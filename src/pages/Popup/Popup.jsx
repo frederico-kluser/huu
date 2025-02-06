@@ -1,25 +1,42 @@
-import React from 'react';
-import logo from '../../assets/img/logo.svg';
-import Greetings from '../../containers/Greetings/Greetings';
+import React, { useEffect } from 'react';
+
+// Import Blockly core.
+import * as Blockly from 'blockly/core';
+// Import the default blocks.
+import * as libraryBlocks from 'blockly/blocks';
+// Import a generator.
+import { javascriptGenerator } from 'blockly/javascript';
+// Import a message file.
+import * as En from 'blockly/msg/en';
+
 import './Popup.css';
 
+Blockly.setLocale(En);
+
 const Popup = () => {
+  useEffect(() => {
+    const toolbox = {
+      kind: 'flyoutToolbox',
+      contents: [
+        {
+          kind: 'block',
+          type: 'controls_if',
+        },
+        {
+          kind: 'block',
+          type: 'controls_whileUntil',
+        },
+        // You can add more blocks to this array.
+      ],
+    };
+
+    // Inject Blockly into the DOM.
+    const workspace = Blockly.inject('blocklyDiv', { toolbox });
+  }, []);
+
   return (
     <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/pages/Popup/Popup.jsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React!
-        </a>
-      </header>
+      <div id="blocklyDiv" className="blockly-container"></div>
     </div>
   );
 };
