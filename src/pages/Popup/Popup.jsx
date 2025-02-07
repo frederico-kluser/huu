@@ -19,6 +19,7 @@ const Popup = () => {
   useEffect(() => {
     // Inject Blockly into the DOM.
     const workspace = Blockly.inject('blocklyDiv', blocklyOptions);
+    // workspace.updateToolbox(newTree); // Update toolbox
   }, []);
 
   return (
