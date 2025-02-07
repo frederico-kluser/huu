@@ -4,16 +4,23 @@ import blocklyOptions from './config/options';
 
 var workspace: Blockly.Workspace;
 
-function updateCode(event: any) {
-    const code = javascriptGenerator.workspaceToCode(workspace);
-    console.log(code);
+export function loadWorkspace() {
+    const state = JSON.parse(localStorage.getItem('workspace') || '{}');
+    Blockly.serialization.workspaces.load(state, workspace);
 }
 
-const blocklySetup = () => {
-    // Inject Blockly into the DOM.
+function updateCode(event: any) {
+    const code = javascriptGenerator.workspaceToCode(workspace);
+    console.log("code:");
+    console.log(code);
+    console.log("----");
+    const state = Blockly.serialization.workspaces.save(workspace);
+    console.log("state:");
+    console.log(state);
+    localStorage.setItem('workspace', JSON.stringify(state));
+}
+
+export const blocklySetup = () => {
     workspace = Blockly.inject('blocklyDiv', blocklyOptions);
-    // workspace.updateToolbox(newTree); // Update toolbox
     workspace.addChangeListener(updateCode);
 };
-
-export default blocklySetup;
