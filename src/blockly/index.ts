@@ -1,8 +1,14 @@
 import * as Blockly from 'blockly/core';
 import { javascriptGenerator } from 'blockly/javascript';
 import blocklyOptions from './config/options';
+import blocklyContextMenus from './config/contextMenu';
 
 var workspace: Blockly.Workspace;
+
+
+blocklyContextMenus.forEach((item) => {
+    Blockly.ContextMenuRegistry.registry.register(item);
+});
 
 export function loadWorkspace() {
     const state = JSON.parse(localStorage.getItem('workspace') || '{}');

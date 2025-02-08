@@ -1,4 +1,7 @@
 import { BlocklyOptions } from 'blockly';
+import configCustomBlocks from '../blocks';
+
+configCustomBlocks();
 
 const blocklyToolbox: BlocklyOptions['toolbox'] = {
     kind: 'categoryToolbox',
@@ -25,6 +28,15 @@ const blocklyToolbox: BlocklyOptions['toolbox'] = {
                     fields: {
                         NUM: '9',
                     },
+                },
+                // adicionar string
+                {
+                    kind: 'block',
+                    type: 'text',
+                },
+                {
+                    kind: 'block',
+                    type: 'text_print',
                 },
                 {
                     kind: "block",
@@ -60,16 +72,13 @@ const blocklyToolbox: BlocklyOptions['toolbox'] = {
         },
         {
             kind: 'category',
-            name: 'Seleção 2',
-            hidden: "true",
+            name: 'Custom',
+            // hidden: "true",
             contents: [
                 {
                     kind: 'block',
-                    type: 'math_number',
-                    fields: {
-                        NUM: '9',
-                    },
-                }
+                    type: 'string_length',
+                },
             ],
         },
         {
