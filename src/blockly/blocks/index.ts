@@ -26,7 +26,7 @@ const configCustomBlocks = () => {
     blockConstructor({
       colour: 300,
       hasPreviousConnection: 'feijão',
-      hasNextConnection: 'feijão',
+      hasNextConnection: 'sorvete',
       helpUrl: 'http://www.test.com',
       name: 'test3',
       text: 'test3',
@@ -39,6 +39,15 @@ const configCustomBlocks = () => {
       name: 'test4',
       text: 'test4',
       tooltip: 'this is a test 4',
+    }),
+    blockConstructor({
+      colour: 1,
+      hasPreviousConnection: ['goiabinha', 'feijão', 'sorvete'],
+      hasNextConnection: ['goiabinha', 'feijão', 'sorvete'],
+      helpUrl: 'http://www.test.com',
+      name: 'test5',
+      text: 'test5',
+      tooltip: 'this is a test 5',
     }),
   ];
 };

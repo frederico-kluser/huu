@@ -24,11 +24,13 @@ const blockConstructorErrorHandling = (
   }
 };
 
+type TypeConnection = string | string[] | null;
+
 interface blockConstructorInterface {
   colour: TypeColorBlock;
-  hasNextConnection?: string | null; // TODO: definir tipos
-  hasPreviousConnection?: string | null; // TODO: definir tipos
-  hasOutput?: string | null; // TODO: definir tipos
+  hasNextConnection?: TypeConnection; // TODO: definir tipos
+  hasPreviousConnection?: TypeConnection; // TODO: definir tipos
+  hasOutput?: TypeConnection; // TODO: definir tipos
   helpUrl: string;
   name: string;
   text: string;
