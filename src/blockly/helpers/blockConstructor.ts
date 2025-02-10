@@ -28,9 +28,9 @@ type TypeConnection = string | string[] | null;
 
 interface blockConstructorInterface {
   colour: TypeColorBlock;
-  hasNextConnection?: TypeConnection; // TODO: definir tipos
-  hasPreviousConnection?: TypeConnection; // TODO: definir tipos
-  hasOutput?: TypeConnection; // TODO: definir tipos
+  hasNextConnection?: TypeConnection;
+  hasPreviousConnection?: TypeConnection;
+  hasOutput?: TypeConnection;
   helpUrl: string;
   name: string;
   text: string;
