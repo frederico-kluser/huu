@@ -162,3 +162,8 @@ Blocos para manipulação direta de elementos na página.
 
 - Função: Exibe uma mensagem de alerta na tela.
 - Justificativa: Útil para notificações ou interações simples com o usuário.
+
+### BlockExtractPattern (Posterior)
+
+- Função: Extrai informações de texto com base em um padrão (regex).
+- Justificativa: Permite a captura de dados específicos de textos, como números, datas ou URLs.
