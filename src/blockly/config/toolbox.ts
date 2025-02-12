@@ -1,6 +1,6 @@
 import { BlocklyOptions } from 'blockly';
 import configCustomBlocks from '../blocks';
-import configHTMLSelection from '../blocks/1-category_html-interection';
+import configHTMLInterection from '../blocks/1-category_html-interection';
 
 const customBlocks = configCustomBlocks();
 
@@ -11,7 +11,7 @@ const blocklyToolbox: BlocklyOptions['toolbox'] = {
       kind: 'category',
       name: 'Interação com Site',
       // hidden: "true",
-      contents: configHTMLSelection(),
+      contents: configHTMLInterection(),
     },
     {
       kind: 'category',

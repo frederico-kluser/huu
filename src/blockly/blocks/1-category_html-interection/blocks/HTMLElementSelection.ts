@@ -13,8 +13,9 @@ const setHTMLElementSelection = () => {
         text: 'Digite o XPath %1',
       },
       {
-        type: 'input_value',
+        type: 'field_input',
         name: 'VALUE',
+        text: 'VALUE',
       }
     ],
     tooltip: 'Seleciona um elemento HTML a partir de um XPath.',

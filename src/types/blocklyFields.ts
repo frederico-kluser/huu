@@ -11,8 +11,9 @@ type TypeBlocklyFieldVariable = {
 };
 
 type TypeBlocklyFieldInput = {
-    type: 'input_value';
+    type: 'field_input';
     name: string;
+    text: string;
 };
 
 type TypeBlocklyFieldDropdown = {

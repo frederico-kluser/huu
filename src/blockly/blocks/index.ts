@@ -68,8 +68,9 @@ const configCustomBlocks = () => {
           variableTypes: [''],
         },
         {
-          type: 'input_value',
+          type: 'field_input',
           name: 'TO',
+          text: 'to',
         },
       ],
       tooltip: 'this is a test 5',

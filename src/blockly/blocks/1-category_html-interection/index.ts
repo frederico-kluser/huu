@@ -1,10 +1,10 @@
 import { TypeBlockly } from "../../helpers/blockConstructor";
 import setHTMLElementSelection from "./blocks/HTMLElementSelection";
 
-const configHTMLSelection = (): TypeBlockly[] => {
+const configHTMLInterection = (): TypeBlockly[] => {
     return [
         setHTMLElementSelection(),
     ];
 };
 
-export default configHTMLSelection;
+export default configHTMLInterection;
