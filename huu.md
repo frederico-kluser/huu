@@ -10,13 +10,8 @@ Blocos para manipulação direta de elementos na página.
 
 ### BlockWaitForElementAppear (MVP)
 
-- Função: Aguarda até que um elemento específico esteja presente no DOM.
-- Justificativa: Essencial para páginas dinâmicas onde os elementos podem demorar a carregar.
-
-### BlockWaitForElementDisappear (MVP)
-
-- Função: Aguarda até que um elemento específico desapareça do DOM.
-- Justificativa: Útil para esperar que elementos de carregamento ou modais sejam removidos.
+- Função: Aguarda até que um elemento específico esteja presente ou sumido na página.
+- Justificativa: Importante para sincronizar ações com a presença de elementos na tela.
 
 ### BlockClearField (Posterior)
 
