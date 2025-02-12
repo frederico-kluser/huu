@@ -41,6 +41,11 @@ const blockConstructorErrorHandling = (
 
 type TypeConnection = string | string[] | null;
 
+export type TypeBlockly = {
+  kind: string;
+  type: string;
+};
+
 interface blockConstructorInterface {
   colour: TypeColorBlock;
   hasNextConnection?: TypeConnection;
@@ -52,7 +57,7 @@ interface blockConstructorInterface {
   tooltip: string;
 }
 
-const blockConstructor = (blockConfig: blockConstructorInterface) => {
+const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly => {
   blockConstructorErrorHandling(blockConfig);
 
   const {

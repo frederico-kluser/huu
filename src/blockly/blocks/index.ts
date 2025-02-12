@@ -1,8 +1,6 @@
 import blockConstructor from '../helpers/blockConstructor';
-import setStringLengthBlock from './string_length';
 
 const configCustomBlocks = () => {
-  setStringLengthBlock();
 
   return [
     blockConstructor({
