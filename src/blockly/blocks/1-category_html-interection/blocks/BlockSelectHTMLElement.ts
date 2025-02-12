@@ -1,16 +1,23 @@
+import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
 
-const setHTMLElementSelection = () => {
+const setBlockSelectHTMLElement = () => {
   return blockConstructor({
-    colour: 100,
+    colour: Colors.HTML,
     hasPreviousConnection: 'null',
     hasNextConnection: 'null',
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/XML/XPath/Guides/Introduction_to_using_XPath_in_JavaScript',
-    name: 'HTMLElementSelection',
+    name: 'BlockSelectHTMLElement',
     fields: [
       {
         type: 'text',
-        text: 'Digite o XPath %1',
+        text: 'definir %1\n para %2(XPath)',
+      },
+      {
+        type: 'field_variable',
+        name: 'VARIABLE',
+        variable: 'elemento',
+        variableTypes: [''],
       },
       {
         type: 'field_input',
@@ -22,4 +29,4 @@ const setHTMLElementSelection = () => {
   });
 };
 
-export default setHTMLElementSelection;
+export default setBlockSelectHTMLElement;
