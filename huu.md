@@ -8,11 +8,15 @@ Blocos para manipulação direta de elementos na página.
 - Função: Permite selecionar um elemento HTML na tela e armazená-lo em uma variável.
 - Justificativa: Fundamental para identificar elementos (ex: botões, campos de texto). Pode usar seleção por CSS selector, XPath ou interação visual (como o "clicar para selecionar" do Puppeteer).
 
-### BlockWaitForElement (MVP/Opcional)
+### BlockWaitForElementAppear (MVP)
 
 - Função: Aguarda até que um elemento específico esteja presente no DOM.
 - Justificativa: Essencial para páginas dinâmicas onde os elementos podem demorar a carregar.
-- Observação: Pode ser considerado MVP se o foco inicial for em sites com carregamento assíncrono; caso contrário, pode ser adicionado depois.
+
+### BlockWaitForElementDisappear (MVP)
+
+- Função: Aguarda até que um elemento específico desapareça do DOM.
+- Justificativa: Útil para esperar que elementos de carregamento ou modais sejam removidos.
 
 ### BlockClearField (Posterior)
 
