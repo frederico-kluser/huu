@@ -14,6 +14,31 @@ Blocos para manipulação direta de elementos na página.
 - Justificativa: Essencial para páginas dinâmicas onde os elementos podem demorar a carregar.
 - Observação: Pode ser considerado MVP se o foco inicial for em sites com carregamento assíncrono; caso contrário, pode ser adicionado depois.
 
+### BlockClearField (Posterior)
+
+- Função: Limpa o conteúdo de um campo de texto ou formulário.
+- Justificativa: Útil para interações mais complexas que envolvem limpeza de dados.
+
+### BlockUploadFile (Posterior)
+
+- Função: Realiza o upload de um arquivo para um campo de input.
+- Justificativa: Importante para interações que envolvem envio de arquivos, como formulários de upload.
+
+### BlockGetAttribute (Posterior)
+
+- Função: Extrai um atributo específico de um elemento (ex: href, src, class).
+- Justificativa: Útil para coletar informações específicas de elementos na página.
+
+### BlockSetAttribute (Posterior)
+
+- Função: Define um atributo específico em um elemento.
+- Justificativa: Permite manipular elementos de forma mais avançada, como alterar classes ou IDs.
+
+### BlockClearField (Posterior)
+
+- Função: Limpa o conteúdo de um campo de texto ou formulário.
+- Justificativa: Útil para interações mais complexas que envolvem limpeza de dados.
+
 ### BlockScrollToElement (Posterior)
 
 - Função: Rola a página até que o elemento selecionado esteja visível.
@@ -47,63 +72,93 @@ Blocos para manipulação direta de elementos na página.
 - Justificativa: Necessário em casos onde o clique duplo é a ação esperada (ex.: seleção de texto ou edição).
 
 ## 3. Navegação e Controle de Página
-BlockNavigateToUrl (MVP)
-Função: Abre uma URL específica no navegador.
-Justificativa: Fundamental para agentes que precisam iniciar ou redirecionar fluxos de interação em diferentes sites.
 
-BlockRefreshPage (Posterior)
-Função: Atualiza a página atual.
-Justificativa: Pode ser útil para recarregar informações, mas não é essencial para o MVP.
+### BlockNavigateToUrl (MVP)
 
-BlockNavigateBack/Forward (Posterior)
-Função: Permite navegar para trás ou para frente no histórico do navegador.
-Justificativa: Para fluxos de navegação mais complexos; pode ser implementado em versões futuras.
+- Função: Abre uma URL específica no navegador.
+- Justificativa: Fundamental para agentes que precisam iniciar ou redirecionar fluxos de interação em diferentes sites.
+
+### BlockRefreshPage (Posterior)
+
+- Função: Atualiza a página atual.
+- Justificativa: Pode ser útil para recarregar informações, mas não é essencial para o MVP.
+
+### BlockNavigateBack/Forward (Posterior)
+
+- Função: Permite navegar para trás ou para frente no histórico do navegador.
+- Justificativa: Para fluxos de navegação mais complexos; pode ser implementado em versões futuras.
 
 ## 4. Integração com IA (ChatGPT)
-BlockAiGenerateText (MVP)
+
+### BlockAiGenerateText (MVP)
 
 - Função: Envia um prompt para o ChatGPT e armazena o texto gerado em uma variável.
 - Justificativa: Núcleo da integração com IA, possibilitando a criação de respostas dinâmicas.
 
-BlockAiConditional (MVP)
+### BlockAiConditional (MVP)
 
 - Função: Executa uma lógica condicional baseada na resposta da IA (if/else dinâmico).
 - Justificativa: Permite criar fluxos que se adaptam às saídas da IA, tornando o agente mais interativo.
 
-BlockAiSetContext (Posterior)
+### BlockAiSummarizeText (Posterior)
 
-- Função: Define ou atualiza o contexto/memória para conversas subsequentes com a IA.
-- Justificativa: Importante para diálogos mais complexos e contínuos, porém pode ser incorporado após o MVP.
+- Função: Resumo de texto gerado pela IA.
+- Justificativa: Útil para condensar informações extensas ou simplificar respostas.
 
-BlockAiChatMessage (Posterior)
+### BlockAiTranslateText (Posterior)
 
-- Função: Gerencia o envio e recebimento de mensagens em um fluxo de chat.
-- Justificativa: Facilita a criação de interações estilo chat, adicionando mais naturalidade à conversa com a IA em futuras versões.
+- Função: Traduz texto gerado pela IA para outro idioma.
+- Justificativa: Pode ser útil para interações multilíngues ou para acessar informações em diferentes idiomas.
+
+### BlockAiTextToSpeech (Posterior)
+
+- Função: Converte texto gerado pela IA em fala.
+- Justificativa: Adiciona uma dimensão auditiva à interação, podendo ser incorporado em versões futuras.
 
 ## 5. Controle de Fluxo e Lógica (Blocos já existentes no Blockly)
-Blocos de Variáveis, Condicionais, Loops, Operadores, etc.
+
+### Blocos de Variáveis, Condicionais, Loops, Operadores, etc.
 
 - Função: Permitem o controle do fluxo de execução e manipulação de dados.
 - Justificativa: São essenciais para qualquer linguagem de programação visual e já estão disponíveis no Blockly.
 
 ## 6. Sincronização e Espera
-BlockDelay/Wait (MVP)
+
+### BlockDelay/Wait (MVP)
 
 - Função: Introduz um atraso na execução de ações.
 - Justificativa: Essencial para sincronizar interações, principalmente em páginas dinâmicas ou ao aguardar respostas da IA.
 
-BlockWaitForResponse (Posterior)
+### BlockWaitForResponse (Posterior)
 
 - Função: Aguarda a resposta de uma chamada assíncrona (por exemplo, do ChatGPT).
 - Justificativa: Melhora o controle de fluxos que dependem de respostas externas, podendo ser incorporado em versões futuras.
 
 ## 7. Ações Auxiliares e Depuração
-BlockLogAction (MVP/Opcional)
+
+### BlockLogAction (MVP/Opcional)
 
 - Função: Exibe mensagens de log para depuração no console.
 - Justificativa: Útil para monitorar e solucionar problemas durante o desenvolvimento e uso do agente.
 
-BlockCaptureScreenshot (Posterior)
+### BlockCaptureScreenshot (Posterior)
 
 - Função: Captura uma imagem da tela ou de um elemento específico.
 - Justificativa: Pode servir para registro de ações ou debug avançado, sendo uma funcionalidade complementar.
+
+## 8. Ações Avançadas (Posterior)
+
+### BlockRunJavaScript (Posterior)
+
+- Função: Executa um trecho de código JavaScript personalizado.
+- Justificativa: Permite ações mais complexas e personalizadas que não estão cobertas pelos blocos padrão.
+
+### BlockPromptUser (Posterior)
+
+- Função: Exibe um prompt para o usuário inserir informações.
+- Justificativa: Pode ser útil para interações que requerem entrada do usuário em tempo real.
+
+### BlockAlertMessage (Posterior)
+
+- Função: Exibe uma mensagem de alerta na tela.
+- Justificativa: Útil para notificações ou interações simples com o usuário.
