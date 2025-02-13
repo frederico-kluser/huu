@@ -2,7 +2,7 @@
 
 enum Colors {
     HTML = 5,
-    URL = 120,
+    URL = 220,
 }
 
 export default Colors;
