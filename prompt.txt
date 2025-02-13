@@ -1,0 +1,245 @@
+nesses códigos:
+
+types.ts
+"""
+enum BlocklyTypes {
+    htmlElement = 'htmlElement',
+    htmlElementVariable = 'elementoHTML1',
+    textVariable = 'variavelTextual1',
+}
+
+export default BlocklyTypes;
+"""
+
+blocklyFields.ts
+"""
+type TypeBlocklyFieldText = {
+    type: 'text';
+    text: string;
+}
+
+type TypeBlocklyFieldVariable = {
+    type: 'field_variable';
+    name: string;
+    variable: string;
+    variableTypes: string[];
+    dataType?: string;
+};
+
+type TypeBlocklyFieldInput = {
+    type: 'field_input';
+    name: string;
+    text: string;
+};
+
+type TypeBlocklyFieldDropdown = {
+    type: 'field_dropdown';
+    name: string;
+    options: [string, string][]; // [value, text]
+};
+
+type TypeBlocklyFieldCheckbox = {
+    type: 'field_checkbox';
+    name: string;
+    checked: boolean;
+};
+
+type TypeBlocklyInputValue = {
+    type: 'input_value';
+    name: string;
+};
+
+type TypeBlocklyFields = TypeBlocklyFieldText | TypeBlocklyFieldVariable | TypeBlocklyFieldInput | TypeBlocklyFieldDropdown | TypeBlocklyFieldCheckbox | TypeBlocklyInputValue;
+
+export default TypeBlocklyFields;
+"""
+
+blockConstructor.ts
+"""
+import * as Blockly from 'blockly';
+import { javascriptGenerator, Order } from 'blockly/javascript';
+import TypeColorBlock from '../../types/blockColor';
+import TypeBlocklyFields from '../../types/blocklyFields';
+
+const blockConstructorErrorHandling = (
+  blockConfig: blockConstructorInterface
+) => {
+  if (
+    blockConfig.hasOutput !== undefined &&
+    blockConfig.hasNextConnection !== undefined
+  ) {
+    throw new Error(
+      'A block cannot have output and next connection at the same time'
+    );
+  }
+
+  if (
+    blockConfig.hasOutput !== undefined &&
+    blockConfig.hasPreviousConnection !== undefined
+  ) {
+    throw new Error(
+      'A block cannot have output and previous connection at the same time'
+    );
+  }
+
+  if (
+    blockConfig.fields.filter((field) => field.type === 'text').length > 1
+  ) {
+    throw new Error('A block cannot have more than one text field');
+  }
+
+  if (
+    blockConfig.fields.filter((field) => field.type === 'text').length === 0
+  ) {
+    throw new Error('A block must have at least one text field');
+  }
+};
+
+type TypeConnection = string | string[] | null;
+
+export type TypeBlockly = {
+  kind: string;
+  type: string;
+};
+
+interface blockConstructorInterface {
+  colour: TypeColorBlock;
+  hasNextConnection?: TypeConnection;
+  hasPreviousConnection?: TypeConnection;
+  hasOutput?: TypeConnection;
+  helpUrl: string;
+  name: string;
+  fields: TypeBlocklyFields[];
+  tooltip: string;
+  generator?: (block: any, generator: any) => string;
+}
+
+const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly => {
+  blockConstructorErrorHandling(blockConfig);
+
+  const {
+    colour,
+    hasNextConnection,
+    hasPreviousConnection,
+    hasOutput,
+    helpUrl,
+    name,
+    fields,
+    tooltip,
+  } = blockConfig;
+
+  const jsonInitExtra: {
+    [key: string]: any;
+  } = {};
+
+  if (hasNextConnection !== undefined) {
+    jsonInitExtra['nextStatement'] = hasNextConnection;
+  }
+
+  if (hasPreviousConnection !== undefined) {
+    jsonInitExtra['previousStatement'] = hasPreviousConnection;
+  }
+
+  if (hasOutput !== undefined) {
+    jsonInitExtra['output'] = hasOutput;
+  }
+
+  let message0 = '';
+  let args0: any = [];
+
+  fields.forEach((field, index) => {
+    if (field.type === 'text') {
+      message0 += field.text;
+    };
+  });
+
+  fields.filter((field) => field.type !== 'text').forEach((field, index) => {
+    args0.push(field);
+  });
+
+  Blockly.Blocks[name] = {
+    init: function () {
+      this.jsonInit({
+        args0,
+        colour,
+        helpUrl,
+        message0,
+        tooltip,
+        ...jsonInitExtra,
+      });
+    },
+  };
+
+
+  if (blockConfig.generator) {
+    javascriptGenerator.forBlock[name] = blockConfig.generator;
+  } else {
+    javascriptGenerator.forBlock[name] = function (block, generator) {
+      return '/* Generator not implemented */';
+    };
+  }
+
+  return {
+    kind: 'block',
+    type: name,
+  };
+};
+
+export default blockConstructor;
+"""
+
+e nesse exemplo de implementação
+
+BlockSetTextVariable.ts
+"""
+import * as Blockly from 'blockly/core';
+import Colors from '../../../config/colors';
+import BlocklyTypes from '../../../config/types';
+import blockConstructor from '../../../helpers/blockConstructor';
+
+const setBlockSetTextVariable = () => {
+    return blockConstructor({
+        colour: Colors.HTML,
+        hasPreviousConnection: null,
+        hasNextConnection: null,
+        helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Assignment',
+        name: 'BlockSetTextVariable',
+        fields: [
+            {
+                type: 'text',
+                text: 'salvar o texto %1 em %2',
+            },
+            {
+                type: 'field_input',
+                name: 'TEXT',
+                text: 'valor', // valor padrão
+            },
+            {
+                type: 'field_variable',
+                name: 'VARIABLE',
+                variable: BlocklyTypes.textVariable,
+                variableTypes: [''], // sem restrição específica
+            }
+        ],
+        tooltip: 'Atribui um valor textual a uma variável.',
+        generator: function (block, generator) {
+            // Obtém o valor digitado
+            const textValue = block.getFieldValue('TEXT');
+            // Obtém o nome da variável de forma segura usando o sistema de nomes do Blockly
+            const variable = generator.nameDB_.getName(
+                block.getFieldValue('VARIABLE'),
+                Blockly.Names.NameType.VARIABLE
+            );
+            return `${variable} = ${generator.quote_(textValue)};\n`;
+        }
+
+    });
+};
+
+export default setBlockSetTextVariable;
+
+"""
+
+Crie um setBlock... para salvar um valor textual em uma variável
+
+!!! important: se precisar alterar um dos arquivos ou funções existentes, adicione na resposta o que deve mudar e onde !!!

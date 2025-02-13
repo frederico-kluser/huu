@@ -9,7 +9,7 @@ const setBlockWriteTextToHTMLElement = () => {
         hasPreviousConnection: null,
         name: 'BlockWriteTextToHTMLElement',
         helpUrl:
-            'https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/textContent',
+            'https://developer.mozilla.org/en-US/docs/Web/API/Node/textContent',
         fields: [
             {
                 type: 'text',

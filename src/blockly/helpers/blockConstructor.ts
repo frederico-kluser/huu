@@ -53,6 +53,7 @@ interface blockConstructorInterface {
   name: string;
   fields: TypeBlocklyFields[];
   tooltip: string;
+  generator?: (block: any, generator: any) => string;
 }
 
 const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly => {
@@ -110,9 +111,15 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
       });
     },
   };
-  javascriptGenerator.forBlock[name] = function (block, generator) {
-    return 'goiabinha';
-  };
+
+
+  if (blockConfig.generator) {
+    javascriptGenerator.forBlock[name] = blockConfig.generator;
+  } else {
+    javascriptGenerator.forBlock[name] = function (block, generator) {
+      return '/* Generator not implemented */';
+    };
+  }
 
   return {
     kind: 'block',
