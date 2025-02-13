@@ -8,6 +8,7 @@ type TypeBlocklyFieldVariable = {
     name: string;
     variable: string;
     variableTypes: string[];
+    dataType?: string;
 };
 
 type TypeBlocklyFieldInput = {
@@ -28,6 +29,11 @@ type TypeBlocklyFieldCheckbox = {
     checked: boolean;
 };
 
-type TypeBlocklyFields = TypeBlocklyFieldText | TypeBlocklyFieldVariable | TypeBlocklyFieldInput | TypeBlocklyFieldDropdown | TypeBlocklyFieldCheckbox;
+type TypeBlocklyInputValue = {
+    type: 'input_value';
+    name: string;
+};
+
+type TypeBlocklyFields = TypeBlocklyFieldText | TypeBlocklyFieldVariable | TypeBlocklyFieldInput | TypeBlocklyFieldDropdown | TypeBlocklyFieldCheckbox | TypeBlocklyInputValue;
 
 export default TypeBlocklyFields;
