@@ -1,11 +1,24 @@
 nesses códigos:
 
+color.ts
+"""
+// hue-variationion-value (HSV) 0 - 360
+
+enum Colors {
+    HTML = 5,
+    URL = 120,
+}
+
+export default Colors;
+"""
+
 types.ts
 """
 enum BlocklyTypes {
     htmlElement = 'htmlElement',
     htmlElementVariable = 'elementoHTML1',
     textVariable = 'variavelTextual1',
+    urlVariable = 'variavelURL1',
 }
 
 export default BlocklyTypes;
@@ -198,7 +211,7 @@ import blockConstructor from '../../helpers/blockConstructor';
 
 const setBlockNavigateToUrl = () => {
     return blockConstructor({
-        colour: Colors.HTML, // utilize a cor desejada para este bloco
+        colour: Colors.URL,
         hasPreviousConnection: null,
         hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/location',
@@ -225,6 +238,6 @@ const setBlockNavigateToUrl = () => {
 export default setBlockNavigateToUrl;
 """
 
-Crie um BlockRefreshPage para recarregar a página atual
+Crie um BlockNavigateBack e um BlockNavigateForward para que o usuário possa navegar para trás e para frente no histórico do navegador.
 
 !!! important: se precisar alterar um dos arquivos ou funções existentes, adicione na resposta o que deve mudar e onde !!!
