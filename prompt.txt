@@ -190,56 +190,41 @@ export default blockConstructor;
 
 e nesse exemplo de implementação
 
-BlockSetTextVariable.ts
+BlockNavigateToUrl.ts
 """
 import * as Blockly from 'blockly/core';
-import Colors from '../../../config/colors';
-import BlocklyTypes from '../../../config/types';
-import blockConstructor from '../../../helpers/blockConstructor';
+import Colors from '../../config/colors';
+import blockConstructor from '../../helpers/blockConstructor';
 
-const setBlockSetTextVariable = () => {
+const setBlockNavigateToUrl = () => {
     return blockConstructor({
-        colour: Colors.HTML,
+        colour: Colors.HTML, // utilize a cor desejada para este bloco
         hasPreviousConnection: null,
         hasNextConnection: null,
-        helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Assignment',
-        name: 'BlockSetTextVariable',
+        helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/location',
+        name: 'BlockNavigateToUrl',
         fields: [
             {
                 type: 'text',
-                text: 'salvar o texto %1 em %2',
+                text: 'navegar para URL %1',
             },
             {
                 type: 'field_input',
-                name: 'TEXT',
-                text: 'valor', // valor padrão
-            },
-            {
-                type: 'field_variable',
-                name: 'VARIABLE',
-                variable: BlocklyTypes.textVariable,
-                variableTypes: [''], // sem restrição específica
+                name: 'URL',
+                text: 'https://exemplo.com', // valor padrão da URL
             }
         ],
-        tooltip: 'Atribui um valor textual a uma variável.',
-        generator: function (block, generator) {
-            // Obtém o valor digitado
-            const textValue = block.getFieldValue('TEXT');
-            // Obtém o nome da variável de forma segura usando o sistema de nomes do Blockly
-            const variable = generator.nameDB_.getName(
-                block.getFieldValue('VARIABLE'),
-                Blockly.Names.NameType.VARIABLE
-            );
-            return `${variable} = ${generator.quote_(textValue)};\n`;
+        tooltip: 'Navega para uma nova URL, alterando a página atual.',
+        generator: function (block: Blockly.Block, generator: any) {
+            const urlValue = block.getFieldValue('URL');
+            return `window.location.href = ${generator.quote_(urlValue)};\n`;
         }
-
     });
 };
 
-export default setBlockSetTextVariable;
-
+export default setBlockNavigateToUrl;
 """
 
-Crie um setBlock... para salvar um valor textual em uma variável
+Crie um BlockRefreshPage para recarregar a página atual
 
 !!! important: se precisar alterar um dos arquivos ou funções existentes, adicione na resposta o que deve mudar e onde !!!
