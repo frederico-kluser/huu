@@ -2,12 +2,12 @@ import Colors from '../../../config/colors';
 import BlocklyTypes from '../../../config/types';
 import blockConstructor from '../../../helpers/blockConstructor';
 
-const setBlockWriteTextToHTMLElement = () => {
+const setBlockWriteVariableToHTMLElement = () => {
     return blockConstructor({
         colour: Colors.HTML,
         hasNextConnection: null,
         hasPreviousConnection: null,
-        name: 'BlockWriteTextToHTMLElement',
+        name: 'BlockWriteVariableToHTMLElement',
         helpUrl:
             'https://developer.mozilla.org/en-US/docs/Web/API/Node/textContent',
         fields: [
@@ -16,9 +16,10 @@ const setBlockWriteTextToHTMLElement = () => {
                 text: 'escrever %1\nno elemento %2'
             },
             {
-                type: 'field_input',
+                type: 'field_variable',
                 name: 'TEXT',
-                text: 'texto'
+                variable: BlocklyTypes.textVariable,
+                variableTypes: [''] // TODO: criar um tipo para texto, se necessário
             },
             {
                 type: 'field_variable',
@@ -32,4 +33,4 @@ const setBlockWriteTextToHTMLElement = () => {
     });
 };
 
-export default setBlockWriteTextToHTMLElement;
+export default setBlockWriteVariableToHTMLElement;

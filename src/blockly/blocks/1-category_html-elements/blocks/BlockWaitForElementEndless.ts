@@ -2,17 +2,17 @@ import Colors from '../../../config/colors';
 import BlocklyTypes from '../../../config/types';
 import blockConstructor from '../../../helpers/blockConstructor';
 
-const setBlockWaitForElement = () => {
+const setBlockWaitForElementEndless = () => {
   return blockConstructor({
     colour: Colors.HTML,
     hasPreviousConnection: 'null',
     hasNextConnection: 'null',
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement',
-    name: 'BlockWaitForElement',
+    name: 'BlockWaitForElementEndless',
     fields: [
       {
         type: 'text',
-        text: 'esperar %1 o\nelemento %2\npor %3 segundos',
+        text: 'esperar %1 o\nelemento %2',
       },
       {
         type: 'field_dropdown',
@@ -28,14 +28,9 @@ const setBlockWaitForElement = () => {
         variable: BlocklyTypes.htmlElementVariable,
         variableTypes: [''], // TODO: criar um tipo para elemento HTML
       },
-      {
-        type: 'field_input',
-        name: 'VALUE',
-        text: '10',
-      },
     ],
-    tooltip: 'Espera um elemento HTML aparecer ou desaparecer por um determinado tempo.',
+    tooltip: 'Espera um elemento HTML aparecer ou desaparecer.',
   });
 };
 
-export default setBlockWaitForElement;
+export default setBlockWaitForElementEndless;
