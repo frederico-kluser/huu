@@ -1,6 +1,7 @@
 import { BlocklyOptions } from 'blockly';
 import configHTMLActions from '../blocks/2-category_html-actions';
 import configHTMLInterection from '../blocks/1-category_html-elements';
+import configURLActions from '../blocks/3-category_url-control';
 
 const blocklyToolbox: BlocklyOptions['toolbox'] = {
   kind: 'categoryToolbox',
@@ -15,6 +16,11 @@ const blocklyToolbox: BlocklyOptions['toolbox'] = {
       kind: 'category',
       name: 'Ações no Site',
       contents: configHTMLActions(),
+    },
+    {
+      kind: 'category',
+      name: 'Ações de Navegação',
+      contents: configURLActions(),
     },
     {
       kind: 'sep', // Separator
