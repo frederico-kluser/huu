@@ -12,7 +12,7 @@ const setBlockWaitForElement = () => {
     fields: [
       {
         type: 'text',
-        text: 'esperar %1\nelemento %2\npor %3 segundos',
+        text: 'esperar %1 o\nelemento %2\npor %3 segundos',
       },
       {
         type: 'field_dropdown',

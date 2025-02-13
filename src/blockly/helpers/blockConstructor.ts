@@ -3,8 +3,6 @@ import { javascriptGenerator, Order } from 'blockly/javascript';
 import TypeColorBlock from '../../types/blockColor';
 import TypeBlocklyFields from '../../types/blocklyFields';
 
-// field_variable
-
 const blockConstructorErrorHandling = (
   blockConfig: blockConstructorInterface
 ) => {

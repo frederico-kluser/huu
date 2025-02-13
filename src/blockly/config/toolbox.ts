@@ -1,25 +1,20 @@
 import { BlocklyOptions } from 'blockly';
-import configCustomBlocks from '../blocks';
-import configHTMLInterection from '../blocks/1-category_html-interection';
-
-const customBlocks = configCustomBlocks();
+import configHTMLActions from '../blocks/2-category_html-actions';
+import configHTMLInterection from '../blocks/1-category_html-elements';
 
 const blocklyToolbox: BlocklyOptions['toolbox'] = {
   kind: 'categoryToolbox',
   contents: [
     {
       kind: 'category',
-      name: 'Interação com Site',
+      name: 'Elementos do Site',
       // hidden: "true",
       contents: configHTMLInterection(),
     },
     {
       kind: 'category',
-      name: 'Custom',
-      // hidden: "true",
-      contents: [
-        ...customBlocks,
-      ],
+      name: 'Ações no Site',
+      contents: configHTMLActions(),
     },
     {
       kind: 'sep', // Separator

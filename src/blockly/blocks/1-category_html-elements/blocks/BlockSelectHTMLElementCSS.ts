@@ -7,7 +7,7 @@ const setBlockSelectHTMLElementCSS = () => {
     colour: Colors.HTML,
     hasNextConnection: null,
     hasPreviousConnection: null,
-    name: 'BlockSelectHTMLElementCSS Seletor',
+    name: 'BlockSelectHTMLElementCSS',
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Scripting/Variables',
     fields: [
       {
