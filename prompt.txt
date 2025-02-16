@@ -7,6 +7,7 @@ color.ts
 enum Colors {
     HTML = 5,
     URL = 120,
+    AI = 120,
 }
 
 export default Colors;

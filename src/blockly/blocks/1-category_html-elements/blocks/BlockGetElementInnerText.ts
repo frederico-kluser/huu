@@ -11,7 +11,7 @@ const setBlockGetElementInnerText = () => {
         fields: [
             {
                 type: 'text',
-                text: 'obter o texto de %1',
+                text: 'obter o texto de\n%1',
             },
             {
                 type: 'field_variable',

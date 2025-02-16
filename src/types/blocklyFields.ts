@@ -34,6 +34,11 @@ type TypeBlocklyInputValue = {
     name: string;
 };
 
-type TypeBlocklyFields = TypeBlocklyFieldText | TypeBlocklyFieldVariable | TypeBlocklyFieldInput | TypeBlocklyFieldDropdown | TypeBlocklyFieldCheckbox | TypeBlocklyInputValue;
+type TypeBlocklyStatementInput = {
+    type: 'input_statement';
+    name: string;
+};
+
+type TypeBlocklyFields = TypeBlocklyFieldText | TypeBlocklyFieldVariable | TypeBlocklyFieldInput | TypeBlocklyFieldDropdown | TypeBlocklyFieldCheckbox | TypeBlocklyInputValue | TypeBlocklyStatementInput;
 
 export default TypeBlocklyFields;

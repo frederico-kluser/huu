@@ -12,7 +12,7 @@ const setBlockClickHTMLElement = () => {
         fields: [
             {
                 type: 'text',
-                text: 'clicar no elemento %1',
+                text: 'clicar no elemento\n%1',
             },
             {
                 type: 'field_variable',

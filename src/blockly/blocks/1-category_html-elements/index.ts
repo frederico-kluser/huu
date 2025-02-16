@@ -1,5 +1,6 @@
 import { TypeBlockly } from "../../helpers/blockConstructor";
 import setBlockGetElementInnerText from "./blocks/BlockGetElementInnerText";
+import setBlockScrollToElement from "./blocks/BlockScrollToElement";
 import setBlockSelectHTMLElementCSS from "./blocks/BlockSelectHTMLElementCSS";
 import setBlockSelectHTMLElementXPath from "./blocks/BlockSelectHTMLElementXPath";
 import setBlockWaitForElement from "./blocks/BlockWaitForElement";
@@ -12,6 +13,7 @@ const configHTMLInterection = (): TypeBlockly[] => {
         setBlockWaitForElement(),
         setBlockWaitForElementEndless(),
         setBlockGetElementInnerText(),
+        setBlockScrollToElement(),
     ];
 };
 
