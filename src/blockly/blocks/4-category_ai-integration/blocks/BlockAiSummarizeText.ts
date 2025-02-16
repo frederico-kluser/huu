@@ -5,18 +5,13 @@ import BlocklyTypes from '../../../config/types';
 
 const setBlockAiSummarizeText = () => {
     return blockConstructor({
-        // Utiliza a cor destinada à IA (definida em colors.ts)
         colour: Colors.AI,
-        // Define o bloco como uma expressão que retorna um texto;
-        // Aqui utilizamos o tipo 'textVariable' definido em types.ts
         hasOutput: BlocklyTypes.textVariable,
         helpUrl: 'https://example.com/ai-summarization',
+        message: 'Resumo de texto\n%1',
         name: 'BlockAiSummarizeText',
+        tooltip: 'Gera um resumo do texto usando IA, condensando informações extensas ou simplificando respostas.',
         fields: [
-            {
-                type: 'text',
-                text: 'Resumo de texto\n%1',
-            },
             {
                 type: 'field_variable',
                 name: 'PROMPT',
@@ -24,8 +19,6 @@ const setBlockAiSummarizeText = () => {
                 variableTypes: [''],
             },
         ],
-        tooltip: 'Gera um resumo do texto usando IA, condensando informações extensas ou simplificando respostas.',
-        // O gerador retorna uma expressão chamando uma função fictícia "aiSummarizeText"
         generator: function (block: Blockly.Block, generator: any) {
             return '/* not implemented yet */';
         },

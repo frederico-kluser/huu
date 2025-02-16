@@ -5,17 +5,13 @@ import blockConstructor from '../../../helpers/blockConstructor';
 const setBlockNavigateForward = () => {
     return blockConstructor({
         colour: Colors.URL,
-        hasPreviousConnection: null,
         hasNextConnection: null,
+        hasPreviousConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/History/forward',
+        message: 'navegar para frente',
         name: 'BlockNavigateForward',
-        fields: [
-            {
-                type: 'text',
-                text: 'navegar para frente',
-            }
-        ],
         tooltip: 'Navega para a próxima página no histórico do navegador.',
+        fields: [],
         generator: function (block: Blockly.Block, generator: any) {
             return '/* not implemented yet */';
         },

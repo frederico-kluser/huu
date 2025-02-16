@@ -8,18 +8,15 @@ const setBlockRunJavaScript = () => {
         hasPreviousConnection: null,
         hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript',
+        message: 'executar JavaScript %1',
         name: 'BlockRunJavaScript',
+        tooltip: 'Executa um trecho de código JavaScript personalizado.',
         fields: [
-            {
-                type: 'text',
-                text: 'executar JavaScript %1',
-            },
             {
                 type: 'input_value',
                 name: 'CODE',
             },
         ],
-        tooltip: 'Executa um trecho de código JavaScript personalizado.',
         generator: function (block: Blockly.Block, generator: any) {
             return '/* not implemented yet */';
         },

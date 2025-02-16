@@ -5,17 +5,14 @@ import BlocklyTypes from '../../../config/types';
 
 const setBlockAiGenerateText = () => {
     return blockConstructor({
-        colour: Colors.AI, // Escolhemos a cor HTML; ajuste se desejar outra cor.
-        hasPreviousConnection: null,
+        colour: Colors.AI,
         hasNextConnection: null,
+        hasPreviousConnection: null,
         helpUrl: 'https://openai.com/blog/chatgpt',
+        message: 'Pergunta para IA %1\nsalvar resultado em\n%2',
         name: 'BlockAiGenerateText',
-        // Importante: Use apenas UM campo de texto para compor a mensagem.
+        tooltip: 'Envia um prompt para o ChatGPT e armazena o texto gerado em uma variável.',
         fields: [
-            {
-                type: 'text',
-                text: 'Pergunta para IA %1\nsalvar resultado em\n%2',
-            },
             {
                 type: 'input_value',
                 name: 'PROMPT',
@@ -27,7 +24,6 @@ const setBlockAiGenerateText = () => {
                 variableTypes: [''],
             },
         ],
-        tooltip: 'Envia um prompt para o ChatGPT e armazena o texto gerado em uma variável.',
         generator: function (block: Blockly.Block, generator: any) {
             return '/* not implemented yet */';
         },

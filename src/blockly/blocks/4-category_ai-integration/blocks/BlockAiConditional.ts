@@ -5,16 +5,13 @@ import blockConstructor from '../../../helpers/blockConstructor';
 const setBlockAiConditional = () => {
     return blockConstructor({
         colour: Colors.AI,
-        // Para blocos de lógica, costumamos permitir conexão anterior e seguinte
-        hasPreviousConnection: null,
         hasNextConnection: null,
+        hasPreviousConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/if...else',
+        message: 'Se a IA responder "Sim" para\n%1\nentão: %2\nsenão: %3',
         name: 'BlockAiConditional',
+        tooltip: 'Executa lógica condicional baseada na resposta da IA.',
         fields: [
-            {
-                type: 'text',
-                text: 'Se a IA responder "Sim" para\n%1\nentão: %2\nsenão: %3'
-            },
             {
                 type: 'input_value',
                 name: 'PROMPT',
@@ -28,7 +25,6 @@ const setBlockAiConditional = () => {
                 name: 'ELSE'
             }
         ],
-        tooltip: 'Executa lógica condicional baseada na resposta da IA.',
         generator: function (block: Blockly.Block, generator: any) {
             return '/* not implemented yet */';
         },

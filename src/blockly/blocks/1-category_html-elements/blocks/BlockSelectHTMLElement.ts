@@ -6,16 +6,21 @@ const setBlockSelectHTMLElement = () => {
   return blockConstructor({
     colour: Colors.HTML,
     hasOutput: 'String',
-    name: 'BlockSelectHTMLElementCSS',
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Scripting/Variables',
+    message: 'seletor de elemento %1\nTipo de seletor %2',
+    name: 'BlockSelectHTMLElement',
+    tooltip: 'Variável que armazena um elemento HTML.',
     fields: [
-      {
-        type: 'text',
-        text: 'seletor de elemento %1\nTipo de seletor %2',
-      },
       {
         type: 'input_value',
         name: 'SELECTOR',
+        check: 'String',
+        shadow: {
+          type: 'text',
+          fields: {
+            TEXT: 'div'
+          }
+        }
       },
       {
         type: 'field_dropdown',
@@ -29,7 +34,6 @@ const setBlockSelectHTMLElement = () => {
         ],
       },
     ],
-    tooltip: 'Variável que armazena um elemento HTML.',
     generator: function (block: Blockly.Block, generator: any) {
       return '/* not implemented yet */';
     },

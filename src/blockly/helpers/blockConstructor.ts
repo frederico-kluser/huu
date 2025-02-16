@@ -25,15 +25,9 @@ const blockConstructorErrorHandling = (
   }
 
   if (
-    blockConfig.fields.filter((field) => field.type === 'text').length > 1
+    blockConfig.fields.filter((field) => field.type === 'text').length
   ) {
-    throw new Error('A block cannot have more than one text field');
-  }
-
-  if (
-    blockConfig.fields.filter((field) => field.type === 'text').length === 0
-  ) {
-    throw new Error('A block must have at least one text field');
+    throw new Error('A block cannot have a text field');
   }
 };
 
@@ -46,12 +40,13 @@ export type TypeBlockly = {
 
 interface blockConstructorInterface {
   colour: TypeColorBlock;
-  hasNextConnection?: TypeConnection;
-  hasPreviousConnection?: TypeConnection;
-  hasOutput?: TypeConnection;
-  helpUrl: string;
-  name: string;
   fields: TypeBlocklyFields[];
+  hasNextConnection?: TypeConnection;
+  hasOutput?: TypeConnection;
+  hasPreviousConnection?: TypeConnection;
+  helpUrl: string;
+  message: string;
+  name: string;
   tooltip: string;
   generator?: (block: any, generator: any) => string;
 }
@@ -61,12 +56,13 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
 
   const {
     colour,
-    hasNextConnection,
-    hasPreviousConnection,
-    hasOutput,
-    helpUrl,
-    name,
     fields,
+    hasNextConnection,
+    hasOutput,
+    hasPreviousConnection,
+    helpUrl,
+    message,
+    name,
     tooltip,
   } = blockConfig;
 
@@ -86,16 +82,10 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
     jsonInitExtra['output'] = hasOutput;
   }
 
-  let message0 = '';
+  const message0 = message;
   let args0: any = [];
 
   fields.forEach((field, index) => {
-    if (field.type === 'text') {
-      message0 += field.text;
-    };
-  });
-
-  fields.filter((field) => field.type !== 'text').forEach((field, index) => {
     args0.push(field);
   });
 
@@ -111,7 +101,6 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
       });
     },
   };
-
 
   if (blockConfig.generator) {
     javascriptGenerator.forBlock[name] = blockConfig.generator;

@@ -32,6 +32,8 @@ type TypeBlocklyFieldCheckbox = {
 type TypeBlocklyInputValue = {
     type: 'input_value';
     name: string;
+    check?: string | string[];
+    shadow?: any;
 };
 
 type TypeBlocklyStatementInput = {

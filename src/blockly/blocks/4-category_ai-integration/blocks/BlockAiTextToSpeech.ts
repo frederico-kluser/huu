@@ -5,21 +5,18 @@ import blockConstructor from '../../../helpers/blockConstructor';
 const setBlockAiTextToSpeech = () => {
     return blockConstructor({
         colour: Colors.AI,
-        hasPreviousConnection: null,
         hasNextConnection: null,
+        hasPreviousConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesis',
+        message: 'Falar o texto %1',
         name: 'BlockAiTextToSpeech',
+        tooltip: 'Converte o texto gerado pela IA em fala, utilizando a API SpeechSynthesis.',
         fields: [
-            {
-                type: 'text',
-                text: 'Falar o texto %1',
-            },
             {
                 type: 'input_value',
                 name: 'TEXT',
             }
         ],
-        tooltip: 'Converte o texto gerado pela IA em fala, utilizando a API SpeechSynthesis.',
         generator: function (block: Blockly.Block, generator: any) {
             return '/* not implemented yet */';
         },

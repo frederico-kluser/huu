@@ -4,22 +4,19 @@ import Colors from '../../../config/colors';
 
 const setBlockNavigateToUrlText = () => {
     return blockConstructor({
-        colour: Colors.URL, // utilize a cor desejada para este bloco
-        hasPreviousConnection: null,
+        colour: Colors.URL,
         hasNextConnection: null,
+        hasPreviousConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/location',
+        message: 'navegar para URL %1',
         name: 'BlockNavigateToUrlText',
+        tooltip: 'Navega para uma nova URL, alterando a página atual.',
         fields: [
-            {
-                type: 'text',
-                text: 'navegar para URL %1',
-            },
             {
                 type: 'input_value',
                 name: 'URL',
             },
         ],
-        tooltip: 'Navega para uma nova URL, alterando a página atual.',
         generator: function (block: Blockly.Block, generator: any) {
             return '/* not implemented yet */';
         },

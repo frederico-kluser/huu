@@ -1,17 +1,16 @@
-import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import BlocklyTypes from '../../../config/types';
 import blockConstructor from '../../../helpers/blockConstructor';
 
-const setBlockDblClickHTMLElement = () => {
+const setBlockTypeAction = () => {
     return blockConstructor({
         colour: Colors.HTML,
         hasNextConnection: null,
         hasPreviousConnection: null,
-        message: 'clicar duas vezes no elemento\n%1',
-        name: 'BlockDblClickHTMLElement',
-        helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/click',
-        tooltip: 'Clica duas vezes no elemento HTML armazenado na variável.',
+        helpUrl: 'https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Scripting/Variables',
+        message: 'digita no element %1\no texto %2',
+        name: 'BlockTypeAction',
+        tooltip: 'Variável que armazena um elemento HTML.',
         fields: [
             {
                 type: 'field_variable',
@@ -19,11 +18,15 @@ const setBlockDblClickHTMLElement = () => {
                 variable: BlocklyTypes.htmlElementVariable,
                 variableTypes: [''],
             },
+            {
+                type: 'field_variable',
+                name: 'VARIABLE',
+                variable: BlocklyTypes.textVariable,
+                variableTypes: [''],
+            },
+
         ],
-        generator: function (block: Blockly.Block, generator: any) {
-            return '/* not implemented yet */';
-        },
     });
 };
 
-export default setBlockDblClickHTMLElement;
+export default setBlockTypeAction;

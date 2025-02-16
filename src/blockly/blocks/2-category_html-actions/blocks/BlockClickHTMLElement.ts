@@ -8,21 +8,18 @@ const setBlockClickHTMLElement = () => {
         colour: Colors.HTML,
         hasNextConnection: null,
         hasPreviousConnection: null,
-        name: 'BlockClickHTMLElement',
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/click',
+        message: 'clicar no elemento\n%1',
+        name: 'BlockClickHTMLElement',
+        tooltip: 'Clica no elemento HTML armazenado na variável.',
         fields: [
-            {
-                type: 'text',
-                text: 'clicar no elemento\n%1',
-            },
             {
                 type: 'field_variable',
                 name: 'VARIABLE',
                 variable: BlocklyTypes.htmlElementVariable,
-                variableTypes: [''], // TODO: definir um tipo para elemento HTML
+                variableTypes: [''],
             },
         ],
-        tooltip: 'Clica no elemento HTML armazenado na variável.',
         generator: function (block: Blockly.Block, generator: any) {
             return '/* not implemented yet */';
         },

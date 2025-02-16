@@ -4,18 +4,14 @@ import blockConstructor from '../../../helpers/blockConstructor';
 
 const setBlockRefreshPage = () => {
     return blockConstructor({
-        colour: Colors.URL, // utilize a cor desejada para este bloco
-        hasPreviousConnection: null,
+        colour: Colors.URL,
         hasNextConnection: null,
+        hasPreviousConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Location/reload',
+        message: 'recarregar página',
         name: 'BlockRefreshPage',
-        fields: [
-            {
-                type: 'text',
-                text: 'recarregar página'
-            }
-        ],
         tooltip: 'Recarrega a página atual.',
+        fields: [],
         generator: function (block: Blockly.Block, generator: any) {
             return '/* not implemented yet */';
         },

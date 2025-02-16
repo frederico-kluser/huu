@@ -6,14 +6,11 @@ import BlocklyTypes from '../../../config/types';
 const setBlockAlertUser = () => {
     return blockConstructor({
         colour: Colors.HTML,
-        hasOutput: BlocklyTypes.textVariable, // bloco que retorna a resposta do usuário
+        hasOutput: BlocklyTypes.textVariable,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/alert',
+        message: 'browser alert %1',
         name: 'BlockAlerUser',
         fields: [
-            {
-                type: 'text',
-                text: 'browser alert %1',
-            },
             {
                 type: 'input_value',
                 name: 'ALERT_MESSAGE',

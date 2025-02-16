@@ -6,15 +6,13 @@ import blockConstructor from '../../../helpers/blockConstructor';
 const setBlockWaitForElementEndless = () => {
   return blockConstructor({
     colour: Colors.HTML,
-    hasPreviousConnection: 'null',
     hasNextConnection: 'null',
+    hasPreviousConnection: 'null',
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement',
+    message: 'esperar %1 o\nelemento %2',
     name: 'BlockWaitForElementEndless',
+    tooltip: 'Espera um elemento HTML aparecer ou desaparecer.',
     fields: [
-      {
-        type: 'text',
-        text: 'esperar %1 o\nelemento %2',
-      },
       {
         type: 'field_dropdown',
         name: 'VALUE',
@@ -27,10 +25,9 @@ const setBlockWaitForElementEndless = () => {
         type: 'field_variable',
         name: 'VARIABLE',
         variable: BlocklyTypes.htmlElementVariable,
-        variableTypes: [''], // TODO: criar um tipo para elemento HTML
+        variableTypes: [''],
       },
     ],
-    tooltip: 'Espera um elemento HTML aparecer ou desaparecer.',
     generator: function (block: Blockly.Block, generator: any) {
       return '/* not implemented yet */';
     },

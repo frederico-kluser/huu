@@ -6,22 +6,19 @@ import blockConstructor from '../../../helpers/blockConstructor';
 const setBlockGetElementInnerText = () => {
     return blockConstructor({
         colour: Colors.HTML,
-        hasOutput: 'String', // Este bloco retorna um valor (o innerText)
-        name: 'BlockGetElementInnerText',
+        hasOutput: 'String',
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/innerText',
+        message: 'obter o texto de\n%1',
+        name: 'BlockGetElementInnerText',
+        tooltip: 'Extrai o innerText de um elemento HTML armazenado em uma variável.',
         fields: [
-            {
-                type: 'text',
-                text: 'obter o texto de\n%1',
-            },
             {
                 type: 'field_variable',
                 name: 'ELEMENT',
                 variable: BlocklyTypes.htmlElementVariable,
-                variableTypes: [''], // TODO: definir um tipo específico para elemento HTML, se necessário
+                variableTypes: [''],
             }
         ],
-        tooltip: 'Extrai o innerText de um elemento HTML armazenado em uma variável.',
         generator: function (block: Blockly.Block, generator: any) {
             return '/* not implemented yet */';
         },

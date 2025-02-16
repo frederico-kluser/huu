@@ -8,14 +8,13 @@ const setBlockWriteTextToHTMLElement = () => {
         colour: Colors.HTML,
         hasNextConnection: null,
         hasPreviousConnection: null,
-        name: 'BlockWriteTextToHTMLElement',
         helpUrl:
             'https://developer.mozilla.org/en-US/docs/Web/API/Node/textContent',
+        message: 'escrever %1 no elemento\n%2',
+        name: 'BlockWriteTextToHTMLElement',
+        tooltip:
+            'Insere o texto de uma variável em um elemento HTML previamente salvo.',
         fields: [
-            {
-                type: 'text',
-                text: 'escrever %1 no elemento\n%2'
-            },
             {
                 type: 'input_value',
                 name: 'TEXT',
@@ -24,11 +23,9 @@ const setBlockWriteTextToHTMLElement = () => {
                 type: 'field_variable',
                 name: 'ELEMENT',
                 variable: BlocklyTypes.htmlElementVariable,
-                variableTypes: [''] // TODO: criar um tipo para elemento HTML, se necessário
+                variableTypes: [''],
             }
         ],
-        tooltip:
-            'Insere o texto de uma variável em um elemento HTML previamente salvo.',
         generator: function (block: Blockly.Block, generator: any) {
             return '/* not implemented yet */';
         },

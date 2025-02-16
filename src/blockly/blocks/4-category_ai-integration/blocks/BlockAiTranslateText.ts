@@ -6,15 +6,12 @@ import BlocklyTypes from '../../../config/types';
 const setBlockAiTranslateText = () => {
     return blockConstructor({
         colour: Colors.AI,
-        // Define que o bloco tem saída do tipo "variavelTextual1"
         hasOutput: BlocklyTypes.textVariable,
-        helpUrl: 'https://cloud.google.com/translate/docs', // URL de referência para tradução
+        helpUrl: 'https://cloud.google.com/translate/docs',
+        message: 'traduz texto %1\npara %2',
         name: 'BlockAiTranslateText',
+        tooltip: 'Traduz o texto gerado pela IA para outro idioma.',
         fields: [
-            {
-                type: 'text',
-                text: 'traduz texto %1\npara %2',
-            },
             {
                 type: 'input_value',
                 name: 'TEXT',
@@ -37,7 +34,6 @@ const setBlockAiTranslateText = () => {
                 ],
             },
         ],
-        tooltip: 'Traduz o texto gerado pela IA para outro idioma.',
         generator: function (block: Blockly.Block, generator: any) {
             return '/* not implemented yet */';
         },
