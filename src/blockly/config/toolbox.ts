@@ -3,6 +3,7 @@ import configHTMLActions from '../blocks/2-category_html-actions';
 import configHTMLInterection from '../blocks/1-category_html-elements';
 import configURLActions from '../blocks/3-category_url-control';
 import configAiActions from '../blocks/4-category_ai-integration';
+import configMiscellaneousActions from '../blocks/5-category_miscellaneous';
 
 const blocklyToolbox: BlocklyOptions['toolbox'] = {
   kind: 'categoryToolbox',
@@ -27,6 +28,11 @@ const blocklyToolbox: BlocklyOptions['toolbox'] = {
       kind: 'category',
       name: 'Ações de IA',
       contents: configAiActions(),
+    },
+    {
+      kind: 'category',
+      name: 'Ações Diversas',
+      contents: configMiscellaneousActions(),
     },
     {
       kind: 'sep', // Separator

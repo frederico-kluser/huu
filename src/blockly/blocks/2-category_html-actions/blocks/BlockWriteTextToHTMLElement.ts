@@ -14,7 +14,7 @@ const setBlockWriteTextToHTMLElement = () => {
         fields: [
             {
                 type: 'text',
-                text: 'escrever %1\nno elemento %2'
+                text: 'escrever %1 no elemento\n%2'
             },
             {
                 type: 'input_value',

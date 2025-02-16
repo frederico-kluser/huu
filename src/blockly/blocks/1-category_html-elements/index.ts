@@ -1,19 +1,21 @@
 import { TypeBlockly } from "../../helpers/blockConstructor";
+import setBlockAlertUser from "./blocks/BlockAlertUser";
 import setBlockGetElementInnerText from "./blocks/BlockGetElementInnerText";
+import setBlockPromptUser from "./blocks/BlockPromptUser";
 import setBlockScrollToElement from "./blocks/BlockScrollToElement";
-import setBlockSelectHTMLElementCSS from "./blocks/BlockSelectHTMLElementCSS";
-import setBlockSelectHTMLElementXPath from "./blocks/BlockSelectHTMLElementXPath";
+import setBlockSelectHTMLElement from "./blocks/BlockSelectHTMLElement";
 import setBlockWaitForElement from "./blocks/BlockWaitForElement";
 import setBlockWaitForElementEndless from "./blocks/BlockWaitForElementEndless";
 
 const configHTMLInterection = (): TypeBlockly[] => {
     return [
-        setBlockSelectHTMLElementXPath(),
-        setBlockSelectHTMLElementCSS(),
+        setBlockSelectHTMLElement(),
         setBlockWaitForElement(),
         setBlockWaitForElementEndless(),
         setBlockGetElementInnerText(),
         setBlockScrollToElement(),
+        setBlockPromptUser(),
+        setBlockAlertUser(),
     ];
 };
 

@@ -13,7 +13,7 @@ const setBlockScrollToElement = () => {
         fields: [
             {
                 type: 'text',
-                text: 'scrollar para elemento\n%1',
+                text: 'scrollar a tela para\n%1',
             },
             {
                 type: 'field_variable',
