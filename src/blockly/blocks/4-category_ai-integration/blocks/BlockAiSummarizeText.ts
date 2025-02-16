@@ -28,7 +28,7 @@ const setBlockAiSummarizeText = () => {
         // O gerador retorna uma expressão chamando uma função fictícia "aiSummarizeText"
         generator: function (block: Blockly.Block, generator: any) {
             return '/* not implemented yet */';
-        }
+        },
     });
 };
 

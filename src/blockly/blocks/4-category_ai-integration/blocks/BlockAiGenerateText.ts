@@ -14,12 +14,11 @@ const setBlockAiGenerateText = () => {
         fields: [
             {
                 type: 'text',
-                text: 'Gerar texto com prompt\n %1\ne armazenar em\n%2',
+                text: 'Pergunta para IA %1\nsalvar resultado em\n%2',
             },
             {
-                type: 'field_input',
+                type: 'input_value',
                 name: 'PROMPT',
-                text: 'Digite o prompt aqui',
             },
             {
                 type: 'field_variable',
@@ -30,13 +29,7 @@ const setBlockAiGenerateText = () => {
         ],
         tooltip: 'Envia um prompt para o ChatGPT e armazena o texto gerado em uma variável.',
         generator: function (block: Blockly.Block, generator: any) {
-            const promptValue = block.getFieldValue('PROMPT');
-            const outputVar = block.getFieldValue('OUTPUT');
-            // OBS.: Certifique-se de que exista (ou implemente) a função `chatGPT` que efetue a chamada à API do ChatGPT.
-            return `\n(async () => {
-  const resposta = await chatGPT(${generator.quote_(promptValue)});
-  ${outputVar} = resposta;
-})();\n`;
+            return '/* not implemented yet */';
         },
     });
 };

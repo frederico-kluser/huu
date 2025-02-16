@@ -1,3 +1,4 @@
+import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import BlocklyTypes from '../../../config/types';
 import blockConstructor from '../../../helpers/blockConstructor';
@@ -30,6 +31,9 @@ const setBlockWaitForElementEndless = () => {
       },
     ],
     tooltip: 'Espera um elemento HTML aparecer ou desaparecer.',
+    generator: function (block: Blockly.Block, generator: any) {
+      return '/* not implemented yet */';
+    },
   });
 };
 

@@ -15,16 +15,14 @@ const setBlockNavigateToUrlText = () => {
                 text: 'navegar para URL %1',
             },
             {
-                type: 'field_input',
+                type: 'input_value',
                 name: 'URL',
-                text: 'https://exemplo.com', // valor padrão da URL
-            }
+            },
         ],
         tooltip: 'Navega para uma nova URL, alterando a página atual.',
         generator: function (block: Blockly.Block, generator: any) {
-            const urlValue = block.getFieldValue('URL');
-            return `window.location.href = ${generator.quote_(urlValue)};\n`;
-        }
+            return '/* not implemented yet */';
+        },
     });
 };
 

@@ -1,3 +1,4 @@
+import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import BlocklyTypes from '../../../config/types';
 import blockConstructor from '../../../helpers/blockConstructor';
@@ -22,6 +23,9 @@ const setBlockClickHTMLElement = () => {
             },
         ],
         tooltip: 'Clica no elemento HTML armazenado na variável.',
+        generator: function (block: Blockly.Block, generator: any) {
+            return '/* not implemented yet */';
+        },
     });
 };
 

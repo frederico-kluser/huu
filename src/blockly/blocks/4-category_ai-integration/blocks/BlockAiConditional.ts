@@ -1,7 +1,6 @@
 import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
-import BlocklyTypes from '../../../config/types';
 
 const setBlockAiConditional = () => {
     return blockConstructor({
@@ -14,13 +13,11 @@ const setBlockAiConditional = () => {
         fields: [
             {
                 type: 'text',
-                text: 'Se (IA prompt %1)\nentão: %2 senão: %3'
+                text: 'Se a IA responder "Sim" para\n%1\nentão: %2\nsenão: %3'
             },
             {
-                type: 'field_variable',
+                type: 'input_value',
                 name: 'PROMPT',
-                variable: BlocklyTypes.promptVariable,
-                variableTypes: [''],
             },
             {
                 type: 'input_statement',
@@ -33,24 +30,8 @@ const setBlockAiConditional = () => {
         ],
         tooltip: 'Executa lógica condicional baseada na resposta da IA.',
         generator: function (block: Blockly.Block, generator: any) {
-            // Recupera o prompt inserido pelo usuário
-            const promptText = block.getFieldValue('PROMPT');
-            // Gera o código para os ramos if e else
-            const branchIf = generator.statementToCode(block, 'IF');
-            const branchElse = generator.statementToCode(block, 'ELSE');
-
-            // Aqui estamos assumindo a existência de uma função getAiResponse(prompt)
-            // que retorna um valor truthy/falsy com base na resposta da IA.
-            const code = `
-const aiResponse = getAiResponse(${generator.quote_(promptText)});
-if (aiResponse) {
-${branchIf}
-} else {
-${branchElse}
-}
-`;
-            return code;
-        }
+            return '/* not implemented yet */';
+        },
     });
 };
 

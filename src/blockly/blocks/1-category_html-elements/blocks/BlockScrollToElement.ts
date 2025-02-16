@@ -24,16 +24,8 @@ const setBlockScrollToElement = () => {
         ],
         tooltip: 'Rola a página até que o elemento selecionado esteja visível.',
         generator: function (block: Blockly.Block, generator: any) {
-            const elementSelector = block.getFieldValue('ELEMENT');
-            return `
-(function(){
-  var element = document.querySelector(${generator.quote_(elementSelector)});
-  if (element) {
-    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-})();
-\n`;
-        }
+            return '/* not implemented yet */';
+        },
     });
 };
 

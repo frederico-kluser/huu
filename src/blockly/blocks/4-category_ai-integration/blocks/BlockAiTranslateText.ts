@@ -13,13 +13,11 @@ const setBlockAiTranslateText = () => {
         fields: [
             {
                 type: 'text',
-                text: 'traduz texto AI\n%1\npara %2',
+                text: 'traduz texto %1\npara %2',
             },
             {
-                type: 'field_variable',
-                name: 'PROMPT',
-                variable: BlocklyTypes.textVariable,
-                variableTypes: [''],
+                type: 'input_value',
+                name: 'TEXT',
             },
             {
                 type: 'field_dropdown',

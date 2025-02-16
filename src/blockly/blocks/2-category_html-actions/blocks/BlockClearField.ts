@@ -24,18 +24,8 @@ const setBlockClearField = () => {
         ],
         tooltip: 'Limpa o conteúdo de um campo de texto ou formulário.',
         generator: function (block: Blockly.Block, generator: any) {
-            const fieldType = block.getFieldValue('FIELD_TYPE');
-            const fieldId = block.getFieldValue('FIELD_ID');
-            if (fieldType === 'text') {
-                // Limpa o conteúdo de um campo de texto
-                return `document.getElementById(${generator.quote_(fieldId)}).value = '';\n`;
-            } else if (fieldType === 'form') {
-                // Reinicia um formulário
-                return `document.getElementById(${generator.quote_(fieldId)}).reset();\n`;
-            } else {
-                return '/* Tipo de campo desconhecido */';
-            }
-        }
+            return '/* not implemented yet */';
+        },
     });
 };
 
