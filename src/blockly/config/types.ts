@@ -5,6 +5,7 @@ enum BlocklyTypes {
     textVariable2 = 'variavelTextual2',
     urlVariable = 'variavelURL1',
     promptVariable = 'variavelPrompt1',
+    confirmVariable = 'variavelConfirm1',
 }
 
 export default BlocklyTypes;

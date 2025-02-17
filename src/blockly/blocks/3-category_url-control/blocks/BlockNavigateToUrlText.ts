@@ -15,6 +15,12 @@ const setBlockNavigateToUrlText = () => {
             {
                 type: 'input_value',
                 name: 'URL',
+                shadow: {
+                    type: 'text',
+                    fields: {
+                        TEXT: 'https://www.google.com'
+                    }
+                }
             },
         ],
         generator: function (block: Blockly.Block, generator: any) {

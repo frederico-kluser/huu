@@ -15,6 +15,12 @@ const setBlockAiTextToSpeech = () => {
             {
                 type: 'input_value',
                 name: 'TEXT',
+                shadow: {
+                    type: 'text',
+                    fields: {
+                        TEXT: 'Texto para falar',
+                    }
+                }
             }
         ],
         generator: function (block: Blockly.Block, generator: any) {

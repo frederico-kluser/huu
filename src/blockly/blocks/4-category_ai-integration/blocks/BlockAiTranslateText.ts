@@ -8,13 +8,19 @@ const setBlockAiTranslateText = () => {
         colour: Colors.AI,
         hasOutput: BlocklyTypes.textVariable,
         helpUrl: 'https://cloud.google.com/translate/docs',
-        message: 'traduz texto %1\npara %2',
+        message: 'traduz texto\n%1\npara %2',
         name: 'BlockAiTranslateText',
         tooltip: 'Traduz o texto gerado pela IA para outro idioma.',
         fields: [
             {
                 type: 'input_value',
                 name: 'TEXT',
+                shadow: {
+                    type: 'text',
+                    fields: {
+                        TEXT: 'Texto a ser traduzido',
+                    }
+                }
             },
             {
                 type: 'field_dropdown',

@@ -15,6 +15,12 @@ const setBlockAiConditional = () => {
             {
                 type: 'input_value',
                 name: 'PROMPT',
+                shadow: {
+                    type: 'text',
+                    fields: {
+                        TEXT: 'Pergunta para IA',
+                    }
+                }
             },
             {
                 type: 'input_statement',

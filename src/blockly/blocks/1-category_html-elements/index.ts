@@ -1,5 +1,6 @@
 import { TypeBlockly } from "../../helpers/blockConstructor";
 import setBlockAlertUser from "./blocks/BlockAlertUser";
+import setBlockConfirmUser from "./blocks/BlockConfirmUser";
 import setBlockGetElementInnerText from "./blocks/BlockGetElementInnerText";
 import setBlockPromptUser from "./blocks/BlockPromptUser";
 import setBlockScrollToElement from "./blocks/BlockScrollToElement";
@@ -16,6 +17,7 @@ const configHTMLInterection = (): TypeBlockly[] => {
         setBlockScrollToElement(),
         setBlockPromptUser(),
         setBlockAlertUser(),
+        setBlockConfirmUser(),
     ];
 };
 

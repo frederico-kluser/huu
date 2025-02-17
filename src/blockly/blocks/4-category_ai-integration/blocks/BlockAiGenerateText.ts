@@ -9,13 +9,19 @@ const setBlockAiGenerateText = () => {
         hasNextConnection: null,
         hasPreviousConnection: null,
         helpUrl: 'https://openai.com/blog/chatgpt',
-        message: 'Pergunta para IA %1\nsalvar resultado em\n%2',
+        message: 'Pergunta para IA\n%1\nsalvar resultado em\n%2',
         name: 'BlockAiGenerateText',
         tooltip: 'Envia um prompt para o ChatGPT e armazena o texto gerado em uma variável.',
         fields: [
             {
                 type: 'input_value',
                 name: 'PROMPT',
+                shadow: {
+                    type: 'text',
+                    fields: {
+                        TEXT: 'Prompt para IA',
+                    }
+                }
             },
             {
                 type: 'field_variable',

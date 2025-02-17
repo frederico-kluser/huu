@@ -14,6 +14,12 @@ const setBlockAlertUser = () => {
             {
                 type: 'input_value',
                 name: 'ALERT_MESSAGE',
+                shadow: {
+                    type: 'text',
+                    fields: {
+                        TEXT: 'Alerta!'
+                    }
+                }
             },
         ],
         tooltip: 'Exibe um alerta para o usuário inserir informações.',

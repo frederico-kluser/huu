@@ -1,24 +1,24 @@
 import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
+import BlocklyTypes from '../../../config/types';
 
-const setBlockRunJavaScript = () => {
+const setBlockConfirmUser = () => {
     return blockConstructor({
-        colour: Colors.MISCELLANEOUS,
-        hasPreviousConnection: null,
-        hasNextConnection: null,
-        helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript',
-        message: 'executar JavaScript %1',
-        name: 'BlockRunJavaScript',
-        tooltip: 'Executa um trecho de código JavaScript personalizado.',
+        colour: Colors.HTML,
+        hasOutput: BlocklyTypes.confirmVariable,
+        helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/confirm',
+        message: 'browser confirm %1',
+        name: 'BlockConfirmUser',
+        tooltip: 'Exibe um window confirm para o usuário aceitar ou cancelar.',
         fields: [
             {
                 type: 'input_value',
-                name: 'CODE',
+                name: 'CONFIRM_MESSAGE',
                 shadow: {
                     type: 'text',
                     fields: {
-                        TEXT: 'console.log("Hello, World!");',
+                        TEXT: 'Confirma?'
                     }
                 }
             },
@@ -29,4 +29,4 @@ const setBlockRunJavaScript = () => {
     });
 };
 
-export default setBlockRunJavaScript;
+export default setBlockConfirmUser;

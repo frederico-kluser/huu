@@ -10,7 +10,7 @@ const setBlockWriteTextToHTMLElement = () => {
         hasPreviousConnection: null,
         helpUrl:
             'https://developer.mozilla.org/en-US/docs/Web/API/Node/textContent',
-        message: 'escrever %1 no elemento\n%2',
+        message: 'escrever %1\nno elemento %2',
         name: 'BlockWriteTextToHTMLElement',
         tooltip:
             'Insere o texto de uma variável em um elemento HTML previamente salvo.',
@@ -18,6 +18,12 @@ const setBlockWriteTextToHTMLElement = () => {
             {
                 type: 'input_value',
                 name: 'TEXT',
+                shadow: {
+                    type: 'text',
+                    fields: {
+                        TEXT: 'Digite o texto'
+                    }
+                }
             },
             {
                 type: 'field_variable',
