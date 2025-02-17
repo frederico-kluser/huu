@@ -37,7 +37,6 @@ const setBlockSelectHTMLElement = () => {
     generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
       const selector =
         generator.valueToCode(block, 'SELECTOR', Order.ATOMIC) || '""';
-      // Obtém o valor selecionado no dropdown 'TARGET_SELECTOR'
       const target = block.getFieldValue('TARGET_SELECTOR');
       let code = '';
 
@@ -61,7 +60,6 @@ const setBlockSelectHTMLElement = () => {
           code = `document.querySelector(${selector})`;
       }
 
-      // Retorna o código gerado e a precedência
       return [code, Order.ATOMIC];
     },
   });
