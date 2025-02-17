@@ -12,7 +12,7 @@ const setBlockAiConditional = () => {
         message: 'pergunta de sim ou não\n%1\nse sim\n%2\nsenao\n%3',
         name: 'BlockAiConditional',
         tooltip: 'Pergunta ao usuário e executa um bloco de código se a resposta for verdadeira e outro se for falsa.',
-        fields: [
+        fields: [ // TODO: Implementar async await
             {
                 type: 'input_value',
                 name: 'PROMPT',
