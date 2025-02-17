@@ -14,7 +14,6 @@ const setBlockSelectHTMLElement = () => {
       {
         type: 'input_value',
         name: 'SELECTOR',
-        check: 'String',
         shadow: {
           type: 'text',
           fields: {

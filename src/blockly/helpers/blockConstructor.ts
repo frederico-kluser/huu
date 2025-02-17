@@ -1,7 +1,8 @@
 import * as Blockly from 'blockly';
 import { javascriptGenerator, Order } from 'blockly/javascript';
 import TypeColorBlock from '../../types/blockColor';
-import TypeBlocklyFields from '../../types/blocklyFields';
+import TypeBlocklyFields, { TypeBlocklyInputValue } from '../../types/blocklyFields';
+import TypeInputBlock from '../../types/blocklyInputs';
 
 const blockConstructorErrorHandling = (
   blockConfig: blockConstructorInterface
@@ -41,14 +42,15 @@ export type TypeBlockly = {
 interface blockConstructorInterface {
   colour: TypeColorBlock;
   fields: TypeBlocklyFields[];
+  generator?: (block: any, generator: any) => string;
   hasNextConnection?: TypeConnection;
   hasOutput?: TypeConnection;
   hasPreviousConnection?: TypeConnection;
   helpUrl: string;
+  inputs?: TypeInputBlock;
   message: string;
   name: string;
   tooltip: string;
-  generator?: (block: any, generator: any) => string;
 }
 
 const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly => {
@@ -61,6 +63,7 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
     hasOutput,
     hasPreviousConnection,
     helpUrl,
+    inputs,
     message,
     name,
     tooltip,
@@ -99,6 +102,28 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
         tooltip,
         ...jsonInitExtra,
       });
+
+      fields.filter((field) => field.type === 'input_value' && !!field.shadow).forEach((field) => {
+        const formattedField = field as any;
+
+        const selectorInput = this.getInput(formattedField.name);
+        if (selectorInput && !selectorInput.connection.getShadowDom()) {
+          const shadowXml = document.createElement('shadow');
+          shadowXml.setAttribute('type', formattedField.shadow.type);
+
+          const fields = formattedField.shadow.fields;
+
+          Object.keys(fields).forEach((key) => {
+            const fieldXml = document.createElement('field');
+            fieldXml.setAttribute('name', key);
+            fieldXml.textContent = fields[key];
+
+            shadowXml.appendChild(fieldXml);
+          });
+
+          selectorInput.connection.setShadowDom(shadowXml);
+        }
+      });
     },
   };
 
@@ -113,6 +138,7 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
   return {
     kind: 'block',
     type: name,
+    ...inputs ? { inputs } : {},
   };
 };
 

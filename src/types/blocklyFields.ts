@@ -29,11 +29,16 @@ type TypeBlocklyFieldCheckbox = {
     checked: boolean;
 };
 
-type TypeBlocklyInputValue = {
+export type TypeBlocklyInputValue = {
     type: 'input_value';
     name: string;
     check?: string | string[];
-    shadow?: any;
+    shadow?: {
+        type: 'text' | 'number';
+        fields: {
+            [key: string]: string | number;
+        };
+    },
 };
 
 type TypeBlocklyStatementInput = {

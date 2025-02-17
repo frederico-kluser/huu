@@ -15,6 +15,12 @@ const setBlockPromptUser = () => {
             {
                 type: 'input_value',
                 name: 'PROMPT_MESSAGE',
+                shadow: {
+                    type: 'text',
+                    fields: {
+                        TEXT: 'Digite a sua pergunta'
+                    }
+                }
             },
         ],
         generator: function (block: Blockly.Block, generator: any) {
