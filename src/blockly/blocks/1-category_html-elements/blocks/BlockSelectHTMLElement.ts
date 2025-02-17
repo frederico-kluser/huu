@@ -1,6 +1,7 @@
 import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
+import { Order } from 'blockly/javascript';
 
 const setBlockSelectHTMLElement = () => {
   return blockConstructor({
@@ -33,10 +34,9 @@ const setBlockSelectHTMLElement = () => {
         ],
       },
     ],
-    generator: function (block: Blockly.Block, generator: any) {
-      // Obtém o código para o valor de entrada 'SELECTOR'
+    generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
       const selector =
-        generator.valueToCode(block, 'SELECTOR', generator.ORDER_ATOMIC) || '""';
+        generator.valueToCode(block, 'SELECTOR', Order.ATOMIC) || '""';
       // Obtém o valor selecionado no dropdown 'TARGET_SELECTOR'
       const target = block.getFieldValue('TARGET_SELECTOR');
       let code = '';
@@ -62,7 +62,7 @@ const setBlockSelectHTMLElement = () => {
       }
 
       // Retorna o código gerado e a precedência
-      return [code, generator.ORDER_ATOMIC];
+      return [code, Order.ATOMIC];
     },
   });
 };

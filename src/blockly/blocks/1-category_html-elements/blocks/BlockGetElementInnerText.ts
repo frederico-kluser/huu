@@ -2,6 +2,7 @@ import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import BlocklyTypes from '../../../config/types';
 import blockConstructor from '../../../helpers/blockConstructor';
+import { Order } from 'blockly/javascript';
 
 const setBlockGetElementInnerText = () => {
     return blockConstructor({
@@ -20,8 +21,10 @@ const setBlockGetElementInnerText = () => {
             }
         ],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
-            // ...
-            return '...';
+            const varName = generator.nameDB_?.getName(block.getFieldValue('ELEMENT'), Blockly.VARIABLE_CATEGORY_NAME);
+
+            const code = `${varName}.innerText`;
+            return [code, Order.MEMBER];
         },
     });
 };
