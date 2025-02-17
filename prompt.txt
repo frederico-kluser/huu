@@ -6,8 +6,9 @@ color.ts
 
 enum Colors {
     HTML = 5,
-    URL = 120,
+    URL = 220,
     AI = 120,
+    MISCELLANEOUS = 300,
 }
 
 export default Colors;
@@ -19,7 +20,9 @@ enum BlocklyTypes {
     htmlElement = 'htmlElement',
     htmlElementVariable = 'elementoHTML1',
     textVariable = 'variavelTextual1',
+    textVariable2 = 'variavelTextual2',
     urlVariable = 'variavelURL1',
+    promptVariable = 'variavelPrompt1',
 }
 
 export default BlocklyTypes;
@@ -58,12 +61,24 @@ type TypeBlocklyFieldCheckbox = {
     checked: boolean;
 };
 
-type TypeBlocklyInputValue = {
+export type TypeBlocklyInputValue = {
     type: 'input_value';
+    name: string;
+    check?: string | string[];
+    shadow?: {
+        type: 'text' | 'number';
+        fields: {
+            [key: string]: string | number;
+        };
+    },
+};
+
+type TypeBlocklyStatementInput = {
+    type: 'input_statement';
     name: string;
 };
 
-type TypeBlocklyFields = TypeBlocklyFieldText | TypeBlocklyFieldVariable | TypeBlocklyFieldInput | TypeBlocklyFieldDropdown | TypeBlocklyFieldCheckbox | TypeBlocklyInputValue;
+type TypeBlocklyFields = TypeBlocklyFieldText | TypeBlocklyFieldVariable | TypeBlocklyFieldInput | TypeBlocklyFieldDropdown | TypeBlocklyFieldCheckbox | TypeBlocklyInputValue | TypeBlocklyStatementInput;
 
 export default TypeBlocklyFields;
 """
@@ -73,7 +88,8 @@ blockConstructor.ts
 import * as Blockly from 'blockly';
 import { javascriptGenerator, Order } from 'blockly/javascript';
 import TypeColorBlock from '../../types/blockColor';
-import TypeBlocklyFields from '../../types/blocklyFields';
+import TypeBlocklyFields, { TypeBlocklyInputValue } from '../../types/blocklyFields';
+import TypeInputBlock from '../../types/blocklyInputs';
 
 const blockConstructorErrorHandling = (
   blockConfig: blockConstructorInterface
@@ -97,15 +113,9 @@ const blockConstructorErrorHandling = (
   }
 
   if (
-    blockConfig.fields.filter((field) => field.type === 'text').length > 1
+    blockConfig.fields.filter((field) => field.type === 'text').length
   ) {
-    throw new Error('A block cannot have more than one text field');
-  }
-
-  if (
-    blockConfig.fields.filter((field) => field.type === 'text').length === 0
-  ) {
-    throw new Error('A block must have at least one text field');
+    throw new Error('A block cannot have a text field');
   }
 };
 
@@ -118,14 +128,16 @@ export type TypeBlockly = {
 
 interface blockConstructorInterface {
   colour: TypeColorBlock;
-  hasNextConnection?: TypeConnection;
-  hasPreviousConnection?: TypeConnection;
-  hasOutput?: TypeConnection;
-  helpUrl: string;
-  name: string;
   fields: TypeBlocklyFields[];
-  tooltip: string;
   generator?: (block: any, generator: any) => string;
+  hasNextConnection?: TypeConnection;
+  hasOutput?: TypeConnection;
+  hasPreviousConnection?: TypeConnection;
+  helpUrl: string;
+  inputs?: TypeInputBlock;
+  message: string;
+  name: string;
+  tooltip: string;
 }
 
 const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly => {
@@ -133,12 +145,14 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
 
   const {
     colour,
-    hasNextConnection,
-    hasPreviousConnection,
-    hasOutput,
-    helpUrl,
-    name,
     fields,
+    hasNextConnection,
+    hasOutput,
+    hasPreviousConnection,
+    helpUrl,
+    inputs,
+    message,
+    name,
     tooltip,
   } = blockConfig;
 
@@ -158,16 +172,10 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
     jsonInitExtra['output'] = hasOutput;
   }
 
-  let message0 = '';
+  const message0 = message;
   let args0: any = [];
 
   fields.forEach((field, index) => {
-    if (field.type === 'text') {
-      message0 += field.text;
-    };
-  });
-
-  fields.filter((field) => field.type !== 'text').forEach((field, index) => {
     args0.push(field);
   });
 
@@ -181,9 +189,30 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
         tooltip,
         ...jsonInitExtra,
       });
+
+      fields.filter((field) => field.type === 'input_value' && !!field.shadow).forEach((field) => {
+        const formattedField = field as any;
+
+        const selectorInput = this.getInput(formattedField.name);
+        if (selectorInput && !selectorInput.connection.getShadowDom()) {
+          const shadowXml = document.createElement('shadow');
+          shadowXml.setAttribute('type', formattedField.shadow.type);
+
+          const fields = formattedField.shadow.fields;
+
+          Object.keys(fields).forEach((key) => {
+            const fieldXml = document.createElement('field');
+            fieldXml.setAttribute('name', key);
+            fieldXml.textContent = fields[key];
+
+            shadowXml.appendChild(fieldXml);
+          });
+
+          selectorInput.connection.setShadowDom(shadowXml);
+        }
+      });
     },
   };
-
 
   if (blockConfig.generator) {
     javascriptGenerator.forBlock[name] = blockConfig.generator;
@@ -196,6 +225,7 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
   return {
     kind: 'block',
     type: name,
+    ...inputs ? { inputs } : {},
   };
 };
 
@@ -204,41 +234,45 @@ export default blockConstructor;
 
 e nesse exemplo de implementação
 
-BlockNavigateToUrl.ts
+BlockPromptUser.ts
 """
 import * as Blockly from 'blockly/core';
-import Colors from '../../config/colors';
-import blockConstructor from '../../helpers/blockConstructor';
+import Colors from '../../../config/colors';
+import blockConstructor from '../../../helpers/blockConstructor';
+import BlocklyTypes from '../../../config/types';
 
-const setBlockNavigateToUrl = () => {
+const setBlockPromptUser = () => {
     return blockConstructor({
-        colour: Colors.URL,
-        hasPreviousConnection: null,
-        hasNextConnection: null,
-        helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/location',
-        name: 'BlockNavigateToUrl',
+        colour: Colors.HTML,
+        hasOutput: BlocklyTypes.textVariable,
+        helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/prompt',
+        message: 'browser prompt %1',
+        name: 'BlockPromptUser',
+        tooltip: 'Exibe um prompt para o usuário inserir informações.',
         fields: [
             {
-                type: 'text',
-                text: 'navegar para URL %1',
+                type: 'input_value',
+                name: 'PROMPT_MESSAGE',
+                shadow: {
+                    type: 'text',
+                    fields: {
+                        TEXT: 'Digite a sua pergunta'
+                    }
+                }
             },
-            {
-                type: 'field_input',
-                name: 'URL',
-                text: 'https://exemplo.com', // valor padrão da URL
-            }
         ],
-        tooltip: 'Navega para uma nova URL, alterando a página atual.',
         generator: function (block: Blockly.Block, generator: any) {
-            const urlValue = block.getFieldValue('URL');
-            return `window.location.href = ${generator.quote_(urlValue)};\n`;
-        }
+            return '/* not implemented yet */';
+        },
     });
 };
 
-export default setBlockNavigateToUrl;
+export default setBlockPromptUser;
+
 """
 
-Crie um BlockNavigateBack e um BlockNavigateForward para que o usuário possa navegar para trás e para frente no histórico do navegador.
+Crie um BlockConfirmUser
+Função: Exibe um window confirm para o usuaário aceitar ou cancelar
 
 !!! important: se precisar alterar um dos arquivos ou funções existentes, adicione na resposta o que deve mudar e onde !!!
+!!! important: não crie lógica para o generator, apenas copie o /* not implemented yet */ !!!
