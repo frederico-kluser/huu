@@ -20,8 +20,13 @@ const setBlockScrollToElement = () => {
                 variableTypes: [''],
             },
         ],
-        generator: function (block: Blockly.Block, generator: any) {
-            return '/* not implemented yet */';
+        generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
+            const varName = generator.nameDB_?.getName(
+                block.getFieldValue('VARIABLE'),
+                Blockly.VARIABLE_CATEGORY_NAME
+            );
+            const code = `${varName}.scrollIntoView();\n`;
+            return code;
         },
     });
 };
