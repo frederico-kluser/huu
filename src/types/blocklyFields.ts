@@ -34,7 +34,7 @@ export type TypeBlocklyInputValue = {
     name: string;
     check?: string | string[];
     shadow?: {
-        type: 'text' | 'number';
+        type: 'text' | 'math_number';
         fields: {
             [key: string]: string | number;
         };

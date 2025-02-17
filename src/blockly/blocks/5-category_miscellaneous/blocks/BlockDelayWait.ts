@@ -1,27 +1,47 @@
 import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
+import { Order } from 'blockly/javascript';
 
 const setBlockDelayWait = () => {
     return blockConstructor({
         colour: Colors.MISCELLANEOUS,
-        hasNextConnection: null,
         hasPreviousConnection: null,
+        hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout',
-        message: 'aguardar %1 ms',
+        message: 'aguarde %1 milissegundos',
         name: 'BlockDelayWait',
-        tooltip: 'Introduz um atraso na execução de ações, sincronizando interações.',
+        tooltip: 'Aguarda um intervalo de tempo antes de continuar a execução.',
         fields: [
             {
-                type: 'field_input',
+                type: 'input_value',
                 name: 'DELAY_TIME',
-                text: '1000',
-            }
+                check: 'Number',
+                shadow: {
+                    type: 'math_number',
+                    fields: {
+                        NUM: 1000,
+                    },
+                },
+            },
         ],
-        generator: function (block: Blockly.Block, generator: any) {
-            return '/* not implemented yet */';
+        generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
+            const delayTime =
+                generator.valueToCode(block, 'DELAY_TIME', Order.ATOMIC) || '0';
+            // Gera código que aguarda o tempo especificado usando Promise e setTimeout.
+            const code = `await new Promise(resolve => setTimeout(resolve, ${delayTime}));\n`;
+            return code;
         },
     });
 };
 
 export default setBlockDelayWait;
+
+/*
+shadow: {
+          type: 'text',
+          fields: {
+            TEXT: 'div'
+          }
+        }
+*/
