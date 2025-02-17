@@ -19,8 +19,9 @@ const setBlockGetElementInnerText = () => {
                 variableTypes: [''],
             }
         ],
-        generator: function (block: Blockly.Block, generator: any) {
-            return '/* not implemented yet */';
+        generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
+            // ...
+            return '...';
         },
     });
 };

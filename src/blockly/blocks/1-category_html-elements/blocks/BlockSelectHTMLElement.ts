@@ -34,7 +34,35 @@ const setBlockSelectHTMLElement = () => {
       },
     ],
     generator: function (block: Blockly.Block, generator: any) {
-      return '/* not implemented yet */';
+      // Obtém o código para o valor de entrada 'SELECTOR'
+      const selector =
+        generator.valueToCode(block, 'SELECTOR', generator.ORDER_ATOMIC) || '""';
+      // Obtém o valor selecionado no dropdown 'TARGET_SELECTOR'
+      const target = block.getFieldValue('TARGET_SELECTOR');
+      let code = '';
+
+      switch (target) {
+        case 'css':
+          code = `document.querySelector(${selector})`;
+          break;
+        case 'id':
+          code = `document.getElementById(${selector})`;
+          break;
+        case 'class':
+          code = `document.getElementsByClassName(${selector})[0]`;
+          break;
+        case 'tag':
+          code = `document.getElementsByTagName(${selector})[0]`;
+          break;
+        case 'xpath':
+          code = `document.evaluate(${selector}, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue`;
+          break;
+        default:
+          code = `document.querySelector(${selector})`;
+      }
+
+      // Retorna o código gerado e a precedência
+      return [code, generator.ORDER_ATOMIC];
     },
   });
 };

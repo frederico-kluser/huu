@@ -1,8 +1,9 @@
 import * as Blockly from 'blockly';
-import { javascriptGenerator, Order } from 'blockly/javascript';
+import { javascriptGenerator } from 'blockly/javascript';
 import TypeColorBlock from '../../types/blockColor';
-import TypeBlocklyFields, { TypeBlocklyInputValue } from '../../types/blocklyFields';
+import TypeBlocklyFields from '../../types/blocklyFields';
 import TypeInputBlock from '../../types/blocklyInputs';
+import TypeBlockGenerator from '../../types/blockGenerator';
 
 const blockConstructorErrorHandling = (
   blockConfig: blockConstructorInterface
@@ -42,7 +43,7 @@ export type TypeBlockly = {
 interface blockConstructorInterface {
   colour: TypeColorBlock;
   fields: TypeBlocklyFields[];
-  generator?: (block: any, generator: any) => string;
+  generator?: TypeBlockGenerator;
   hasNextConnection?: TypeConnection;
   hasOutput?: TypeConnection;
   hasPreviousConnection?: TypeConnection;
@@ -128,7 +129,7 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
   };
 
   if (blockConfig.generator) {
-    javascriptGenerator.forBlock[name] = blockConfig.generator;
+    javascriptGenerator.forBlock[name] = blockConfig.generator as any;
   } else {
     javascriptGenerator.forBlock[name] = function (block, generator) {
       return '/* Generator not implemented */';
