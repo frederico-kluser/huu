@@ -36,6 +36,12 @@ const blockConstructorErrorHandling = (
 
 type TypeConnection = string | string[] | null;
 
+export type TypeBlocklyButton = {
+  kind: string;
+  text: string;
+  callbackKey: string;
+};
+
 export type TypeBlockly = {
   kind: string;
   type: string;

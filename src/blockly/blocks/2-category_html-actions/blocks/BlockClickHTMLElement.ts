@@ -17,7 +17,7 @@ const setBlockClickHTMLElement = () => {
             {
                 type: 'field_variable',
                 name: 'VARIABLE',
-                variable: BlocklyVariableNames.htmlElementVariable,
+                variable: '',
                 variableTypes: [BlocklyTypes.htmlElement],
                 defaultType: BlocklyTypes.htmlElement,
             },

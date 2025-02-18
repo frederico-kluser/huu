@@ -28,7 +28,7 @@ const setBlockWriteTextToHTMLElement = () => {
             {
                 type: 'field_variable',
                 name: 'ELEMENT',
-                variable: BlocklyVariableNames.htmlElementVariable,
+                variable: '',
                 variableTypes: [''],
             }
         ],

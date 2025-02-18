@@ -2,6 +2,7 @@ import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import BlocklyVariableNames from '../../../config/variable-names';
 import blockConstructor from '../../../helpers/blockConstructor';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockWaitForElementEndless = () => {
   return blockConstructor({
@@ -25,7 +26,8 @@ const setBlockWaitForElementEndless = () => {
         type: 'field_variable',
         name: 'VARIABLE',
         variable: BlocklyVariableNames.htmlElementVariable,
-        variableTypes: [''],
+        variableTypes: [BlocklyTypes.htmlElement],
+        defaultType: BlocklyTypes.htmlElement,
       },
     ],
     generator: function (block: Blockly.Block, generator: any) {

@@ -3,6 +3,7 @@ import Colors from '../../../config/colors';
 import BlocklyVariableNames from '../../../config/variable-names';
 import blockConstructor from '../../../helpers/blockConstructor';
 import { Order } from 'blockly/javascript';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockGetElementInnerText = () => {
     return blockConstructor({
@@ -16,8 +17,9 @@ const setBlockGetElementInnerText = () => {
             {
                 type: 'field_variable',
                 name: 'ELEMENT',
-                variable: BlocklyVariableNames.htmlElementVariable,
-                variableTypes: [''],
+                variable: '',
+                variableTypes: [BlocklyTypes.htmlElement],
+                defaultType: BlocklyTypes.htmlElement,
             }
         ],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {

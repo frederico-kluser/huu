@@ -2,6 +2,7 @@ import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
 import BlocklyVariableNames from '../../../config/variable-names';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockScrollToElement = () => {
     return blockConstructor({
@@ -16,8 +17,9 @@ const setBlockScrollToElement = () => {
             {
                 type: 'field_variable',
                 name: 'VARIABLE',
-                variable: BlocklyVariableNames.htmlElementVariable,
-                variableTypes: [''],
+                variable: '',
+                variableTypes: [BlocklyTypes.htmlElement],
+                defaultType: BlocklyTypes.htmlElement,
             },
         ],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {

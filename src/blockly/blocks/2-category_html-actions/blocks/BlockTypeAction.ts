@@ -15,7 +15,7 @@ const setBlockTypeAction = () => {
             {
                 type: 'field_variable',
                 name: 'VARIABLE',
-                variable: BlocklyVariableNames.htmlElementVariable,
+                variable: '',
                 variableTypes: [''],
             },
             {

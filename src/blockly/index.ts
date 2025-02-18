@@ -2,6 +2,7 @@ import * as Blockly from 'blockly/core';
 import { javascriptGenerator } from 'blockly/javascript';
 import blocklyOptions from './config/options';
 import blocklyContextMenus from './config/contextMenu';
+import BlocklyTypes from './config/types';
 
 var workspace: Blockly.Workspace;
 
@@ -28,5 +29,13 @@ function updateCode(event: any) {
 
 export const blocklySetup = () => {
     workspace = Blockly.inject('blocklyDiv', blocklyOptions);
+    const Workspace = workspace as any;
+    Workspace.registerButtonCallback('CREATE_HTML_VARIABLE', function (button: any) {
+        Blockly.Variables.createVariableButtonHandler(
+            button.getTargetWorkspace(),
+            (variable) => { },
+            BlocklyTypes.htmlElement
+        );
+    });
     workspace.addChangeListener(updateCode);
 };
