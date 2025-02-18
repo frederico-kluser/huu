@@ -1,11 +1,10 @@
 enum BlocklyVariableNames {
-    htmlElement = 'htmlElement',
-    htmlElementVariable = 'elementoHTML1',
-    textVariable = 'variavelTextual1',
-    textVariable2 = 'variavelTextual2',
-    urlVariable = 'variavelURL1',
-    promptVariable = 'variavelPrompt1',
-    confirmVariable = 'variavelConfirm1',
+    htmlElement = 'varHTML1',
+    textVariable = 'varTextual1',
+    textVariable2 = 'varTextual2',
+    urlVariable = 'varURL1',
+    promptVariable = 'varPrompt1',
+    confirmVariable = 'varConfirm1',
 }
 
 export default BlocklyVariableNames;

@@ -2,6 +2,7 @@ import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
 import BlocklyVariableNames from '../../../config/variable-names';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockClearField = () => {
     return blockConstructor({
@@ -16,8 +17,9 @@ const setBlockClearField = () => {
             {
                 type: 'field_variable',
                 name: 'VARIABLE',
-                variable: '',
-                variableTypes: [''],
+                variable: BlocklyVariableNames.htmlElement,
+                variableTypes: [BlocklyTypes.htmlElement],
+                defaultType: BlocklyTypes.htmlElement,
             },
         ],
         generator: function (block: Blockly.Block, generator: any) {

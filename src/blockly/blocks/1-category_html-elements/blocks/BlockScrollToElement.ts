@@ -17,7 +17,7 @@ const setBlockScrollToElement = () => {
             {
                 type: 'field_variable',
                 name: 'VARIABLE',
-                variable: '',
+                variable: BlocklyVariableNames.htmlElement,
                 variableTypes: [BlocklyTypes.htmlElement],
                 defaultType: BlocklyTypes.htmlElement,
             },

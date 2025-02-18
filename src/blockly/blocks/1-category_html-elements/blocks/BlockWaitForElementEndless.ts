@@ -25,7 +25,7 @@ const setBlockWaitForElementEndless = () => {
       { // TODO: preciso mudar, porque como eu posso ter uma variável de um elemento que nem existe ainda?
         type: 'field_variable',
         name: 'VARIABLE',
-        variable: BlocklyVariableNames.htmlElementVariable,
+        variable: BlocklyVariableNames.htmlElement,
         variableTypes: [BlocklyTypes.htmlElement],
         defaultType: BlocklyTypes.htmlElement,
       },

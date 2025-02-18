@@ -17,7 +17,7 @@ const setBlockGetElementInnerText = () => {
             {
                 type: 'field_variable',
                 name: 'ELEMENT',
-                variable: '',
+                variable: BlocklyVariableNames.htmlElement,
                 variableTypes: [BlocklyTypes.htmlElement],
                 defaultType: BlocklyTypes.htmlElement,
             }
