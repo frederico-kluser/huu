@@ -17,6 +17,7 @@ const setBlockAlertUser = () => {
             {
                 type: 'input_value',
                 name: 'MESSAGE',
+                check: 'String',
                 shadow: {
                     type: 'text',
                     fields: {

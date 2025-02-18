@@ -17,6 +17,7 @@ const setBlockAiGenerateText = () => {
             {
                 type: 'input_value',
                 name: 'PROMPT',
+                check: 'String',
                 shadow: {
                     type: 'text',
                     fields: {

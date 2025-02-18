@@ -19,7 +19,7 @@ const setBlockRunJavaScript = () => {
             {
                 type: 'input_value',
                 name: 'JS_CODE',
-                // Permite receber uma string literal ou variável com o código.
+                check: 'String',
                 shadow: {
                     type: 'text',
                     fields: {
