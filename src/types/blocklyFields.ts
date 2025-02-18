@@ -8,7 +8,8 @@ type TypeBlocklyFieldVariable = {
     name: string;
     variable: string;
     variableTypes: string[];
-    dataType?: string;
+    check?: string;
+    defaultType?: string;
 };
 
 type TypeBlocklyFieldInput = {

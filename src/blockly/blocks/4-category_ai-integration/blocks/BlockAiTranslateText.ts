@@ -1,12 +1,12 @@
 import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
-import BlocklyTypes from '../../../config/types';
+import BlocklyVariableNames from '../../../config/variable-names';
 
 const setBlockAiTranslateText = () => {
     return blockConstructor({
         colour: Colors.AI,
-        hasOutput: BlocklyTypes.textVariable,
+        hasOutput: BlocklyVariableNames.textVariable,
         helpUrl: 'https://cloud.google.com/translate/docs',
         message: 'traduz texto\n%1\npara %2',
         name: 'BlockAiTranslateText',

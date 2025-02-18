@@ -4,6 +4,7 @@ import TypeColorBlock from '../../types/blockColor';
 import TypeBlocklyFields from '../../types/blocklyFields';
 import TypeInputBlock from '../../types/blocklyInputs';
 import TypeBlockGenerator from '../../types/blockGenerator';
+import BlocklyTypes from '../config/types';
 
 const blockConstructorErrorHandling = (
   blockConfig: blockConstructorInterface
@@ -51,6 +52,7 @@ interface blockConstructorInterface {
   inputs?: TypeInputBlock;
   message: string;
   name: string;
+  output?: BlocklyTypes;
   tooltip: string;
 }
 
@@ -67,6 +69,7 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
     inputs,
     message,
     name,
+    output,
     tooltip,
   } = blockConfig;
 
@@ -84,6 +87,10 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
 
   if (hasOutput !== undefined) {
     jsonInitExtra['output'] = hasOutput;
+  }
+
+  if (output) {
+    jsonInitExtra['output'] = output;
   }
 
   const message0 = message;

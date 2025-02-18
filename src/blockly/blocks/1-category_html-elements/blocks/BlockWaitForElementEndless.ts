@@ -1,6 +1,6 @@
 import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
-import BlocklyTypes from '../../../config/types';
+import BlocklyVariableNames from '../../../config/variable-names';
 import blockConstructor from '../../../helpers/blockConstructor';
 
 const setBlockWaitForElementEndless = () => {
@@ -24,7 +24,7 @@ const setBlockWaitForElementEndless = () => {
       { // TODO: preciso mudar, porque como eu posso ter uma variável de um elemento que nem existe ainda?
         type: 'field_variable',
         name: 'VARIABLE',
-        variable: BlocklyTypes.htmlElementVariable,
+        variable: BlocklyVariableNames.htmlElementVariable,
         variableTypes: [''],
       },
     ],

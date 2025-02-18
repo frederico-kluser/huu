@@ -1,7 +1,8 @@
 import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
-import BlocklyTypes from '../../../config/types';
+import BlocklyVariableNames from '../../../config/variable-names';
 import blockConstructor from '../../../helpers/blockConstructor';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockClickHTMLElement = () => {
     return blockConstructor({
@@ -16,8 +17,9 @@ const setBlockClickHTMLElement = () => {
             {
                 type: 'field_variable',
                 name: 'VARIABLE',
-                variable: BlocklyTypes.htmlElementVariable,
-                variableTypes: [''],
+                variable: BlocklyVariableNames.htmlElementVariable,
+                variableTypes: [BlocklyTypes.htmlElement],
+                defaultType: BlocklyTypes.htmlElement,
             },
         ],
         generator: function (block: Blockly.Block, generator: any) {

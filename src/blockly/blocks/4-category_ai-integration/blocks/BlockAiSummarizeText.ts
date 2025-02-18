@@ -1,12 +1,12 @@
 import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
-import BlocklyTypes from '../../../config/types';
+import BlocklyVariableNames from '../../../config/variable-names';
 
 const setBlockAiSummarizeText = () => {
     return blockConstructor({
         colour: Colors.AI,
-        hasOutput: BlocklyTypes.textVariable,
+        hasOutput: BlocklyVariableNames.textVariable,
         helpUrl: 'https://example.com/ai-summarization',
         message: 'Resumo de texto\n%1',
         name: 'BlockAiSummarizeText',
@@ -15,7 +15,7 @@ const setBlockAiSummarizeText = () => {
             {
                 type: 'field_variable',
                 name: 'PROMPT',
-                variable: BlocklyTypes.textVariable,
+                variable: BlocklyVariableNames.textVariable,
                 variableTypes: [''],
             },
         ],

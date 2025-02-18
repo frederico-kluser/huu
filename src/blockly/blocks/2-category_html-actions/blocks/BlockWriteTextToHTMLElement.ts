@@ -1,6 +1,6 @@
 import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
-import BlocklyTypes from '../../../config/types';
+import BlocklyVariableNames from '../../../config/variable-names';
 import blockConstructor from '../../../helpers/blockConstructor';
 
 const setBlockWriteTextToHTMLElement = () => {
@@ -28,7 +28,7 @@ const setBlockWriteTextToHTMLElement = () => {
             {
                 type: 'field_variable',
                 name: 'ELEMENT',
-                variable: BlocklyTypes.htmlElementVariable,
+                variable: BlocklyVariableNames.htmlElementVariable,
                 variableTypes: [''],
             }
         ],

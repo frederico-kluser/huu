@@ -2,6 +2,7 @@ import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
 import { Order } from 'blockly/javascript';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockSelectHTMLElement = () => {
   return blockConstructor({
@@ -10,6 +11,7 @@ const setBlockSelectHTMLElement = () => {
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Scripting/Variables',
     message: 'seletor de elemento %1\nTipo de seletor %2',
     name: 'BlockSelectHTMLElement',
+    output: BlocklyTypes.htmlElement,
     tooltip: 'Variável que armazena um elemento HTML.',
     fields: [
       {

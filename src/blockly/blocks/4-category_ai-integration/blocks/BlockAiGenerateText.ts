@@ -1,8 +1,8 @@
 import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
-import BlocklyTypes from '../../../config/types';
 import { Order } from 'blockly/javascript';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockAiGenerateText = () => {
     return blockConstructor({
@@ -17,7 +17,6 @@ const setBlockAiGenerateText = () => {
             {
                 type: 'input_value',
                 name: 'PROMPT',
-                check: 'String',
                 shadow: {
                     type: 'text',
                     fields: {
@@ -28,8 +27,9 @@ const setBlockAiGenerateText = () => {
             {
                 type: 'field_variable',
                 name: 'OUTPUT',
-                variable: BlocklyTypes.textVariable,
-                variableTypes: [''],
+                variable: BlocklyTypes.htmlElement,
+                variableTypes: [BlocklyTypes.htmlElement],
+                defaultType: BlocklyTypes.htmlElement,
             },
         ],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {

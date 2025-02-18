@@ -1,5 +1,5 @@
 import Colors from '../../../config/colors';
-import BlocklyTypes from '../../../config/types';
+import BlocklyVariableNames from '../../../config/variable-names';
 import blockConstructor from '../../../helpers/blockConstructor';
 
 const setBlockTypeAction = () => {
@@ -15,13 +15,13 @@ const setBlockTypeAction = () => {
             {
                 type: 'field_variable',
                 name: 'VARIABLE',
-                variable: BlocklyTypes.htmlElementVariable,
+                variable: BlocklyVariableNames.htmlElementVariable,
                 variableTypes: [''],
             },
             {
                 type: 'field_variable',
                 name: 'VARIABLE',
-                variable: BlocklyTypes.textVariable,
+                variable: BlocklyVariableNames.textVariable,
                 variableTypes: [''],
             },
 
