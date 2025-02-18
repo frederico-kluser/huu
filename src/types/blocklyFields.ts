@@ -1,3 +1,5 @@
+import BlocklyTypes from "../blockly/config/types";
+
 type TypeBlocklyFieldText = {
     type: 'text';
     text: string;
@@ -8,7 +10,7 @@ type TypeBlocklyFieldVariable = {
     name: string;
     variable: string;
     variableTypes: string[];
-    check?: string;
+    check?: BlocklyTypes;
     defaultType?: string;
 };
 
@@ -33,7 +35,7 @@ type TypeBlocklyFieldCheckbox = {
 export type TypeBlocklyInputValue = {
     type: 'input_value';
     name: string;
-    check?: string | string[];
+    check?: BlocklyTypes | BlocklyTypes[];
     shadow?: {
         type: 'text' | 'math_number';
         fields: {

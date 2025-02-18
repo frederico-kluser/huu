@@ -26,9 +26,9 @@ const setBlockWaitForElement = () => {
         type: 'field_variable',
         name: 'VARIABLE',
         variable: BlocklyVariableNames.htmlElement,
-        variableTypes: [BlocklyTypes.htmlElement],
-        defaultType: BlocklyTypes.htmlElement,
-        check: BlocklyTypes.htmlElement,
+        variableTypes: [BlocklyTypes.HTML_ELEMENT],
+        defaultType: BlocklyTypes.HTML_ELEMENT,
+        check: BlocklyTypes.HTML_ELEMENT,
       },
       {
         type: 'field_input',

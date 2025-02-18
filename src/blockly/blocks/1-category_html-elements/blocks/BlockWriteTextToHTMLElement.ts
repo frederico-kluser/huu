@@ -30,8 +30,8 @@ const setBlockWriteTextToHTMLElement = () => {
                 type: 'field_variable',
                 name: 'ELEMENT',
                 variable: BlocklyVariableNames.htmlElement,
-                variableTypes: [BlocklyTypes.htmlElement],
-                defaultType: BlocklyTypes.htmlElement,
+                variableTypes: [BlocklyTypes.HTML_ELEMENT],
+                defaultType: BlocklyTypes.HTML_ELEMENT,
             }
         ],
         generator: function (block: Blockly.Block, generator: any) {

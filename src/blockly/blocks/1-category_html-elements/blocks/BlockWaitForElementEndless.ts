@@ -26,8 +26,8 @@ const setBlockWaitForElementEndless = () => {
         type: 'field_variable',
         name: 'VARIABLE',
         variable: BlocklyVariableNames.htmlElement,
-        variableTypes: [BlocklyTypes.htmlElement],
-        defaultType: BlocklyTypes.htmlElement,
+        variableTypes: [BlocklyTypes.HTML_ELEMENT],
+        defaultType: BlocklyTypes.HTML_ELEMENT,
       },
     ],
     generator: function (block: Blockly.Block, generator: any) {

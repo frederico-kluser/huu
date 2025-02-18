@@ -34,7 +34,7 @@ export const blocklySetup = () => {
         Blockly.Variables.createVariableButtonHandler(
             button.getTargetWorkspace(),
             (variable) => { },
-            BlocklyTypes.htmlElement
+            BlocklyTypes.HTML_ELEMENT
         );
     });
     workspace.addChangeListener(updateCode);

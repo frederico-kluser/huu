@@ -11,12 +11,13 @@ const setBlockSelectHTMLElement = () => {
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Scripting/Variables',
     message: 'seletor de elemento %1\nTipo de seletor %2',
     name: 'BlockSelectHTMLElement',
-    output: BlocklyTypes.htmlElement,
+    output: BlocklyTypes.HTML_ELEMENT,
     tooltip: 'Variável que armazena um elemento HTML.',
     fields: [
       {
         type: 'input_value',
         name: 'SELECTOR',
+        check: BlocklyTypes.STRING,
         shadow: {
           type: 'text',
           fields: {

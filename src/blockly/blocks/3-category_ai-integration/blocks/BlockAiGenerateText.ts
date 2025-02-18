@@ -27,9 +27,9 @@ const setBlockAiGenerateText = () => {
             {
                 type: 'field_variable',
                 name: 'OUTPUT',
-                variable: BlocklyTypes.htmlElement,
-                variableTypes: [BlocklyTypes.htmlElement],
-                defaultType: BlocklyTypes.htmlElement,
+                variable: BlocklyTypes.HTML_ELEMENT,
+                variableTypes: [BlocklyTypes.HTML_ELEMENT],
+                defaultType: BlocklyTypes.HTML_ELEMENT,
             },
         ],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
