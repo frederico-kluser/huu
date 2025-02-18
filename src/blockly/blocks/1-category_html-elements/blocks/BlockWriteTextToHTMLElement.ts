@@ -19,6 +19,7 @@ const setBlockWriteTextToHTMLElement = () => {
             {
                 type: 'input_value',
                 name: 'TEXT',
+                check: BlocklyTypes.STRING,
                 shadow: {
                     type: 'text',
                     fields: {

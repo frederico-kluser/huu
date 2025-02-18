@@ -8,7 +8,7 @@ const setBlockNavigateForward = () => {
         hasNextConnection: null,
         hasPreviousConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/History/forward',
-        message: 'navegar para frente',
+        message: 'avançar para a próxima página',
         name: 'BlockNavigateForward',
         tooltip: 'Navega para a próxima página no histórico do navegador.',
         fields: [],

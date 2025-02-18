@@ -8,7 +8,7 @@ const setBlockNavigateBack = () => {
         hasNextConnection: null,
         hasPreviousConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/History/back',
-        message: 'text',
+        message: 'voltar para a página anterior',
         name: 'BlockNavigateBack',
         tooltip: 'Navega para a página anterior no histórico do navegador.',
         fields: [],

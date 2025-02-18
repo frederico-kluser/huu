@@ -2,6 +2,7 @@ import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
 import { Order } from 'blockly/javascript';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockConfirmUser = () => {
     return blockConstructor({
@@ -15,7 +16,7 @@ const setBlockConfirmUser = () => {
             {
                 type: 'input_value',
                 name: 'MESSAGE',
-                check: 'String',
+                check: BlocklyTypes.STRING,
                 shadow: {
                     type: 'text',
                     fields: {

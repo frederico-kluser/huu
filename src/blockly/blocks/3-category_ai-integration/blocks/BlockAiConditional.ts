@@ -2,6 +2,7 @@ import * as Blockly from 'blockly/core';
 import { Order } from "blockly/javascript";
 import Colors from "../../../config/colors";
 import blockConstructor from "../../../helpers/blockConstructor";
+import BlocklyTypes from '../../../config/types';
 
 const setBlockAiConditional = () => {
     return blockConstructor({
@@ -16,6 +17,7 @@ const setBlockAiConditional = () => {
             {
                 type: 'input_value',
                 name: 'PROMPT',
+                check: BlocklyTypes.STRING,
                 shadow: {
                     type: 'text',
                     fields: {

@@ -2,6 +2,7 @@ import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
 import { Order } from 'blockly/javascript';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockDelayWait = () => {
     return blockConstructor({
@@ -16,7 +17,7 @@ const setBlockDelayWait = () => {
             {
                 type: 'input_value',
                 name: 'DELAY_TIME',
-                check: 'Number',
+                check: BlocklyTypes.NUMBER,
                 shadow: {
                     type: 'math_number',
                     fields: {

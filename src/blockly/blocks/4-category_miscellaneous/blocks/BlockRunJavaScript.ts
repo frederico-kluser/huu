@@ -2,6 +2,7 @@ import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
 import { Order } from 'blockly/javascript';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockRunJavaScript = () => {
     return blockConstructor({
@@ -19,7 +20,7 @@ const setBlockRunJavaScript = () => {
             {
                 type: 'input_value',
                 name: 'JS_CODE',
-                check: 'String',
+                check: BlocklyTypes.STRING,
                 shadow: {
                     type: 'text',
                     fields: {

@@ -1,6 +1,7 @@
 import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockAiTextToSpeech = () => {
     return blockConstructor({
@@ -15,6 +16,7 @@ const setBlockAiTextToSpeech = () => {
             {
                 type: 'input_value',
                 name: 'TEXT',
+                check: BlocklyTypes.STRING,
                 shadow: {
                     type: 'text',
                     fields: {

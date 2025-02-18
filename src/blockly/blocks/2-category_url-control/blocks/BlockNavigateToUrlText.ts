@@ -1,6 +1,7 @@
 import * as Blockly from 'blockly/core';
 import blockConstructor from '../../../helpers/blockConstructor';
 import Colors from '../../../config/colors';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockNavigateToUrlText = () => {
     return blockConstructor({
@@ -15,6 +16,7 @@ const setBlockNavigateToUrlText = () => {
             {
                 type: 'input_value',
                 name: 'URL',
+                check: BlocklyTypes.STRING,
                 shadow: {
                     type: 'text',
                     fields: {
