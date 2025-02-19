@@ -3,6 +3,7 @@ import { javascriptGenerator } from 'blockly/javascript';
 import blocklyOptions from './config/options';
 import blocklyContextMenus from './config/contextMenu';
 import BlocklyTypes from './config/types';
+import { getItem, setItem } from '../core/storage';
 
 var workspace: Blockly.Workspace;
 
@@ -12,7 +13,7 @@ blocklyContextMenus.forEach((item) => {
 });
 
 export function loadWorkspace() {
-    const state = JSON.parse(localStorage.getItem('workspace') || '{}');
+    const state = getItem('workspace') || {};
     Blockly.serialization.workspaces.load(state, workspace);
 }
 
@@ -25,7 +26,7 @@ function updateCode(event: any) {
     const state = Blockly.serialization.workspaces.save(workspace);
     // console.log("state:");
     // console.log(state);
-    localStorage.setItem('workspace', JSON.stringify(state));
+    setItem('workspace', state);
 }
 
 export const blocklySetup = () => {
