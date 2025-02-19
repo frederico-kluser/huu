@@ -9,7 +9,7 @@ const setBlockPromptUser = () => {
         colour: Colors.MISCELLANEOUS,
         hasOutput: 'String',
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/prompt',
-        message: 'prompt: %1',
+        message: 'Perguntar ao usuário: %1',
         name: 'BlockPromptUser',
         tooltip: 'Exibe um prompt para o usuário e retorna a entrada digitada.',
         fields: [

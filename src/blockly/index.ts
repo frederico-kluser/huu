@@ -18,12 +18,13 @@ export function loadWorkspace() {
 
 function updateCode(event: any) {
     const code = javascriptGenerator.workspaceToCode(workspace);
+    console.clear();
     console.log("code:");
     console.log(code);
     console.log("----");
     const state = Blockly.serialization.workspaces.save(workspace);
-    console.log("state:");
-    console.log(state);
+    // console.log("state:");
+    // console.log(state);
     localStorage.setItem('workspace', JSON.stringify(state));
 }
 

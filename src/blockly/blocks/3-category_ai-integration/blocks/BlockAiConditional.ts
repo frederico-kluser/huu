@@ -8,7 +8,6 @@ const setBlockAiConditional = () => {
     return blockConstructor({
         colour: Colors.AI,
         hasPreviousConnection: null,
-        hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/if...else',
         message: 'pergunta de sim ou não\n%1\nse sim\n%2\nsenao\n%3',
         name: 'BlockAiConditional',
