@@ -6,14 +6,14 @@
   right: 0px;
   text-align: center;
   height: 100%;
-  padding: 10px;
+  /* padding: 10px; */
   background-color: #282c34;
   color: white;
 }
 
 .blockly-container {
-  height: 480px;
-  width: 600px;
+  height: 600px;
+  width: 800px;
   margin: 0 auto;
   background-color: white;
   border-radius: 10px;
