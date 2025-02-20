@@ -6,14 +6,15 @@ import BlocklyTypes from './config/types';
 import { getItem, setItem } from '../core/storage';
 
 var workspace: Blockly.Workspace;
-
+var workspaceName = "";
 
 blocklyContextMenus.forEach((item) => {
     Blockly.ContextMenuRegistry.registry.register(item);
 });
 
-export function loadWorkspace() {
-    const state = getItem('workspace') || {};
+export function loadWorkspace(wsName: string) {
+    workspaceName = wsName;
+    const state = getItem(workspaceName) || {};
     Blockly.serialization.workspaces.load(state, workspace);
 }
 
@@ -26,7 +27,7 @@ function updateCode(event: any) {
     const state = Blockly.serialization.workspaces.save(workspace);
     // console.log("state:");
     // console.log(state);
-    setItem('workspace', state);
+    setItem(workspaceName, state);
 }
 
 export const blocklySetup = () => {

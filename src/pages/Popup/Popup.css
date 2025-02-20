@@ -7,16 +7,28 @@
   text-align: center;
   height: 100%;
   /* padding: 10px; */
-  background-color: #282c34;
+  border: 1px solid white;
   color: white;
 }
 
 .blockly-container {
-  height: 600px;
-  width: 800px;
-  margin: 0 auto;
   background-color: white;
   border-radius: 10px;
-  overflow: hidden;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+  height: 600px;
+  left: 0px;
+  margin: 0 auto;
+  overflow: hidden;
+  position: absolute;
+  top: 0px;
+  width: 800px;
+  z-index: 1;
+}
+
+.content {
+  bottom: 0px;
+  left: 0px;
+  padding: 16px;
+  position: absolute;
+  z-index: 2;
 }
