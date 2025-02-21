@@ -1,9 +1,9 @@
 import * as Blockly from 'blockly';
 import { javascriptGenerator } from 'blockly/javascript';
-import TypeColorBlock from '../../types/blockColor';
-import TypeBlocklyFields from '../../types/blocklyFields';
-import TypeInputBlock from '../../types/blocklyInputs';
-import TypeBlockGenerator from '../../types/blockGenerator';
+import TypeColorBlock from '../types/blockColor';
+import TypeBlocklyFields from '../types/blocklyFields';
+import TypeInputBlock from '../types/blocklyInputs';
+import TypeBlockGenerator from '../types/blockGenerator';
 import BlocklyTypes from '../config/types';
 
 const blockConstructorErrorHandling = (

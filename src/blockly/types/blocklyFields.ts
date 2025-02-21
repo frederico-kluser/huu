@@ -1,4 +1,4 @@
-import BlocklyTypes from "../blockly/config/types";
+import BlocklyTypes from "../config/types";
 
 type TypeBlocklyFieldText = {
     type: 'text';
