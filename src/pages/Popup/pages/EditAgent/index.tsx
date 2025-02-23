@@ -7,14 +7,17 @@ import isValidJsonKey from '../../../../helpers/isValidJsonKey';
 interface EditAgentProps {
     setWorkspaceName: Dispatch<SetStateAction<string>>
     handleCreateAgent: () => void
+    workspaces: string[]
+    setWorkspaces: Dispatch<SetStateAction<string[]>>
 }
 
 const EditAgent = ({
     setWorkspaceName,
-    handleCreateAgent
+    handleCreateAgent,
+    workspaces,
+    setWorkspaces,
 }: EditAgentProps
 ) => {
-    const [workspaces, setWorkspaces] = useState<string[]>(getItem(keys.workspace) || []);
     const selectRef = useRef<HTMLSelectElement>(null);
     const [agentName, setAgentName] = useState(workspaces[0] as string || '');
     const [agentSite, setAgentSite] = useState('');
