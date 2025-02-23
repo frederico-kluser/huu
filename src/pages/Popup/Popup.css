@@ -25,10 +25,24 @@
   z-index: 1;
 }
 
-.content {
+.blockly-content {
   bottom: 0px;
   left: 0px;
   padding: 16px;
   position: absolute;
   z-index: 2;
+}
+
+.content {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+input:not([type=checkbox], [type=radio]),
+select,
+textarea {
+  margin-bottom: 0px !important;
 }

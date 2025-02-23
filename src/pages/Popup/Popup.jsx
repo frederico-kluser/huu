@@ -1,22 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
-
 import * as Blockly from 'blockly/core';
-// Import a message file.
 import * as PtBr from 'blockly/msg/pt-br';
-
 import { blocklySetup, loadWorkspace } from '../../blockly';
+
+import EditAgent from './pages/EditAgent';
+import CreateAgent from './pages/CreateAgent';
+import { getItem, setItem } from '../../core/storage';
+import keys from '../../types/keys';
 
 import '../../assets/css/pico.min.css';
 import './Popup.css';
-import { getItem, removeItem, setItem } from '../../core/storage';
-import keys from '../../types/keys';
 
 Blockly.setLocale(PtBr);
 
 const Popup = () => {
   const [workspaces, setWorkspaces] = useState(getItem(keys.workspace) || []);
   const [workspaceName, setWorkspaceName] = useState('');
-  const selectRef = useRef();
 
   useEffect(() => {
     setItem(keys.workspace, workspaces);
@@ -43,49 +42,25 @@ const Popup = () => {
     setWorkspaceName(workspaceName);
   };
 
-  const handleLoadAgent = () => {
-    const workspaceName = selectRef.current.value;
-    setWorkspaceName(workspaceName);
-  };
-
-  const handleDeleteAgent = () => {
-    const workspaceName = selectRef.current.value;
-    setWorkspaces(workspaces.filter((workspace) => workspace !== workspaceName));
-    setWorkspaceName('');
-    removeItem(workspaceName);
-  };
-
   return (
     <div className="App">
       {workspaceName && (
         <>
           <div id="blocklyDiv" className="blockly-container"></div>
-          <div className="content">
+          <div className="blockly-content">
             <button onClick={handleSave}>Salvar</button>
           </div>
         </>
       )}
-      {!workspaceName && !!workspaces.length && (
-        <>
-          <select ref={selectRef}>
-            {workspaces.map((workspace) => (
-              <option key={workspace} value={workspace}>
-                {workspace}
-              </option>
-            ))}
-          </select>
-          <div role="group">
-            <button onClick={handleCreateAgent}>Criar Agente</button>
-            <button onClick={handleLoadAgent}>Carregar Agente</button>
-            <button onClick={handleDeleteAgent}>Deletar Agente</button>
-          </div>
-        </>
-      )}
+      {!workspaceName && !!workspaces.length &&
+        <EditAgent setWorkspaceName={setWorkspaceName} handleCreateAgent={handleCreateAgent} />
+      }
       {!workspaceName && !workspaces.length && (
-        <div>
-          <h1>Nenhum agente criado</h1>
-          <button onClick={handleCreateAgent}>Criar Agente</button>
-        </div>
+        <CreateAgent
+          setWorkspaceName={setWorkspaceName}
+          workspaces={workspaces}
+          setWorkspaces={setWorkspaces}
+        />
       )}
     </div>
   );
