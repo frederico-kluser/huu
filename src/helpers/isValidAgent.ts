@@ -1,5 +1,4 @@
-import { getItem } from "../core/storage";
-import TypeAgent from "../types/agent";
+import { getAgent } from "../core/storageAgents";
 import isValidJsonKey from "./isValidJsonKey";
 
 const isValidAgent = (agentName: string) => {
@@ -7,7 +6,7 @@ const isValidAgent = (agentName: string) => {
         return false;
     }
 
-    const agent = getItem<TypeAgent>(agentName);
+    const agent = getAgent(agentName);
 
     if (!agent) {
         return false;

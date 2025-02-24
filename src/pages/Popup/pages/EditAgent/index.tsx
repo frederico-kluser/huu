@@ -5,6 +5,7 @@ import isValidUrl from '../../../../helpers/isValidUrl';
 import isValidJsonKey from '../../../../helpers/isValidJsonKey';
 import { getBlocklyState } from '../../../../blockly';
 import TypeAgent from '../../../../types/agent';
+import { getAgent, setAgent } from '../../../../core/storageAgents';
 
 interface EditAgentProps {
     handleCreateAgent: () => void
@@ -34,7 +35,7 @@ const EditAgent = ({
             return false;
         }
 
-        const agentItem = getItem<TypeAgent>(agentName);
+        const agentItem = getAgent(agentName);
 
         if (!agentItem) {
             return true;
@@ -55,7 +56,7 @@ const EditAgent = ({
         const lastSelectIndex = getItem<number>(keys.LAST_WORKSPACE_INDEX) || 0;
         const firstWorkspace = workspaces[lastSelectIndex];
         setAgentName(firstWorkspace);
-        setAgentSite(getItem<TypeAgent>(firstWorkspace)?.urls || '');
+        setAgentSite(getAgent(firstWorkspace)?.urls || '');
         if (selectRef.current) {
             selectRef.current.value = lastSelectIndex.toString();
         }
@@ -86,12 +87,12 @@ const EditAgent = ({
             const filteredWorkspaces = workspaces.filter((workspace) => workspace !== workspaceName);
             setWorkspaces([...filteredWorkspaces, agentName]);
 
-            setItem(agentName, {
+            setAgent(agentName, {
                 ...state,
                 urls: agentSite,
             });
         } else {
-            setItem(workspaceName, {
+            setAgent(workspaceName, {
                 ...state,
                 urls: agentSite,
             });
@@ -112,7 +113,7 @@ const EditAgent = ({
         setItem(keys.LAST_WORKSPACE_INDEX, Number(selectRef.current.value));
         const workspaceName = getWorkspaceName();
         setAgentName(workspaceName);
-        const url = getItem<TypeAgent>(workspaceName)?.urls || '';
+        const url = getAgent(workspaceName)?.urls || '';
         setAgentSite(url);
     };
 
