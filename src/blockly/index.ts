@@ -12,10 +12,14 @@ blocklyContextMenus.forEach((item) => {
     Blockly.ContextMenuRegistry.registry.register(item);
 });
 
+export const getBlocklyState = (localWorkspaceName: string): any => getItem(localWorkspaceName) || {
+    blocks: {},
+}
+
 export function loadWorkspace(wsName: string) {
     workspaceName = wsName;
-    const state = getItem(workspaceName) || {};
-    Blockly.serialization.workspaces.load(state, workspace);
+    const { blocks } = getBlocklyState(workspaceName);
+    Blockly.serialization.workspaces.load(blocks, workspace);
 }
 
 function updateCode(event: any) {
@@ -24,10 +28,13 @@ function updateCode(event: any) {
     console.log("code:");
     console.log(code);
     console.log("----");
-    const state = Blockly.serialization.workspaces.save(workspace);
-    // console.log("state:");
-    // console.log(state);
-    setItem(workspaceName, state);
+    const blocks = Blockly.serialization.workspaces.save(workspace);
+
+    const actualState = getBlocklyState(workspaceName);
+    setItem(workspaceName, {
+        ...actualState,
+        blocks
+    });
 }
 
 export const blocklySetup = () => {

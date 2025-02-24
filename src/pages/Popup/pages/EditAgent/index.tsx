@@ -1,29 +1,70 @@
-import React, { Dispatch, SetStateAction, useRef, useState } from 'react';
-import { getItem, removeItem } from '../../../../core/storage';
+import React, { Dispatch, SetStateAction, useEffect, useRef, useState } from 'react';
+import { getItem, removeItem, setItem } from '../../../../core/storage';
 import keys from '../../../../types/keys';
 import isValidUrl from '../../../../helpers/isValidUrl';
 import isValidJsonKey from '../../../../helpers/isValidJsonKey';
+import { getBlocklyState } from '../../../../blockly';
 
 interface EditAgentProps {
-    setWorkspaceName: Dispatch<SetStateAction<string>>
     handleCreateAgent: () => void
-    workspaces: string[]
+    setWorkspaceName: Dispatch<SetStateAction<string>>
     setWorkspaces: Dispatch<SetStateAction<string[]>>
+    workspaces: string[]
 }
 
 const EditAgent = ({
-    setWorkspaceName,
     handleCreateAgent,
-    workspaces,
+    setWorkspaceName,
     setWorkspaces,
+    workspaces,
 }: EditAgentProps
 ) => {
     const selectRef = useRef<HTMLSelectElement>(null);
-    const [agentName, setAgentName] = useState(workspaces[0] as string || '');
+    const [agentName, setAgentName] = useState('');
     const [agentSite, setAgentSite] = useState('');
+    const [isBackButtonDisabled, setIsBackButtonDisabled] = useState(true);
+
+    const canSave = isValidJsonKey(agentName) && isValidUrl(agentSite);
+
+    useEffect(() => {
+        const firstWorkspace = workspaces[0];
+        setAgentName(firstWorkspace);
+        setAgentSite(getItem<{
+            urls: string
+        }>(firstWorkspace)?.urls || '');
+    }, [workspaces]);
+
+    useEffect(() => {
+        if (!canSave) {
+            setIsBackButtonDisabled(true);
+            return;
+        }
+
+        const state = getBlocklyState(agentName);
+        const hasNoBlocks = Object.keys(state.blocks).length === 0;
+        debugger;
+        setIsBackButtonDisabled(hasNoBlocks);
+    }, [agentName, agentSite, workspaces]);
 
     const handleSave = () => {
-        setWorkspaceName('');
+        const state = getBlocklyState(agentName);
+        const workspaceName = selectRef.current?.value || '';
+
+        if (workspaceName !== agentName) {
+            removeItem(workspaceName);
+            const filteredWorkspaces = workspaces.filter((workspace) => workspace !== workspaceName);
+            setWorkspaces([...filteredWorkspaces, agentName]);
+
+            setItem(agentName, {
+                ...state,
+                urls: agentSite,
+            });
+        } else {
+            setItem(workspaceName, {
+                ...state,
+                urls: agentSite,
+            });
+        }
     };
 
     const handleLoadAgent = () => {
@@ -35,7 +76,14 @@ const EditAgent = ({
 
     const handleChangeAgent = () => {
         if (!selectRef.current) return;
-        setAgentName(selectRef.current.value);
+
+        debugger;
+        const workspaceName = selectRef.current.value;
+        setAgentName(workspaceName);
+        const url = getItem<{
+            urls: string
+        }>(workspaceName)?.urls || '';
+        setAgentSite(url);
     };
 
     const handleDeleteAgent = () => {
@@ -51,11 +99,16 @@ const EditAgent = ({
 
     const handleBack = () => { };
 
-    const canSave = isValidJsonKey(agentName) && isValidUrl(agentSite);
-
     return (
         <main className="content">
-            <button onClick={handleBack}>Voltar</button>
+            <button onClick={handleBack} disabled={isBackButtonDisabled}>Voltar</button>
+            {(isBackButtonDisabled) && (
+                <mark>
+                    <i>
+                        <small style={{
+                        }}>O seu agente não tem nenhuma ação cadastrada, por favor clique em Editar para adicionar ações</small>
+                    </i>
+                </mark>)}
             <select ref={selectRef} onChange={handleChangeAgent}>
                 {workspaces.map((workspace) => (
                     <option key={workspace} value={workspace}>

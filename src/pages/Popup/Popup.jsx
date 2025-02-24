@@ -54,17 +54,17 @@ const Popup = () => {
       )}
       {!workspaceName && !!workspaces.length &&
         <EditAgent
-          setWorkspaceName={setWorkspaceName}
           handleCreateAgent={handleCreateAgent}
-          workspaces={workspaces}
+          setWorkspaceName={setWorkspaceName}
           setWorkspaces={setWorkspaces}
+          workspaces={workspaces}
         />
       }
       {!workspaceName && !workspaces.length && (
         <CreateAgent
           setWorkspaceName={setWorkspaceName}
-          workspaces={workspaces}
           setWorkspaces={setWorkspaces}
+          workspaces={workspaces}
         />
       )}
     </div>

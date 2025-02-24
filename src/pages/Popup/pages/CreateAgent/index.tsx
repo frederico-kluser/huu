@@ -2,14 +2,14 @@ import React, { Dispatch, SetStateAction } from 'react';
 
 interface CreateAgentProps {
     setWorkspaceName: Dispatch<SetStateAction<string>>
-    workspaces: string[]
     setWorkspaces: Dispatch<SetStateAction<string[]>>
+    workspaces: string[]
 };
 
 const CreateAgent = ({
     setWorkspaceName,
+    setWorkspaces,
     workspaces,
-    setWorkspaces
 }: CreateAgentProps) => {
 
     const handleCreateAgent = () => {
