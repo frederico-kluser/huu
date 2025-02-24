@@ -7,6 +7,7 @@ import { getBlocklyState } from '../../../../blockly';
 
 interface EditAgentProps {
     handleCreateAgent: () => void
+    setIsMainPage: Dispatch<SetStateAction<boolean>>
     setWorkspaceName: Dispatch<SetStateAction<string>>
     setWorkspaces: Dispatch<SetStateAction<string[]>>
     workspaces: string[]
@@ -14,6 +15,7 @@ interface EditAgentProps {
 
 const EditAgent = ({
     handleCreateAgent,
+    setIsMainPage,
     setWorkspaceName,
     setWorkspaces,
     workspaces,
@@ -27,11 +29,15 @@ const EditAgent = ({
     const canSave = isValidJsonKey(agentName) && isValidUrl(agentSite);
 
     useEffect(() => {
-        const firstWorkspace = workspaces[0];
+        const lastSelectIndex = getItem<number>(keys.LAST_WORKSPACE_INDEX) || 0;
+        const firstWorkspace = workspaces[lastSelectIndex];
         setAgentName(firstWorkspace);
         setAgentSite(getItem<{
             urls: string
         }>(firstWorkspace)?.urls || '');
+        if (selectRef.current) {
+            selectRef.current.value = lastSelectIndex.toString();
+        }
     }, [workspaces]);
 
     useEffect(() => {
@@ -46,9 +52,14 @@ const EditAgent = ({
         setIsBackButtonDisabled(hasNoBlocks);
     }, [agentName, agentSite, workspaces]);
 
+    const getWorkspaceName = () => {
+        const workspaceIndex: number = Number(selectRef.current?.value) || 0;
+        return workspaces[workspaceIndex];
+    };
+
     const handleSave = () => {
         const state = getBlocklyState(agentName);
-        const workspaceName = selectRef.current?.value || '';
+        const workspaceName = getWorkspaceName();
 
         if (workspaceName !== agentName) {
             removeItem(workspaceName);
@@ -70,15 +81,14 @@ const EditAgent = ({
     const handleLoadAgent = () => {
         if (!selectRef.current) return;
 
-        const workspaceName = selectRef.current.value;
+        const workspaceName = getWorkspaceName();
         setWorkspaceName(workspaceName);
     };
 
     const handleChangeAgent = () => {
         if (!selectRef.current) return;
-
-        debugger;
-        const workspaceName = selectRef.current.value;
+        setItem(keys.LAST_WORKSPACE_INDEX, Number(selectRef.current.value));
+        const workspaceName = getWorkspaceName();
         setAgentName(workspaceName);
         const url = getItem<{
             urls: string
@@ -89,15 +99,18 @@ const EditAgent = ({
     const handleDeleteAgent = () => {
         if (!selectRef.current) return;
 
-        const workspaceName = selectRef.current.value;
+        const workspaceName = getWorkspaceName();
         if (!confirm(`Deseja realmente deletar o agente "${workspaceName}"?`)) return;
 
+        setItem(keys.LAST_WORKSPACE_INDEX, 0);
         setWorkspaces(workspaces.filter((workspace) => workspace !== workspaceName));
         setWorkspaceName('');
         removeItem(workspaceName);
     };
 
-    const handleBack = () => { };
+    const handleBack = () => {
+        setIsMainPage(true);
+    };
 
     return (
         <main className="content">
@@ -110,8 +123,8 @@ const EditAgent = ({
                     </i>
                 </mark>)}
             <select ref={selectRef} onChange={handleChangeAgent}>
-                {workspaces.map((workspace) => (
-                    <option key={workspace} value={workspace}>
+                {workspaces.map((workspace, index) => (
+                    <option key={workspace} value={index}>
                         {workspace}
                     </option>
                 ))}

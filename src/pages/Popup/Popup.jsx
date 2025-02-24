@@ -3,6 +3,7 @@ import * as Blockly from 'blockly/core';
 import * as PtBr from 'blockly/msg/pt-br';
 import { blocklySetup, loadWorkspace } from '../../blockly';
 
+import MainPage from './pages/MainPage';
 import EditAgent from './pages/EditAgent';
 import CreateAgent from './pages/CreateAgent';
 import { getItem, setItem } from '../../core/storage';
@@ -14,11 +15,12 @@ import './Popup.css';
 Blockly.setLocale(PtBr);
 
 const Popup = () => {
-  const [workspaces, setWorkspaces] = useState(getItem(keys.workspace) || []);
+  const [workspaces, setWorkspaces] = useState(getItem(keys.WORKSPACE) || []);
   const [workspaceName, setWorkspaceName] = useState('');
+  const [isMainPage, setIsMainPage] = useState(false);
 
   useEffect(() => {
-    setItem(keys.workspace, workspaces);
+    setItem(keys.WORKSPACE, workspaces);
   }, [workspaces]);
 
   useEffect(() => {
@@ -53,12 +55,13 @@ const Popup = () => {
         </>
       )}
       {!workspaceName && !!workspaces.length &&
-        <EditAgent
+        (isMainPage ? <MainPage setIsMainPage={setIsMainPage} /> : <EditAgent
           handleCreateAgent={handleCreateAgent}
+          setIsMainPage={setIsMainPage}
           setWorkspaceName={setWorkspaceName}
           setWorkspaces={setWorkspaces}
           workspaces={workspaces}
-        />
+        />)
       }
       {!workspaceName && !workspaces.length && (
         <CreateAgent
