@@ -6,8 +6,10 @@
   right: 0px;
   text-align: center;
   height: 100%;
-  /* padding: 10px; */
+  box-sizing: border-box;
   border: 1px solid white;
+  max-width: 800px;
+  max-height: 600px;
   color: white;
 }
 
