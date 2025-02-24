@@ -44,8 +44,10 @@ const Popup = () => {
       alert('Já existe um agente com esse nome');
       return;
     }
+
     setWorkspaces([...workspaces, workspaceName]);
     setWorkspaceName(workspaceName);
+    setItem(keys.LAST_WORKSPACE_INDEX, workspaces.length);
   };
 
   return (
