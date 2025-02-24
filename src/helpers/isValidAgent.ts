@@ -1,4 +1,4 @@
-import { getAgent } from "../core/storageAgents";
+import { fetchAgentById } from "../core/storageAgents";
 import isValidJsonKey from "./isValidJsonKey";
 
 const isValidAgent = (agentName: string) => {
@@ -6,7 +6,7 @@ const isValidAgent = (agentName: string) => {
         return false;
     }
 
-    const agent = getAgent(agentName);
+    const agent = fetchAgentById(agentName);
 
     if (!agent) {
         return false;

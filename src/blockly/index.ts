@@ -3,7 +3,7 @@ import { javascriptGenerator } from 'blockly/javascript';
 import blocklyOptions from './config/options';
 import blocklyContextMenus from './config/contextMenu';
 import BlocklyTypes from './config/types';
-import { getAgent, setAgent } from '../core/storageAgents';
+import { fetchAgentById, saveOrUpdateAgent } from '../core/storageAgents';
 
 var workspace: Blockly.Workspace;
 var workspaceName = "";
@@ -12,7 +12,7 @@ blocklyContextMenus.forEach((item) => {
     Blockly.ContextMenuRegistry.registry.register(item);
 });
 
-export const getBlocklyState = (localWorkspaceName: string): any => getAgent(localWorkspaceName) || {
+export const getBlocklyState = (localWorkspaceName: string): any => fetchAgentById(localWorkspaceName) || {
     blocks: {},
 }
 
@@ -31,7 +31,7 @@ function updateCode(event: any) {
     const blocks = Blockly.serialization.workspaces.save(workspace);
 
     const actualState = getBlocklyState(workspaceName);
-    setAgent(workspaceName, {
+    saveOrUpdateAgent(workspaceName, {
         ...actualState,
         blocks,
         code,

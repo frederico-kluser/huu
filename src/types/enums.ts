@@ -1,6 +1,6 @@
-enum keys {
+enum enums {
     WORKSPACE = "workspace",
     LAST_WORKSPACE_INDEX = "lastWorkspaceIndex",
 }
 
-export default keys;
+export default enums;

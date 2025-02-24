@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import * as Blockly from 'blockly/core';
 import * as PtBr from 'blockly/msg/pt-br';
 import { blocklySetup, loadWorkspace } from '../../blockly';
@@ -7,21 +7,22 @@ import MainPage from './pages/MainPage';
 import EditAgent from './pages/EditAgent';
 import CreateAgent from './pages/CreateAgent';
 import { getItem, setItem } from '../../core/storage';
-import keys from '../../types/keys';
+import enums from '../../types/enums';
 
 import '../../assets/css/pico.min.css';
 import './Popup.css';
 import isValidJsonKey from '../../helpers/isValidJsonKey';
+import { updateActualWorkspace } from '../../core/storageWorkspace';
 
 Blockly.setLocale(PtBr as any);
 
 const Popup = () => {
-  const [workspaces, setWorkspaces] = useState<string[]>(getItem(keys.WORKSPACE) || []);
+  const [workspaces, setWorkspaces] = useState<string[]>(getItem(enums.WORKSPACE) || []);
   const [workspaceName, setWorkspaceName] = useState('');
   const [isMainPage, setIsMainPage] = useState(!workspaceName && !!workspaces.length);
 
   useEffect(() => {
-    setItem(keys.WORKSPACE, workspaces);
+    setItem(enums.WORKSPACE, workspaces);
   }, [workspaces]);
 
   useEffect(() => {
@@ -51,7 +52,7 @@ const Popup = () => {
 
     setWorkspaces([...workspaces, workspaceName]);
     setWorkspaceName(workspaceName);
-    setItem(keys.LAST_WORKSPACE_INDEX, workspaces.length);
+    updateActualWorkspace(workspaces.length);
   };
 
   return (

@@ -1,11 +1,10 @@
 import React, { Dispatch, SetStateAction, useEffect, useRef, useState } from 'react';
-import { getItem, removeItem, setItem } from '../../../../core/storage';
-import keys from '../../../../types/keys';
+import { removeItem } from '../../../../core/storage';
 import isValidUrl from '../../../../helpers/isValidUrl';
 import isValidJsonKey from '../../../../helpers/isValidJsonKey';
 import { getBlocklyState } from '../../../../blockly';
-import TypeAgent from '../../../../types/agent';
-import { getAgent, setAgent } from '../../../../core/storageAgents';
+import { fetchAgentById, saveOrUpdateAgent } from '../../../../core/storageAgents';
+import { fetchActualWorkspace, updateActualWorkspace } from '../../../../core/storageWorkspace';
 
 interface EditAgentProps {
     handleCreateAgent: () => void
@@ -35,7 +34,7 @@ const EditAgent = ({
             return false;
         }
 
-        const agentItem = getAgent(agentName);
+        const agentItem = fetchAgentById(agentName);
 
         if (!agentItem) {
             return true;
@@ -53,10 +52,10 @@ const EditAgent = ({
     };
 
     useEffect(() => {
-        const lastSelectIndex = getItem<number>(keys.LAST_WORKSPACE_INDEX) || 0;
+        const lastSelectIndex = fetchActualWorkspace();
         const firstWorkspace = workspaces[lastSelectIndex];
         setAgentName(firstWorkspace);
-        setAgentSite(getAgent(firstWorkspace)?.urls || '');
+        setAgentSite(fetchAgentById(firstWorkspace)?.urls || '');
         if (selectRef.current) {
             selectRef.current.value = lastSelectIndex.toString();
         }
@@ -87,12 +86,12 @@ const EditAgent = ({
             const filteredWorkspaces = workspaces.filter((workspace) => workspace !== workspaceName);
             setWorkspaces([...filteredWorkspaces, agentName]);
 
-            setAgent(agentName, {
+            saveOrUpdateAgent(agentName, {
                 ...state,
                 urls: agentSite,
             });
         } else {
-            setAgent(workspaceName, {
+            saveOrUpdateAgent(workspaceName, {
                 ...state,
                 urls: agentSite,
             });
@@ -110,10 +109,10 @@ const EditAgent = ({
 
     const handleChangeAgent = () => {
         if (!selectRef.current) return;
-        setItem(keys.LAST_WORKSPACE_INDEX, Number(selectRef.current.value));
+        updateActualWorkspace(Number(selectRef.current.value));
         const workspaceName = getWorkspaceName();
         setAgentName(workspaceName);
-        const url = getAgent(workspaceName)?.urls || '';
+        const url = fetchAgentById(workspaceName)?.urls || '';
         setAgentSite(url);
     };
 
@@ -123,7 +122,7 @@ const EditAgent = ({
         const workspaceName = getWorkspaceName();
         if (!confirm(`Deseja realmente deletar o agente "${workspaceName}"?`)) return;
 
-        setItem(keys.LAST_WORKSPACE_INDEX, 0);
+        updateActualWorkspace(0);
         setWorkspaces(workspaces.filter((workspace) => workspace !== workspaceName));
         setWorkspaceName('');
         removeItem(workspaceName);
