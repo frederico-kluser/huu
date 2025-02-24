@@ -2,6 +2,7 @@ import React, { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import isValidAgent from '../../../../helpers/isValidAgent';
 import { fetchAgentById, updateAgentPartial } from '../../../../core/storageAgents';
 import { TypeMode } from '../../../../types/agent';
+import Colors from '../../../../types/colors';
 
 interface MainPageProps {
     setIsMainPage: Dispatch<SetStateAction<boolean>>
@@ -37,6 +38,24 @@ const MainPage = ({ setIsMainPage, workspaces }: MainPageProps) => {
         setIsMainPage(false);
     };
 
+    const getButton = (agentName: string) => {
+        const active = !!fetchAgentById(agentName)?.active;
+
+        return (
+            <button onClick={() => {
+                updateAgentPartial(agentName, {
+                    active: !active,
+                });
+
+                updateApprovedAgents();
+            }} style={{
+                backgroundColor: active ? Colors.red500 : Colors.green500,
+                maxWidth: '300px',
+                width: '300px',
+            }}>{active ? 'Desativar' : 'Ativar'}</button>
+        );
+    };
+
     return (
         <>
             <h1>huu</h1>
@@ -44,8 +63,9 @@ const MainPage = ({ setIsMainPage, workspaces }: MainPageProps) => {
             {approvedAgents.length > 0 && <h4>Agentes para este site <mark><i>youtube.com/</i></mark></h4>}
             {approvedAgents.map((agent) => (
                 <div role="group" key={agent}>
+                    {getButton(agent)}
                     <h3 style={{
-                        width: '50%',
+                        width: '80%',
                         lineHeight: '56px',
                     }}>{agent}</h3>
                     <select onChange={(e) => handleEditMode(agent, e.target.value as TypeMode)} value={fetchAgentById(agent)?.mode}>

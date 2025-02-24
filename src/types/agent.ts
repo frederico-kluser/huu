@@ -20,6 +20,7 @@ type TypeAgent = {
     urls: string;
     code: string;
     mode: TypeMode;
+    active: boolean;
 };
 
 export default TypeAgent;
