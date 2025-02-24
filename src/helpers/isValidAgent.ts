@@ -12,9 +12,9 @@ const isValidAgent = (agentName: string) => {
         return false;
     }
 
-    const { blockly, urls, code } = agent;
+    const { blocks, urls, code } = agent;
 
-    if (!blockly || !urls || !code) {
+    if (!blocks || !urls || !code) {
         return false;
     }
 

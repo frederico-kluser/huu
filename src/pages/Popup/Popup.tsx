@@ -6,23 +6,21 @@ import { blocklySetup, loadWorkspace } from '../../blockly';
 import MainPage from './pages/MainPage';
 import EditAgent from './pages/EditAgent';
 import CreateAgent from './pages/CreateAgent';
-import { getItem, setItem } from '../../core/storage';
-import enums from '../../types/enums';
 
 import '../../assets/css/pico.min.css';
 import './Popup.css';
 import isValidJsonKey from '../../helpers/isValidJsonKey';
-import { updateActualWorkspace } from '../../core/storageWorkspace';
+import { fetchWorkspaceNames, updateActualWorkspace, updateWorkspaceNames } from '../../core/storageWorkspace';
 
 Blockly.setLocale(PtBr as any);
 
 const Popup = () => {
-  const [workspaces, setWorkspaces] = useState<string[]>(getItem(enums.WORKSPACE) || []);
+  const [workspaces, setWorkspaces] = useState<string[]>(fetchWorkspaceNames());
   const [workspaceName, setWorkspaceName] = useState('');
   const [isMainPage, setIsMainPage] = useState(!workspaceName && !!workspaces.length);
 
   useEffect(() => {
-    setItem(enums.WORKSPACE, workspaces);
+    updateWorkspaceNames(workspaces);
   }, [workspaces]);
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 type TypeAgent = {
-    blockly: {
+    blocks: {
         [key: string]: any;
     };
     urls: string;

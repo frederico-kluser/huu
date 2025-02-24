@@ -8,3 +8,11 @@ export const updateActualWorkspace = (index: number) => {
 export const fetchActualWorkspace = () => {
     return getItem<number>(enums.LAST_WORKSPACE_INDEX) || 0;
 };
+
+export const fetchWorkspaceNames = () => {
+    return getItem<string[]>(enums.WORKSPACE) || [];
+};
+
+export const updateWorkspaceNames = (names: string[]) => {
+    setItem(enums.WORKSPACE, names);
+};
