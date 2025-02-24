@@ -26,7 +26,31 @@ const EditAgent = ({
     const [agentSite, setAgentSite] = useState('');
     const [isBackButtonDisabled, setIsBackButtonDisabled] = useState(true);
 
-    const canSave = isValidJsonKey(agentName) && isValidUrl(agentSite);
+    const canSave = isValidJsonKey(agentName) && isValidUrl(agentSite) && !(agentName !== workspaces[Number(selectRef.current?.value)] && workspaces.includes(agentName));
+
+    const needToSave = () => {
+        if (!canSave) {
+            return false;
+        }
+
+        const agentItem = getItem<{
+            urls: string
+        }>(agentName);
+
+        if (!agentItem) {
+            return true;
+        }
+
+        if (agentItem.urls !== agentSite) {
+            return true;
+        }
+
+        if (agentName !== workspaces[Number(selectRef.current?.value)]) {
+            return true;
+        }
+
+        return false;
+    };
 
     useEffect(() => {
         const lastSelectIndex = getItem<number>(keys.LAST_WORKSPACE_INDEX) || 0;
@@ -152,7 +176,7 @@ const EditAgent = ({
             <div role="group">
                 {/* <button onClick={handleCreateAgent}>Criar Novo Agente</button> */}
                 <button onClick={handleCreateAgent}>Criar</button>
-                <button onClick={handleSave} disabled={!canSave}>Salvar</button>
+                <button onClick={handleSave} disabled={!needToSave()}>Salvar</button>
                 <button onClick={handleLoadAgent}>Editar</button>
                 <button onClick={handleDeleteAgent}>Deletar</button>
             </div>
