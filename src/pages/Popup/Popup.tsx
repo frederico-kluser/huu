@@ -11,6 +11,7 @@ import keys from '../../types/keys';
 
 import '../../assets/css/pico.min.css';
 import './Popup.css';
+import isValidJsonKey from '../../helpers/isValidJsonKey';
 
 Blockly.setLocale(PtBr as any);
 
@@ -38,8 +39,11 @@ const Popup = () => {
   const handleCreateAgent = () => {
     const workspaceName = prompt('Digite o nome do agente', 'Agente 1');
     if (!workspaceName) return;
-    // TODO: validar se já existe um agente com esse nome
-    // TODO: validar se o nome é válido
+    if (!isValidJsonKey(workspaceName)) {
+      alert('Nome inválido');
+      return;
+    }
+
     if (workspaces.includes(workspaceName)) {
       alert('Já existe um agente com esse nome');
       return;
