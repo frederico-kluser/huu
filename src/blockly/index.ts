@@ -33,7 +33,8 @@ function updateCode(event: any) {
     const actualState = getBlocklyState(workspaceName);
     setItem(workspaceName, {
         ...actualState,
-        blocks
+        blocks,
+        code,
     });
 }
 
