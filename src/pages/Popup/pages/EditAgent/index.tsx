@@ -76,6 +76,8 @@ const EditAgent = ({
                 urls: agentSite,
             });
         }
+
+        handleBack();
     };
 
     const handleLoadAgent = () => {

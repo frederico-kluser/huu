@@ -12,12 +12,12 @@ import keys from '../../types/keys';
 import '../../assets/css/pico.min.css';
 import './Popup.css';
 
-Blockly.setLocale(PtBr);
+Blockly.setLocale(PtBr as any);
 
 const Popup = () => {
-  const [workspaces, setWorkspaces] = useState(getItem(keys.WORKSPACE) || []);
+  const [workspaces, setWorkspaces] = useState<string[]>(getItem(keys.WORKSPACE) || []);
   const [workspaceName, setWorkspaceName] = useState('');
-  const [isMainPage, setIsMainPage] = useState(false);
+  const [isMainPage, setIsMainPage] = useState(!workspaceName && !!workspaces.length);
 
   useEffect(() => {
     setItem(keys.WORKSPACE, workspaces);
@@ -59,7 +59,10 @@ const Popup = () => {
         </>
       )}
       {!workspaceName && !!workspaces.length &&
-        (isMainPage ? <MainPage setIsMainPage={setIsMainPage} /> : <EditAgent
+        (isMainPage ? <MainPage
+          setIsMainPage={setIsMainPage}
+          workspaces={workspaces}
+        /> : <EditAgent
           handleCreateAgent={handleCreateAgent}
           setIsMainPage={setIsMainPage}
           setWorkspaceName={setWorkspaceName}

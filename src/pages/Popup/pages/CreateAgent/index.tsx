@@ -2,7 +2,6 @@ import React, { Dispatch, SetStateAction } from 'react';
 
 interface CreateAgentProps {
     handleCreateAgent: () => void
-    workspaces: string[]
 };
 
 const CreateAgent = ({

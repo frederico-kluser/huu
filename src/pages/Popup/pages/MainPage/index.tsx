@@ -2,9 +2,10 @@ import React, { Dispatch, SetStateAction } from 'react';
 
 interface MainPageProps {
     setIsMainPage: Dispatch<SetStateAction<boolean>>
+    workspaces: string[]
 }
 
-const MainPage = ({ setIsMainPage }: MainPageProps) => {
+const MainPage = ({ setIsMainPage, workspaces }: MainPageProps) => {
 
     const handleEditModels = () => {
         setIsMainPage(false);
