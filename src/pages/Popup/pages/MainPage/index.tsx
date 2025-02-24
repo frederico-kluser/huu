@@ -60,9 +60,9 @@ const MainPage = ({ setIsMainPage, workspaces }: MainPageProps) => {
             {approvedAgents.length > 0 && <h4>Agentes para este site <mark><i>youtube.com/</i></mark></h4>}
             <div style={styles.agentContainer}>
                 {approvedAgents.map((agent) => (
-                    <div role="group" key={agent}>
+                    <div role="group" key={agent} style={styles.agentItem}>
                         {getButton(agent)}
-                        <h3 style={styles.agentTitle}>{agent}</h3>
+                        <h6 style={styles.agentTitle}>{agent}</h6>
                         <select onChange={(e) => handleEditMode(agent, e.target.value as TypeMode)} value={fetchAgentById(agent)?.mode}>
                             <option value="">Selecione o modo de acionamento</option>
                             <option value="automatic-1">Acionar automaticamente uma vez</option>
@@ -94,6 +94,9 @@ const styles: TypePageStyle = {
         backgroundColor: Colors.red500,
         maxWidth: '300px',
         width: '300px',
+    },
+    agentItem: {
+        border: '1px solid white',
     },
     agentContainer: {
         boxSizing: 'border-box',
