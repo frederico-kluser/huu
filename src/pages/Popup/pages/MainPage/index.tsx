@@ -11,7 +11,7 @@ interface MainPageProps {
 const MainPage = ({ setIsMainPage, workspaces }: MainPageProps) => {
     const [approvedAgents, setApprovedAgents] = useState<string[]>([]);
 
-    useEffect(() => {
+    const updateApprovedAgents = () => {
         const localApprovedAgents: string[] = [];
 
         workspaces.forEach((workspace) => {
@@ -21,12 +21,16 @@ const MainPage = ({ setIsMainPage, workspaces }: MainPageProps) => {
         });
 
         setApprovedAgents(localApprovedAgents);
-    }, [workspaces]);
+    }
+
+    useEffect(updateApprovedAgents, [workspaces]);
 
     const handleEditMode = (agentName: string, mode: TypeMode) => {
         updateAgentPartial(agentName, {
             mode,
         });
+
+        updateApprovedAgents();
     };
 
     const handleEditModels = () => {
