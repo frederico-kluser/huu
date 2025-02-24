@@ -40,6 +40,10 @@ const Popup = () => {
     if (!workspaceName) return;
     // TODO: validar se já existe um agente com esse nome
     // TODO: validar se o nome é válido
+    if (workspaces.includes(workspaceName)) {
+      alert('Já existe um agente com esse nome');
+      return;
+    }
     setWorkspaces([...workspaces, workspaceName]);
     setWorkspaceName(workspaceName);
   };
@@ -65,9 +69,7 @@ const Popup = () => {
       }
       {!workspaceName && !workspaces.length && (
         <CreateAgent
-          setWorkspaceName={setWorkspaceName}
-          setWorkspaces={setWorkspaces}
-          workspaces={workspaces}
+          handleCreateAgent={handleCreateAgent}
         />
       )}
     </div>

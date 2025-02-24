@@ -1,25 +1,13 @@
 import React, { Dispatch, SetStateAction } from 'react';
 
 interface CreateAgentProps {
-    setWorkspaceName: Dispatch<SetStateAction<string>>
-    setWorkspaces: Dispatch<SetStateAction<string[]>>
+    handleCreateAgent: () => void
     workspaces: string[]
 };
 
 const CreateAgent = ({
-    setWorkspaceName,
-    setWorkspaces,
-    workspaces,
+    handleCreateAgent,
 }: CreateAgentProps) => {
-
-    const handleCreateAgent = () => {
-        const workspaceName = prompt('Digite o nome do agente', 'Agente 1');
-        if (!workspaceName) return;
-        // TODO: validar se já existe um agente com esse nome
-        // TODO: validar se o nome é válido
-        setWorkspaces([...workspaces, workspaceName]);
-        setWorkspaceName(workspaceName);
-    };
 
     return (
         <div>
