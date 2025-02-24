@@ -5,6 +5,7 @@ import isValidJsonKey from '../../../../helpers/isValidJsonKey';
 import { getBlocklyState } from '../../../../blockly';
 import { fetchAgentById, saveOrUpdateAgent } from '../../../../core/storageAgents';
 import { fetchActualWorkspace, updateActualWorkspace } from '../../../../core/storageWorkspace';
+import TypeAgent, { TypeBlock } from '../../../../types/agent';
 
 interface EditAgentProps {
     handleCreateAgent: () => void
@@ -22,12 +23,12 @@ const EditAgent = ({
     workspaces,
 }: EditAgentProps
 ) => {
-    const selectRef = useRef<HTMLSelectElement>(null);
+    const agentSelectRef = useRef<HTMLSelectElement>(null);
     const [agentName, setAgentName] = useState('');
     const [agentSite, setAgentSite] = useState('');
     const [isBackButtonDisabled, setIsBackButtonDisabled] = useState(true);
 
-    const canSave = isValidJsonKey(agentName) && isValidUrl(agentSite) && !(agentName !== workspaces[Number(selectRef.current?.value)] && workspaces.includes(agentName));
+    const canSave = isValidJsonKey(agentName) && isValidUrl(agentSite) && !(agentName !== workspaces[Number(agentSelectRef.current?.value)] && workspaces.includes(agentName));
 
     const needToSave = () => {
         if (!canSave) {
@@ -44,7 +45,7 @@ const EditAgent = ({
             return true;
         }
 
-        if (agentName !== workspaces[Number(selectRef.current?.value)]) {
+        if (agentName !== workspaces[Number(agentSelectRef.current?.value)]) {
             return true;
         }
 
@@ -56,8 +57,8 @@ const EditAgent = ({
         const firstWorkspace = workspaces[lastSelectIndex];
         setAgentName(firstWorkspace);
         setAgentSite(fetchAgentById(firstWorkspace)?.urls || '');
-        if (selectRef.current) {
-            selectRef.current.value = lastSelectIndex.toString();
+        if (agentSelectRef.current) {
+            agentSelectRef.current.value = lastSelectIndex.toString();
         }
     }, [workspaces]);
 
@@ -67,49 +68,56 @@ const EditAgent = ({
             return;
         }
 
-        const state = getBlocklyState(agentName);
-        const hasNoBlocks = Object.keys(state.blocks).length === 0;
+        const { blocks } = getBlocklyState(agentName);
+        const hasNoBlocks = Object.keys(blocks as TypeBlock).length === 0;
         setIsBackButtonDisabled(hasNoBlocks);
     }, [agentName, agentSite, workspaces]);
 
     const getWorkspaceName = () => {
-        const workspaceIndex: number = Number(selectRef.current?.value) || 0;
+        const workspaceIndex: number = Number(agentSelectRef.current?.value) || 0;
         return workspaces[workspaceIndex];
     };
 
     const handleSave = () => {
         const state = getBlocklyState(agentName);
+        const partialAgent: Partial<TypeAgent> = {
+            urls: agentSite,
+            mode: state.mode || '',
+        };
+
+        // TODO: se eu usar o updateAgentPartial não preciso desse "as TypeAgent"
+        const newAgentValue: TypeAgent = {
+            ...state,
+            ...partialAgent,
+        } as TypeAgent;
+
+        let localAgentName = "";
         const workspaceName = getWorkspaceName();
 
         if (workspaceName !== agentName) {
             removeItem(workspaceName);
             const filteredWorkspaces = workspaces.filter((workspace) => workspace !== workspaceName);
             setWorkspaces([...filteredWorkspaces, agentName]);
-
-            saveOrUpdateAgent(agentName, {
-                ...state,
-                urls: agentSite,
-            });
+            localAgentName = agentName;
         } else {
-            saveOrUpdateAgent(workspaceName, {
-                ...state,
-                urls: agentSite,
-            });
+            localAgentName = workspaceName;
         }
 
-        handleBack();
+        saveOrUpdateAgent(localAgentName, newAgentValue);
+
+        handleGoHome();
     };
 
     const handleLoadAgent = () => {
-        if (!selectRef.current) return;
+        if (!agentSelectRef.current) return;
 
         const workspaceName = getWorkspaceName();
         setWorkspaceName(workspaceName);
     };
 
     const handleChangeAgent = () => {
-        if (!selectRef.current) return;
-        updateActualWorkspace(Number(selectRef.current.value));
+        if (!agentSelectRef.current) return;
+        updateActualWorkspace(Number(agentSelectRef.current.value));
         const workspaceName = getWorkspaceName();
         setAgentName(workspaceName);
         const url = fetchAgentById(workspaceName)?.urls || '';
@@ -117,7 +125,7 @@ const EditAgent = ({
     };
 
     const handleDeleteAgent = () => {
-        if (!selectRef.current) return;
+        if (!agentSelectRef.current) return;
 
         const workspaceName = getWorkspaceName();
         if (!confirm(`Deseja realmente deletar o agente "${workspaceName}"?`)) return;
@@ -128,21 +136,14 @@ const EditAgent = ({
         removeItem(workspaceName);
     };
 
-    const handleBack = () => {
+    const handleGoHome = () => {
         setIsMainPage(true);
     };
 
     return (
         <main className="content">
-            <button onClick={handleBack} disabled={isBackButtonDisabled}>Voltar</button>
-            {(isBackButtonDisabled) && (
-                <mark>
-                    <i>
-                        <small style={{
-                        }}>O seu agente não tem nenhuma ação cadastrada, por favor clique em Editar para adicionar ações</small>
-                    </i>
-                </mark>)}
-            <select ref={selectRef} onChange={handleChangeAgent}>
+            <button onClick={handleGoHome} disabled={isBackButtonDisabled}>Ativar Agentes</button>
+            <select ref={agentSelectRef} onChange={handleChangeAgent}>
                 {workspaces.map((workspace, index) => (
                     <option key={workspace} value={index}>
                         {workspace}
@@ -155,21 +156,8 @@ const EditAgent = ({
             <input type="text" placeholder="Site que o agente irá funcionar" value={agentSite} onChange={(e) => {
                 setAgentSite(e.target.value);
             }} aria-invalid={!isValidUrl(agentSite)} />
-            {/* <select> TODO: posso definir na tela principal do agente
-          <option>Acionar manual</option>
-          <option>Acionar automatico</option>
-          <option>Acionar com Ctrl + 2</option>
-          <option>Acionar com Ctrl + 3</option>
-          <option>Acionar com Ctrl + 4</option>
-          <option>Acionar com Ctrl + 5</option>
-          <option>Acionar com Ctrl + 6</option>
-          <option>Acionar com Ctrl + 7</option>
-          <option>Acionar com Ctrl + 8</option>
-          <option>Acionar com Ctrl + 9</option>
-        </select> */}
             <div role="group">
-                {/* <button onClick={handleCreateAgent}>Criar Novo Agente</button> */}
-                <button onClick={handleCreateAgent}>Criar</button>
+                <button onClick={handleCreateAgent} className="contrast">Criar Novo Agente</button>
                 <button onClick={handleSave} disabled={!needToSave()}>Salvar</button>
                 <button onClick={handleLoadAgent}>Editar</button>
                 <button onClick={handleDeleteAgent}>Deletar</button>

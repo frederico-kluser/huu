@@ -4,6 +4,7 @@ import blocklyOptions from './config/options';
 import blocklyContextMenus from './config/contextMenu';
 import BlocklyTypes from './config/types';
 import { fetchAgentById, saveOrUpdateAgent } from '../core/storageAgents';
+import TypeAgent, { TypeBlock } from '../types/agent';
 
 var workspace: Blockly.Workspace;
 var workspaceName = "";
@@ -12,14 +13,14 @@ blocklyContextMenus.forEach((item) => {
     Blockly.ContextMenuRegistry.registry.register(item);
 });
 
-export const getBlocklyState = (localWorkspaceName: string): any => fetchAgentById(localWorkspaceName) || {
+export const getBlocklyState = (localWorkspaceName: string): Partial<TypeAgent> => fetchAgentById(localWorkspaceName) || {
     blocks: {},
 }
 
 export function loadWorkspace(wsName: string) {
     workspaceName = wsName;
     const { blocks } = getBlocklyState(workspaceName);
-    Blockly.serialization.workspaces.load(blocks, workspace);
+    Blockly.serialization.workspaces.load(blocks as TypeBlock, workspace);
 }
 
 function updateCode(event: any) {
@@ -30,7 +31,9 @@ function updateCode(event: any) {
     console.log("----");
     const blocks = Blockly.serialization.workspaces.save(workspace);
 
-    const actualState = getBlocklyState(workspaceName);
+    // TODO: se eu usar o updateAgentPartial não preciso desse "as TypeAgent"
+    const actualState = getBlocklyState(workspaceName) as TypeAgent;
+
     saveOrUpdateAgent(workspaceName, {
         ...actualState,
         blocks,
