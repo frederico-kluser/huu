@@ -20,6 +20,13 @@ const Popup = () => {
   const [isMainPage, setIsMainPage] = useState(!workspaceName && !!workspaces.length);
 
   useEffect(() => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs[0];
+      console.log(tab.url);
+    });
+  }, []);
+
+  useEffect(() => {
     updateWorkspaceNames(workspaces);
   }, [workspaces]);
 

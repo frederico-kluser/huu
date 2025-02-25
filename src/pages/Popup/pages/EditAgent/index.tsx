@@ -1,11 +1,11 @@
-import React, { Dispatch, SetStateAction, useEffect, useRef, useState } from 'react';
-import { removeItem } from '../../../../core/storage';
-import isValidUrl from '../../../../helpers/isValidUrl';
-import isValidJsonKey from '../../../../helpers/isValidJsonKey';
-import { getBlocklyState } from '../../../../blockly';
-import { fetchAgentById, saveOrUpdateAgent } from '../../../../core/storageAgents';
-import { fetchActualWorkspace, updateActualWorkspace } from '../../../../core/storageWorkspace';
-import TypeAgent, { TypeBlock } from '../../../../types/agent';
+import React, { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
+import { removeItem } from "../../../../core/storage";
+import isValidUrl from "../../../../helpers/isValidUrl";
+import isValidJsonKey from "../../../../helpers/isValidJsonKey";
+import { getBlocklyState } from "../../../../blockly";
+import { fetchAgentById, saveOrUpdateAgent } from "../../../../core/storageAgents";
+import { fetchActualWorkspace, updateActualWorkspace } from "../../../../core/storageWorkspace";
+import TypeAgent, { TypeBlock } from "../../../../types/agent";
 
 interface EditAgentProps {
     handleCreateAgent: () => void

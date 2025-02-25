@@ -29,5 +29,6 @@
       "matches": []
     }
   ],
-  "host_permissions": ["<all_urls>"]
+  "host_permissions": ["<all_urls>"],
+  "permissions": ["scripting", "activeTab", "tabs"]
 }
