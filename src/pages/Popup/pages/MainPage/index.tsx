@@ -107,8 +107,9 @@ const styles: TypePageStyle = {
         padding: '16px',
     },
     agentTitle: {
-        width: '80%',
+        color: "#fff",
         lineHeight: '56px',
+        width: '75%',
     },
 }
 
