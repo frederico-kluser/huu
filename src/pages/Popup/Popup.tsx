@@ -11,7 +11,7 @@ import '../../assets/css/pico.min.css';
 import './Popup.css';
 import isValidJsonKey from '../../helpers/isValidJsonKey';
 import { fetchWorkspaceNames, updateActualWorkspace, updateWorkspaceNames } from '../../core/storageWorkspace';
-import { configMessage } from '../../core/message';
+import { messageListener } from '../../core/message';
 
 Blockly.setLocale(PtBr as any);
 
@@ -26,7 +26,7 @@ const Popup = () => {
       console.log(tab.url);
     });
 
-    configMessage.popup();
+    messageListener.popup();
   }, []);
 
   useEffect(() => {
