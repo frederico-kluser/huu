@@ -1,4 +1,4 @@
-import CommunicationChannel from "../types/communicationChannel";
+import CommunicationChannel from "../../types/communicationChannel";
 
 enum DataCommand {
     SEND_CODE = 'sendCode',
