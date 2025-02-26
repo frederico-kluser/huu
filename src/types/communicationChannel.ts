@@ -1,7 +1,7 @@
-enum MessageType {
+enum CommunicationChannel {
     BACKGROUND = 'background',
     CONTENT = 'content',
     POPUP = 'popup',
 }
 
-export default MessageType;
+export default CommunicationChannel;
