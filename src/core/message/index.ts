@@ -1,17 +1,11 @@
+import TypeChannelObjectFunction from "../../types/channelOBjectFunction";
 import CommunicationChannel from "../../types/communicationChannel";
-
-enum DataCommand {
-    SEND_CODE = 'sendCode',
-};
+import DataCommand from "../../types/dataCommand";
 
 type TypeMessageData = {
     command: DataCommand;
     sender: CommunicationChannel;
     value: string;
-};
-
-type TypeChannelObjectFunction = {
-    [key in CommunicationChannel]: (...args: any[]) => void;
 };
 
 export const sendMessageConfig: TypeChannelObjectFunction = {
