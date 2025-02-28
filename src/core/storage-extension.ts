@@ -38,4 +38,19 @@ const removeItem = async (key: string): Promise<void> => {
     await chrome.storage.local.remove(key);
 };
 
-export { setItem, getItem, removeItem };
+const addChangeListener = (
+    keys: string[],
+    callback: (key: string, newValue: any, oldValue: any) => void
+): void => {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== 'local') return;
+
+        keys.forEach((key) => {
+            if (changes[key]) {
+                callback(key, changes[key].newValue, changes[key].oldValue);
+            }
+        });
+    });
+};
+
+export { setItem, getItem, removeItem, addChangeListener };

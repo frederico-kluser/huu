@@ -35,4 +35,25 @@ const removeItem = (key: string): void => {
     localStorage.removeItem(key);
 };
 
-export { setItem, getItem, removeItem };
+const addChangeListener = (
+    keys: string[],
+    callback: (key: string, newValue: any) => void
+): (() => void) => {
+    const handler = (event: StorageEvent) => {
+        // Se a alteração for em uma key monitorada
+        if (event.key && keys.includes(event.key)) {
+            // Converter o valor (se houver) do JSON para o objeto original
+            const newValue = event.newValue ? JSON.parse(event.newValue) : null;
+            callback(event.key, newValue);
+        }
+    };
+
+    window.addEventListener('storage', handler);
+
+    // Retorna uma função para remover o listener
+    return () => {
+        window.removeEventListener('storage', handler);
+    };
+};
+
+export { setItem, getItem, removeItem, addChangeListener };
