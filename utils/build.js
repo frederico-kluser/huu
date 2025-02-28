@@ -22,6 +22,28 @@ config.plugins = (config.plugins || []).concat(
   })
 );
 
-webpack(config, function (err) {
-  if (err) throw err;
+webpack(config, (err, stats) => {
+  if (err) {
+    console.error('Erro fatal no webpack:', err);
+    return;
+  }
+
+  const info = stats.toJson();
+
+  if (stats.hasErrors()) {
+    console.error('Erros de compilação:', info.errors);
+  }
+
+  if (stats.hasWarnings()) {
+    console.warn('Avisos:', info.warnings);
+  }
+
+  console.log(stats.toString({
+    colors: true,
+    modules: false,
+    children: false,
+    chunks: false,
+    chunkModules: false,
+  }));
 });
+
