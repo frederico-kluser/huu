@@ -16,9 +16,9 @@ import { messageListener } from '../../core/message';
 Blockly.setLocale(PtBr as any);
 
 const Popup = () => {
-  const [workspaces, setWorkspaces] = useState<string[]>(fetchWorkspaceNames());
+  const [workspaces, setWorkspaces] = useState<string[]>([]);
   const [workspaceName, setWorkspaceName] = useState('');
-  const [isMainPage, setIsMainPage] = useState(!workspaceName && !!workspaces.length);
+  const [isMainPage, setIsMainPage] = useState(false);
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -27,10 +27,17 @@ const Popup = () => {
     });
 
     messageListener.popup();
+
+    fetchWorkspaceNames().then((loadedWorkspaces) => {
+      setWorkspaces(loadedWorkspaces);
+      setIsMainPage(!workspaceName && !!loadedWorkspaces.length);
+    });
   }, []);
 
   useEffect(() => {
-    updateWorkspaceNames(workspaces);
+    updateWorkspaceNames(workspaces).then(() => {
+      console.log('Workspaces atualizados');
+    });
   }, [workspaces]);
 
   useEffect(() => {
@@ -45,7 +52,7 @@ const Popup = () => {
     setWorkspaceName('');
   };
 
-  const handleCreateAgent = () => {
+  const handleCreateAgent = async () => {
     const workspaceName = prompt('Digite o nome do agente', 'Agente 1');
     if (!workspaceName) return;
     if (!isValidJsonKey(workspaceName)) {
@@ -60,7 +67,7 @@ const Popup = () => {
 
     setWorkspaces([...workspaces, workspaceName]);
     setWorkspaceName(workspaceName);
-    updateActualWorkspace(workspaces.length);
+    await updateActualWorkspace(workspaces.length);
   };
 
   return (

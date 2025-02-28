@@ -13,17 +13,23 @@ blocklyContextMenus.forEach((item) => {
     Blockly.ContextMenuRegistry.registry.register(item);
 });
 
-export const getBlocklyState = (localWorkspaceName: string): Partial<TypeAgent> => fetchAgentById(localWorkspaceName) || {
-    blocks: {},
+export const getBlocklyState = async (localWorkspaceName: string): Promise<Partial<TypeAgent>> => {
+    const workspaceState = await fetchAgentById(localWorkspaceName);
+    const mockWorkspaceState: Partial<TypeAgent> = {
+        blocks: {},
+    };
+
+    return workspaceState || mockWorkspaceState;
 }
 
-export function loadWorkspace(wsName: string) {
+export const loadWorkspace = async (wsName: string) => {
     workspaceName = wsName;
-    const { blocks } = getBlocklyState(workspaceName);
+    const workspaceState = await getBlocklyState(wsName);
+    const { blocks } = workspaceState;
     Blockly.serialization.workspaces.load(blocks as TypeBlock, workspace);
 }
 
-function updateCode(event: any) {
+const updateCode = async (event: any) => {
     const code = javascriptGenerator.workspaceToCode(workspace);
     console.clear();
     console.log("code:");
@@ -32,9 +38,9 @@ function updateCode(event: any) {
     const blocks = Blockly.serialization.workspaces.save(workspace);
 
     // TODO: se eu usar o updateAgentPartial não preciso desse "as TypeAgent"
-    const actualState = getBlocklyState(workspaceName) as TypeAgent;
+    const actualState = await getBlocklyState(workspaceName) as TypeAgent;
 
-    saveOrUpdateAgent(workspaceName, {
+    await saveOrUpdateAgent(workspaceName, {
         ...actualState,
         blocks,
         code,
