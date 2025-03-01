@@ -88,7 +88,7 @@ const MainPage = ({ setIsMainPage, workspaces }: MainPageProps) => {
     };
 
     useEffect(() => {
-        generateAgentElements
+        generateAgentElements()
     }, [approvedAgents]);
 
     const handleEditModels = () => {
