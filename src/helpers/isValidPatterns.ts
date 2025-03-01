@@ -1,39 +1,31 @@
-function isValidUrlPattern(pattern: string): boolean {
-    // Verifica se o padrão não é vazio e não contém espaços em branco
-    if (!pattern || pattern.trim() === '' || /\s/.test(pattern)) {
+function isValidURL(url: string): boolean {
+    try {
+        new URL(url);
+        return true;
+    } catch (error) {
         return false;
     }
-
-    // O padrão deve conter pelo menos uma barra para separar domínio e caminho
-    const slashIndex = pattern.indexOf('/');
-    if (slashIndex === -1) {
-        return false;
-    }
-
-    // Extrai a parte do domínio (antes da primeira barra)
-    const domain = pattern.substring(0, slashIndex);
-    if (!domain) return false;
-
-    // Se o domínio iniciar com "*.", remove essa parte para validação
-    const normalizedDomain = domain.startsWith('*.') ? domain.substring(2) : domain;
-
-    // Verifica se o domínio (ou parte dele) possui pelo menos um ponto
-    if (!normalizedDomain.includes('.')) {
-        return false;
-    }
-
-    // A parte do caminho (após a barra) pode ser qualquer coisa
-    return true;
 }
 
 function isValidPatterns(patterns: string): boolean {
+    debugger;
     if (!patterns || patterns.trim() === '') {
         return false;
     }
+    const patternList = patterns.split(',').map((p) => p.trim());
+    return patternList.every((pattern) => {
+        let url = pattern;
 
-    // Separa os padrões pela vírgula e valida cada um individualmente
-    const patternList = patterns.split(',').map(p => p.trim());
-    return patternList.every(pattern => isValidUrlPattern(pattern));
+        if (!pattern.includes('http')) {
+            url = `https://${pattern}`;
+        }
+
+        if (pattern.includes('*')) {
+            return pattern.length;
+        } else {
+            return isValidURL(url);
+        }
+    });
 }
 
 export default isValidPatterns;
