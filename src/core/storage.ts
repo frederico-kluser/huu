@@ -3,57 +3,54 @@ type StoredData<T> = {
     expiry: number;
 };
 
-const setItem = <T>(key: string, value: T, ttl = -1): void => {
+const setItem = async <T>(key: string, value: T, ttl = -1): Promise<void> => {
     const now = Date.now();
     const item: StoredData<T> = {
         value,
         expiry: ttl !== -1 ? now + ttl : -1,
     };
-    localStorage.setItem(key, JSON.stringify(item));
+    // Armazena o item convertendo para string
+    await chrome.storage.local.set({ [key]: JSON.stringify(item) });
 };
 
-const getItem = <T>(key: string): T | null => {
-    const itemStr = localStorage.getItem(key);
+const getItem = async <T>(key: string): Promise<T | null> => {
+    const result = await chrome.storage.local.get(key);
+    const itemStr = result[key];
     if (!itemStr) {
         return null;
     }
 
     try {
         const item: StoredData<T> = JSON.parse(itemStr);
+        // Se existir expiração e já estiver expirado, remove e retorna null
         if (item.expiry !== -1 && Date.now() > item.expiry) {
-            localStorage.removeItem(key);
+            await chrome.storage.local.remove(key);
             return null;
         }
         return item.value;
     } catch (error) {
-        console.error('Error parsing localStorage data:', error);
+        console.error('Error parsing chrome.storage.local data:', error);
         return null;
     }
 };
 
-const removeItem = (key: string): void => {
-    localStorage.removeItem(key);
+const removeItem = async (key: string): Promise<void> => {
+    await chrome.storage.local.remove(key);
 };
 
 const addChangeListener = (
     keys: string[],
-    callback: (key: string, newValue: any) => void
-): (() => void) => {
-    const handler = (event: StorageEvent) => {
-        // Se a alteração for em uma key monitorada
-        if (event.key && keys.includes(event.key)) {
-            // Converter o valor (se houver) do JSON para o objeto original
-            const newValue = event.newValue ? JSON.parse(event.newValue) : null;
-            callback(event.key, newValue);
-        }
-    };
+    callback: (key: string, newValue: any, oldValue: any) => void
+): void => {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== 'local') return;
 
-    window.addEventListener('storage', handler);
-
-    // Retorna uma função para remover o listener
-    return () => {
-        window.removeEventListener('storage', handler);
-    };
+        keys.forEach((key) => {
+            if (changes[key]) {
+                callback(key, changes[key].newValue, changes[key].oldValue);
+            }
+        });
+    });
 };
 
 export { setItem, getItem, removeItem, addChangeListener };

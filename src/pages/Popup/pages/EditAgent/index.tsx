@@ -1,11 +1,11 @@
 import React, { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
-import { removeItem } from "../../../../core/storage";
 import isValidJsonKey from "../../../../helpers/isValidJsonKey";
 import { getBlocklyState } from "../../../../blockly";
 import { fetchAgentById, saveOrUpdateAgent } from "../../../../core/storageAgents";
 import { fetchActualWorkspace, updateActualWorkspace } from "../../../../core/storageWorkspace";
 import TypeAgent, { TypeBlock } from "../../../../types/agent";
 import isValidPatterns from "../../../../helpers/isValidPatterns";
+import { removeItem } from "../../../../core/storage";
 
 interface EditAgentProps {
     handleCreateAgent: () => void
@@ -30,12 +30,12 @@ const EditAgent = ({
 
     const canSave = isValidJsonKey(agentName) && isValidPatterns(agentSite) && !(agentName !== workspaces[Number(agentSelectRef.current?.value)] && workspaces.includes(agentName));
 
-    const needToSave = () => {
+    const needToSave = async () => {
         if (!canSave) {
             return false;
         }
 
-        const agentItem = fetchAgentById(agentName);
+        const agentItem = await fetchAgentById(agentName);
 
         if (!agentItem) {
             return true;
@@ -53,13 +53,17 @@ const EditAgent = ({
     };
 
     useEffect(() => {
-        const lastSelectIndex = fetchActualWorkspace();
-        const firstWorkspace = workspaces[lastSelectIndex];
-        setAgentName(firstWorkspace);
-        setAgentSite(fetchAgentById(firstWorkspace)?.urls || '');
-        if (agentSelectRef.current) {
-            agentSelectRef.current.value = lastSelectIndex.toString();
-        }
+        fetchActualWorkspace().then((lastSelectIndex) => {
+            const firstWorkspace = workspaces[lastSelectIndex];
+            setAgentName(firstWorkspace);
+            fetchAgentById(firstWorkspace).then((agent) => {
+                const { urls } = agent || { urls: '' };
+                setAgentSite(urls);
+                if (agentSelectRef.current) {
+                    agentSelectRef.current.value = lastSelectIndex.toString();
+                }
+            });
+        });
     }, [workspaces]);
 
     useEffect(() => {
@@ -68,9 +72,10 @@ const EditAgent = ({
             return;
         }
 
-        const { blocks } = getBlocklyState(agentName);
-        const hasNoBlocks = Object.keys(blocks as TypeBlock).length === 0;
-        setIsBackButtonDisabled(hasNoBlocks);
+        getBlocklyState(agentName).then(({ blocks }) => {
+            const hasNoBlocks = Object.keys(blocks as TypeBlock).length === 0;
+            setIsBackButtonDisabled(hasNoBlocks);
+        });
     }, [agentName, agentSite, workspaces]);
 
     const getWorkspaceName = () => {
@@ -78,8 +83,8 @@ const EditAgent = ({
         return workspaces[workspaceIndex];
     };
 
-    const handleSave = () => {
-        const state = getBlocklyState(agentName);
+    const handleSave = async () => {
+        const state = await getBlocklyState(agentName);
         const partialAgent: Partial<TypeAgent> = {
             urls: agentSite,
             mode: state.mode || '',
@@ -115,12 +120,13 @@ const EditAgent = ({
         setWorkspaceName(workspaceName);
     };
 
-    const handleChangeAgent = () => {
+    const handleChangeAgent = async () => {
         if (!agentSelectRef.current) return;
         updateActualWorkspace(Number(agentSelectRef.current.value));
         const workspaceName = getWorkspaceName();
         setAgentName(workspaceName);
-        const url = fetchAgentById(workspaceName)?.urls || '';
+        const agentItem = await fetchAgentById(agentName);
+        const url = agentItem?.urls || '';
         setAgentSite(url);
     };
 
