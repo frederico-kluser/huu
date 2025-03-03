@@ -1,4 +1,4 @@
-import { fetchAgentById } from "../core/storageAgents";
+import { fetchAgentById } from "../core/storage/agents";
 import isValidJsonKey from "./isValidJsonKey";
 
 const isValidAgent = async (agentName: string) => {
