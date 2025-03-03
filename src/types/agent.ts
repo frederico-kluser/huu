@@ -16,6 +16,7 @@ export type TypeBlock = {
 };
 
 type TypeAgent = {
+    name: string;
     blocks: TypeBlock;
     urls: string;
     code: string;

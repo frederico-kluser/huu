@@ -42,6 +42,7 @@ const updateCode = async (event: any) => {
 
     await saveOrUpdateAgent(workspaceName, {
         ...actualState,
+        name: workspaceName,
         blocks,
         code,
     });

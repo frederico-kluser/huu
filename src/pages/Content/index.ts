@@ -1,9 +1,12 @@
+import getTabAgents from '../../core/getTabAgents';
 import { messageListener } from '../../core/message';
-import { printLine } from './modules/print';
 
 console.log('Content script works!');
-console.log('Must reload extension for modifications to take effect.');
 
-printLine("Using the 'printLine' function from the Print Module");
+getTabAgents(window.location.href).then((agents) => {
+    console.log('agents:', agents);
+});
+
+// TODO: vou ter que ter um listner para as mudanças de agent e saber quando remover ou inserir um código, com base nele esta ativado ou desativado, e cuidado para duante a execução do codigo, não removelo e causar um side effect
 
 messageListener.content();
