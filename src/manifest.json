@@ -50,6 +50,7 @@
     "scripting",
     "activeTab",
     "tabs",
-    "storage"
+    "storage",
+    "windows"
   ]
 }
