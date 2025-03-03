@@ -1,11 +1,11 @@
 import React, { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
 import isValidJsonKey from "../../../../helpers/isValidJsonKey";
 import { getBlocklyState } from "../../../../blockly";
-import { fetchAgentById, saveOrUpdateAgent } from "../../../../core/storageAgents";
-import { fetchActualWorkspace, updateActualWorkspace } from "../../../../core/storageWorkspace";
+import { fetchActualWorkspace, updateActualWorkspace } from "../../../../core/storage/workspace";
 import TypeAgent, { TypeBlock } from "../../../../types/agent";
 import isValidPatterns from "../../../../helpers/isValidPatterns";
 import { removeItem } from "../../../../core/storage";
+import { fetchAgentById, saveOrUpdateAgent } from "../../../../core/storage/agents";
 
 interface EditAgentProps {
     handleCreateAgent: () => void

@@ -1,5 +1,5 @@
-import enums from "../types/enums";
-import { getItem, setItem } from "./storage";
+import enums from "../../types/enums";
+import { getItem, setItem } from ".";
 
 export const updateActualWorkspace = async (index: number) => {
     return setItem(enums.LAST_WORKSPACE_INDEX, index);

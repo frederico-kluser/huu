@@ -6,12 +6,12 @@ import { blocklySetup, loadWorkspace } from '../../blockly';
 import MainPage from './pages/MainPage';
 import EditAgent from './pages/EditAgent';
 import CreateAgent from './pages/CreateAgent';
+import isValidJsonKey from '../../helpers/isValidJsonKey';
+import { fetchWorkspaceNames, updateActualWorkspace, updateWorkspaceNames } from '../../core/storage/workspace';
+import { messageListener } from '../../core/message';
 
 import '../../assets/css/pico.min.css';
 import './Popup.css';
-import isValidJsonKey from '../../helpers/isValidJsonKey';
-import { fetchWorkspaceNames, updateActualWorkspace, updateWorkspaceNames } from '../../core/storageWorkspace';
-import { messageListener } from '../../core/message';
 
 Blockly.setLocale(PtBr as any);
 

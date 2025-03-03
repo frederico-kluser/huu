@@ -3,8 +3,8 @@ import { javascriptGenerator } from 'blockly/javascript';
 import blocklyOptions from './config/options';
 import blocklyContextMenus from './config/contextMenu';
 import BlocklyTypes from './config/types';
-import { fetchAgentById, saveOrUpdateAgent } from '../core/storageAgents';
 import TypeAgent, { TypeBlock } from '../types/agent';
+import { fetchAgentById, saveOrUpdateAgent } from '../core/storage/agents';
 
 var workspace: Blockly.Workspace;
 var workspaceName = "";

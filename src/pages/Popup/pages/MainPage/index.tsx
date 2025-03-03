@@ -1,9 +1,9 @@
 import React, { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import isValidAgent from '../../../../helpers/isValidAgent';
-import { fetchAgentById, updateAgentPartial } from '../../../../core/storageAgents';
 import { TypeMode } from '../../../../types/agent';
 import Colors from '../../../../types/colors';
 import TypePageStyle from '../../../../types/pageStyle';
+import { fetchAgentById, updateAgentPartial } from '../../../../core/storage/agents';
 
 interface MainPageProps {
     setIsMainPage: Dispatch<SetStateAction<boolean>>

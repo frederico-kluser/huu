@@ -1,5 +1,5 @@
-import TypeAgent from "../types/agent";
-import { getItem, setItem } from "./storage";
+import { getItem, setItem } from ".";
+import TypeAgent from "../../types/agent";
 
 export const fetchAgentById = async (agentId: string) => {
     return getItem<TypeAgent | null>(agentId);
