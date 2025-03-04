@@ -48,18 +48,21 @@ export enum ValidKey {
     Digit9 = 'Digit9',
 }
 
+// Cria o set de teclas válidas uma única vez
+const validKeysSet = new Set(Object.values(ValidKey));
+
 export const registerShortcut = (shortcut: ValidKey[], callback: () => void) => {
     const pressedKeys = new Set<ValidKey>();
     let callbackExecuted = false;
 
     const keydownHandler = (event: KeyboardEvent): void => {
-        const keyCode = event.code;
-        // Se o código da tecla estiver entre os válidos, adiciona ao conjunto
-        if ((Object.values(ValidKey) as string[]).includes(keyCode)) {
+        const keyCode = event.code as ValidKey;
+        // Verifica se a tecla pressionada está no set de teclas válidas
+        if (validKeysSet.has(keyCode)) {
             pressedKeys.add(keyCode as ValidKey);
         }
-        // Executa o callback apenas se:
-        // 1. O número de teclas pressionadas for exatamente igual ao número do atalho.
+        // Executa o callback se:
+        // 1. O número de teclas pressionadas for igual ao número do atalho.
         // 2. Todas as teclas do atalho estiverem pressionadas.
         // 3. O callback ainda não tiver sido executado.
         if (
@@ -73,8 +76,9 @@ export const registerShortcut = (shortcut: ValidKey[], callback: () => void) => 
     };
 
     const keyupHandler = (event: KeyboardEvent): void => {
-        const keyCode = event.code;
-        if ((Object.values(ValidKey) as string[]).includes(keyCode)) {
+        const keyCode = event.code as ValidKey;
+        // Remove a tecla do set de teclas pressionadas se ela for válida.
+        if (validKeysSet.has(keyCode)) {
             pressedKeys.delete(keyCode as ValidKey);
         }
         // Reseta a flag se uma tecla do atalho for liberada.
@@ -83,7 +87,7 @@ export const registerShortcut = (shortcut: ValidKey[], callback: () => void) => 
         }
     };
 
-    // Listener para restaurar o estado caso o foco seja perdido (ex: mudança de aba ou minimização)
+    // Listener para restaurar o estado se o foco for perdido
     const blurHandler = (): void => {
         pressedKeys.clear();
         callbackExecuted = false;
