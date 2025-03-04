@@ -1,5 +1,5 @@
 export enum ValidKey {
-    // Modificadores: consideramos as versões esquerda e direita
+    // Modificadores: versões esquerda e direita
     ControlLeft = 'ControlLeft',
     ControlRight = 'ControlRight',
     AltLeft = 'AltLeft',
@@ -8,7 +8,7 @@ export enum ValidKey {
     ShiftRight = 'ShiftRight',
     MetaLeft = 'MetaLeft',
     MetaRight = 'MetaRight',
-    // Letras: os códigos sempre começam com "Key"
+    // Letras: os códigos começam com "Key"
     KeyA = 'KeyA',
     KeyB = 'KeyB',
     KeyC = 'KeyC',
@@ -58,8 +58,15 @@ export const registerShortcut = (shortcut: ValidKey[], callback: () => void) => 
         if ((Object.values(ValidKey) as string[]).includes(keyCode)) {
             pressedKeys.add(keyCode as ValidKey);
         }
-        // Executa o callback apenas uma vez enquanto o atalho estiver pressionado.
-        if (shortcut.every((k) => pressedKeys.has(k)) && !callbackExecuted) {
+        // Executa o callback apenas se:
+        // 1. O número de teclas pressionadas for exatamente igual ao número do atalho.
+        // 2. Todas as teclas do atalho estiverem pressionadas.
+        // 3. O callback ainda não tiver sido executado.
+        if (
+            !callbackExecuted &&
+            pressedKeys.size === shortcut.length &&
+            shortcut.every((k) => pressedKeys.has(k))
+        ) {
             callback();
             callbackExecuted = true;
         }
