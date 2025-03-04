@@ -42,21 +42,23 @@ export enum ValidKey {
 }
 
 const normalizeKey = (key: string): string => {
-    // Se for uma única letra ou dígito, converte para minúscula;
-    // Caso contrário, mantém o valor original (para Control, Alt, etc.)
+    // Converte para minúscula se for uma única letra ou dígito.
     return key.length === 1 ? key.toLowerCase() : key;
 };
 
 export const registerShortcut = (shortcut: ValidKey[], callback: () => void) => {
     const pressedKeys = new Set<ValidKey>();
+    let callbackExecuted = false;
 
     const keydownHandler = (event: KeyboardEvent): void => {
         const normalizedKey = normalizeKey(event.key);
         if ((Object.values(ValidKey) as string[]).includes(normalizedKey)) {
             pressedKeys.add(normalizedKey as ValidKey);
         }
-        if (shortcut.every((k) => pressedKeys.has(k))) {
+        // Se todas as teclas do atalho estiverem pressionadas e o callback ainda não foi executado...
+        if (shortcut.every((k) => pressedKeys.has(k)) && !callbackExecuted) {
             callback();
+            callbackExecuted = true;
         }
     };
 
@@ -65,12 +67,16 @@ export const registerShortcut = (shortcut: ValidKey[], callback: () => void) => 
         if ((Object.values(ValidKey) as string[]).includes(normalizedKey)) {
             pressedKeys.delete(normalizedKey as ValidKey);
         }
+        // Se uma tecla que faz parte do atalho for liberada, permite que o callback seja disparado novamente.
+        if (shortcut.includes(normalizedKey as ValidKey)) {
+            callbackExecuted = false;
+        }
     };
 
     document.addEventListener('keydown', keydownHandler);
     document.addEventListener('keyup', keyupHandler);
 
-    // Retorna uma função que remove os listeners adicionados
+    // Retorna uma função que remove os listeners adicionados.
     return () => {
         document.removeEventListener('keydown', keydownHandler);
         document.removeEventListener('keyup', keyupHandler);
