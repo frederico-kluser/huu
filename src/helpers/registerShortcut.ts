@@ -55,7 +55,7 @@ export const registerShortcut = (shortcut: ValidKey[], callback: () => void) => 
         if ((Object.values(ValidKey) as string[]).includes(normalizedKey)) {
             pressedKeys.add(normalizedKey as ValidKey);
         }
-        // Se todas as teclas do atalho estiverem pressionadas e o callback ainda não foi executado...
+        // Executa o callback apenas uma vez enquanto o atalho estiver pressionado.
         if (shortcut.every((k) => pressedKeys.has(k)) && !callbackExecuted) {
             callback();
             callbackExecuted = true;
@@ -67,18 +67,26 @@ export const registerShortcut = (shortcut: ValidKey[], callback: () => void) => 
         if ((Object.values(ValidKey) as string[]).includes(normalizedKey)) {
             pressedKeys.delete(normalizedKey as ValidKey);
         }
-        // Se uma tecla que faz parte do atalho for liberada, permite que o callback seja disparado novamente.
+        // Reseta o flag se uma tecla do atalho for liberada.
         if (shortcut.includes(normalizedKey as ValidKey)) {
             callbackExecuted = false;
         }
     };
 
+    // Listener para restaurar o estado caso o foco seja perdido (ex: mudança de aba ou minimização)
+    const blurHandler = (): void => {
+        pressedKeys.clear();
+        callbackExecuted = false;
+    };
+
     document.addEventListener('keydown', keydownHandler);
     document.addEventListener('keyup', keyupHandler);
+    window.addEventListener('blur', blurHandler);
 
     // Retorna uma função que remove os listeners adicionados.
     return () => {
         document.removeEventListener('keydown', keydownHandler);
         document.removeEventListener('keyup', keyupHandler);
+        window.removeEventListener('blur', blurHandler);
     };
 };
