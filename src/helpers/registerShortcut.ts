@@ -41,13 +41,19 @@ export enum ValidKey {
     Digit9 = '9',
 }
 
+const normalizeKey = (key: string): string => {
+    // Se for uma única letra ou dígito, converte para minúscula;
+    // Caso contrário, mantém o valor original (para Control, Alt, etc.)
+    return key.length === 1 ? key.toLowerCase() : key;
+};
+
 export const registerShortcut = (shortcut: ValidKey[], callback: () => void) => {
     const pressedKeys = new Set<ValidKey>();
 
     const keydownHandler = (event: KeyboardEvent): void => {
-        const key = event.key;
-        if ((Object.values(ValidKey) as string[]).includes(key)) {
-            pressedKeys.add(key as ValidKey);
+        const normalizedKey = normalizeKey(event.key);
+        if ((Object.values(ValidKey) as string[]).includes(normalizedKey)) {
+            pressedKeys.add(normalizedKey as ValidKey);
         }
         if (shortcut.every((k) => pressedKeys.has(k))) {
             callback();
@@ -55,9 +61,9 @@ export const registerShortcut = (shortcut: ValidKey[], callback: () => void) => 
     };
 
     const keyupHandler = (event: KeyboardEvent): void => {
-        const key = event.key;
-        if ((Object.values(ValidKey) as string[]).includes(key)) {
-            pressedKeys.delete(key as ValidKey);
+        const normalizedKey = normalizeKey(event.key);
+        if ((Object.values(ValidKey) as string[]).includes(normalizedKey)) {
+            pressedKeys.delete(normalizedKey as ValidKey);
         }
     };
 
@@ -69,4 +75,4 @@ export const registerShortcut = (shortcut: ValidKey[], callback: () => void) => 
         document.removeEventListener('keydown', keydownHandler);
         document.removeEventListener('keyup', keyupHandler);
     };
-}
+};
