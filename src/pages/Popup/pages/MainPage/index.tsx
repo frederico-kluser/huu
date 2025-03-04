@@ -71,14 +71,14 @@ const MainPage = ({ setIsMainPage, workspaces }: MainPageProps) => {
                         <option value="">Selecione o modo de acionamento</option>
                         <option value="automatic-1">Acionar automaticamente uma vez</option>
                         <option value="automatic">Acionar automaticamente sem parar</option>
-                        <option value="manual-shortcut-2">Manual pelo atalho Ctrl + Shift + 2</option>
-                        <option value="manual-shortcut-3">Manual pelo atalho Ctrl + Shift + 3</option>
-                        <option value="manual-shortcut-4">Manual pelo atalho Ctrl + Shift + 4</option>
-                        <option value="manual-shortcut-5">Manual pelo atalho Ctrl + Shift + 5</option>
-                        <option value="manual-shortcut-6">Manual pelo atalho Ctrl + Shift + 6</option>
-                        <option value="manual-shortcut-7">Manual pelo atalho Ctrl + Shift + 7</option>
-                        <option value="manual-shortcut-8">Manual pelo atalho Ctrl + Shift + 8</option>
-                        <option value="manual-shortcut-9">Manual pelo atalho Ctrl + Shift + 9</option>
+                        <option value="manual-shortcut-2">Manual pelo atalho Ctrl + 2</option>
+                        <option value="manual-shortcut-3">Manual pelo atalho Ctrl + 3</option>
+                        <option value="manual-shortcut-4">Manual pelo atalho Ctrl + 4</option>
+                        <option value="manual-shortcut-5">Manual pelo atalho Ctrl + 5</option>
+                        <option value="manual-shortcut-6">Manual pelo atalho Ctrl + 6</option>
+                        <option value="manual-shortcut-7">Manual pelo atalho Ctrl + 7</option>
+                        <option value="manual-shortcut-8">Manual pelo atalho Ctrl + 8</option>
+                        <option value="manual-shortcut-9">Manual pelo atalho Ctrl + 9</option>
                     </select>
                 </div>
             );

@@ -1,5 +1,3 @@
-import { messageListener } from "../../core/message";
-
 console.log('This is the background page.');
 console.log('Put the background scripts here.');
 
@@ -96,8 +94,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
 }
 */
-
-messageListener.background();
 
 /*
 chrome.tabs.onActivated.addListener((activeInfo) => {

@@ -8,7 +8,6 @@ import EditAgent from './pages/EditAgent';
 import CreateAgent from './pages/CreateAgent';
 import isValidJsonKey from '../../helpers/isValidJsonKey';
 import { fetchWorkspaceNames, updateActualWorkspace, updateWorkspaceNames } from '../../core/storage/workspace';
-import { messageListener } from '../../core/message';
 
 import '../../assets/css/pico.min.css';
 import './Popup.css';
@@ -25,8 +24,6 @@ const Popup = () => {
       const tab = tabs[0];
       console.log(tab.url);
     });
-
-    messageListener.popup();
 
     fetchWorkspaceNames().then((loadedWorkspaces) => {
       setWorkspaces(loadedWorkspaces);

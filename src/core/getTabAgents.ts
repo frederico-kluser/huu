@@ -25,9 +25,7 @@ const getTabAgents = async (url: string): Promise<TypeAgent[]> => {
 
     agentToListener = filteredAgents.map((agent) => agent.name);
 
-    console.log("agentToListener", agentToListener);
-
-    return filteredAgents.filter((agent) => agent.active);
+    return filteredAgents;
 };
 
 export default getTabAgents;
