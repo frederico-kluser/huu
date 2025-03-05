@@ -1,4 +1,5 @@
 import getTabAgents from '../../core/getTabAgents';
+import executeCode from '../../core/executeCode';
 import { registerShortcut, ValidKey } from '../../helpers/registerShortcut';
 
 console.log('Content script works!');
@@ -27,6 +28,7 @@ const InsertPageAgents = () => {
 
             const evalCode = () => {
                 window.alert('Código executado');
+                executeCode(agent.code);
             };
 
             removeShortcuts[agent.name] = {
