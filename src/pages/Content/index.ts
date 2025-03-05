@@ -10,6 +10,7 @@ const removeShortcuts: {
     };
 } = {};
 
+// TODO: melhorar aparentemente estamos tendo problemas com a execução do código
 const InsertPageAgents = () => {
     Object.keys(removeShortcuts).forEach((key) => {
         removeShortcuts[key].removeListener.forEach((removeListener) => {
@@ -25,10 +26,13 @@ const InsertPageAgents = () => {
             if (!agent.active) return;
 
             const evalCode = () => {
-                eval(agent.code);
+                window.alert('Código executado');
             };
 
-            removeShortcuts[agent.name].removeListener = [];
+            removeShortcuts[agent.name] = {
+                removeListener: [],
+                lastUpdate: Date.now(), // TODO: no futuro vou usar pra otimização
+            };
 
             switch (agent.mode) {
                 case 'manual-shortcut-2':
@@ -72,7 +76,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') return;
 
     console.log('changes:', changes);
-    InsertPageAgents();
+    // InsertPageAgents();
 });
 
 InsertPageAgents();
