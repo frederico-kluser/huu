@@ -45,7 +45,7 @@ const Popup = () => {
     loadWorkspace(workspaceName);
   }, [workspaceName]);
 
-  const handleSave = () => {
+  const handleBack = () => {
     setWorkspaceName('');
   };
 
@@ -73,7 +73,7 @@ const Popup = () => {
         <>
           <div id="blocklyDiv" className="blockly-container"></div>
           <div className="blockly-content">
-            <button onClick={handleSave}>Salvar</button>
+            <button onClick={handleBack}>Voltar</button>
           </div>
         </>
       )}

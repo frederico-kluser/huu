@@ -22,6 +22,7 @@ type TypeAgent = {
     code: string;
     mode: TypeMode;
     active: boolean;
+    lastUpdate: number;
 };
 
 export default TypeAgent;

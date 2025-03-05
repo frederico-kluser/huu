@@ -6,7 +6,10 @@ export const fetchAgentById = async (agentId: string) => {
 };
 
 export const saveOrUpdateAgent = (agentId: string, agent: TypeAgent) => {
-    return setItem<TypeAgent>(agentId, agent);
+    return setItem<TypeAgent>(agentId, {
+        ...agent,
+        lastUpdate: Date.now(),
+    });
 };
 
 export const updateAgentPartial = async (agentId: string, partial: Partial<TypeAgent>) => {
@@ -15,6 +18,7 @@ export const updateAgentPartial = async (agentId: string, partial: Partial<TypeA
         saveOrUpdateAgent(agentId, {
             ...agent,
             ...partial,
+            lastUpdate: Date.now(),
         });
     } else {
         throw new Error(`Agent ${agentId} not found`);

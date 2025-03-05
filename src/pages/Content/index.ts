@@ -27,7 +27,6 @@ const InsertPageAgents = () => {
             if (!agent.active) return;
 
             const evalCode = () => {
-                window.alert('Código executado');
                 executeCode(agent.code);
             };
 
