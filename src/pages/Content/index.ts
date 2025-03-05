@@ -1,18 +1,17 @@
 import getTabAgents from '../../core/getTabAgents';
 import executeCode from '../../core/executeCode';
 import { registerShortcut, ValidKey } from '../../helpers/registerShortcut';
+import TypeHandlerShortcut from '../../types/shortcuts';
 
 console.log('Content script works!');
 
-const removeShortcuts: {
-    [key: string]: {
-        removeListener: Array<() => void>;
-        lastUpdate: number;
-    };
-} = {};
+const Window = window as Window & typeof globalThis & { removeShortcuts: TypeHandlerShortcut };
+Window['removeShortcuts'] = {};
 
 // TODO: melhorar aparentemente estamos tendo problemas com a execução do código
 const InsertPageAgents = () => {
+    const removeShortcuts = Window.removeShortcuts;
+
     Object.keys(removeShortcuts).forEach((key) => {
         removeShortcuts[key].removeListener.forEach((removeListener) => {
             removeListener();
@@ -71,13 +70,15 @@ const InsertPageAgents = () => {
             }
         });
     });
+
+    Window.removeShortcuts = removeShortcuts;
 };
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') return;
 
     console.log('changes:', changes);
-    // InsertPageAgents();
+    InsertPageAgents();
 });
 
 InsertPageAgents();

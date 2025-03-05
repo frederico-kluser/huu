@@ -78,20 +78,11 @@ const Popup = () => {
         </>
       )}
       {!workspaceName && !!workspaces.length &&
-        (isMainPage ? (<>
+        (isMainPage ? (
           <MainPage
             setIsMainPage={setIsMainPage}
             workspaces={workspaces}
-          />
-          <button onClick={() => {
-            chrome.runtime.sendMessage(
-              { from: 'popup', data: 'Mensagem do Popup para o Background' },
-              (response) => {
-                console.log('Popup recebeu resposta do Background:', response.data);
-              },
-            );
-          }}>testar mensageria</button>
-        </>) : <EditAgent
+          />) : <EditAgent
           handleCreateAgent={handleCreateAgent}
           setIsMainPage={setIsMainPage}
           setWorkspaceName={setWorkspaceName}
