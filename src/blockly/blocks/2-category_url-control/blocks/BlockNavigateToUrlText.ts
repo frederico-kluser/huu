@@ -2,6 +2,7 @@ import * as Blockly from 'blockly/core';
 import blockConstructor from '../../../helpers/blockConstructor';
 import Colors from '../../../config/colors';
 import BlocklyTypes from '../../../config/types';
+import { Order } from 'blockly/javascript';
 
 const setBlockNavigateToUrlText = () => {
     return blockConstructor({
@@ -25,9 +26,15 @@ const setBlockNavigateToUrlText = () => {
                 }
             },
         ],
-        generator: function (block: Blockly.Block, generator: any) {
-            return '/* not implemented yet */';
-        },
+        generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
+            // Obter o código para o valor da URL
+            const url = generator.valueToCode(block, 'URL', Order.ASSIGNMENT) || "'https://www.google.com'";
+
+            // Gerar o código para navegar para a URL
+            const code = `window.location.href = ${url};\n`;
+
+            return code;
+        }
     });
 };
 

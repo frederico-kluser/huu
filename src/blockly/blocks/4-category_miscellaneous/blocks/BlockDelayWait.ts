@@ -37,12 +37,3 @@ const setBlockDelayWait = () => {
 };
 
 export default setBlockDelayWait;
-
-/*
-shadow: {
-          type: 'text',
-          fields: {
-            TEXT: 'div'
-          }
-        }
-*/

@@ -12,8 +12,9 @@ const setBlockRefreshPage = () => {
         name: 'BlockRefreshPage',
         tooltip: 'Recarrega a página atual.',
         fields: [],
-        generator: function (block: Blockly.Block, generator: any) {
-            return '/* not implemented yet */';
+        generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
+            const code = 'window.location.reload();';
+            return code;
         },
     });
 };

@@ -8,7 +8,7 @@ import setBlockRunJavaScript from "./blocks/BlockRunJavaScript";
 const configMiscellaneousActions = (): TypeBlockly[] => {
     return [
         setBlockDelayWait(),
-        setBlockRunJavaScript(),
+        // setBlockRunJavaScript(),
         setBlockAlertUser(),
         setBlockConfirmUser(),
         setBlockPromptUser(),
