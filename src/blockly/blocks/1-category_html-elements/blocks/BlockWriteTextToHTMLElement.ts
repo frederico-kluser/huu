@@ -29,22 +29,20 @@ const setBlockWriteTextToHTMLElement = () => {
                 }
             },
             {
-                type: 'field_variable',
-                name: 'ELEMENT',
-                variable: BlocklyVariableNames.htmlElement,
-                variableTypes: [BlocklyTypes.HTML_ELEMENT],
-                defaultType: BlocklyTypes.HTML_ELEMENT,
-            }
+                type: 'input_value',
+                name: 'ELEMENT_SELECTOR',
+                check: BlocklyTypes.HTML_ELEMENT,
+            },
         ],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
             // Obter o nome da variável do elemento HTML
-            const varName = generator.nameDB_?.getName(block.getFieldValue('ELEMENT'), Blockly.VARIABLE_CATEGORY_NAME);
+            const elementSelector = generator.valueToCode(block, 'ELEMENT_SELECTOR', Order.ATOMIC) || 'document.querySelector("")';
 
             // Obter o código para o texto (que pode ser um bloco conectado)
             const textCode = generator.valueToCode(block, 'TEXT', Order.NONE) || '""';
 
             // Gerar o código para definir o textContent do elemento
-            const code = `${varName}.textContent = ${textCode};\n`;
+            const code = `${elementSelector}.textContent = ${textCode};\n`;
 
             return code;
         }
