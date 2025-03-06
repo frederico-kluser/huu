@@ -2,6 +2,7 @@ import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import BlocklyVariableNames from '../../../config/variable-names';
 import blockConstructor from '../../../helpers/blockConstructor';
+import { Order } from 'blockly/javascript';
 import BlocklyTypes from '../../../config/types';
 
 const setBlockClickHTMLElement = () => {
@@ -22,8 +23,12 @@ const setBlockClickHTMLElement = () => {
                 defaultType: BlocklyTypes.HTML_ELEMENT,
             },
         ],
-        generator: function (block: Blockly.Block, generator: any) {
-            return '/* not implemented yet */';
+        generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
+            const varName = generator.nameDB_?.getName(block.getFieldValue('VARIABLE'), Blockly.VARIABLE_CATEGORY_NAME);
+
+            // Gera código para chamar o método click() no elemento HTML
+            const code = `${varName}.click();\n`;
+            return code;
         },
     });
 };

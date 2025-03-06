@@ -22,8 +22,12 @@ const setBlockDblClickHTMLElement = () => {
                 defaultType: BlocklyTypes.HTML_ELEMENT,
             },
         ],
-        generator: function (block: Blockly.Block, generator: any) {
-            return '/* not implemented yet */';
+        generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
+            const varName = generator.nameDB_?.getName(block.getFieldValue('VARIABLE'), Blockly.VARIABLE_CATEGORY_NAME);
+
+            // Gera código para chamar o método click() no elemento HTML
+            const code = `${varName}.dblclick();\n`;
+            return code;
         },
     });
 };
