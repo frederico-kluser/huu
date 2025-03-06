@@ -3,6 +3,9 @@ import { Interpreter } from "eval5";
 const executeCode = (code: string) => {
     // Cria um contexto customizado onde você pode expor funções e objetos necessários.
     // Por exemplo, você pode incluir funções de manipulação do DOM, eventos, etc.
+
+    // generateResponseJSON
+
     const context = {
         // Expondo algumas funções úteis
         console,
