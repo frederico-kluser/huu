@@ -3,6 +3,7 @@ import Colors from '../../../config/colors';
 import BlocklyVariableNames from '../../../config/variable-names';
 import blockConstructor from '../../../helpers/blockConstructor';
 import BlocklyTypes from '../../../config/types';
+import { Order } from 'blockly/javascript';
 
 const setBlockWriteTextToHTMLElement = () => {
     return blockConstructor({
@@ -35,9 +36,18 @@ const setBlockWriteTextToHTMLElement = () => {
                 defaultType: BlocklyTypes.HTML_ELEMENT,
             }
         ],
-        generator: function (block: Blockly.Block, generator: any) {
-            return '/* not implemented yet */';
-        },
+        generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
+            // Obter o nome da variável do elemento HTML
+            const varName = generator.nameDB_?.getName(block.getFieldValue('ELEMENT'), Blockly.VARIABLE_CATEGORY_NAME);
+
+            // Obter o código para o texto (que pode ser um bloco conectado)
+            const textCode = generator.valueToCode(block, 'TEXT', Order.NONE) || '""';
+
+            // Gerar o código para definir o textContent do elemento
+            const code = `${varName}.textContent = ${textCode};\n`;
+
+            return code;
+        }
     });
 };
 
