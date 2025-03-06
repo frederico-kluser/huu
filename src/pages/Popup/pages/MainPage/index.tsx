@@ -67,7 +67,7 @@ const MainPage = ({ setIsMainPage, workspaces }: MainPageProps) => {
     };
 
     const generateAgentElements = async () => {
-        const localApprovedAgentElements: JSX.Element[] = [];
+        const localAgentUIElements: JSX.Element[] = [];
 
         for (let i = 0; i < validatedAgents.length; i++) {
             const agent = validatedAgents[i];
@@ -75,7 +75,7 @@ const MainPage = ({ setIsMainPage, workspaces }: MainPageProps) => {
             const mode = retrievedAgent?.mode;
 
             if (urlMatchesPattern(url, retrievedAgent?.urls || '')) {
-                localApprovedAgentElements.push(
+                localAgentUIElements.push(
                     <div role="group" key={agent} style={styles.agentItem}>
                         {await getButton(agent)}
                         <h6 style={styles.agentTitle}>{agent}</h6>
@@ -97,7 +97,7 @@ const MainPage = ({ setIsMainPage, workspaces }: MainPageProps) => {
             }
         }
 
-        setAgentItems(localApprovedAgentElements);
+        setAgentItems(localAgentUIElements);
     };
 
     useEffect(() => {

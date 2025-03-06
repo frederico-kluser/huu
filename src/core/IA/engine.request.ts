@@ -49,6 +49,7 @@ export const generateResponseJSON = async <T>(
 
 		const result = await generateResponse(finalPrompt, getTemperature(temperature));
 
+
 		if (typeof result === 'string') {
 			const code = result as string;
 			const { codeValue } = extractCodeBlocks(code)[0];
