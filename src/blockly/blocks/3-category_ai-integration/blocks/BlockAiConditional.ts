@@ -12,7 +12,7 @@ const setBlockAiConditional = () => {
         message: 'pergunta de sim ou não\n%1\nse sim\n%2\nsenao\n%3',
         name: 'BlockAiConditional',
         tooltip: 'Pergunta ao usuário e executa um bloco de código se a resposta for verdadeira e outro se for falsa.',
-        fields: [ // TODO: Implementar async await
+        fields: [
             {
                 type: 'input_value',
                 name: 'PROMPT',
@@ -38,13 +38,15 @@ const setBlockAiConditional = () => {
             const branchIf = generator.statementToCode(block, 'IF_BRANCH');
             const branchElse = generator.statementToCode(block, 'ELSE_BRANCH');
 
+            // Usando a versão com callback da função getConditionalAi em ES5
             const code =
-                'const aiBooleanResponse = await getConditionalAi(' + promptCode + ');\n' +
-                'if (aiBooleanResponse) {\n' +
-                branchIf +
-                '} else {\n' +
-                branchElse +
-                '}\n';
+                'getConditionalAi(' + promptCode + ', function(aiBooleanResponse) {\n' +
+                '  if (aiBooleanResponse) {\n' +
+                generator.prefixLines(branchIf, '    ') +
+                '\n  } else {\n' +
+                generator.prefixLines(branchElse, '    ') +
+                '\n  }\n' +
+                '});\n';
 
             return code;
         },

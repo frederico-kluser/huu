@@ -1,5 +1,5 @@
 import { Interpreter } from "eval5";
-import { getSummarizedText } from "./IA";
+import { getConditionalAi, getGeneratedText, getSummarizedText, getTranslatedText } from "./IA";
 
 const executeCode = (code: string) => {
     // Cria um contexto customizado onde você pode expor funções e objetos necessários.
@@ -9,13 +9,14 @@ const executeCode = (code: string) => {
         // Expondo algumas funções úteis
         chrome,
         console,
-        fetch: window.fetch,
-        XMLHttpRequest: window.XMLHttpRequest,
+        fetch,
+        getConditionalAi,
+        getGeneratedText,
         getSummarizedText,
+        getTranslatedText,
         window: {
             ...window,
             fetch: window.fetch.bind(window), // Exponha o fetch real
-            XMLHttpRequest: window.XMLHttpRequest, // Exponha o XMLHttpRequest real
             Promise: window.Promise, // Garanta que Promise está disponível
         },
         // Você pode adicionar outras funções personalizadas aqui,

@@ -8,7 +8,6 @@ function isValidURL(url: string): boolean {
 }
 
 function isValidPatterns(patterns: string): boolean {
-    debugger;
     if (!patterns || patterns.trim() === '') {
         return false;
     }
