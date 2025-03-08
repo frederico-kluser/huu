@@ -34,7 +34,7 @@ export const getGeneratedText = async (prompt: string): Promise<string> => {
     }
 };
 
-export const getSummarizedText = async (text: string): Promise<string> => {
+export const getSummarizedText = async (text: string, callback: (summary: string) => {}): Promise<void> => {
     const data = await generateResponseJSON<{
         summary: string;
     }>(`Resuma o texto a seguir: """${text}"""`, [
@@ -48,10 +48,10 @@ export const getSummarizedText = async (text: string): Promise<string> => {
 
     if ('error' in data) {
         console.error('error', data.error);
-        return '';
+        throw new Error('Erro ao obter resumo');
     }
 
-    return data.response.summary;
+    callback(data.response.summary);
 };
 
 type TypeLanguage = 'pt' | 'en' | 'es' | 'fr' | 'de' | 'it' | 'ja' | 'ko' | 'ru' | 'zh-CN' | 'zh-TW';

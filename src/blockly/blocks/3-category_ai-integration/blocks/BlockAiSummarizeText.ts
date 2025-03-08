@@ -29,7 +29,9 @@ const setBlockAiSummarizeText = () => {
             const promptCode = generator.valueToCode(block, 'PROMPT', Order.ATOMIC) || '""';
 
             // Chamando a função assíncrona getSummarizedText com o texto como argumento
-            const code = `getSummarizedText(${promptCode})`;
+            const code = `getSummarizedText(${promptCode}, function(summary) {
+                window.alert(summary);
+            });`;
 
             // Como estamos usando await, a precedência é AWAIT (4.8)
             return [code, Order.AWAIT];

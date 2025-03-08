@@ -16,6 +16,7 @@ const executeCode = (code: string) => {
         getTranslatedText,
         window: {
             ...window,
+            alert: window.alert.bind(window), // Exponha o alert real
             fetch: window.fetch.bind(window), // Exponha o fetch real
             Promise: window.Promise, // Garanta que Promise está disponível
         },
