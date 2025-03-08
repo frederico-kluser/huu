@@ -3,6 +3,7 @@ import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
 import BlocklyVariableNames from '../../../config/variable-names';
 import BlocklyTypes from '../../../config/types';
+import { Order } from 'blockly/javascript';
 
 const setBlockAiSummarizeText = () => {
     return blockConstructor({
@@ -21,8 +22,14 @@ const setBlockAiSummarizeText = () => {
                 defaultType: BlocklyTypes.STRING,
             },
         ],
-        generator: function (block: Blockly.Block, generator: any) {
-            return '/* not implemented yet */';
+        generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
+            const varName = generator.nameDB_?.getName(block.getFieldValue('PROMPT'), Blockly.VARIABLE_CATEGORY_NAME);
+
+            // Chamando a função assíncrona getSummarizedText com o texto como argumento
+            const code = `await getSummarizedText(${varName})`;
+
+            // Como estamos usando await, a precedência é AWAIT (4.8)
+            return [code, Order.AWAIT];
         },
     });
 };

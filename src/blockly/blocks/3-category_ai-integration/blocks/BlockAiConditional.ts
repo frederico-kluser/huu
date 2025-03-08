@@ -39,7 +39,7 @@ const setBlockAiConditional = () => {
             const branchElse = generator.statementToCode(block, 'ELSE_BRANCH');
 
             const code =
-                'const aiBooleanResponse = await getAIResponde(' + promptCode + ');\n' +
+                'const aiBooleanResponse = await getConditionalAi(' + promptCode + ');\n' +
                 'if (aiBooleanResponse) {\n' +
                 branchIf +
                 '} else {\n' +

@@ -2,7 +2,7 @@ import { TypeBlockly } from "../../helpers/blockConstructor";
 import setBlockAiConditional from "./blocks/BlockAiConditional";
 import setBlockAiGenerateText from "./blocks/BlockAiGenerateText";
 import setBlockAiSummarizeText from "./blocks/BlockAiSummarizeText";
-import setBlockAiTextToSpeech from "./blocks/BlockAiTextToSpeech";
+// import setBlockAiTextToSpeech from "./blocks/BlockAiTextToSpeech";
 import setBlockAiTranslateText from "./blocks/BlockAiTranslateText";
 
 const configAiActions = (): TypeBlockly[] => {
@@ -11,7 +11,7 @@ const configAiActions = (): TypeBlockly[] => {
         setBlockAiConditional(),
         setBlockAiSummarizeText(),
         setBlockAiTranslateText(),
-        setBlockAiTextToSpeech()
+        // setBlockAiTextToSpeech()
     ];
 };
 

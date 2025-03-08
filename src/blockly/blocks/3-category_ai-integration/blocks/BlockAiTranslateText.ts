@@ -3,6 +3,7 @@ import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
 import BlocklyVariableNames from '../../../config/variable-names';
 import BlocklyTypes from '../../../config/types';
+import { Order } from 'blockly/javascript';
 
 const setBlockAiTranslateText = () => {
     return blockConstructor({
@@ -42,8 +43,18 @@ const setBlockAiTranslateText = () => {
                 ],
             },
         ],
-        generator: function (block: Blockly.Block, generator: any) {
-            return '/* not implemented yet */';
+        generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
+            // Obtém o valor do texto a ser traduzido
+            const text = generator.valueToCode(block, 'TEXT', Order.NONE) || '\'\'';
+
+            // Obtém o idioma alvo do campo dropdown
+            const targetLanguage = block.getFieldValue('TARGET_LANGUAGE');
+
+            // Gera o código para chamar a função de tradução assíncrona
+            const code = `await getTranslatedText(${text}, '${targetLanguage}')`;
+
+            // Retorna o código e a ordem de precedência (AWAIT é apropriado para uma chamada de função assíncrona)
+            return [code, Order.AWAIT];
         },
     });
 };

@@ -40,7 +40,7 @@ const setBlockAiGenerateText = () => {
                     block.getFieldValue('OUTPUT'),
                     Blockly.VARIABLE_CATEGORY_NAME
                 ) || 'output';
-            const code = `${outputVar} = await aiGenerateText(${promptCode});\n`;
+            const code = `${outputVar} = await getGeneratedText(${promptCode});\n`;
             return code;
         },
     });

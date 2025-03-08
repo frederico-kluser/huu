@@ -27,10 +27,12 @@ const setBlockDelayWait = () => {
             },
         ],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
-            const delayTime =
-                generator.valueToCode(block, 'DELAY_TIME', Order.ATOMIC) || '0';
-            // Gera código que aguarda o tempo especificado usando Promise e setTimeout.
+            // Obtém o valor de entrada para o tempo de delay
+            const delayTime = generator.valueToCode(block, 'DELAY_TIME', Order.ATOMIC) || '1000';
+
+            // Cria o código que implementa a espera usando Promise e setTimeout
             const code = `await new Promise(resolve => setTimeout(resolve, ${delayTime}));\n`;
+
             return code;
         },
     });
