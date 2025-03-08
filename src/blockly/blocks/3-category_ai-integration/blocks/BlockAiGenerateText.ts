@@ -7,12 +7,11 @@ import BlocklyTypes from '../../../config/types';
 const setBlockAiGenerateText = () => {
     return blockConstructor({
         colour: Colors.AI,
-        hasNextConnection: null,
-        hasPreviousConnection: null,
+        hasOutput: 'String',
         helpUrl: 'https://platform.openai.com/docs/guides/prompt-engineering',
-        message: 'Pergunta para IA\n%1\nsalvar resultado em\n%2',
+        message: 'Pergunta para IA\n%1',
         name: 'BlockAiGenerateText',
-        tooltip: 'Envia um prompt para o ChatGPT e armazena o texto gerado em uma variável.',
+        tooltip: 'Envia um prompt para o ChatGPT e retorna o texto gerado.',
         fields: [
             {
                 type: 'input_value',
@@ -24,24 +23,12 @@ const setBlockAiGenerateText = () => {
                         TEXT: 'Digite o prompt',
                     },
                 },
-            },
-            {
-                type: 'field_variable',
-                name: 'OUTPUT',
-                variable: BlocklyTypes.HTML_ELEMENT,
-                variableTypes: [BlocklyTypes.HTML_ELEMENT],
-                defaultType: BlocklyTypes.HTML_ELEMENT,
-            },
+            }
         ],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
             const promptCode = generator.valueToCode(block, 'PROMPT', Order.ATOMIC) || '""';
-            const outputVar =
-                generator.nameDB_?.getName(
-                    block.getFieldValue('OUTPUT'),
-                    Blockly.VARIABLE_CATEGORY_NAME
-                ) || 'output';
-            const code = `${outputVar} = await getGeneratedText(${promptCode});\n`;
-            return code;
+            const code = `await getGeneratedText(${promptCode})`;
+            return [code, Order.AWAIT];
         },
     });
 };

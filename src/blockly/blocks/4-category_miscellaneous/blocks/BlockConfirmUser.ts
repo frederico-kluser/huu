@@ -8,6 +8,7 @@ const setBlockConfirmUser = () => {
     return blockConstructor({
         colour: Colors.MISCELLANEOUS,
         hasPreviousConnection: null,
+        hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/confirm',
         message: 'confirmar %1\nse sim\n%2\nsenao\n%3',
         name: 'BlockConfirmUser',
