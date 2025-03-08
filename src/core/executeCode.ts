@@ -4,18 +4,18 @@ const executeCode = (code: string) => {
     // Cria um contexto customizado onde você pode expor funções e objetos necessários.
     // Por exemplo, você pode incluir funções de manipulação do DOM, eventos, etc.
 
-    // generateResponseJSON
-
     const context = {
         // Expondo algumas funções úteis
+        chrome,
         console,
+        fetch: window.fetch,
+        XMLHttpRequest: window.XMLHttpRequest,
         window: {
             ...window,
             fetch: window.fetch.bind(window), // Exponha o fetch real
             XMLHttpRequest: window.XMLHttpRequest, // Exponha o XMLHttpRequest real
             Promise: window.Promise, // Garanta que Promise está disponível
         },
-        chrome,
         // Você pode adicionar outras funções personalizadas aqui,
         // por exemplo, para manipular a DOM ou interagir com eventos.
         // document, addEventListener, etc., podem ser expostos com cuidado.

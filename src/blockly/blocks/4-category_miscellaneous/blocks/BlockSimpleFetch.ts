@@ -7,11 +7,11 @@ import BlocklyTypes from '../../../config/types';
 const setBlockSimpleFetch = () => {
     return blockConstructor({
         colour: Colors.MISCELLANEOUS,
-        hasOutput: 'Promise',
-        helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API',
-        message: 'testar URL com fetch %1',
+        hasOutput: 'Boolean',
+        helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest',
+        message: 'testar URL com XHR %1',
         name: 'BlockSimpleFetch',
-        tooltip: 'Faz uma requisição GET simples para testar se a URL está acessível.',
+        tooltip: 'Faz uma requisição GET síncrona para testar se a URL está acessível.',
         fields: [
             {
                 type: 'input_value',
@@ -20,25 +20,30 @@ const setBlockSimpleFetch = () => {
             }
         ],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
-            // Obter a URL da requisição
             const urlValue = generator.valueToCode(block, 'URL', Order.ATOMIC) || '""';
 
-            // Gerar o código para uma requisição fetch GET simples com then e catch
-            const code = `window.fetch(${urlValue})
-    .then(response => {
-        console.log('Resposta da requisição:', response);
-        if (!response.ok) {
-            throw new Error('Falha na requisição: ' + response.status);
+            const code = `(function() {
+    var xhr = new XMLHttpRequest();
+    var url = ${urlValue};
+    var success = false;
+    
+    try {
+        xhr.open('GET', url, false);
+        xhr.send();
+        
+        if (xhr.status >= 200 && xhr.status < 300) {
+            console.log('Sucesso:', xhr.status, xhr.responseText);
+            success = true;
+        } else {
+            console.error('Erro HTTP:', xhr.status, xhr.statusText);
         }
-        return response;
-    })
-    .catch(error => {
+    } catch (error) {
         console.error('Erro na requisição:', error.message);
-        throw error;
-    })`;
+    }
+    
+    return success;
+})()`;
 
-            // Retornar o código com a precedência adequada
-            // Como este é um encadeamento de métodos, usamos Order.NONE para não ter problemas com precedência
             return [code, Order.NONE];
         },
     });
