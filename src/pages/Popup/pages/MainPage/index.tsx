@@ -5,13 +5,15 @@ import Colors from '../../../../types/colors';
 import TypePageStyle from '../../../../types/pageStyle';
 import { fetchAgentById, updateAgentPartial } from '../../../../core/storage/agents';
 import urlMatchesPattern from '../../../../helpers/urlMatchePattern';
+import Gap from '../../../../components/Gap';
 
 interface MainPageProps {
     setIsMainPage: Dispatch<SetStateAction<boolean>>
     workspaces: string[]
+    handleCreateAgent: () => void
 }
 
-const MainPage = ({ setIsMainPage, workspaces }: MainPageProps) => {
+const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent }: MainPageProps) => {
     const [validatedAgents, setValidatedAgents] = useState<string[]>([]);
     const [agentItems, setAgentItems] = useState<JSX.Element[]>([]);
     const [url, setUrl] = useState<string>('');
@@ -116,7 +118,10 @@ const MainPage = ({ setIsMainPage, workspaces }: MainPageProps) => {
             <div style={styles.agentContainer}>
                 {agentItems}
             </div>
-            <button onClick={handleEditModels}>Editar Agentes</button>
+            <Gap horizontal size={16}>
+                <button onClick={handleEditModels}>Editar Agentes</button>
+                <button onClick={handleCreateAgent} className="contrast">Criar Novo Agente</button>
+            </Gap>
         </div>
     )
 };

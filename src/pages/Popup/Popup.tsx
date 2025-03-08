@@ -82,6 +82,7 @@ const Popup = () => {
           <MainPage
             setIsMainPage={setIsMainPage}
             workspaces={workspaces}
+            handleCreateAgent={handleCreateAgent}
           />) : <EditAgent
           handleCreateAgent={handleCreateAgent}
           setIsMainPage={setIsMainPage}

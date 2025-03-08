@@ -121,11 +121,12 @@ const EditAgent = ({
     };
 
     const handleChangeAgent = async () => {
+        console.log("agentSelectRef.current", agentSelectRef.current);
         if (!agentSelectRef.current) return;
         updateActualWorkspace(Number(agentSelectRef.current.value));
         const workspaceName = getWorkspaceName();
         setAgentName(workspaceName);
-        const agentItem = await fetchAgentById(agentName);
+        const agentItem = await fetchAgentById(workspaceName);
         const url = agentItem?.urls || '';
         setAgentSite(url);
     };
@@ -148,7 +149,7 @@ const EditAgent = ({
 
     return (
         <main className="content">
-            <button onClick={handleGoHome} disabled={isBackButtonDisabled}>Ativar Agentes</button>
+            <button onClick={handleGoHome} disabled={isBackButtonDisabled}>Voltar</button>
             <select ref={agentSelectRef} onChange={handleChangeAgent}>
                 {workspaces.map((workspace, index) => (
                     <option key={workspace} value={index}>
