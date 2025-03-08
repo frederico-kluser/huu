@@ -1,6 +1,6 @@
-import AIModel from '../enums/gptModel.enum.js';
-import { ContentItem, TypeAIError, TypeTemperature } from '../types/gpt.type.js';
-import getChatCompletion from './getChatCompletion.gpt.js';
+import AIModel from '../enums/gptModel.enum';
+import { ContentItem, TypeAIError, TypeTemperature } from '../types/gpt.type';
+import getChatCompletion from './getChatCompletion.gpt';
 
 export const getAIResponse = async ({
 	question,

@@ -1,4 +1,5 @@
 import { Interpreter } from "eval5";
+import getConditionalAi from "./IA";
 
 const executeCode = (code: string) => {
     // Cria um contexto customizado onde você pode expor funções e objetos necessários.
@@ -10,6 +11,7 @@ const executeCode = (code: string) => {
         // Expondo algumas funções úteis
         console,
         window,
+        getConditionalAi,
         // Você pode adicionar outras funções personalizadas aqui,
         // por exemplo, para manipular a DOM ou interagir com eventos.
         // document, addEventListener, etc., podem ser expostos com cuidado.

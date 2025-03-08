@@ -1,6 +1,6 @@
-import enums from '../../../types/enums.js';
-import { getItem } from '../../storage/index.js';
-import { fetchRequestProps, GptMessage } from '../types/gpt.type.js';
+import enums from '../../../types/enums';
+import { getItem } from '../../storage/index';
+import { fetchRequestProps, GptMessage } from '../types/gpt.type';
 
 const getChatCompletion = async ({
 	history,

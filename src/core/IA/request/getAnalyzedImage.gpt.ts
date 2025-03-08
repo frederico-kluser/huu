@@ -1,4 +1,4 @@
-import AIModel from '../enums/gptModel.enum.js';
+import AIModel from '../enums/gptModel.enum';
 import { ContentItem } from '../types/gpt.type.js';
 import { getAIResponse } from './gpt.request.js';
 

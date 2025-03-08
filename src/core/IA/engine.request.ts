@@ -1,26 +1,13 @@
-import extractCodeBlocks from './helpers/extractCodeBlocks.helper.js';
-import getJsonPrompt from './helpers/getJsonPrompt.helper.js';
-import getTemperature from './helpers/getTemperature.helper.js';
-import validateResponse from './helpers/validateResponse.helper.js';
-import { generateResponse } from './request/gpt.request.js';
-import { TypeTypescript } from './types/typescript.type.js';
-
-const getPromptFormatInstructions = (english: boolean) => {
-	let response = '\n\n';
-
-	response += english
-		? '(return only JSON object for output. just the code, no disclaimers, no markdown code blocks)\n\nIn the following format:'
-		: '(retorne apenas o objeto JSON para a saída. apenas o código, sem avisos legais, sem blocos de código em markdown)\n\nNo seguinte formato:';
-
-	response += '\n';
-
-	return response;
-};
+import extractCodeBlocks from './helpers/extractCodeBlocks.helper';
+import getJsonPrompt from './helpers/getJsonPrompt.helper';
+import getTemperature from './helpers/getTemperature.helper';
+import validateResponse from './helpers/validateResponse.helper';
+import { generateResponse } from './request/gpt.request';
+import { TypeTypescript } from './types/typescript.type';
 
 export const generateResponseJSON = async <T>(
 	prompt: string,
 	responseFormat: TypeTypescript[],
-	noPromptOptimization = false,
 ): Promise<
 	| {
 		response: T;
@@ -37,7 +24,7 @@ export const generateResponseJSON = async <T>(
 	let temperature = 0;
 
 	let finalPrompt = prompt;
-	finalPrompt += getPromptFormatInstructions(noPromptOptimization);
+	finalPrompt += '(retorne apenas o objeto JSON para a saída. apenas o código, sem avisos legais, sem blocos de código em markdown)\n\nNo seguinte formato:';
 	finalPrompt += getJsonPrompt(responseFormat);
 
 	let whileCondition = true;
