@@ -9,9 +9,10 @@
   },
   "scripts": {
     "build": "node utils/build.js",
+    "dev-build": "node utils/dev-build.js",
     "start": "node utils/webserver.js",
     "prettier": "prettier --write '**/*.{js,jsx,ts,tsx,json,css,scss,md}'",
-    "dev": "nodemon --exec 'npm run build' --watch src --ext js,jsx,ts,tsx"
+    "dev": "nodemon --exec 'npm run dev-build' --watch src --ext js,jsx,ts,tsx"
   },
   "dependencies": {
     "blockly": "^11.2.1",
