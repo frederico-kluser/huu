@@ -149,7 +149,8 @@ const EditAgent = ({
 
     return (
         <main className="content">
-            <button onClick={handleGoHome} disabled={isBackButtonDisabled}>Voltar</button>
+            {/* <button onClick={handleGoHome} disabled={isBackButtonDisabled}>Voltar</button> */}
+            <button onClick={handleGoHome}>Voltar</button>
             <select ref={agentSelectRef} onChange={handleChangeAgent}>
                 {workspaces.map((workspace, index) => (
                     <option key={workspace} value={index}>
