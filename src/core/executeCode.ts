@@ -1,5 +1,4 @@
 import { Interpreter } from "eval5";
-import { getConditionalAi, getGeneratedText } from "./IA";
 
 const executeCode = (code: string) => {
     // Cria um contexto customizado onde você pode expor funções e objetos necessários.
@@ -10,9 +9,13 @@ const executeCode = (code: string) => {
     const context = {
         // Expondo algumas funções úteis
         console,
-        window,
-        getConditionalAi,
-        getGeneratedText,
+        window: {
+            ...window,
+            fetch: window.fetch.bind(window), // Exponha o fetch real
+            XMLHttpRequest: window.XMLHttpRequest, // Exponha o XMLHttpRequest real
+            Promise: window.Promise, // Garanta que Promise está disponível
+        },
+        chrome,
         // Você pode adicionar outras funções personalizadas aqui,
         // por exemplo, para manipular a DOM ou interagir com eventos.
         // document, addEventListener, etc., podem ser expostos com cuidado.
