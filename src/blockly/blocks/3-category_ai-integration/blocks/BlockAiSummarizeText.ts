@@ -1,8 +1,8 @@
 import * as Blockly from 'blockly/core';
 import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
-import BlocklyVariableNames from '../../../config/variable-names';
 import BlocklyTypes from '../../../config/types';
+import BlocklyVariableNames from '../../../config/variable-names';
 import { Order } from 'blockly/javascript';
 
 const setBlockAiSummarizeText = () => {
@@ -15,18 +15,22 @@ const setBlockAiSummarizeText = () => {
         tooltip: 'Gera um resumo do texto usando IA, condensando informações extensas ou simplificando respostas.',
         fields: [
             {
-                type: 'field_variable',
+                type: 'input_value',
                 name: 'PROMPT',
-                variable: BlocklyVariableNames.textVariable,
-                variableTypes: [BlocklyTypes.STRING],
-                defaultType: BlocklyTypes.STRING,
+                check: BlocklyTypes.STRING,
+                shadow: {
+                    type: 'text',
+                    fields: {
+                        TEXT: 'Digite o texto para resumir',
+                    },
+                },
             },
         ],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
-            const varName = generator.nameDB_?.getName(block.getFieldValue('PROMPT'), Blockly.VARIABLE_CATEGORY_NAME);
+            const promptCode = generator.valueToCode(block, 'PROMPT', Order.ATOMIC) || '""';
 
             // Chamando a função assíncrona getSummarizedText com o texto como argumento
-            const code = `await getSummarizedText(${varName})`;
+            const code = `await getSummarizedText(${promptCode})`;
 
             // Como estamos usando await, a precedência é AWAIT (4.8)
             return [code, Order.AWAIT];

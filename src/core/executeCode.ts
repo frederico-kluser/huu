@@ -1,4 +1,5 @@
 import { Interpreter } from "eval5";
+import { getSummarizedText } from "./IA";
 
 const executeCode = (code: string) => {
     // Cria um contexto customizado onde você pode expor funções e objetos necessários.
@@ -10,6 +11,7 @@ const executeCode = (code: string) => {
         console,
         fetch: window.fetch,
         XMLHttpRequest: window.XMLHttpRequest,
+        getSummarizedText,
         window: {
             ...window,
             fetch: window.fetch.bind(window), // Exponha o fetch real

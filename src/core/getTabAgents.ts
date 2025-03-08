@@ -20,6 +20,10 @@ const getTabAgents = async (url: string): Promise<TypeAgent[]> => {
             return false;
         }
 
+        if (!agent.urls) {
+            return false;
+        }
+
         return urlMatchesPattern(url, agent.urls);
     }) as TypeAgent[];
 
