@@ -2,11 +2,8 @@ import { generateResponseJSON } from "./engine.request";
 import getTemperature from "./helpers/getTemperature.helper";
 import { generateResponse } from "./request/gpt.request";
 
-export const getConditionalAi = (
-    booleanQuestion: string,
-    callback?: (result: boolean) => void
-): void => {
-    generateResponseJSON<{
+export const getConditionalAi = async (booleanQuestion: string, callback: (bool: boolean) => {}) => {
+    const data = await generateResponseJSON<{
         bool: boolean;
     }>(`Considerando o seguinte texto """${booleanQuestion}""" como uma questão booleana, qual seria sua resposta ?"`, [
         {
@@ -15,57 +12,30 @@ export const getConditionalAi = (
             propertyValue: 'boolean',
             propertyComment: 'A resposta deve ser booleana mesmo que a questão não seja uma pergunta booleana'
         }
-    ]).then(data => {
-        let result = false;
+    ]);
 
-        if (!('error' in data)) {
-            result = data.response.bool;
-        } else {
-            console.error('error', data.error);
-        }
 
-        if (callback) {
-            callback(result);
-        }
-    }).catch(error => {
-        console.error('error', error);
-        if (callback) {
-            callback(false);
-        }
-    });
+    if ('error' in data) {
+        console.error('error', data.error);
+        throw new Error('Erro ao obter resposta condicional');
+    }
+
+    callback(data.response.bool);
 };
 
-export const getGeneratedText = (
-    prompt: string,
-    callback?: (result: string) => void
-): void => {
-    generateResponse(prompt, getTemperature(0))
-        .then(result => {
-            let textResult = '';
+export const getGeneratedText = async (prompt: string): Promise<string> => {
+    const result = await generateResponse(prompt, getTemperature(0));
 
-            if (typeof result === 'string') {
-                textResult = result;
-            } else {
-                console.error('Erro ao gerar texto:', result);
-            }
-
-            if (callback) {
-                callback(textResult);
-            }
-        })
-        .catch(error => {
-            console.error('Erro ao gerar texto:', error);
-            if (callback) {
-                callback('');
-            }
-        });
+    if (typeof result === 'string') {
+        return result;
+    } else {
+        console.error('Erro ao gerar texto:', result);
+        return '';
+    }
 };
 
-export const getSummarizedText = (
-    text: string,
-    callback?: (result: string) => void
-): void => {
-    generateResponseJSON<{
+export const getSummarizedText = async (text: string): Promise<string> => {
+    const data = await generateResponseJSON<{
         summary: string;
     }>(`Resuma o texto a seguir: """${text}"""`, [
         {
@@ -74,34 +44,20 @@ export const getSummarizedText = (
             propertyValue: 'string',
             propertyComment: 'O resumo do texto'
         }
-    ]).then(data => {
-        let result = '';
+    ]);
 
-        if (!('error' in data)) {
-            result = data.response.summary;
-        } else {
-            console.error('error', data.error);
-        }
+    if ('error' in data) {
+        console.error('error', data.error);
+        return '';
+    }
 
-        if (callback) {
-            callback(result);
-        }
-    }).catch(error => {
-        console.error('error', error);
-        if (callback) {
-            callback('');
-        }
-    });
+    return data.response.summary;
 };
 
 type TypeLanguage = 'pt' | 'en' | 'es' | 'fr' | 'de' | 'it' | 'ja' | 'ko' | 'ru' | 'zh-CN' | 'zh-TW';
 
-export const getTranslatedText = (
-    text: string,
-    targetLanguage: TypeLanguage,
-    callback?: (result: string) => void
-): void => {
-    generateResponseJSON<{
+export const getTranslatedText = async (text: string, targetLanguage: TypeLanguage): Promise<string> => {
+    const data = await generateResponseJSON<{
         translatedText: string;
     }>(`Traduza o texto a seguir para "${targetLanguage}": """${text}"""`, [
         {
@@ -110,22 +66,12 @@ export const getTranslatedText = (
             propertyValue: 'string',
             propertyComment: `O texto traduzido para "${targetLanguage}"`
         }
-    ]).then(data => {
-        let result = '';
+    ]);
 
-        if (!('error' in data)) {
-            result = data.response.translatedText;
-        } else {
-            console.error('error', data.error);
-        }
+    if ('error' in data) {
+        console.error('error', data.error);
+        return '';
+    }
 
-        if (callback) {
-            callback(result);
-        }
-    }).catch(error => {
-        console.error('error', error);
-        if (callback) {
-            callback('');
-        }
-    });
+    return data.response.translatedText;
 };
