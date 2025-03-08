@@ -19,7 +19,7 @@ export const getAIResponse = async ({
 			stream: false,
 			model,
 			max_tokens,
-			temperature: temperature || 0.2,
+			temperature: temperature || 0.1,
 		})
 			.then(async (response) => {
 				const data = await response.json();

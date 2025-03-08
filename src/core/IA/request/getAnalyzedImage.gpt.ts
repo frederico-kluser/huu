@@ -17,7 +17,7 @@ const getAnalyzedImage = async (prompt: string, base64URL: string): Promise<stri
 		question,
 		model: AIModel.GPT4,
 		max_tokens: 100,
-		temperature: 0.2,
+		temperature: 0.1,
 	});
 	return response as string;
 };

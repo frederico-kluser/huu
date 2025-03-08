@@ -8,7 +8,7 @@ const getChatCompletion = async ({
 	model,
 	question,
 	stream,
-	temperature = 0.2,
+	temperature = 0.1,
 }: fetchRequestProps): Promise<Response> => {
 	const messages: GptMessage[] = [...(history || []), { role: 'user', content: question }];
 
