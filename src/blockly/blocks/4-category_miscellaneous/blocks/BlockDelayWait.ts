@@ -10,9 +10,9 @@ const setBlockDelayWait = () => {
         hasPreviousConnection: null,
         hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout',
-        message: 'aguarde %1 milissegundos',
+        message: 'aguarde %1 milissegundos\ndepois faça %2',
         name: 'BlockDelayWait',
-        tooltip: 'Aguarda um intervalo de tempo antes de continuar a execução.',
+        tooltip: 'Aguarda um intervalo de tempo antes de executar os blocos aninhados.',
         fields: [
             {
                 type: 'input_value',
@@ -25,13 +25,22 @@ const setBlockDelayWait = () => {
                     },
                 },
             },
+            {
+                type: 'input_statement',
+                name: 'DO',
+            }
         ],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
             // Obtém o valor de entrada para o tempo de delay
             const delayTime = generator.valueToCode(block, 'DELAY_TIME', Order.ATOMIC) || '1000';
 
-            // Cria o código que implementa a espera usando Promise e setTimeout
-            const code = `await new Promise(resolve => setTimeout(resolve, ${delayTime}));\n`;
+            // Obtém o código dos blocos aninhados
+            const statementCode = generator.statementToCode(block, 'DO');
+
+            // Cria o código ES5 usando setTimeout com uma função de callback
+            const code = `setTimeout(function() {\n` +
+                `  ${statementCode.replace(/^  /gm, '  ')}\n` +
+                `}, ${delayTime});\n`;
 
             return code;
         },
