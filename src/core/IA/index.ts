@@ -30,7 +30,7 @@ export const getGeneratedText = async (prompt: string): Promise<string> => {
         return result;
     } else {
         console.error('Erro ao gerar texto:', result);
-        return '';
+        throw new Error('Erro ao gerar texto');
     }
 };
 
@@ -70,7 +70,7 @@ export const getTranslatedText = async (text: string, targetLanguage: TypeLangua
 
     if ('error' in data) {
         console.error('error', data.error);
-        return '';
+        throw new Error('Erro ao obter tradução');
     }
 
     return data.response.translatedText;
