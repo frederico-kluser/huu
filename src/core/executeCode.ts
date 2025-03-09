@@ -2,30 +2,41 @@ import { Interpreter } from "eval5";
 import { getConditionalAi, getGeneratedText, getSummarizedText, getTranslatedText } from "./IA";
 
 const executeCode = (code: string) => {
-    // Cria um contexto customizado onde você pode expor funções e objetos necessários.
-    // Por exemplo, você pode incluir funções de manipulação do DOM, eventos, etc.
-
+    // Exponha TUDO que será usado no código do eval5
     const context = {
-        // Expondo algumas funções úteis
-        chrome,
+        chrome, // APIs da extensão
         console,
-        fetch,
+        fetch: window.fetch.bind(window),
         getConditionalAi,
         getGeneratedText,
         getSummarizedText,
         getTranslatedText,
+        // Objetos do DOM com bind
+        document: {
+            ...document,
+            getElementById: document.getElementById.bind(document),
+            querySelector: document.querySelector.bind(document),
+            createElement: document.createElement.bind(document),
+            addEventListener: document.addEventListener.bind(document),
+            body: document.body,
+        },
         window: {
             ...window,
-            alert: window.alert.bind(window), // Exponha o alert real
-            fetch: window.fetch.bind(window), // Exponha o fetch real
-            Promise: window.Promise, // Garanta que Promise está disponível
+            alert: window.alert.bind(window),
+            confirm: window.confirm.bind(window),
+            addEventListener: window.addEventListener.bind(window),
+            // Outras funções e propriedades necessárias
         },
-        // Você pode adicionar outras funções personalizadas aqui,
-        // por exemplo, para manipular a DOM ou interagir com eventos.
-        // document, addEventListener, etc., podem ser expostos com cuidado.
+        // Classes e construtores
+        Event: window.Event,
+        MouseEvent: window.MouseEvent,
+        HTMLElement: window.HTMLElement,
+        // Polyfills ou substitutos para funcionalidades ausentes
+        setTimeout: (handler: TimerHandler, timeout?: number) => window.setTimeout(handler, timeout),
+        clearTimeout: (handle: number) => window.clearTimeout(handle),
+        setInterval: (handler: TimerHandler, timeout?: number) => window.setInterval(handler, timeout),
     };
 
-    // Cria um novo interpretador com o contexto customizado e define um timeout (em milissegundos)
     const interpreter = new Interpreter(context, { timeout: 0 });
 
     try {
