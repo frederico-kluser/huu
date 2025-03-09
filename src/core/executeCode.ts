@@ -18,6 +18,9 @@ const executeCode = (code: string) => {
             querySelector: document.querySelector.bind(document),
             createElement: document.createElement.bind(document),
             addEventListener: document.addEventListener.bind(document),
+            getElementsByTagName: document.getElementsByTagName.bind(document),
+            getElementsByClassName: document.getElementsByClassName.bind(document),
+            getElementsByName: document.getElementsByName.bind(document),
             body: document.body,
         },
         window: {
