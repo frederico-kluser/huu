@@ -8,7 +8,7 @@ const setBlockAiTranslateText = () => {
     return blockConstructor({
         colour: Colors.AI,
         hasOutput: 'String',
-        helpUrl: 'https://cloud.google.com/translate/docs',
+        helpUrl: 'https://platform.openai.com/docs/guides/prompt-engineering',
         message: 'traduz texto\n%1\npara %2',
         name: 'BlockAiTranslateText',
         tooltip: 'Traduz o texto gerado pela IA para outro idioma.',

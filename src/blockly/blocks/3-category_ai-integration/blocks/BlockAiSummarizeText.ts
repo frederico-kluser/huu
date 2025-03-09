@@ -9,7 +9,7 @@ const setBlockAiSummarizeText = () => {
     return blockConstructor({
         colour: Colors.AI,
         hasPreviousConnection: null,
-        helpUrl: 'https://cloud.google.com/use-cases/ai-summarization',
+        helpUrl: 'https://platform.openai.com/docs/guides/prompt-engineering',
         message: 'Resumir texto:\n%1\ne salvar em %2\n%3',
         name: 'BlockAiSummarizeText',
         tooltip: 'Gera um resumo do texto usando IA, salva o resultado na variável especificada e executa os blocos aninhados.',

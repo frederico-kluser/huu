@@ -8,7 +8,7 @@ const setBlockAiTextToSpeech = () => {
         colour: Colors.AI,
         hasNextConnection: null,
         hasPreviousConnection: null,
-        helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesis',
+        helpUrl: 'https://platform.openai.com/docs/guides/prompt-engineering',
         message: 'Falar o texto %1',
         name: 'BlockAiTextToSpeech',
         tooltip: 'Converte o texto gerado pela IA em fala, utilizando a API SpeechSynthesis.',

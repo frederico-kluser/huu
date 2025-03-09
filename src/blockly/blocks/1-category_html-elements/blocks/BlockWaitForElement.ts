@@ -8,9 +8,8 @@ const setBlockWaitForElement = () => {
   return blockConstructor({
     colour: Colors.HTML,
     hasPreviousConnection: null,
-    hasNextConnection: null,
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver',
-    message: 'esperar elemento %1\n%2 por %3 segundos',
+    message: 'esperar elemento %1\n%2 por %3 segundos\nse encontrar %4\nse tempo esgotar %5',
     name: 'BlockWaitForElement',
     tooltip: 'Espera até que um elemento HTML apareça ou desapareça na página por um determinado tempo.',
     fields: [
@@ -38,42 +37,55 @@ const setBlockWaitForElement = () => {
           }
         }
       },
+      {
+        type: 'input_statement',
+        name: 'DO_IF_FOUND',
+      },
+      {
+        type: 'input_statement',
+        name: 'DO_IF_TIMEOUT',
+      },
     ],
     generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
       const elementSelector = generator.valueToCode(block, 'ELEMENT_SELECTOR', Order.ATOMIC) || 'document.querySelector("")';
       const condition = block.getFieldValue('CONDITION');
       const timeout = generator.valueToCode(block, 'TIMEOUT', Order.ATOMIC) || '10';
+      const doIfFound = generator.statementToCode(block, 'DO_IF_FOUND');
+      const doIfTimeout = generator.statementToCode(block, 'DO_IF_TIMEOUT');
 
       // Determina a condição baseada na escolha (aparecer ou desaparecer)
       const checkCondition = condition === 'appear' ?
         `element !== null` :
         `element === null`;
 
-      // Constrói o código para a espera do elemento usando Promise
+      // Constrói o código ES5 para a espera do elemento usando setTimeout para polling
       const code = `
-await new Promise((resolve, reject) => {
-  const startTime = Date.now();
-  const timeoutMs = ${timeout} * 1000;
+(function() {
+  var startTime = Date.now();
+  var timeoutMs = ${timeout} * 1000;
   
-  const checkElement = () => {
-    const element = ${elementSelector};
+  function checkElement() {
+    var element = ${elementSelector};
+    
     if (${checkCondition}) {
-      resolve();
+      // Elemento encontrado, executar o bloco DO_IF_FOUND
+      ${doIfFound.replace(/^  /gm, '      ')}
       return;
     }
     
     if (Date.now() - startTime >= timeoutMs) {
-      reject(new Error("Tempo esgotado esperando pelo elemento ${condition === 'appear' ? 'aparecer' : 'desaparecer'}"));
+      // Tempo esgotado, executar o bloco DO_IF_TIMEOUT
+      ${doIfTimeout.replace(/^  /gm, '      ')}
       return;
     }
     
-    setTimeout(checkElement, 100);
-  };
+    // Continuar verificando
+    setTimeout(checkElement, 100); // TODO: posso deixar a pessoa escolher o tempo de polling
+  }
   
+  // Iniciar a verificação
   checkElement();
-}).catch(error => {
-  console.error(error.message);
-});
+})();
 `;
 
       return code;
