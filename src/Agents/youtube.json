@@ -1,0 +1,420 @@
+{
+    "blocks": {
+        "blocks": {
+            "languageVersion": 0,
+            "blocks": [
+                {
+                    "type": "variables_set",
+                    "id": "b}5ouNxQ:oySTJ^2U.Is",
+                    "x": 90,
+                    "y": -50,
+                    "fields": {
+                        "VAR": {
+                            "id": "[0i+{v:o||n-_?bfXsL2"
+                        }
+                    },
+                    "inputs": {
+                        "VALUE": {
+                            "block": {
+                                "type": "BlockSelectHTMLElement",
+                                "id": "fk`xVect^AA5y+MRQ*A|",
+                                "fields": {
+                                    "TARGET_SELECTOR": "css"
+                                },
+                                "inputs": {
+                                    "SELECTOR": {
+                                        "shadow": {
+                                            "type": "text",
+                                            "id": "ohq5|bqi0~ARP9I=*fyj",
+                                            "fields": {
+                                                "TEXT": "button[aria-label=\"Mostrar transcrição\"]"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "next": {
+                        "block": {
+                            "type": "BlockClickHTMLElement",
+                            "id": "lpV4yna`aB(K6j2(jpyU",
+                            "fields": {
+                                "VARIABLE": {
+                                    "id": "[0i+{v:o||n-_?bfXsL2"
+                                }
+                            },
+                            "next": {
+                                "block": {
+                                    "type": "BlockWaitForElement",
+                                    "id": "7e2gbm:!paA9+wd1::2}",
+                                    "fields": {
+                                        "CONDITION": "appear"
+                                    },
+                                    "inputs": {
+                                        "ELEMENT_SELECTOR": {
+                                            "block": {
+                                                "type": "BlockSelectHTMLElement",
+                                                "id": "u.^F!cWJ;OJ2lG06Sj+z",
+                                                "fields": {
+                                                    "TARGET_SELECTOR": "tag"
+                                                },
+                                                "inputs": {
+                                                    "SELECTOR": {
+                                                        "shadow": {
+                                                            "type": "text",
+                                                            "id": "c3:VcSUlu1nDZ+9O^YLq",
+                                                            "fields": {
+                                                                "TEXT": "ytd-transcript-search-panel-renderer"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "TIMEOUT": {
+                                            "shadow": {
+                                                "type": "math_number",
+                                                "id": "TvfLMImLoL]Xp4a,q4wc",
+                                                "fields": {
+                                                    "NUM": 5
+                                                }
+                                            }
+                                        },
+                                        "DO_IF_FOUND": {
+                                            "block": {
+                                                "type": "variables_set",
+                                                "id": ":52,.#bSNQFv,h$U|6dS",
+                                                "fields": {
+                                                    "VAR": {
+                                                        "id": "/[,k+9A*W(%Zs%Ib1lU("
+                                                    }
+                                                },
+                                                "inputs": {
+                                                    "VALUE": {
+                                                        "block": {
+                                                            "type": "BlockSelectHTMLElement",
+                                                            "id": "4H1_hv/QSz=N8%@}D65o",
+                                                            "fields": {
+                                                                "TARGET_SELECTOR": "css"
+                                                            },
+                                                            "inputs": {
+                                                                "SELECTOR": {
+                                                                    "shadow": {
+                                                                        "type": "text",
+                                                                        "id": "E(V2mJi_*)fpJeq1616e",
+                                                                        "fields": {
+                                                                            "TEXT": "h1.style-scope.ytd-watch-metadata"
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                "next": {
+                                                    "block": {
+                                                        "type": "variables_set",
+                                                        "id": "wz=n/M(Y6]SqNG/gc~XI",
+                                                        "fields": {
+                                                            "VAR": {
+                                                                "id": "q,8-}a8C4j$_r%gfFIZ`"
+                                                            }
+                                                        },
+                                                        "inputs": {
+                                                            "VALUE": {
+                                                                "block": {
+                                                                    "type": "BlockGetElementInnerText",
+                                                                    "id": "~n2BPlq,w6pQwYfV|m$X",
+                                                                    "fields": {
+                                                                        "ELEMENT": {
+                                                                            "id": "/[,k+9A*W(%Zs%Ib1lU("
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        },
+                                                        "next": {
+                                                            "block": {
+                                                                "type": "variables_set",
+                                                                "id": "!4Y6{3lVqlXImw5f2$fe",
+                                                                "fields": {
+                                                                    "VAR": {
+                                                                        "id": "`r4jj]ghK?7Sc?amX,F:"
+                                                                    }
+                                                                },
+                                                                "inputs": {
+                                                                    "VALUE": {
+                                                                        "block": {
+                                                                            "type": "BlockSelectHTMLElement",
+                                                                            "id": "CK~;juo@r:v(pO2JHWT.",
+                                                                            "fields": {
+                                                                                "TARGET_SELECTOR": "tag"
+                                                                            },
+                                                                            "inputs": {
+                                                                                "SELECTOR": {
+                                                                                    "shadow": {
+                                                                                        "type": "text",
+                                                                                        "id": "FZicx,Wn}GHe=IIWjss%",
+                                                                                        "fields": {
+                                                                                            "TEXT": "ytd-transcript-search-panel-renderer"
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "next": {
+                                                                    "block": {
+                                                                        "type": "variables_set",
+                                                                        "id": "d14?M$/P5HXD@.@xk_XO",
+                                                                        "fields": {
+                                                                            "VAR": {
+                                                                                "id": "55)-M[Ud[H}XjdPFYD,Z"
+                                                                            }
+                                                                        },
+                                                                        "inputs": {
+                                                                            "VALUE": {
+                                                                                "block": {
+                                                                                    "type": "BlockGetElementInnerText",
+                                                                                    "id": "^GHB.V,;UIuxtU/fEW*?",
+                                                                                    "fields": {
+                                                                                        "ELEMENT": {
+                                                                                            "id": "`r4jj]ghK?7Sc?amX,F:"
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        },
+                                                                        "next": {
+                                                                            "block": {
+                                                                                "type": "variables_set",
+                                                                                "id": "thzby%g/IIk$?;[c`sq2",
+                                                                                "fields": {
+                                                                                    "VAR": {
+                                                                                        "id": "756(c9HT3x39+y}!gA~a"
+                                                                                    }
+                                                                                },
+                                                                                "inputs": {
+                                                                                    "VALUE": {
+                                                                                        "block": {
+                                                                                            "type": "text_join",
+                                                                                            "id": "lY%Ew!|Cs2xJ%!V%WUrD",
+                                                                                            "extraState": {
+                                                                                                "itemCount": 2
+                                                                                            },
+                                                                                            "inputs": {
+                                                                                                "ADD0": {
+                                                                                                    "block": {
+                                                                                                        "type": "text",
+                                                                                                        "id": "2TdtWZ}%[+u_kPfH}j()",
+                                                                                                        "fields": {
+                                                                                                            "TEXT": "Resuma o conteúdo do vídeo '"
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                "ADD1": {
+                                                                                                    "block": {
+                                                                                                        "type": "variables_get",
+                                                                                                        "id": "*:#yh3E#6:9.]`f:_:)$",
+                                                                                                        "fields": {
+                                                                                                            "VAR": {
+                                                                                                                "id": "q,8-}a8C4j$_r%gfFIZ`"
+                                                                                                            }
+                                                                                                        }
+                                                                                                    }
+                                                                                                }
+                                                                                            }
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                "next": {
+                                                                                    "block": {
+                                                                                        "type": "variables_set",
+                                                                                        "id": "C^tp9;:8Gu)gk6.Gp[DB",
+                                                                                        "fields": {
+                                                                                            "VAR": {
+                                                                                                "id": "756(c9HT3x39+y}!gA~a"
+                                                                                            }
+                                                                                        },
+                                                                                        "inputs": {
+                                                                                            "VALUE": {
+                                                                                                "block": {
+                                                                                                    "type": "text_join",
+                                                                                                    "id": "4fcDDtcY{ws$FtSEOJaR",
+                                                                                                    "extraState": {
+                                                                                                        "itemCount": 2
+                                                                                                    },
+                                                                                                    "inputs": {
+                                                                                                        "ADD0": {
+                                                                                                            "block": {
+                                                                                                                "type": "text",
+                                                                                                                "id": "Z2t?%,C,tQCh.|Pp*.71",
+                                                                                                                "fields": {
+                                                                                                                    "TEXT": "' em português, resuma de forma objetiva e clara. Aos final aponte os tempos do vídeo que começa a falar as partes importante (tempo que começa e tempo que termina), a seguir o conteúdo do vídeo:"
+                                                                                                                }
+                                                                                                            }
+                                                                                                        },
+                                                                                                        "ADD1": {
+                                                                                                            "block": {
+                                                                                                                "type": "variables_get",
+                                                                                                                "id": "m-IrN}?=kRyl?bbOG5X{",
+                                                                                                                "fields": {
+                                                                                                                    "VAR": {
+                                                                                                                        "id": "55)-M[Ud[H}XjdPFYD,Z"
+                                                                                                                    }
+                                                                                                                }
+                                                                                                            }
+                                                                                                        }
+                                                                                                    }
+                                                                                                }
+                                                                                            }
+                                                                                        },
+                                                                                        "next": {
+                                                                                            "block": {
+                                                                                                "type": "BlockAiGenerateText",
+                                                                                                "id": "g`62|OFE-Q]JrQXoxC1F",
+                                                                                                "fields": {
+                                                                                                    "VAR": {
+                                                                                                        "id": "wMlB1IG{^,vroyvzsfyI"
+                                                                                                    }
+                                                                                                },
+                                                                                                "inputs": {
+                                                                                                    "PROMPT": {
+                                                                                                        "shadow": {
+                                                                                                            "type": "text",
+                                                                                                            "id": ".g?!rm7EBs:*z?ZL30Yr",
+                                                                                                            "fields": {
+                                                                                                                "TEXT": "Digite o prompt"
+                                                                                                            }
+                                                                                                        },
+                                                                                                        "block": {
+                                                                                                            "type": "variables_get",
+                                                                                                            "id": "?Qjx+:g2qh3SlAp{p-Fb",
+                                                                                                            "fields": {
+                                                                                                                "VAR": {
+                                                                                                                    "id": "756(c9HT3x39+y}!gA~a"
+                                                                                                                }
+                                                                                                            }
+                                                                                                        }
+                                                                                                    },
+                                                                                                    "DO": {
+                                                                                                        "block": {
+                                                                                                            "type": "BlockWriteTextToHTMLElement",
+                                                                                                            "id": "k}vzKc2DpB#MkS1lpUOy",
+                                                                                                            "inputs": {
+                                                                                                                "TEXT": {
+                                                                                                                    "shadow": {
+                                                                                                                        "type": "text",
+                                                                                                                        "id": "aijpIR]n=.CcbRI;W)[g",
+                                                                                                                        "fields": {
+                                                                                                                            "TEXT": "Digite o texto"
+                                                                                                                        }
+                                                                                                                    },
+                                                                                                                    "block": {
+                                                                                                                        "type": "variables_get",
+                                                                                                                        "id": "h~X6lMSgFQ^;Lx~SlbWF",
+                                                                                                                        "fields": {
+                                                                                                                            "VAR": {
+                                                                                                                                "id": "wMlB1IG{^,vroyvzsfyI"
+                                                                                                                            }
+                                                                                                                        }
+                                                                                                                    }
+                                                                                                                },
+                                                                                                                "ELEMENT_SELECTOR": {
+                                                                                                                    "block": {
+                                                                                                                        "type": "variables_get",
+                                                                                                                        "id": "GwjG_V0NkqB;(r?pVnew",
+                                                                                                                        "fields": {
+                                                                                                                            "VAR": {
+                                                                                                                                "id": "`r4jj]ghK?7Sc?amX,F:"
+                                                                                                                            }
+                                                                                                                        }
+                                                                                                                    }
+                                                                                                                }
+                                                                                                            }
+                                                                                                        }
+                                                                                                    }
+                                                                                                }
+                                                                                            }
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "DO_IF_TIMEOUT": {
+                                            "block": {
+                                                "type": "BlockAlertUser",
+                                                "id": "+Q{T:e|SzeWCxW,q@X%y",
+                                                "inputs": {
+                                                    "MESSAGE": {
+                                                        "shadow": {
+                                                            "type": "text",
+                                                            "id": "U~n4CZr0tn?;Yis,(ugq",
+                                                            "fields": {
+                                                                "TEXT": "Não carregaram as legendas"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "variables": [
+            {
+                "name": "textGptAnswer",
+                "id": "wMlB1IG{^,vroyvzsfyI",
+                "type": "String"
+            },
+            {
+                "name": "textSubtitle",
+                "id": "55)-M[Ud[H}XjdPFYD,Z"
+            },
+            {
+                "name": "textTitle",
+                "id": "q,8-}a8C4j$_r%gfFIZ`"
+            },
+            {
+                "name": "textPrompt",
+                "id": "756(c9HT3x39+y}!gA~a"
+            },
+            {
+                "name": "youtubeShowSubtitles",
+                "id": "[0i+{v:o||n-_?bfXsL2",
+                "type": "htmlElement"
+            },
+            {
+                "name": "youtubeTitleElement",
+                "id": "/[,k+9A*W(%Zs%Ib1lU(",
+                "type": "htmlElement"
+            },
+            {
+                "name": "youtubeSubtitleArea",
+                "id": "`r4jj]ghK?7Sc?amX,F:",
+                "type": "htmlElement"
+            }
+        ]
+    },
+    "name": "Youtube Video Summarize",
+    "code": "var youtubeShowSubtitles, youtubeTitleElement, textTitle, youtubeSubtitleArea, textSubtitle, textPrompt, textGptAnswer;\n\n\nyoutubeShowSubtitles = document.querySelector('button[aria-label=\"Mostrar transcrição\"]');\nyoutubeShowSubtitles.click();\n\n(function() {\n  var startTime = Date.now();\n  var timeoutMs = 5 * 1000;\n\n  function checkElement() {\n    var element = document.getElementsByTagName('ytd-transcript-search-panel-renderer')[0];\n\n    if (element !== undefined && element !== null) {\n      // Elemento encontrado, executar o bloco DO_IF_FOUND\n            youtubeTitleElement = document.querySelector('h1.style-scope.ytd-watch-metadata');\n      textTitle = youtubeTitleElement.innerText;\n      youtubeSubtitleArea = document.getElementsByTagName('ytd-transcript-search-panel-renderer')[0];\n      textSubtitle = youtubeSubtitleArea.innerText;\n      textPrompt = 'Resuma o conteúdo do vídeo \\'' + String(textTitle);\n      textPrompt = '\\' em português, resuma de forma objetiva e clara. Aos final aponte os tempos do vídeo que começa a falar as partes importante (tempo que começa e tempo que termina), a seguir o conteúdo do vídeo:' + String(textSubtitle);\n      getGeneratedText(textPrompt, function(result) {\n        textGptAnswer = result;\n          youtubeSubtitleArea.textContent = textGptAnswer;\n\n      });\n\n      return;\n    }\n\n    if (Date.now() - startTime >= timeoutMs) {\n      // Tempo esgotado, executar o bloco DO_IF_TIMEOUT\n            window.alert('Não carregaram as legendas');\n\n      return;\n    }\n\n    // Continuar verificando\n    setTimeout(checkElement, 100); // TODO: posso deixar a pessoa escolher o tempo de polling\n  }\n\n  // Iniciar a verificação\n  checkElement();\n})();\n",
+    "lastUpdate": 1741545484768,
+    "urls": "youtube.com/*",
+    "mode": "manual-shortcut-3",
+    "active": true
+}
