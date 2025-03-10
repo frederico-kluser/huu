@@ -33,33 +33,6 @@ const blocklyToolbox: BlocklyOptions['toolbox'] = {
     },
     {
       kind: 'category',
-      name: 'IA',
-      contents: [
-        {
-          kind: 'block',
-          type: 'logic_compare',
-          disabled: true,
-        },
-        {
-          kind: 'category',
-          name: 'Turn',
-          contents: [
-            {
-              kind: 'block',
-              type: 'logic_compare',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      kind: 'sep', // Separator
-    },
-    {
-      kind: 'sep', // Separator
-    },
-    {
-      kind: 'category',
       name: 'Logic',
       categorystyle: 'logic_category',
       contents: [

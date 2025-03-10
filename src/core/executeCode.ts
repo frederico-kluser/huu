@@ -21,6 +21,7 @@ const executeCode = (code: string) => {
             getElementsByTagName: document.getElementsByTagName.bind(document),
             getElementsByClassName: document.getElementsByClassName.bind(document),
             getElementsByName: document.getElementsByName.bind(document),
+            evaluate: document.evaluate.bind(document),
             body: document.body,
         },
         window: {
