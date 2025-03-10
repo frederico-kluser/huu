@@ -41,7 +41,7 @@ const setBlockWriteTextToHTMLElement = () => {
             const textCode = generator.valueToCode(block, 'TEXT', Order.NONE) || '""';
 
             // Gerar o código para definir o textContent do elemento
-            const code = `${elementSelector}.textContent = ${textCode};\n`;
+            const code = `${elementSelector}.innerHTML = ${textCode};\n`;
 
             return code;
         }

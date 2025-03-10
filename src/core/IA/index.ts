@@ -2,7 +2,7 @@ import { generateResponseJSON } from "./engine.request";
 import getTemperature from "./helpers/getTemperature.helper";
 import { generateResponse } from "./request/gpt.request";
 
-export const getConditionalAi = async (booleanQuestion: string, callback: (bool: boolean) => {}) => {
+export const getConditionalAi = async (booleanQuestion: string, callback: (bool: boolean) => {}): Promise<void> => {
     const data = await generateResponseJSON<{
         bool: boolean;
     }>(`Considerando o seguinte texto """${booleanQuestion}""" como uma questão booleana, qual seria sua resposta ?"`, [
@@ -23,15 +23,15 @@ export const getConditionalAi = async (booleanQuestion: string, callback: (bool:
     callback(data.response.bool);
 };
 
-export const getGeneratedText = async (prompt: string): Promise<string> => {
+export const getGeneratedText = async (prompt: string, callback: (text: string) => {}) => {
     const result = await generateResponse(prompt, getTemperature(0));
 
-    if (typeof result === 'string') {
-        return result;
-    } else {
+    if (typeof result !== 'string') {
         console.error('Erro ao gerar texto:', result);
         throw new Error('Erro ao gerar texto');
     }
+
+    callback(result);
 };
 
 export const getSummarizedText = async (text: string, callback: (summary: string) => {}): Promise<void> => {
@@ -56,7 +56,7 @@ export const getSummarizedText = async (text: string, callback: (summary: string
 
 type TypeLanguage = 'pt' | 'en' | 'es' | 'fr' | 'de' | 'it' | 'ja' | 'ko' | 'ru' | 'zh-CN' | 'zh-TW';
 
-export const getTranslatedText = async (text: string, targetLanguage: TypeLanguage): Promise<string> => {
+export const getTranslatedText = async (text: string, targetLanguage: TypeLanguage, callback: (translatedText: string) => {}): Promise<void> => {
     const data = await generateResponseJSON<{
         translatedText: string;
     }>(`Traduza o texto a seguir para "${targetLanguage}": """${text}"""`, [
@@ -73,5 +73,5 @@ export const getTranslatedText = async (text: string, targetLanguage: TypeLangua
         throw new Error('Erro ao obter tradução');
     }
 
-    return data.response.translatedText;
+    callback(data.response.translatedText);
 };
