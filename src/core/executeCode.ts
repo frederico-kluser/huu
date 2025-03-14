@@ -35,6 +35,8 @@ const executeCode = (code: string) => {
         Event: window.Event,
         MouseEvent: window.MouseEvent,
         HTMLElement: window.HTMLElement,
+        XPathResult: window.XPathResult,
+        // Tipos de dados
         // Polyfills ou substitutos para funcionalidades ausentes
         setTimeout: (handler: TimerHandler, timeout?: number) => window.setTimeout(handler, timeout),
         clearTimeout: (handle: number) => window.clearTimeout(handle),
