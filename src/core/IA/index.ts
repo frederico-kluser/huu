@@ -1,6 +1,4 @@
 import { generateResponseJSON } from "./engine.request";
-import getTemperature from "./helpers/getTemperature.helper";
-import { generateResponse } from "./request/gpt.request";
 
 export const getConditionalAi = async (booleanQuestion: string, callback: (bool: boolean) => {}): Promise<void> => {
     const data = await generateResponseJSON<{
@@ -24,14 +22,23 @@ export const getConditionalAi = async (booleanQuestion: string, callback: (bool:
 };
 
 export const getGeneratedText = async (prompt: string, callback: (text: string) => {}) => {
-    const result = await generateResponse(prompt, getTemperature(0));
+    const data = await generateResponseJSON<{
+        result: string;
+    }>(`"""${prompt}"""`, [
+        {
+            isArray: false,
+            propertyName: 'result',
+            propertyValue: 'string',
+            propertyComment: 'Resultado gerado pela IA'
+        }
+    ]);
 
-    if (typeof result !== 'string') {
-        console.error('Erro ao gerar texto:', result);
+    if ('error' in data) {
+        console.error('error', data.error);
         throw new Error('Erro ao gerar texto');
     }
 
-    callback(result);
+    callback(data.response.result);
 };
 
 export const getSummarizedText = async (text: string, callback: (summary: string) => {}): Promise<void> => {
