@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "huu - Criador de Agentes Inteligentes",
   "description": "Crie agentes inteligentes com IA para modificar sites, executar ações e automatizar tarefas usando o Blockly",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "background": {
     "service_worker": "background.bundle.js"
   },
