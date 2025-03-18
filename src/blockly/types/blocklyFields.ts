@@ -44,11 +44,17 @@ export type TypeBlocklyInputValue = {
     },
 };
 
+export type TypeBlocklyFieldLabel = {
+    type: 'field_label';
+    name: string;
+    text: string;
+};
+
 type TypeBlocklyStatementInput = {
     type: 'input_statement';
     name: string;
 };
 
-type TypeBlocklyFields = TypeBlocklyFieldText | TypeBlocklyFieldVariable | TypeBlocklyFieldInput | TypeBlocklyFieldDropdown | TypeBlocklyFieldCheckbox | TypeBlocklyInputValue | TypeBlocklyStatementInput;
+type TypeBlocklyFields = TypeBlocklyFieldText | TypeBlocklyFieldVariable | TypeBlocklyFieldInput | TypeBlocklyFieldDropdown | TypeBlocklyFieldCheckbox | TypeBlocklyInputValue | TypeBlocklyStatementInput | TypeBlocklyFieldLabel;
 
 export default TypeBlocklyFields;

@@ -3,10 +3,16 @@ import configHTMLInterection from '../blocks/1-category_html-elements';
 import configURLActions from '../blocks/2-category_url-control';
 import configAiActions from '../blocks/3-category_ai-integration';
 import configMiscellaneousActions from '../blocks/4-category_miscellaneous';
+import configPageInterection from '../blocks/PageInterection';
 
 const blocklyToolbox: BlocklyOptions['toolbox'] = {
   kind: 'categoryToolbox',
   contents: [
+    {
+      kind: 'category',
+      name: 'Interação com a Página',
+      contents: configPageInterection(),
+    },
     {
       kind: 'category',
       name: 'Elementos do Site',
