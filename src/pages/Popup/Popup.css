@@ -51,3 +51,17 @@ select,
 textarea {
   margin-bottom: 0px !important;
 }
+
+.blocklyFieldTextInput {
+  min-width: 100px !important;
+  font-size: 16px !important;
+  height: auto !important;
+  padding: 5px !important;
+}
+
+.blocklyWidgetDiv .blocklyHtmlInput {
+  min-width: 150px !important;
+  min-height: 30px !important;
+  font-size: 16px !important;
+  padding: 4px !important;
+}

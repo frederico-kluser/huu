@@ -1,9 +1,11 @@
 import { TypeBlockly, TypeBlocklyButton } from "../../helpers/blockConstructor";
-import setBlockPromptText from "./setBlockPromptText";
+import BlockDynamicElementSelector from "./BlockDynamicElementSelector";
+import setBlockSelectHTMLElement from "./BlockSelectHTMLElement";
 
 const configPageInterection = (): Array<TypeBlockly | TypeBlocklyButton> => {
     return [
-        setBlockPromptText(),
+        BlockDynamicElementSelector(),
+        setBlockSelectHTMLElement(),
     ];
 };
 
