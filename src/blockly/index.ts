@@ -31,7 +31,7 @@ export const loadWorkspace = async (wsName: string) => {
 
 const updateCode = async (event: any) => {
     const code = javascriptGenerator.workspaceToCode(workspace);
-    console.clear();
+    // console.clear();
     console.log("code:");
     console.log(code);
     console.log("----");

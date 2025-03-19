@@ -56,6 +56,7 @@ interface blockConstructorInterface {
   hasPreviousConnection?: TypeConnection;
   helpUrl: string;
   inputs?: TypeInputBlock;
+  installListener?: (workspace: Blockly.Workspace, event: any) => void;
   message: string;
   name: string;
   output?: BlocklyTypes;
@@ -73,6 +74,7 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
     hasPreviousConnection,
     helpUrl,
     inputs,
+    installListener,
     message,
     name,
     output,
@@ -146,6 +148,24 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
   } else {
     javascriptGenerator.forBlock[name] = function (block, generator) {
       return '/* Generator not implemented */';
+    };
+  }
+
+  if (installListener) {
+    // Modifica a inicialização do bloco
+    const originalInit = Blockly.Blocks[name].init;
+
+    Blockly.Blocks[name].init = function () {
+      originalInit.call(this);
+
+      // Instala o listener quando o bloco é inicializado
+      if (this.workspace) {
+
+        // workspace.addChangeListener((event: Blockly.Events.Abstract) => {
+        this.workspace.addChangeListener((event: any) => {
+          installListener(this.workspace, event);
+        });
+      }
     };
   }
 
