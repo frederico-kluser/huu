@@ -10,7 +10,7 @@ import { fetchAgentById, saveOrUpdateAgent } from "../../../../core/storage/agen
 interface EditAgentProps {
     handleCreateAgent: () => void
     setIsMainPage: Dispatch<SetStateAction<boolean>>
-    setWorkspaceName: Dispatch<SetStateAction<string>>
+    setActualWorkspace: Dispatch<SetStateAction<string>>
     setWorkspaces: Dispatch<SetStateAction<string[]>>
     workspaces: string[]
 }
@@ -18,7 +18,7 @@ interface EditAgentProps {
 const EditAgent = ({
     handleCreateAgent,
     setIsMainPage,
-    setWorkspaceName,
+    setActualWorkspace,
     setWorkspaces,
     workspaces,
 }: EditAgentProps
@@ -117,7 +117,7 @@ const EditAgent = ({
         if (!agentSelectRef.current) return;
 
         const workspaceName = getWorkspaceName();
-        setWorkspaceName(workspaceName);
+        setActualWorkspace(workspaceName);
     };
 
     const handleChangeAgent = async () => {
@@ -139,7 +139,7 @@ const EditAgent = ({
 
         updateActualWorkspace(0);
         setWorkspaces(workspaces.filter((workspace) => workspace !== workspaceName));
-        setWorkspaceName('');
+        setActualWorkspace('');
         removeItem(workspaceName);
     };
 
