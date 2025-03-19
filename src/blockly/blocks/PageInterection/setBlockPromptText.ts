@@ -36,18 +36,6 @@ const setBlockPromptText = () => {
 
             console.log("event", event);
 
-            /*
-            reason: [
-                "drag",
-                "snap"
-            ]
-            
-            reason: [
-                "drag",
-                "connect"
-            ]
-            */
-
             // Detecta quando um bloco é movido (solto no workspace)
             if (event.type === Blockly.Events.BLOCK_MOVE && event.reason?.includes("connect")) {
                 // Verifica se o bloco está realmente no workspace principal
@@ -58,8 +46,12 @@ const setBlockPromptText = () => {
                     // Mostra o prompt
                     setTimeout(() => {
                         const userInput = window.prompt("Digite o texto para este bloco:", "");
-                        if (userInput !== null) {
+                        if (userInput !== null && userInput !== "") {
+                            // Se o usuário forneceu um texto, define o valor do campo
                             block.setFieldValue(userInput, "TEXT_DISPLAY");
+                        } else {
+                            // Se o usuário clicou em cancelar ou não forneceu texto, deleta o bloco
+                            block.dispose();
                         }
                     }, 100);
                 }
