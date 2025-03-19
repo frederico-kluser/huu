@@ -7,7 +7,7 @@ import MainPage from './pages/MainPage';
 import EditAgent from './pages/EditAgent';
 import CreateAgent from './pages/CreateAgent';
 import isValidJsonKey from '../../helpers/isValidJsonKey';
-import { fetchWorkspaceNames, updateActualWorkspace, updateWorkspaceNames } from '../../core/storage/workspace';
+import { fetchNavigation, fetchWorkspaceNames, updateActualWorkspace, updateNavigation, updateWorkspaceNames } from '../../core/storage/workspace';
 
 import '../../assets/css/pico.min.css';
 import './Popup.css';
@@ -22,12 +22,17 @@ const Popup = () => {
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs[0];
+      console.log("tab.url");
       console.log(tab.url);
     });
 
     fetchWorkspaceNames().then((loadedWorkspaces) => {
       setWorkspaces(loadedWorkspaces);
       setIsMainPage(!workspaceName && !!loadedWorkspaces.length);
+    });
+
+    fetchNavigation().then((navigation) => {
+      setWorkspaceName(navigation);
     });
   }, []);
 
@@ -38,6 +43,7 @@ const Popup = () => {
   }, [workspaces]);
 
   useEffect(() => {
+    updateNavigation(workspaceName);
     if (!workspaceName) return;
 
     blocklySetup();
