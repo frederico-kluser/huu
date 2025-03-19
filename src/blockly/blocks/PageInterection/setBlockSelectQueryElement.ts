@@ -4,13 +4,13 @@ import blockConstructor from '../../helpers/blockConstructor';
 import Colors from '../../config/colors';
 import BlocklyTypes from '../../config/types';
 
-const setBlockSelectHTMLElement = () => {
+const setBlockSelectQueryElement = () => {
     return blockConstructor({
         colour: Colors.HTML,
         hasOutput: 'String',
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Document/querySelector',
         message: 'encontrar elemento na página %1',
-        name: 'BlockSelectHTMLElement',
+        name: 'BlockSelectQueryElement',
         output: BlocklyTypes.HTML_ELEMENT,
         tooltip: 'Encontra um elemento na página. Use # para buscar por ID (ex: #meuBotao), . para buscar por classe (ex: .minhaClasse), ou o nome da tag (ex: button).',
         fields: [
@@ -35,4 +35,4 @@ const setBlockSelectHTMLElement = () => {
     });
 };
 
-export default setBlockSelectHTMLElement;
+export default setBlockSelectQueryElement;

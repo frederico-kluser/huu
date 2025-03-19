@@ -1,0 +1,1097 @@
+{
+    // Configurações gerais da interface
+    "configInterface": {
+        "seletorVisual": {
+            "ativado": true,
+            "destacarElementoAoPassarMouse": true,
+            "corDestaque": "rgba(75, 161, 255, 0.5)",
+            "mensagemAjuda": "Clique no elemento que deseja selecionar. Pressione ESC para cancelar."
+        }
+    },
+    // Estrutura principal que define todas as categorias de blocos
+    "categorias": [
+        {
+            "nome": "Interação com a Página",
+            "cor": "#4a6cd4",
+            "descricao": "Blocos para encontrar e interagir com elementos nas páginas web",
+            "blocos": [
+                {
+                    "nome": "Selecionar elemento visualmente",
+                    "icone": "cursor",
+                    "descricao": "Clique diretamente no elemento que deseja selecionar na página",
+                    "campos": [
+                        {
+                            "tipo": "botao",
+                            "nome": "iniciarSelecao",
+                            "descricao": "Clique para selecionar um elemento na página",
+                            "acao": "ativarSeletorVisual"
+                        },
+                        {
+                            "tipo": "texto_somente_leitura",
+                            "nome": "elementoSelecionado",
+                            "descricao": "Elemento atualmente selecionado"
+                        }
+                    ],
+                    "retorna": "elemento"
+                },
+                {
+                    "nome": "Encontrar elemento na página",
+                    "icone": "search",
+                    "descricao": "Localiza um elemento na página atual",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "busca",
+                            "descricao": "O que você quer encontrar? (ex: botão de login, campo de email)"
+                        },
+                        {
+                            "tipo": "escolha",
+                            "nome": "metodo",
+                            "descricao": "Como encontrar?",
+                            "opcoes": [
+                                {
+                                    "texto": "Texto visível",
+                                    "valor": "texto"
+                                },
+                                {
+                                    "texto": "Pelo que está escrito dentro",
+                                    "valor": "conteudo"
+                                },
+                                {
+                                    "texto": "Pelo nome do campo",
+                                    "valor": "id"
+                                },
+                                {
+                                    "texto": "Avançado (CSS)",
+                                    "valor": "css"
+                                },
+                                {
+                                    "texto": "Avançado (XPath)",
+                                    "valor": "xpath"
+                                }
+                            ],
+                            "padrao": "texto"
+                        }
+                    ],
+                    "retorna": "elemento"
+                },
+                {
+                    "nome": "Aguardar elemento aparecer",
+                    "icone": "timer",
+                    "descricao": "Espera até que um elemento seja encontrado na página",
+                    "campos": [
+                        {
+                            "tipo": "elemento_ou_seletor",
+                            "nome": "elemento",
+                            "descricao": "Qual elemento aguardar?",
+                            "botaoSelecaoVisual": true
+                        },
+                        {
+                            "tipo": "escolha",
+                            "nome": "condicao",
+                            "descricao": "Condição",
+                            "opcoes": [
+                                {
+                                    "texto": "Aparecer na página",
+                                    "valor": "aparecer"
+                                },
+                                {
+                                    "texto": "Desaparecer da página",
+                                    "valor": "sumir"
+                                }
+                            ],
+                            "padrao": "aparecer"
+                        },
+                        {
+                            "tipo": "numero",
+                            "nome": "tempo",
+                            "descricao": "Por quanto tempo esperar (em segundos)?",
+                            "padrao": 10
+                        }
+                    ],
+                    "acoes": [
+                        {
+                            "tipo": "entao",
+                            "nome": "encontrou",
+                            "descricao": "O que fazer quando encontrar?"
+                        },
+                        {
+                            "tipo": "senao",
+                            "nome": "naoEncontrou",
+                            "descricao": "O que fazer se o tempo acabar?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Rolar até elemento",
+                    "icone": "scroll",
+                    "descricao": "Move a página até mostrar o elemento desejado",
+                    "campos": [
+                        {
+                            "tipo": "elemento_ou_seletor",
+                            "nome": "elemento",
+                            "descricao": "Rolar até qual elemento?",
+                            "botaoSelecaoVisual": true
+                        }
+                    ]
+                },
+                {
+                    "nome": "Clicar",
+                    "icone": "click",
+                    "descricao": "Clica em um elemento da página",
+                    "campos": [
+                        {
+                            "tipo": "elemento_ou_seletor",
+                            "nome": "elemento",
+                            "descricao": "Onde clicar?",
+                            "botaoSelecaoVisual": true
+                        }
+                    ]
+                },
+                {
+                    "nome": "Clicar duas vezes",
+                    "icone": "doubleclick",
+                    "descricao": "Clica duas vezes em um elemento da página",
+                    "campos": [
+                        {
+                            "tipo": "elemento_ou_seletor",
+                            "nome": "elemento",
+                            "descricao": "Onde clicar duas vezes?",
+                            "botaoSelecaoVisual": true
+                        }
+                    ]
+                },
+                {
+                    "nome": "Digitar texto",
+                    "icone": "text",
+                    "descricao": "Escreve um texto em um campo",
+                    "campos": [
+                        {
+                            "tipo": "elemento_ou_seletor",
+                            "nome": "elemento",
+                            "descricao": "Onde digitar?",
+                            "botaoSelecaoVisual": true
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "texto",
+                            "descricao": "O que digitar?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Copiar texto",
+                    "icone": "copy",
+                    "descricao": "Obtém o texto de um elemento e salva para usar depois",
+                    "campos": [
+                        {
+                            "tipo": "elemento_ou_seletor",
+                            "nome": "elemento",
+                            "descricao": "De onde copiar o texto?",
+                            "botaoSelecaoVisual": true
+                        }
+                    ],
+                    "retorna": "texto"
+                }
+            ]
+        },
+        {
+            "nome": "Navegação",
+            "cor": "#5ba55b",
+            "descricao": "Blocos para navegar entre páginas da web",
+            "blocos": [
+                {
+                    "nome": "Visitar site",
+                    "icone": "globe",
+                    "descricao": "Abre um endereço web",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "url",
+                            "descricao": "Qual endereço visitar? (ex: www.google.com)"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Atualizar página",
+                    "icone": "refresh",
+                    "descricao": "Recarrega a página atual"
+                },
+                {
+                    "nome": "Voltar página",
+                    "icone": "back",
+                    "descricao": "Volta para a página anterior"
+                },
+                {
+                    "nome": "Avançar página",
+                    "icone": "forward",
+                    "descricao": "Avança para a próxima página"
+                }
+            ]
+        },
+        {
+            "nome": "Assistente Inteligente",
+            "cor": "#9966ff",
+            "descricao": "Blocos que usam inteligência artificial para ajudar nas tarefas",
+            "blocos": [
+                {
+                    "nome": "Perguntar ao assistente",
+                    "icone": "assistant",
+                    "descricao": "Faz uma pergunta para a IA e usa a resposta",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "pergunta",
+                            "descricao": "O que perguntar para a IA?"
+                        }
+                    ],
+                    "retorna": "texto",
+                    "acoes": [
+                        {
+                            "tipo": "entao",
+                            "nome": "continuar",
+                            "descricao": "O que fazer com a resposta?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Decisão Sim/Não",
+                    "icone": "decision",
+                    "descricao": "Pede para a IA analisar algo e decidir entre sim ou não",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "pergunta",
+                            "descricao": "Qual decisão a IA deve tomar? (ex: Este email parece importante?)"
+                        }
+                    ],
+                    "acoes": [
+                        {
+                            "tipo": "entao",
+                            "nome": "sim",
+                            "descricao": "O que fazer se a resposta for SIM?"
+                        },
+                        {
+                            "tipo": "senao",
+                            "nome": "nao",
+                            "descricao": "O que fazer se a resposta for NÃO?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Resumir texto",
+                    "icone": "summary",
+                    "descricao": "Pede para a IA criar um resumo de um texto",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "texto",
+                            "descricao": "Qual texto resumir?"
+                        }
+                    ],
+                    "retorna": "texto",
+                    "acoes": [
+                        {
+                            "tipo": "entao",
+                            "nome": "continuar",
+                            "descricao": "O que fazer com o resumo?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Traduzir texto",
+                    "icone": "translate",
+                    "descricao": "Traduz um texto para outro idioma",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "texto",
+                            "descricao": "O que traduzir?"
+                        },
+                        {
+                            "tipo": "escolha",
+                            "nome": "idioma",
+                            "descricao": "Para qual idioma?",
+                            "opcoes": [
+                                {
+                                    "texto": "Inglês",
+                                    "valor": "en"
+                                },
+                                {
+                                    "texto": "Espanhol",
+                                    "valor": "es"
+                                },
+                                {
+                                    "texto": "Francês",
+                                    "valor": "fr"
+                                },
+                                {
+                                    "texto": "Alemão",
+                                    "valor": "de"
+                                },
+                                {
+                                    "texto": "Italiano",
+                                    "valor": "it"
+                                },
+                                {
+                                    "texto": "Português",
+                                    "valor": "pt"
+                                },
+                                {
+                                    "texto": "Japonês",
+                                    "valor": "ja"
+                                },
+                                {
+                                    "texto": "Chinês",
+                                    "valor": "zh"
+                                },
+                                {
+                                    "texto": "Russo",
+                                    "valor": "ru"
+                                }
+                            ],
+                            "padrao": "en"
+                        }
+                    ],
+                    "retorna": "texto",
+                    "acoes": [
+                        {
+                            "tipo": "entao",
+                            "nome": "continuar",
+                            "descricao": "O que fazer com a tradução?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Extrair informações",
+                    "icone": "extract",
+                    "descricao": "Identifica e extrai dados específicos de um texto",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "texto",
+                            "descricao": "De qual texto extrair informações?"
+                        },
+                        {
+                            "tipo": "escolha",
+                            "nome": "tipo",
+                            "descricao": "Que tipo de informação extrair?",
+                            "opcoes": [
+                                {
+                                    "texto": "Email",
+                                    "valor": "email"
+                                },
+                                {
+                                    "texto": "Telefone",
+                                    "valor": "telefone"
+                                },
+                                {
+                                    "texto": "Endereço",
+                                    "valor": "endereco"
+                                },
+                                {
+                                    "texto": "Data",
+                                    "valor": "data"
+                                },
+                                {
+                                    "texto": "Preço",
+                                    "valor": "preco"
+                                },
+                                {
+                                    "texto": "Nome de pessoa",
+                                    "valor": "nome"
+                                },
+                                {
+                                    "texto": "Empresa",
+                                    "valor": "empresa"
+                                },
+                                {
+                                    "texto": "Personalizado",
+                                    "valor": "personalizado"
+                                }
+                            ]
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "instrucao_personalizada",
+                            "descricao": "Se escolheu Personalizado, descreva o que extrair:",
+                            "condicional": {
+                                "campo": "tipo",
+                                "valor": "personalizado"
+                            }
+                        }
+                    ],
+                    "retorna": "texto",
+                    "acoes": [
+                        {
+                            "tipo": "entao",
+                            "nome": "continuar",
+                            "descricao": "O que fazer com as informações extraídas?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Analisar sentimento",
+                    "icone": "sentiment",
+                    "descricao": "Avalia se um texto tem tom positivo, negativo ou neutro",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "texto",
+                            "descricao": "Qual texto analisar?"
+                        }
+                    ],
+                    "retorna": "sentimento",
+                    "acoes": [
+                        {
+                            "tipo": "multiplo",
+                            "nome": "resultado",
+                            "opcoes": [
+                                {
+                                    "nome": "positivo",
+                                    "descricao": "Se o sentimento for positivo"
+                                },
+                                {
+                                    "nome": "neutro",
+                                    "descricao": "Se o sentimento for neutro"
+                                },
+                                {
+                                    "nome": "negativo",
+                                    "descricao": "Se o sentimento for negativo"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "nome": "Classificar conteúdo",
+                    "icone": "classify",
+                    "descricao": "Identifica a categoria ou tipo de um texto",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "texto",
+                            "descricao": "Qual texto classificar?"
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "categorias",
+                            "descricao": "Liste as possíveis categorias separadas por vírgula (ex: notícia, opinião, tutorial)",
+                            "opcional": true
+                        }
+                    ],
+                    "retorna": "categoria",
+                    "acoes": [
+                        {
+                            "tipo": "entao",
+                            "nome": "continuar",
+                            "descricao": "O que fazer com a classificação?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Formatar dados",
+                    "icone": "format",
+                    "descricao": "Converte dados para um formato específico",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "texto",
+                            "descricao": "Quais dados formatar?"
+                        },
+                        {
+                            "tipo": "escolha",
+                            "nome": "formato",
+                            "descricao": "Para qual formato?",
+                            "opcoes": [
+                                {
+                                    "texto": "Lista",
+                                    "valor": "lista"
+                                },
+                                {
+                                    "texto": "Tabela",
+                                    "valor": "tabela"
+                                },
+                                {
+                                    "texto": "JSON",
+                                    "valor": "json"
+                                },
+                                {
+                                    "texto": "CSV",
+                                    "valor": "csv"
+                                },
+                                {
+                                    "texto": "Planilha",
+                                    "valor": "planilha"
+                                },
+                                {
+                                    "texto": "Personalizado",
+                                    "valor": "personalizado"
+                                }
+                            ]
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "instrucoes",
+                            "descricao": "Instruções adicionais para formatação",
+                            "opcional": true
+                        }
+                    ],
+                    "retorna": "texto",
+                    "acoes": [
+                        {
+                            "tipo": "entao",
+                            "nome": "continuar",
+                            "descricao": "O que fazer com os dados formatados?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Preencher formulário",
+                    "icone": "form",
+                    "descricao": "Analisa um formulário e sugere valores para preenchê-lo",
+                    "campos": [
+                        {
+                            "tipo": "elemento_ou_seletor",
+                            "nome": "formulario",
+                            "descricao": "Qual formulário preencher?",
+                            "botaoSelecaoVisual": true
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "dados",
+                            "descricao": "Dados para preenchimento (ex: nome: João Silva, email: joao@exemplo.com)",
+                            "opcional": true
+                        },
+                        {
+                            "tipo": "escolha",
+                            "nome": "modo",
+                            "descricao": "Como preencher?",
+                            "opcoes": [
+                                {
+                                    "texto": "Valores reais",
+                                    "valor": "real"
+                                },
+                                {
+                                    "texto": "Dados fictícios",
+                                    "valor": "ficticio"
+                                },
+                                {
+                                    "texto": "Aleatório",
+                                    "valor": "aleatorio"
+                                }
+                            ],
+                            "padrao": "real"
+                        }
+                    ],
+                    "acoes": [
+                        {
+                            "tipo": "entao",
+                            "nome": "continuar",
+                            "descricao": "O que fazer após preencher?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Comparar textos",
+                    "icone": "compare",
+                    "descricao": "Verifica se dois textos são semelhantes ou diferentes",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "texto1",
+                            "descricao": "Primeiro texto"
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "texto2",
+                            "descricao": "Segundo texto"
+                        },
+                        {
+                            "tipo": "escolha",
+                            "nome": "tipo_comparacao",
+                            "descricao": "Tipo de comparação",
+                            "opcoes": [
+                                {
+                                    "texto": "Semelhança geral",
+                                    "valor": "semelhanca"
+                                },
+                                {
+                                    "texto": "Correspondência exata",
+                                    "valor": "exata"
+                                },
+                                {
+                                    "texto": "Diferenças principais",
+                                    "valor": "diferenca"
+                                }
+                            ],
+                            "padrao": "semelhanca"
+                        }
+                    ],
+                    "retorna": "resultado_comparacao",
+                    "acoes": [
+                        {
+                            "tipo": "entao",
+                            "nome": "similar",
+                            "descricao": "Se forem similares"
+                        },
+                        {
+                            "tipo": "senao",
+                            "nome": "diferente",
+                            "descricao": "Se forem diferentes"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Gerar resposta personalizada",
+                    "icone": "reply",
+                    "descricao": "Cria um texto personalizado com base nos dados coletados",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "instrucao",
+                            "descricao": "Que tipo de texto gerar? (ex: email de agradecimento, mensagem de boas-vindas)"
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "dados",
+                            "descricao": "Informações para incluir no texto",
+                            "opcional": true
+                        },
+                        {
+                            "tipo": "escolha",
+                            "nome": "tom",
+                            "descricao": "Tom da mensagem",
+                            "opcoes": [
+                                {
+                                    "texto": "Formal",
+                                    "valor": "formal"
+                                },
+                                {
+                                    "texto": "Casual",
+                                    "valor": "casual"
+                                },
+                                {
+                                    "texto": "Amigável",
+                                    "valor": "amigavel"
+                                },
+                                {
+                                    "texto": "Profissional",
+                                    "valor": "profissional"
+                                }
+                            ],
+                            "padrao": "profissional"
+                        },
+                        {
+                            "tipo": "numero",
+                            "nome": "tamanho",
+                            "descricao": "Tamanho aproximado (palavras)",
+                            "padrao": 100,
+                            "opcional": true
+                        }
+                    ],
+                    "retorna": "texto",
+                    "acoes": [
+                        {
+                            "tipo": "entao",
+                            "nome": "continuar",
+                            "descricao": "O que fazer com o texto gerado?"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "nome": "Loops e Repetições",
+            "cor": "#f4a261",
+            "descricao": "Blocos para repetir ações automaticamente",
+            "blocos": [
+                {
+                    "nome": "Repetir N vezes",
+                    "icone": "repeat",
+                    "descricao": "Repete uma sequência de ações um número fixo de vezes",
+                    "campos": [
+                        {
+                            "tipo": "numero",
+                            "nome": "vezes",
+                            "descricao": "Quantas vezes repetir?",
+                            "padrao": 3
+                        }
+                    ],
+                    "acoes": [
+                        {
+                            "tipo": "loop",
+                            "nome": "fazer",
+                            "descricao": "O que repetir?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Para cada item na lista",
+                    "icone": "for-each",
+                    "descricao": "Executa ações para cada item de uma lista",
+                    "campos": [
+                        {
+                            "tipo": "lista",
+                            "nome": "lista",
+                            "descricao": "Em qual lista?"
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "item_atual",
+                            "descricao": "Nome para o item atual (ex: produto, link)",
+                            "padrao": "item"
+                        }
+                    ],
+                    "acoes": [
+                        {
+                            "tipo": "loop",
+                            "nome": "fazer",
+                            "descricao": "O que fazer com cada item?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Repetir enquanto condição",
+                    "icone": "while",
+                    "descricao": "Repete ações enquanto uma condição for verdadeira",
+                    "campos": [
+                        {
+                            "tipo": "condicao",
+                            "nome": "condicao",
+                            "descricao": "Repetir enquanto?"
+                        }
+                    ],
+                    "acoes": [
+                        {
+                            "tipo": "loop",
+                            "nome": "fazer",
+                            "descricao": "O que repetir?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Repetir até condição",
+                    "icone": "until",
+                    "descricao": "Repete ações até que uma condição seja verdadeira",
+                    "campos": [
+                        {
+                            "tipo": "condicao",
+                            "nome": "condicao",
+                            "descricao": "Repetir até que?"
+                        }
+                    ],
+                    "acoes": [
+                        {
+                            "tipo": "loop",
+                            "nome": "fazer",
+                            "descricao": "O que repetir?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Para cada elemento na página",
+                    "icone": "for-each-element",
+                    "descricao": "Repete ações para cada elemento encontrado na página",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "busca",
+                            "descricao": "Que elementos procurar? (ex: links, botões, imagens)"
+                        },
+                        {
+                            "tipo": "escolha",
+                            "nome": "tipo",
+                            "descricao": "Tipo de elemento",
+                            "opcoes": [
+                                {
+                                    "texto": "Links",
+                                    "valor": "links"
+                                },
+                                {
+                                    "texto": "Botões",
+                                    "valor": "botoes"
+                                },
+                                {
+                                    "texto": "Imagens",
+                                    "valor": "imagens"
+                                },
+                                {
+                                    "texto": "Campos de texto",
+                                    "valor": "campos"
+                                },
+                                {
+                                    "texto": "Parágrafos",
+                                    "valor": "paragrafos"
+                                },
+                                {
+                                    "texto": "Itens de lista",
+                                    "valor": "itens_lista"
+                                },
+                                {
+                                    "texto": "Linhas de tabela",
+                                    "valor": "linhas_tabela"
+                                },
+                                {
+                                    "texto": "Personalizado",
+                                    "valor": "personalizado"
+                                }
+                            ]
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "seletor_personalizado",
+                            "descricao": "Seletor personalizado",
+                            "condicional": {
+                                "campo": "tipo",
+                                "valor": "personalizado"
+                            }
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "elemento_atual",
+                            "descricao": "Nome para o elemento atual",
+                            "padrao": "elemento"
+                        }
+                    ],
+                    "acoes": [
+                        {
+                            "tipo": "loop",
+                            "nome": "fazer",
+                            "descricao": "O que fazer com cada elemento?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Navegação por páginas",
+                    "icone": "pagination",
+                    "descricao": "Navega através de várias páginas, realizando ações em cada uma",
+                    "campos": [
+                        {
+                            "tipo": "numero",
+                            "nome": "pagina_inicial",
+                            "descricao": "Página inicial",
+                            "padrao": 1
+                        },
+                        {
+                            "tipo": "numero",
+                            "nome": "pagina_final",
+                            "descricao": "Página final",
+                            "padrao": 5
+                        },
+                        {
+                            "tipo": "escolha",
+                            "nome": "metodo_navegacao",
+                            "descricao": "Como navegar para a próxima página?",
+                            "opcoes": [
+                                {
+                                    "texto": "Clicar em botão de próxima página",
+                                    "valor": "botao"
+                                },
+                                {
+                                    "texto": "Clicar no link com número da página",
+                                    "valor": "numero"
+                                },
+                                {
+                                    "texto": "Alterar URL",
+                                    "valor": "url"
+                                }
+                            ]
+                        },
+                        {
+                            "tipo": "elemento_ou_seletor",
+                            "nome": "elemento_proxima_pagina",
+                            "descricao": "Botão/link para próxima página",
+                            "botaoSelecaoVisual": true,
+                            "condicional": {
+                                "campo": "metodo_navegacao",
+                                "valor": [
+                                    "botao",
+                                    "numero"
+                                ]
+                            }
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "padrao_url",
+                            "descricao": "Padrão de URL (use {pagina} onde vai o número)",
+                            "exemplo": "https://exemplo.com/resultados?pagina={pagina}",
+                            "condicional": {
+                                "campo": "metodo_navegacao",
+                                "valor": "url"
+                            }
+                        }
+                    ],
+                    "acoes": [
+                        {
+                            "tipo": "loop",
+                            "nome": "fazer",
+                            "descricao": "O que fazer em cada página?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Repetir com intervalo",
+                    "icone": "interval",
+                    "descricao": "Repete ações com intervalo de tempo entre cada repetição",
+                    "campos": [
+                        {
+                            "tipo": "numero",
+                            "nome": "vezes",
+                            "descricao": "Quantas vezes repetir?",
+                            "padrao": 3
+                        },
+                        {
+                            "tipo": "numero",
+                            "nome": "intervalo",
+                            "descricao": "Intervalo entre repetições (segundos)",
+                            "padrao": 5
+                        }
+                    ],
+                    "acoes": [
+                        {
+                            "tipo": "loop",
+                            "nome": "fazer",
+                            "descricao": "O que repetir?"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Quebrar loop",
+                    "icone": "break",
+                    "descricao": "Interrompe o loop atual e continua com o resto da automação",
+                    "campos": [
+                        {
+                            "tipo": "condicao",
+                            "nome": "condicao",
+                            "descricao": "Quando interromper?",
+                            "opcional": true
+                        }
+                    ]
+                },
+                {
+                    "nome": "Continuar próxima iteração",
+                    "icone": "continue",
+                    "descricao": "Pula para a próxima repetição do loop",
+                    "campos": [
+                        {
+                            "tipo": "condicao",
+                            "nome": "condicao",
+                            "descricao": "Quando pular?",
+                            "opcional": true
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "nome": "Dados",
+            "cor": "#2a9d8f",
+            "descricao": "Blocos para trabalhar com informações",
+            "blocos": [
+                {
+                    "nome": "Criar variável",
+                    "icone": "variable",
+                    "descricao": "Cria um espaço para guardar informação",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "nome",
+                            "descricao": "Nome da variável (ex: email, senha, resultado)"
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "valor",
+                            "descricao": "Valor inicial (opcional)"
+                        }
+                    ],
+                    "retorna": "variavel"
+                },
+                {
+                    "nome": "Definir valor",
+                    "icone": "set",
+                    "descricao": "Muda o valor de uma variável existente",
+                    "campos": [
+                        {
+                            "tipo": "variavel",
+                            "nome": "variavel",
+                            "descricao": "Qual variável modificar?"
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "valor",
+                            "descricao": "Novo valor"
+                        }
+                    ]
+                },
+                {
+                    "nome": "Contador",
+                    "icone": "counter",
+                    "descricao": "Cria um contador que pode ser aumentado ou diminuído",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "nome",
+                            "descricao": "Nome do contador"
+                        },
+                        {
+                            "tipo": "numero",
+                            "nome": "valorInicial",
+                            "descricao": "Valor inicial",
+                            "padrao": 0
+                        }
+                    ],
+                    "retorna": "contador"
+                },
+                {
+                    "nome": "Aumentar contador",
+                    "icone": "increment",
+                    "descricao": "Aumenta o valor de um contador",
+                    "campos": [
+                        {
+                            "tipo": "contador",
+                            "nome": "contador",
+                            "descricao": "Qual contador aumentar?"
+                        },
+                        {
+                            "tipo": "numero",
+                            "nome": "quantidade",
+                            "descricao": "Quanto aumentar?",
+                            "padrao": 1
+                        }
+                    ]
+                },
+                {
+                    "nome": "Lista",
+                    "icone": "list",
+                    "descricao": "Cria uma lista para armazenar vários itens",
+                    "campos": [
+                        {
+                            "tipo": "texto",
+                            "nome": "nome",
+                            "descricao": "Nome da lista"
+                        }
+                    ],
+                    "retorna": "lista"
+                },
+                {
+                    "nome": "Adicionar à lista",
+                    "icone": "add",
+                    "descricao": "Adiciona um item a uma lista",
+                    "campos": [
+                        {
+                            "tipo": "lista",
+                            "nome": "lista",
+                            "descricao": "Em qual lista adicionar?"
+                        },
+                        {
+                            "tipo": "texto",
+                            "nome": "item",
+                            "descricao": "O que adicionar?"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
