@@ -5,6 +5,10 @@ import TypeBlocklyFields from '../types/blocklyFields';
 import TypeInputBlock from '../types/blocklyInputs';
 import TypeBlockGenerator from '../types/blockGenerator';
 import BlocklyTypes from '../config/types';
+import { BlocklyEvent } from '../types/blockEvent';
+
+const blockListeners: Record<string, (workspace: Blockly.Workspace, event: any) => void> = {};
+const workspaceListeners: Record<string, boolean> = {};
 
 const blockConstructorErrorHandling = (
   blockConfig: blockConstructorInterface
@@ -56,7 +60,7 @@ interface blockConstructorInterface {
   hasPreviousConnection?: TypeConnection;
   helpUrl: string;
   inputs?: TypeInputBlock;
-  installListener?: (workspace: Blockly.Workspace, event: any) => void;
+  installListener?: (workspace: Blockly.Workspace, event: BlocklyEvent) => void;
   message: string;
   name: string;
   output?: BlocklyTypes;
@@ -152,18 +156,27 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
   }
 
   if (installListener) {
-    // Modifica a inicialização do bloco
+    // Registra o listener deste tipo de bloco
+    blockListeners[name] = installListener;
+
+    // Modifica o método de inicialização do bloco
     const originalInit = Blockly.Blocks[name].init;
 
     Blockly.Blocks[name].init = function () {
       originalInit.call(this);
 
-      // Instala o listener quando o bloco é inicializado
-      if (this.workspace) {
+      // Adiciona um listener principal ao workspace apenas se ainda não tiver um
+      if (this.workspace && !workspaceListeners[this.workspace.id]) {
+        workspaceListeners[this.workspace.id] = true;
 
-        // workspace.addChangeListener((event: Blockly.Events.Abstract) => {
-        this.workspace.addChangeListener((event: any) => {
-          installListener(this.workspace, event);
+        this.workspace.addChangeListener((event: BlocklyEvent) => {
+          // Verifica se este evento é para um bloco e se temos um listener para esse tipo de bloco
+          if (event.blockId) {
+            const block = this.workspace.getBlockById(event.blockId);
+            if (block && blockListeners[block.type]) {
+              blockListeners[block.type](this.workspace, event);
+            }
+          }
         });
       }
     };

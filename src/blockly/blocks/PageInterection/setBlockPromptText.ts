@@ -3,6 +3,7 @@ import blockConstructor from '../../helpers/blockConstructor';
 import Colors from '../../config/colors';
 import BlocklyTypes from '../../config/types';
 import { Order } from 'blockly/javascript';
+import { BlocklyEvent } from '../../types/blockEvent';
 
 const setBlockPromptText = () => {
     // Registramos o tipo de bloco usando nosso constructor
@@ -24,7 +25,7 @@ const setBlockPromptText = () => {
             const textValue = (block as any).promptValue || block.getFieldValue('TEXT_DISPLAY');
             return [`"${textValue.replace(/"/g, '\\"')}"`, Order.ATOMIC];
         },
-        installListener: (workspace: Blockly.Workspace, event: any) => {
+        installListener: (workspace: Blockly.Workspace, event: BlocklyEvent) => {
             // Ignora eventos que não são de movimentação ou se não temos o ID do bloco
             if (!event.blockId) return;
 
