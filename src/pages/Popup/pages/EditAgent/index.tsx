@@ -168,7 +168,7 @@ const EditAgent = ({
             <div role="group">
                 <button onClick={handleCreateAgent} className="contrast">Criar Novo Agente</button>
                 <button onClick={handleSave} disabled={!needToSave()}>Salvar</button>
-                <button onClick={handleLoadAgent}>Editar</button>
+                <button onClick={handleLoadAgent}>Modificar funcionamento</button>
                 <button onClick={handleDeleteAgent}>Deletar</button>
             </div>
         </main>

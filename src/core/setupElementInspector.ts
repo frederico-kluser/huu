@@ -1,4 +1,4 @@
-const elementSelector = () => {
+const setupElementInspector = (): Promise<HTMLElement | null> => new Promise((resolve) => {
     // Interface para estender o HTMLElement com propriedades personalizadas
     interface ExtendedHTMLElement extends HTMLElement {
         _originalOutline: string;
@@ -104,7 +104,7 @@ const elementSelector = () => {
     `;
     };
 
-    // Função para destacar um elemento
+    // Função para destacar um elemento 
     const highlightElement = (element: HTMLElement): void => {
         const extendedElement = element as ExtendedHTMLElement;
 
@@ -208,6 +208,8 @@ const elementSelector = () => {
         // Faz o console.log do elemento
         console.log('%cElemento selecionado:', 'color: #4285f4; font-weight: bold', clickedElement);
 
+        resolve(clickedElement);
+
         // Desativa o seletor para restaurar o comportamento normal do site
         toggleSelector();
     };
@@ -216,6 +218,7 @@ const elementSelector = () => {
     const handleKeyDown = (event: Event): void => {
         const keyEvent = event as KeyboardEvent;
         if (keyEvent.key === 'Escape' && isActive) {
+            resolve(null);
             toggleSelector();
         }
     };
@@ -282,6 +285,6 @@ const elementSelector = () => {
 
     console.log('Use window.toggleElementSelector() para ativar/desativar o seletor');
     console.log('Use window.cleanupElementSelector() para remover o seletor completamente');
-};
+});
 
-export default elementSelector;
+export default setupElementInspector;
