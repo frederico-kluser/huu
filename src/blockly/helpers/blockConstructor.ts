@@ -5,6 +5,10 @@ import TypeBlocklyFields from '../types/blocklyFields';
 import TypeInputBlock from '../types/blocklyInputs';
 import TypeBlockGenerator from '../types/blockGenerator';
 import BlocklyTypes from '../config/types';
+import { BlocklyEvent } from '../types/blockEvent';
+
+const blockListeners: Record<string, (workspace: Blockly.Workspace, event: any) => void> = {};
+const workspaceListeners: Record<string, boolean> = {};
 
 const blockConstructorErrorHandling = (
   blockConfig: blockConstructorInterface
@@ -56,6 +60,7 @@ interface blockConstructorInterface {
   hasPreviousConnection?: TypeConnection;
   helpUrl: string;
   inputs?: TypeInputBlock;
+  installListener?: (workspace: Blockly.Workspace, event: BlocklyEvent) => void;
   message: string;
   name: string;
   output?: BlocklyTypes;
@@ -73,6 +78,7 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
     hasPreviousConnection,
     helpUrl,
     inputs,
+    installListener,
     message,
     name,
     output,
@@ -146,6 +152,33 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
   } else {
     javascriptGenerator.forBlock[name] = function (block, generator) {
       return '/* Generator not implemented */';
+    };
+  }
+
+  if (installListener) {
+    // Registra o listener deste tipo de bloco
+    blockListeners[name] = installListener;
+
+    // Modifica o método de inicialização do bloco
+    const originalInit = Blockly.Blocks[name].init;
+
+    Blockly.Blocks[name].init = function () {
+      originalInit.call(this);
+
+      // Adiciona um listener principal ao workspace apenas se ainda não tiver um
+      if (this.workspace && !workspaceListeners[this.workspace.id]) {
+        workspaceListeners[this.workspace.id] = true;
+
+        this.workspace.addChangeListener((event: BlocklyEvent) => {
+          // Verifica se este evento é para um bloco e se temos um listener para esse tipo de bloco
+          if (event.blockId) {
+            const block = this.workspace.getBlockById(event.blockId);
+            if (block && blockListeners[block.type]) {
+              blockListeners[block.type](this.workspace, event);
+            }
+          }
+        });
+      }
     };
   }
 

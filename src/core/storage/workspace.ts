@@ -2,12 +2,18 @@ import enums from "../../types/enums";
 import { getItem, setItem } from ".";
 
 export const updateActualWorkspace = async (index: number) => {
-    return setItem(enums.LAST_WORKSPACE_INDEX, index);
+    return setItem(enums.ACTUAL_WORKSPACE_INDEX, index);
 };
 
-export const fetchActualWorkspace = async () => {
-    const workspaceIndex = await getItem<number>(enums.LAST_WORKSPACE_INDEX);
+export const fetchActualWorkspaceIndex = async () => {
+    const workspaceIndex = await getItem<number>(enums.ACTUAL_WORKSPACE_INDEX);
     return workspaceIndex || 0;
+};
+
+export const fetchActualWorkspaceName = async () => {
+    const workspaceIndex = await fetchActualWorkspaceIndex();
+    const workspaceNames = await fetchWorkspaceNames();
+    return workspaceNames[workspaceIndex] || "";
 };
 
 export const fetchWorkspaceNames = async () => {

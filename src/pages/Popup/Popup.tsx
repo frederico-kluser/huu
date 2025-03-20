@@ -11,23 +11,31 @@ import { fetchWorkspaceNames, updateActualWorkspace, updateWorkspaceNames } from
 
 import '../../assets/css/pico.min.css';
 import './Popup.css';
+import { fetchNavigation, updateNavigation } from '../../core/storage/navigation';
 
 Blockly.setLocale(PtBr as any);
 
 const Popup = () => {
   const [workspaces, setWorkspaces] = useState<string[]>([]);
-  const [workspaceName, setWorkspaceName] = useState('');
+  const [actualWorkspace, setActualWorkspace] = useState('');
   const [isMainPage, setIsMainPage] = useState(false);
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs[0];
+      console.log("tab.url");
       console.log(tab.url);
+      console.log("tab");
+      console.log(tab);
     });
 
     fetchWorkspaceNames().then((loadedWorkspaces) => {
       setWorkspaces(loadedWorkspaces);
-      setIsMainPage(!workspaceName && !!loadedWorkspaces.length);
+      setIsMainPage(!actualWorkspace && !!loadedWorkspaces.length);
+    });
+
+    fetchNavigation().then((navigation) => {
+      setActualWorkspace(navigation);
     });
   }, []);
 
@@ -38,15 +46,16 @@ const Popup = () => {
   }, [workspaces]);
 
   useEffect(() => {
-    if (!workspaceName) return;
+    updateNavigation(actualWorkspace);
+    if (!actualWorkspace) return;
 
     blocklySetup();
     // Foi melhor separar, porque assim posso carregar o workspace que quiser
-    loadWorkspace(workspaceName);
-  }, [workspaceName]);
+    loadWorkspace(actualWorkspace);
+  }, [actualWorkspace]);
 
   const handleBack = () => {
-    setWorkspaceName('');
+    setActualWorkspace('');
   };
 
   const handleCreateAgent = async () => {
@@ -63,13 +72,13 @@ const Popup = () => {
     }
 
     setWorkspaces([...workspaces, workspaceName]);
-    setWorkspaceName(workspaceName);
+    setActualWorkspace(workspaceName);
     await updateActualWorkspace(workspaces.length);
   };
 
   return (
     <div className="App">
-      {workspaceName && (
+      {actualWorkspace && (
         <>
           <div id="blocklyDiv" className="blockly-container"></div>
           <div className="blockly-content">
@@ -77,7 +86,7 @@ const Popup = () => {
           </div>
         </>
       )}
-      {!workspaceName && !!workspaces.length &&
+      {!actualWorkspace && !!workspaces.length &&
         (isMainPage ? (
           <MainPage
             setIsMainPage={setIsMainPage}
@@ -86,12 +95,12 @@ const Popup = () => {
           />) : <EditAgent
           handleCreateAgent={handleCreateAgent}
           setIsMainPage={setIsMainPage}
-          setWorkspaceName={setWorkspaceName}
+          setActualWorkspace={setActualWorkspace}
           setWorkspaces={setWorkspaces}
           workspaces={workspaces}
         />)
       }
-      {!workspaceName && !workspaces.length && (
+      {!actualWorkspace && !workspaces.length && (
         <CreateAgent
           handleCreateAgent={handleCreateAgent}
         />

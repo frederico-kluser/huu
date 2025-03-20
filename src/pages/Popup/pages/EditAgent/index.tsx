@@ -1,7 +1,7 @@
 import React, { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
 import isValidJsonKey from "../../../../helpers/isValidJsonKey";
 import { getBlocklyState } from "../../../../blockly";
-import { fetchActualWorkspace, updateActualWorkspace } from "../../../../core/storage/workspace";
+import { fetchActualWorkspaceIndex, updateActualWorkspace } from "../../../../core/storage/workspace";
 import TypeAgent, { TypeBlock } from "../../../../types/agent";
 import isValidPatterns from "../../../../helpers/isValidPatterns";
 import { removeItem } from "../../../../core/storage";
@@ -10,7 +10,7 @@ import { fetchAgentById, saveOrUpdateAgent } from "../../../../core/storage/agen
 interface EditAgentProps {
     handleCreateAgent: () => void
     setIsMainPage: Dispatch<SetStateAction<boolean>>
-    setWorkspaceName: Dispatch<SetStateAction<string>>
+    setActualWorkspace: Dispatch<SetStateAction<string>>
     setWorkspaces: Dispatch<SetStateAction<string[]>>
     workspaces: string[]
 }
@@ -18,7 +18,7 @@ interface EditAgentProps {
 const EditAgent = ({
     handleCreateAgent,
     setIsMainPage,
-    setWorkspaceName,
+    setActualWorkspace,
     setWorkspaces,
     workspaces,
 }: EditAgentProps
@@ -53,7 +53,7 @@ const EditAgent = ({
     };
 
     useEffect(() => {
-        fetchActualWorkspace().then((lastSelectIndex) => {
+        fetchActualWorkspaceIndex().then((lastSelectIndex) => {
             const firstWorkspace = workspaces[lastSelectIndex];
             setAgentName(firstWorkspace);
             fetchAgentById(firstWorkspace).then((agent) => {
@@ -117,7 +117,7 @@ const EditAgent = ({
         if (!agentSelectRef.current) return;
 
         const workspaceName = getWorkspaceName();
-        setWorkspaceName(workspaceName);
+        setActualWorkspace(workspaceName);
     };
 
     const handleChangeAgent = async () => {
@@ -139,7 +139,7 @@ const EditAgent = ({
 
         updateActualWorkspace(0);
         setWorkspaces(workspaces.filter((workspace) => workspace !== workspaceName));
-        setWorkspaceName('');
+        setActualWorkspace('');
         removeItem(workspaceName);
     };
 
@@ -168,7 +168,7 @@ const EditAgent = ({
             <div role="group">
                 <button onClick={handleCreateAgent} className="contrast">Criar Novo Agente</button>
                 <button onClick={handleSave} disabled={!needToSave()}>Salvar</button>
-                <button onClick={handleLoadAgent}>Editar</button>
+                <button onClick={handleLoadAgent}>Modificar funcionamento</button>
                 <button onClick={handleDeleteAgent}>Deletar</button>
             </div>
         </main>

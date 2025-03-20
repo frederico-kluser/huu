@@ -31,11 +31,15 @@ export const loadWorkspace = async (wsName: string) => {
 
 const updateCode = async (event: any) => {
     const code = javascriptGenerator.workspaceToCode(workspace);
-    console.clear();
+    // console.clear();
     console.log("code:");
     console.log(code);
     console.log("----");
     const blocks = Blockly.serialization.workspaces.save(workspace);
+    console.log("blocks:");
+    console.log(blocks);
+    console.log("----");
+
 
     // TODO: se eu usar o updateAgentPartial não preciso desse "as TypeAgent"
     const actualState = await getBlocklyState(workspaceName) as TypeAgent;
