@@ -5,7 +5,7 @@ import BlocklyTypes from '../../config/types';
 import { Order } from 'blockly/javascript';
 import { BlocklyEvent } from '../../types/blockEvent';
 import { setElementSelection } from '../../../core/storage/elementSelection';
-import { fetchActualWorkspaceIndex, fetchWorkspaceNames } from '../../../core/storage/workspace';
+import { fetchActualWorkspaceIndex, fetchActualWorkspaceName, fetchWorkspaceNames } from '../../../core/storage/workspace';
 
 const blockName = 'BlockDynamicElementSelector';
 
@@ -50,10 +50,14 @@ const setBlockDynamicElementSelector = () => {
                     if (userInput) {
 
 
-                        setElementSelection(block.id, 'AGENT_ID').then(() => {
-                            window.alert('Selecione um elemento da página clicando nele, veja qual é o elemento antes de clicar passando o mouse sobre ele.');
-                            window.close();
+                        fetchActualWorkspaceName().then((workspaceName) => {
+                            setElementSelection(block.id, workspaceName).then(() => {
+                                window.alert('Selecione um elemento da página clicando nele, veja qual é o elemento antes de clicar passando o mouse sobre ele.');
+                                window.close();
+                            });
                         });
+
+
                         /*
                             // Se o usuário forneceu um texto, substituímos o bloco por outro
 

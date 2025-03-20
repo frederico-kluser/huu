@@ -1,8 +1,14 @@
 import { getItem, setItem } from ".";
 import TypeAgent from "../../types/agent";
+import { fetchActualWorkspaceName } from "./workspace";
 
 export const fetchAgentById = async (agentId: string) => {
     return getItem<TypeAgent | null>(agentId);
+};
+
+export const fetchActualAgent = async () => {
+    const agentId = await fetchActualWorkspaceName();
+    return fetchAgentById(agentId);
 };
 
 export const saveOrUpdateAgent = (agentId: string, agent: TypeAgent) => {

@@ -1,4 +1,4 @@
-import { getItem, setItem } from ".";
+import { getItem, removeItem, setItem } from ".";
 import enums from "../../types/enums";
 
 export const getElementSelection = async () => {
@@ -13,4 +13,8 @@ export const setElementSelection = async (blockId: string, agentId: string) => {
         blockId,
         agentId,
     });
+};
+
+export const removeElementSelection = async () => {
+    return removeItem(enums.ELEMENT_SELECTION);
 };
