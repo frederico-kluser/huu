@@ -1,7 +1,7 @@
 import React, { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
 import isValidJsonKey from "../../../../helpers/isValidJsonKey";
 import { getBlocklyState } from "../../../../blockly";
-import { fetchActualWorkspace, updateActualWorkspace } from "../../../../core/storage/workspace";
+import { fetchActualWorkspaceIndex, updateActualWorkspace } from "../../../../core/storage/workspace";
 import TypeAgent, { TypeBlock } from "../../../../types/agent";
 import isValidPatterns from "../../../../helpers/isValidPatterns";
 import { removeItem } from "../../../../core/storage";
@@ -53,7 +53,7 @@ const EditAgent = ({
     };
 
     useEffect(() => {
-        fetchActualWorkspace().then((lastSelectIndex) => {
+        fetchActualWorkspaceIndex().then((lastSelectIndex) => {
             const firstWorkspace = workspaces[lastSelectIndex];
             setAgentName(firstWorkspace);
             fetchAgentById(firstWorkspace).then((agent) => {

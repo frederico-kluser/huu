@@ -76,7 +76,7 @@ export const getBlockSelectHTMLElement = (selector: TypeSelectors, value: string
     "type": "BlockSelectHTMLElement",
     "id": generateUUID(),
     "fields": {
-      "TARGET_SELECTOR": "css"
+      "TARGET_SELECTOR": selector
     },
     "inputs": {
       "SELECTOR": {

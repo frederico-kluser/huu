@@ -1,6 +1,5 @@
-import createUniqueElementSelector from "../../../core/createUniqueElementSelector";
 import setupElementInspector from "../../../core/setupElementInspector";
-import { addElementSelection, fetchEmptyElementSelectionKey } from "../../../core/storage/elementSelection";
+import { getElementSelection } from "../../../core/storage/elementSelection";
 import enums from "../../../types/enums";
 
 const elementSelection = async (changes: {
@@ -8,12 +7,18 @@ const elementSelection = async (changes: {
 }) => {
     if (!changes[enums.ELEMENT_SELECTION]?.newValue) return;
 
-    const blockId = await fetchEmptyElementSelectionKey();
+    const result = await getElementSelection();
 
-    if (!blockId) return;
+    if (!result) return;
+
+    const {
+        blockId,
+        agentId,
+    } = result;
 
     const elementInspector = await setupElementInspector();
-    await addElementSelection(blockId, elementInspector ? createUniqueElementSelector(elementInspector) : enums.ELEMENT_NOT_SELECTED);
+
+    // elementInspector ? createUniqueElementSelector(elementInspector) : enums.ELEMENT_NOT_SELECTED
 
     window.alert('Elemento selecionado com sucesso!, clique na extensão para continuar a configuração.');
 };

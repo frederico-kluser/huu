@@ -4,7 +4,8 @@ import Colors from '../../config/colors';
 import BlocklyTypes from '../../config/types';
 import { Order } from 'blockly/javascript';
 import { BlocklyEvent } from '../../types/blockEvent';
-import { addNewElementSelection } from '../../../core/storage/elementSelection';
+import { setElementSelection } from '../../../core/storage/elementSelection';
+import { fetchActualWorkspaceIndex, fetchWorkspaceNames } from '../../../core/storage/workspace';
 
 const blockName = 'BlockDynamicElementSelector';
 
@@ -32,6 +33,7 @@ const setBlockDynamicElementSelector = () => {
             if (!block || block.type !== blockName) return;
 
             console.log("event", event);
+            console.log("block", block);
 
             // Detecta quando um bloco é movido (solto no workspace)
             if (event.type === Blockly.Events.BLOCK_MOVE && event.reason?.includes("connect")) {
@@ -43,51 +45,50 @@ const setBlockDynamicElementSelector = () => {
 
                     console.log("CONDIÇÃO ESPERADA");
 
-                    // Mostra o prompt
-                    setTimeout(() => {
-                        const userInput = window.confirm('Deseja ajuda para selecionar um elemento da página?');
-                        if (userInput) {
 
-                            addNewElementSelection(block.id).then(() => {
-                                window.alert('Selecione um elemento da página clicando nele, veja qual é o elemento antes de clicar passando o mouse sobre ele.');
-                                window.close();
-                            });
-                            /*
-                                // Se o usuário forneceu um texto, substituímos o bloco por outro
+                    const userInput = window.confirm('Deseja ajuda para selecionar um elemento da página?');
+                    if (userInput) {
 
-                                // Primeiro, salvamos informações importantes do bloco atual
-                                const parentConnection = block.outputConnection?.targetConnection;
-                                const blockPos = block.getRelativeToSurfaceXY();
 
-                                // Criamos um novo bloco (exemplo usando um bloco de texto fixo)
-                                // Você pode substituir 'text' pelo tipo de bloco que desejar
-                                const newBlock = workspace.newBlock('text') as any;
+                        setElementSelection(block.id, 'AGENT_ID').then(() => {
+                            window.alert('Selecione um elemento da página clicando nele, veja qual é o elemento antes de clicar passando o mouse sobre ele.');
+                            window.close();
+                        });
+                        /*
+                            // Se o usuário forneceu um texto, substituímos o bloco por outro
 
-                                // Definimos o valor do texto no novo bloco
-                                // Ajuste o nome do campo conforme o bloco de destino
-                                newBlock.setFieldValue("Test", 'TEXT');
+                            // Primeiro, salvamos informações importantes do bloco atual
+                            const parentConnection = block.outputConnection?.targetConnection;
+                            const blockPos = block.getRelativeToSurfaceXY();
 
-                                // Posicionamos o novo bloco na mesma posição do bloco atual
-                                newBlock.moveBy(blockPos.x, blockPos.y);
+                            // Criamos um novo bloco (exemplo usando um bloco de texto fixo)
+                            // Você pode substituir 'text' pelo tipo de bloco que desejar
+                            const newBlock = workspace.newBlock('text') as any;
 
-                                // Reconectamos às mesmas conexões do bloco original
-                                if (parentConnection) {
-                                    newBlock.outputConnection.connect(parentConnection);
-                                }
+                            // Definimos o valor do texto no novo bloco
+                            // Ajuste o nome do campo conforme o bloco de destino
+                            newBlock.setFieldValue("Test", 'TEXT');
 
-                                // Tornamos o novo bloco visível
-                                newBlock.initSvg();
-                                newBlock.render();
+                            // Posicionamos o novo bloco na mesma posição do bloco atual
+                            newBlock.moveBy(blockPos.x, blockPos.y);
 
-                                // Removemos o bloco original
-                                block.dispose();
-                            */
-                        } else {
-                            window.alert('Então vá a merda!');
-                            // Se o usuário clicou em cancelar ou não forneceu texto, deleta o bloco
+                            // Reconectamos às mesmas conexões do bloco original
+                            if (parentConnection) {
+                                newBlock.outputConnection.connect(parentConnection);
+                            }
+
+                            // Tornamos o novo bloco visível
+                            newBlock.initSvg();
+                            newBlock.render();
+
+                            // Removemos o bloco original
                             block.dispose();
-                        }
-                    }, 100);
+                        */
+                    } else {
+                        window.alert('Então vá a merda!');
+                        // Se o usuário clicou em cancelar ou não forneceu texto, deleta o bloco
+                        block.dispose();
+                    }
                 }
             }
         }
