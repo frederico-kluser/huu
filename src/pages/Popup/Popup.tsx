@@ -7,10 +7,11 @@ import MainPage from './pages/MainPage';
 import EditAgent from './pages/EditAgent';
 import CreateAgent from './pages/CreateAgent';
 import isValidJsonKey from '../../helpers/isValidJsonKey';
-import { fetchNavigation, fetchWorkspaceNames, updateActualWorkspace, updateNavigation, updateWorkspaceNames } from '../../core/storage/workspace';
+import { fetchWorkspaceNames, updateActualWorkspace, updateWorkspaceNames } from '../../core/storage/workspace';
 
 import '../../assets/css/pico.min.css';
 import './Popup.css';
+import { fetchNavigation, updateNavigation } from '../../core/storage/navigation';
 
 Blockly.setLocale(PtBr as any);
 
