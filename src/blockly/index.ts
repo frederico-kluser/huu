@@ -40,6 +40,7 @@ const updateCode = async (event: any) => {
     console.log(blocks);
     console.log("----");
 
+
     // TODO: se eu usar o updateAgentPartial não preciso desse "as TypeAgent"
     const actualState = await getBlocklyState(workspaceName) as TypeAgent;
 

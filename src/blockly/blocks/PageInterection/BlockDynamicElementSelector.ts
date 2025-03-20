@@ -39,6 +39,9 @@ const setBlockDynamicElementSelector = () => {
                 if (block.workspace &&
                     !block.workspace.isFlyout &&
                     block.isEnabled()) {
+
+                    console.log("CONDIÇÃO ESPERADA");
+
                     // Mostra o prompt
                     setTimeout(() => {
                         const userInput = window.prompt("Qual elemento da página você quer selecionar?", "");

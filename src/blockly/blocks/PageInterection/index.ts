@@ -1,11 +1,11 @@
 import { TypeBlockly, TypeBlocklyButton } from "../../helpers/blockConstructor";
 import BlockDynamicElementSelector from "./BlockDynamicElementSelector";
-import setBlockSelectQueryElement from "./setBlockSelectQueryElement";
+import BlockSelectQueryElement from "./BlockSelectQueryElement";
 
 const configPageInterection = (): Array<TypeBlockly | TypeBlocklyButton> => {
     return [
         BlockDynamicElementSelector(),
-        setBlockSelectQueryElement(),
+        BlockSelectQueryElement(),
     ];
 };
 
