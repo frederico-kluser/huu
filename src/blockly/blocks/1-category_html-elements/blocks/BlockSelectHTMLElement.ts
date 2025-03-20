@@ -3,6 +3,7 @@ import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
 import { Order } from 'blockly/javascript';
 import BlocklyTypes from '../../../config/types';
+import generateUUID from '../../../../helpers/generateUUID';
 
 const setBlockSelectHTMLElement = () => {
   return blockConstructor({
@@ -66,6 +67,29 @@ const setBlockSelectHTMLElement = () => {
       return [code, Order.ATOMIC];
     },
   });
+};
+
+type TypeSelectors = 'css' | 'id' | 'class' | 'tag' | 'xpath';
+
+export const getBlockSelectHTMLElement = (selector: TypeSelectors, value: string) => {
+  return ({
+    "type": "BlockSelectHTMLElement",
+    "id": generateUUID(),
+    "fields": {
+      "TARGET_SELECTOR": "css"
+    },
+    "inputs": {
+      "SELECTOR": {
+        "shadow": {
+          "type": "text",
+          "id": generateUUID(),
+          "fields": {
+            "TEXT": value,
+          }
+        }
+      }
+    }
+  })
 };
 
 export default setBlockSelectHTMLElement;

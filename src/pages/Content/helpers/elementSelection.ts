@@ -12,9 +12,10 @@ const elementSelection = async (changes: {
 
     if (!blockId) return;
 
-    setupElementInspector().then((elementInspector) => {
-        addElementSelection(blockId, elementInspector ? createUniqueElementSelector(elementInspector) : enums.ELEMENT_NOT_SELECTED);
-    });
+    const elementInspector = await setupElementInspector();
+    await addElementSelection(blockId, elementInspector ? createUniqueElementSelector(elementInspector) : enums.ELEMENT_NOT_SELECTED);
+
+    window.alert('Elemento selecionado com sucesso!, clique na extensão para continuar a configuração.');
 };
 
 export default elementSelection;

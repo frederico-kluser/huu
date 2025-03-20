@@ -4,6 +4,7 @@ import Colors from '../../config/colors';
 import BlocklyTypes from '../../config/types';
 import { Order } from 'blockly/javascript';
 import { BlocklyEvent } from '../../types/blockEvent';
+import { addNewElementSelection } from '../../../core/storage/elementSelection';
 
 const blockName = 'BlockDynamicElementSelector';
 
@@ -44,37 +45,45 @@ const setBlockDynamicElementSelector = () => {
 
                     // Mostra o prompt
                     setTimeout(() => {
-                        const userInput = window.prompt("Qual elemento da página você quer selecionar?", "");
-                        if (userInput !== null && userInput !== "") {
-                            // Se o usuário forneceu um texto, substituímos o bloco por outro
+                        const userInput = window.confirm('Deseja ajuda para selecionar um elemento da página?');
+                        if (userInput) {
 
-                            // Primeiro, salvamos informações importantes do bloco atual
-                            const parentConnection = block.outputConnection?.targetConnection;
-                            const blockPos = block.getRelativeToSurfaceXY();
+                            addNewElementSelection(block.id).then(() => {
+                                window.alert('Selecione um elemento da página clicando nele, veja qual é o elemento antes de clicar passando o mouse sobre ele.');
+                                window.close();
+                            });
+                            /*
+                                // Se o usuário forneceu um texto, substituímos o bloco por outro
 
-                            // Criamos um novo bloco (exemplo usando um bloco de texto fixo)
-                            // Você pode substituir 'text' pelo tipo de bloco que desejar
-                            const newBlock = workspace.newBlock('text') as any;
+                                // Primeiro, salvamos informações importantes do bloco atual
+                                const parentConnection = block.outputConnection?.targetConnection;
+                                const blockPos = block.getRelativeToSurfaceXY();
 
-                            // Definimos o valor do texto no novo bloco
-                            // Ajuste o nome do campo conforme o bloco de destino
-                            newBlock.setFieldValue(userInput, 'TEXT');
+                                // Criamos um novo bloco (exemplo usando um bloco de texto fixo)
+                                // Você pode substituir 'text' pelo tipo de bloco que desejar
+                                const newBlock = workspace.newBlock('text') as any;
 
-                            // Posicionamos o novo bloco na mesma posição do bloco atual
-                            newBlock.moveBy(blockPos.x, blockPos.y);
+                                // Definimos o valor do texto no novo bloco
+                                // Ajuste o nome do campo conforme o bloco de destino
+                                newBlock.setFieldValue("Test", 'TEXT');
 
-                            // Reconectamos às mesmas conexões do bloco original
-                            if (parentConnection) {
-                                newBlock.outputConnection.connect(parentConnection);
-                            }
+                                // Posicionamos o novo bloco na mesma posição do bloco atual
+                                newBlock.moveBy(blockPos.x, blockPos.y);
 
-                            // Tornamos o novo bloco visível
-                            newBlock.initSvg();
-                            newBlock.render();
+                                // Reconectamos às mesmas conexões do bloco original
+                                if (parentConnection) {
+                                    newBlock.outputConnection.connect(parentConnection);
+                                }
 
-                            // Removemos o bloco original
-                            block.dispose();
+                                // Tornamos o novo bloco visível
+                                newBlock.initSvg();
+                                newBlock.render();
+
+                                // Removemos o bloco original
+                                block.dispose();
+                            */
                         } else {
+                            window.alert('Então vá a merda!');
                             // Se o usuário clicou em cancelar ou não forneceu texto, deleta o bloco
                             block.dispose();
                         }
