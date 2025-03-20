@@ -1,6 +1,7 @@
 import { registerShortcut, ValidKey } from '../../helpers/registerShortcut';
 import setupElementInspector from '../../core/setupElementInspector';
 import InsertPageAgents from './helpers/insertPageAgents';
+import elementSelection from './helpers/elementSelection';
 
 console.log('Content script works!');
 
@@ -9,6 +10,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
     console.log('changes:', changes);
     InsertPageAgents();
+    elementSelection(changes);
 });
 
 InsertPageAgents();
