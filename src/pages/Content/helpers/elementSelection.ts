@@ -38,7 +38,7 @@ const elementSelection = async (changes: {
 
     await removeElementSelection(); // this need run before updateAgentPartial to avoid infinite loop
     await updateAgentPartial(agentId, {
-        blocks: replaceBlockById(agent.blocks, blockId, getBlockSelectHTMLElement('class', elementInspector)),
+        blocks: replaceBlockById(agent.blocks, blockId, getBlockSelectHTMLElement('css', elementInspector)),
         code: '', // Limpa o código para forçar a recompilação
     });
 
