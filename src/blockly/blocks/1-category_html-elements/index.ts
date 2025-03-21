@@ -9,12 +9,6 @@ import setBlockWriteTextToHTMLElement from "./blocks/BlockWriteTextToHTMLElement
 
 const configHTMLInterection = (): Array<TypeBlockly | TypeBlocklyButton> => {
     return [
-        // Criação de variável HTML
-        {
-            kind: 'button',
-            text: 'Criar Variável HTML',
-            callbackKey: 'CREATE_HTML_VARIABLE'
-        },
         // Seleção e espera do elemento
         setBlockSelectHTMLElement(),
         setBlockWaitForElement(),
