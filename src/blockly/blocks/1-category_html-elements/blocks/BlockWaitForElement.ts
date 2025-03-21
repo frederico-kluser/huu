@@ -55,17 +55,17 @@ const setBlockWaitForElement = () => {
 
       // Determina a condição baseada na escolha (aparecer ou desaparecer)
       const checkCondition = condition === 'appear' ?
-        `element !== undefined && element !== null` :
-        `element === undefined || element === null`;
+        `huu_var_element !== undefined && huu_var_element !== null` :
+        `huu_var_element === undefined || huu_var_element === null`;
 
       // Constrói o código ES5 para a espera do elemento usando setTimeout para polling
       const code = `
 (function() { 
-  var startTime = Date.now();
-  var timeoutMs = ${timeout} * 1000;
+  var huu_var_startTime = Date.now();
+  var huu_var_timeoutMs = ${timeout} * 1000;
   
   function checkElement() {
-    var element = ${elementSelector};
+    var huu_var_element = ${elementSelector};
     
     if (${checkCondition}) {
       // Elemento encontrado, executar o bloco DO_IF_FOUND
@@ -73,7 +73,7 @@ const setBlockWaitForElement = () => {
       return;
     } 
     
-    if (Date.now() - startTime >= timeoutMs) {
+    if (Date.now() - huu_var_startTime >= huu_var_timeoutMs) {
       // Tempo esgotado, executar o bloco DO_IF_TIMEOUT
       ${doIfTimeout.replace(/^  /gm, '      ')}
       return;
