@@ -29,18 +29,13 @@ const setBlockSetHtmlVariable = () => {
         ],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
             // Obtém o nome da variável
-            const anyBlock = block as any;
-
-            const variable = generator?.nameDB_?.getName(
-                block.getFieldValue('VAR'),
-                anyBlock?.Variables?.NAME_TYPE
-            );
+            const variable = generator.nameDB_?.getName(block.getFieldValue('VAR'), Blockly.VARIABLE_CATEGORY_NAME);
 
             // Obtém o valor a ser atribuído à variável
             const value = generator.valueToCode(block, 'VALUE', Order.ASSIGNMENT) || 'null';
 
             // Gera o código para atribuir o valor à variável
-            const code = `var ${variable} = ${value};\n`;
+            const code = `${variable} = ${value};\n`;
 
             return code;
         },
