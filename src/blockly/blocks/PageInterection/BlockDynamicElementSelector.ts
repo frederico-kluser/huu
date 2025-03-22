@@ -5,7 +5,9 @@ import BlocklyTypes from '../../config/types';
 import { Order } from 'blockly/javascript';
 import { BlocklyEvent } from '../../types/blockEvent';
 import { setElementSelection } from '../../../core/storage/elementSelection';
-import { fetchActualWorkspaceIndex, fetchActualWorkspaceName, fetchWorkspaceNames } from '../../../core/storage/workspace';
+import { fetchActualWorkspaceName } from '../../../core/storage/workspace';
+import { fetchActualAgent } from '../../../core/storage/agents';
+import urlMatchesPattern from '../../../helpers/urlMatchePattern';
 
 const blockName = 'BlockDynamicElementSelector';
 
@@ -41,29 +43,54 @@ const setBlockDynamicElementSelector = () => {
                     block.isEnabled()) {
 
                     const userInput = window.confirm('Deseja ajuda para selecionar um elemento da página?');
-                    if (userInput) {
+
+                    if (!userInput) {
+                        window.alert('Usuário cancelou a seleção de elemento');
+                        block.dispose();
+                        return;
+                    }
+
+                    fetchActualAgent().then((actialAgent) => {
+                        if (!actialAgent) {
+                            window.alert('Não foi possível obter o agente atual, tente novamente.');
+                            block.dispose();
+                            return;
+                        }
+
+                        const {
+                            name: workspaceName,
+                            urls: workspaceUrls,
+                        } = actialAgent;
 
 
-                        fetchActualWorkspaceName().then((workspaceName) => {
-                            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                                const tabId = tabs[0]?.id || 0;
+                        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                            const tabId = tabs[0]?.id || 0;
+                            const tabUrl = tabs[0]?.url || '';
 
+                            try {
                                 if (!tabId) {
-                                    window.alert('Não foi possível obter o ID da aba, tente novamente.');
-                                    return;
+                                    throw new Error('Não foi possível obter o ID da aba, tente novamente.');
                                 }
 
-                                setElementSelection(block.id, workspaceName, tabId).then(() => {
-                                    window.alert('Selecione um elemento da página clicando nele, veja qual é o elemento antes de clicar passando o mouse sobre ele.');
-                                    window.close();
-                                });
+                                if (!tabUrl) {
+                                    throw new Error('Não foi possível obter a URL da aba, tente novamente.');
+                                }
+
+                                if (!urlMatchesPattern(tabUrl, workspaceUrls)) {
+                                    throw new Error('A URL da aba não corresponde a nenhum padrão de URL do agente atual.');
+                                }
+                            } catch (error) {
+                                window.alert(error);
+                                block.dispose();
+                                return;
+                            }
+
+                            setElementSelection(block.id, workspaceName, tabId).then(() => {
+                                window.alert('Selecione um elemento da página clicando nele, veja qual é o elemento antes de clicar passando o mouse sobre ele.');
+                                window.close();
                             });
                         });
-                    } else {
-                        window.alert('Então vá a merda!');
-                        // Se o usuário clicou em cancelar ou não forneceu texto, deleta o bloco
-                        block.dispose();
-                    }
+                    });
                 }
             }
         }

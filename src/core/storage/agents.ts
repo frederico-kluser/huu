@@ -30,3 +30,15 @@ export const updateAgentPartial = async (agentId: string, partial: Partial<TypeA
         throw new Error(`Agent ${agentId} not found`);
     }
 };
+
+export const createAgent = async (name: string, urls: string) => {
+    return setItem<TypeAgent>(name, {
+        name,
+        urls,
+        blocks: {},
+        code: '',
+        mode: '',
+        active: false,
+        lastUpdate: Date.now(),
+    });
+};

@@ -7,7 +7,7 @@ function isValidURL(url: string): boolean {
     }
 }
 
-function isValidPatterns(patterns: string): boolean {
+function isValidUrlPatterns(patterns: string): boolean {
     if (!patterns || patterns.trim() === '') {
         return false;
     }
@@ -27,4 +27,4 @@ function isValidPatterns(patterns: string): boolean {
     });
 }
 
-export default isValidPatterns;
+export default isValidUrlPatterns;
