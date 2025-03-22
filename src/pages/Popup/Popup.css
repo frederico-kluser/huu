@@ -65,3 +65,9 @@ textarea {
   font-size: 16px !important;
   padding: 4px !important;
 }
+
+.blocklyScrollbarHorizontal.blocklyMainWorkspaceScrollbar {
+  transform: none !important;
+  bottom: 0px !important;
+  right: 0px !important;
+}
