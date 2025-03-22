@@ -3,7 +3,7 @@ import isValidJsonKey from "../../../../helpers/isValidJsonKey";
 import { getBlocklyState } from "../../../../blockly";
 import { fetchActualWorkspaceIndex, updateActualWorkspace } from "../../../../core/storage/workspace";
 import TypeAgent, { TypeBlock } from "../../../../types/agent";
-import isValidPatterns from "../../../../helpers/isValidPatterns";
+import isValidUrlPatterns from "../../../../helpers/isValidPatterns";
 import { removeItem } from "../../../../core/storage";
 import { fetchAgentById, saveOrUpdateAgent } from "../../../../core/storage/agents";
 
@@ -28,7 +28,7 @@ const EditAgent = ({
     const [agentSite, setAgentSite] = useState('');
     const [isBackButtonDisabled, setIsBackButtonDisabled] = useState(true);
 
-    const canSave = isValidJsonKey(agentName) && isValidPatterns(agentSite) && !(agentName !== workspaces[Number(agentSelectRef.current?.value)] && workspaces.includes(agentName));
+    const canSave = isValidJsonKey(agentName) && isValidUrlPatterns(agentSite) && !(agentName !== workspaces[Number(agentSelectRef.current?.value)] && workspaces.includes(agentName));
 
     const needToSave = async () => {
         if (!canSave) {
@@ -163,12 +163,12 @@ const EditAgent = ({
             }} aria-invalid={!isValidJsonKey(agentName)} />
             <input type="text" placeholder="Site que o agente irá funcionar" value={agentSite} onChange={(e) => {
                 setAgentSite(e.target.value);
-            }} aria-invalid={!isValidPatterns(agentSite)} />
+            }} aria-invalid={!isValidUrlPatterns(agentSite)} />
             <small>Para criar padrões de URL, basta escrever o domínio e o caminho, usando o caractere <code>*</code> onde quiser aceitar qualquer parte variável. Por exemplo, <code>exemplo.com/*</code> permite combinar tudo que esteja em “exemplo.com” sem se preocupar com o que vem depois da barra. Se quiser abranger subdomínios, faça algo como <code>*.exemplo.com/*</code>, que vale para qualquer coisa antes de “.exemplo.com”. Você pode escrever vários padrões separados por vírgula; por exemplo, <code>exemplo.com/*, outro.com/pasta/*</code> cobre “exemplo.com” e qualquer página na pasta “pasta” de “outro.com”.</small>
             <div role="group">
                 <button onClick={handleCreateAgent} className="contrast">Criar Novo Agente</button>
                 <button onClick={handleSave} disabled={!needToSave()}>Salvar</button>
-                <button onClick={handleLoadAgent}>Modificar funcionamento</button>
+                <button onClick={handleLoadAgent}>Configurar Agente</button>
                 <button onClick={handleDeleteAgent}>Deletar</button>
             </div>
         </main>

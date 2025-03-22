@@ -12,6 +12,8 @@ import { fetchWorkspaceNames, updateActualWorkspace, updateWorkspaceNames } from
 import '../../assets/css/pico.min.css';
 import './Popup.css';
 import { fetchNavigation, updateNavigation } from '../../core/storage/navigation';
+import { createAgent } from '../../core/storage/agents';
+import isValidUrlPatterns from '../../helpers/isValidPatterns';
 
 Blockly.setLocale(PtBr as any);
 
@@ -71,6 +73,14 @@ const Popup = () => {
       return;
     }
 
+    const URLs = prompt('Digite um padrão de URL. \n\nPara criar padrões de URL, basta escrever o domínio e o caminho, usando o caractere * onde quiser aceitar qualquer parte variável. Por exemplo, exemplo.com/* permite combinar tudo que esteja em “exemplo.com” sem se preocupar com o que vem depois da barra. Se quiser abranger subdomínios, faça algo como *.exemplo.com/*, que vale para qualquer coisa antes de “.exemplo.com”. Você pode escrever vários padrões separados por vírgula; por exemplo, exemplo.com/*, outro.com/pasta/* cobre “exemplo.com” e qualquer página na pasta “pasta” de “outro.com”.', 'google.com/*');
+    if (!URLs) return;
+    if (!isValidUrlPatterns(URLs)) {
+      alert('URL inválida');
+      return;
+    }
+
+    await createAgent(workspaceName, URLs);
     setWorkspaces([...workspaces, workspaceName]);
     setActualWorkspace(workspaceName);
     await updateActualWorkspace(workspaces.length);
