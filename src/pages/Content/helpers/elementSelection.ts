@@ -5,6 +5,7 @@ import setupElementInspector from "../../../core/setupElementInspector";
 import { fetchAgentById, updateAgentPartial } from "../../../core/storage/agents";
 import { getElementSelection, removeElementSelection } from "../../../core/storage/elementSelection";
 import enums from "../../../types/enums";
+import getTabId from "./getTabId";
 
 const elementSelection = async (changes: {
     [key: string]: chrome.storage.StorageChange;
@@ -18,7 +19,15 @@ const elementSelection = async (changes: {
     const {
         blockId,
         agentId,
+        tabId,
     } = result;
+
+    const localTabId = await getTabId();
+
+    if (tabId != localTabId) {
+        console.log('TabId não corresponde, esperando a seleção do elemento na aba correta.');
+        return;
+    }
 
     const element = await setupElementInspector();
 
