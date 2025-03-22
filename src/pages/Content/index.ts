@@ -8,7 +8,6 @@ console.log('Content script works!');
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') return;
 
-    console.log('changes:', changes);
     InsertPageAgents();
     elementSelection(changes);
 });

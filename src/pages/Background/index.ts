@@ -95,39 +95,18 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 }
 */
 
-/*
-chrome.tabs.onActivated.addListener((activeInfo) => {
-
-Projeto, criação de robots para automatizar tarefas repetitivas em sites, usando IA para criar condicionais abstratas, e llms para geração de textos com base em contexto.
-
-- O background identifica quando a aba ativa muda e procura a variável no object window com o tabId concatenado no nome huu ex: window['huu1656146879']:
-    - Caso tenha a variável, o código já foi injetado, é então verificado a data de atualização
-        - Se o código tiver sido atualizado é injetado novamente no content script e atualizado a data de atualização
-        - Se o código não tiver sido atualizado, nada é feito
-
-    - Caso não tenha a variável, o código é injetado no content script, e a variável é criada, com o seguinte valor:
-
-// variavel simplificada para window object
-{
-    "uuid": string, // identificador único do código
-    "updatedAt": number, // data da última atualização do código
-}[] // array pode ser usado para armazenar mais de um código por aba
-
-// variavel completa para chrome storage
-{
-    urls: "youtube.com/*,facebook.com/*",
-    agentName: "Robot auto like",
-    tabId: 1656146879,
-    code: "document.querySelectorAll('button.like').forEach((button) => button.click());",
-    shortcut: "Ctrl+Shift+L",
-    status: "active",
-    uuid: "1234567890",
-    updatedAt: 1740799621975,
+// No seu background script (service worker)
+interface TabIdMessage {
+    action: string;
 }
 
-- O valor salvo no chrome storage deve acionar um listener no background, para que esse saiba quando atualizar a variável no window object
-
-// importante de quando houver reload na página, o código ser injetado novamente, e a data de atualização ser atualizada no window object
-
-// importante de quando houver troca de página, não fazer nada porque o código não é mais necessário e não vai constar no window object
-*/
+chrome.runtime.onMessage.addListener((
+    message: TabIdMessage,
+    sender: chrome.runtime.MessageSender,
+    sendResponse: (response?: any) => void,
+): boolean => {
+    if (message.action === 'getTabId' && sender.tab?.id) {
+        sendResponse({ tabId: sender.tab.id });
+    }
+    return true; // Importante para manter a conexão aberta para respostas assíncronas
+});
