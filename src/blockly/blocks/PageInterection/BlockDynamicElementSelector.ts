@@ -44,26 +44,30 @@ const setBlockDynamicElementSelector = () => {
 
                     const userInput = window.confirm('Deseja ajuda para selecionar um elemento da página?');
 
-                    try {
-                        if (!userInput) {
-                            throw new Error('Usuário cancelou a seleção de elemento');
+                    if (!userInput) {
+                        window.alert('Usuário cancelou a seleção de elemento');
+                        block.dispose();
+                        return;
+                    }
+
+                    fetchActualAgent().then((actialAgent) => {
+                        if (!actialAgent) {
+                            window.alert('Não foi possível obter o agente atual, tente novamente.');
+                            block.dispose();
+                            return;
                         }
 
-                        fetchActualAgent().then((actialAgent) => {
-                            if (!actialAgent) {
-                                throw new Error('Não foi possível obter o agente atual, tente novamente.');
-                            }
-
-                            const {
-                                name: workspaceName,
-                                urls: workspaceUrls,
-                            } = actialAgent;
+                        const {
+                            name: workspaceName,
+                            urls: workspaceUrls,
+                        } = actialAgent;
 
 
-                            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                                const tabId = tabs[0]?.id || 0;
-                                const tabUrl = tabs[0]?.url || '';
+                        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                            const tabId = tabs[0]?.id || 0;
+                            const tabUrl = tabs[0]?.url || '';
 
+                            try {
                                 if (!tabId) {
                                     throw new Error('Não foi possível obter o ID da aba, tente novamente.');
                                 }
@@ -75,17 +79,18 @@ const setBlockDynamicElementSelector = () => {
                                 if (!urlMatchesPattern(tabUrl, workspaceUrls)) {
                                     throw new Error('A URL da aba não corresponde a nenhum padrão de URL do agente atual.');
                                 }
+                            } catch (error) {
+                                window.alert(error);
+                                block.dispose();
+                                return;
+                            }
 
-                                setElementSelection(block.id, workspaceName, tabId).then(() => {
-                                    window.alert('Selecione um elemento da página clicando nele, veja qual é o elemento antes de clicar passando o mouse sobre ele.');
-                                    window.close();
-                                });
+                            setElementSelection(block.id, workspaceName, tabId).then(() => {
+                                window.alert('Selecione um elemento da página clicando nele, veja qual é o elemento antes de clicar passando o mouse sobre ele.');
+                                window.close();
                             });
                         });
-                    } catch (error) {
-                        window.alert(error);
-                        block.dispose();
-                    }
+                    });
                 }
             }
         }
