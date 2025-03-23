@@ -1,4 +1,5 @@
 type TypeColorBlock =
+  | 0
   | 1
   | 2
   | 3
@@ -361,3 +362,15 @@ type TypeColorBlock =
   | 360;
 
 export default TypeColorBlock;
+
+/*
+Lógica: aproximadamente 210° (azul)
+Loops: aproximadamente 120° (verde)
+Matemática: aproximadamente 230° (azul-violeta)
+Texto: aproximadamente 160° (verde-azulado)
+Listas: aproximadamente 260° (roxo)
+Variáveis: aproximadamente 330° (roxo-avermelhado)
+Funções: aproximadamente 290° (roxo-azulado)
+Eventos: aproximadamente 40° (amarelo-alaranjado)
+Controles: aproximadamente 0° (vermelho)
+*/
