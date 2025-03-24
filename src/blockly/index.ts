@@ -5,6 +5,8 @@ import blocklyContextMenus from './config/contextMenu';
 import BlocklyTypes from './config/types';
 import TypeAgent, { TypeBlock } from '../types/agent';
 import { fetchAgentById, saveOrUpdateAgent } from '../core/storage/agents';
+import processBlocklyCode from '../helpers/processBlocklyCode';
+import generateCodeFromBlocks from '../helpers/generateCodeFormBlocks';
 
 var workspace: Blockly.Workspace;
 var workspaceName = "";
@@ -30,15 +32,16 @@ export const loadWorkspace = async (wsName: string) => {
 }
 
 const updateCode = async (event: any) => {
+    const blocks = Blockly.serialization.workspaces.save(workspace);
     const code = javascriptGenerator.workspaceToCode(workspace);
-    // processBlocklyCode
+    const result = processBlocklyCode(blocks);
+    console.log('goiabinha');
     // generateCodeFromBlocks
 
     // console.clear();
     console.log("code:");
     console.log(code);
     console.log("----");
-    const blocks = Blockly.serialization.workspaces.save(workspace);
     console.log("blocks:");
     console.log(blocks);
     console.log("----");

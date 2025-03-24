@@ -37,8 +37,12 @@ export const createAgent = async (name: string, urls: string) => {
         urls,
         blocks: {},
         code: '',
+        codes: {
+            initial: '',
+        },
         mode: '',
         active: false,
         lastUpdate: Date.now(),
+        actualCode: 'initial',
     });
 };

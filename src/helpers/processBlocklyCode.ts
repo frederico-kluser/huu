@@ -3,12 +3,12 @@
  * Retorna um objeto contendo a estrutura original, código inicial antes da navegação,
  * e segmentos de código que incluem cada bloco de navegação e os blocos subsequentes.
  *
- * @param {any} blocklyWorkspace - A estrutura blockly a ser processada
+ * @param {any} workspaceBlockData - A estrutura blockly a ser processada
  * @returns {any} Um objeto contendo a estrutura original e segmentos de código organizados
  */
-const processBlocklyCode = (blocklyWorkspace: any): any => {
+const processBlocklyCode = (workspaceBlockData: any): any => {
   const result: any = {
-    original: blocklyWorkspace,
+    original: workspaceBlockData,
   };
 
   const navigationBlockTypes = [
@@ -20,7 +20,7 @@ const processBlocklyCode = (blocklyWorkspace: any): any => {
   ];
 
   // Clone a estrutura para evitar modificar o original
-  const workspaceClone = JSON.parse(JSON.stringify(blocklyWorkspace));
+  const workspaceClone = JSON.parse(JSON.stringify(workspaceBlockData));
 
   // Extrai todos os segmentos de navegação (incluindo o próprio bloco de navegação)
   if (workspaceClone.blocks.blocks.length > 0) {
@@ -29,7 +29,7 @@ const processBlocklyCode = (blocklyWorkspace: any): any => {
 
   // Adiciona a estrutura inicial (até encontrar blocos de navegação)
   result.initial = getCodeUntilNavigation(
-    JSON.parse(JSON.stringify(blocklyWorkspace)),
+    JSON.parse(JSON.stringify(workspaceBlockData)),
     navigationBlockTypes,
   );
 
