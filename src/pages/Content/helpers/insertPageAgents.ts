@@ -1,5 +1,5 @@
 import executeCode from "../../../core/executeCode";
-import getTabAgents from "../../../core/getTabAgents";
+import getTabAgents from "../../../helpers/getTabAgents";
 import { registerShortcut, ValidKey } from "../../../helpers/registerShortcut";
 import TypeHandlerShortcut from "../../../types/shortcuts";
 

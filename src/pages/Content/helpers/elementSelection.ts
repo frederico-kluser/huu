@@ -1,6 +1,6 @@
 import { getBlockSelectHTMLElement } from "../../../blockly/blocks/1-category_html-elements/blocks/BlockSelectHTMLElement";
-import createUniqueElementSelector from "../../../core/createUniqueElementSelector";
-import replaceBlockById from "../../../core/replaceBlockId";
+import createUniqueElementSelector from "../../../helpers/createUniqueElementSelector";
+import replaceBlockById from "../../../helpers/replaceBlockId";
 import setupElementInspector from "../../../core/setupElementInspector";
 import { fetchAgentById, updateAgentPartial } from "../../../core/storage/agents";
 import { getElementSelection, removeElementSelection } from "../../../core/storage/elementSelection";
