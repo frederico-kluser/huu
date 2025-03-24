@@ -13,7 +13,7 @@ const setBlockNavigateForward = () => {
         tooltip: 'Navega para a próxima página no histórico do navegador.',
         fields: [],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
-            const code = 'window.history.forward();';
+            const code = 'window.history.forward();\n';
             return code;
         },
     });

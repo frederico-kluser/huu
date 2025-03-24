@@ -13,7 +13,7 @@ const setBlockRefreshPage = () => {
         tooltip: 'Recarrega a página atual.',
         fields: [],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
-            const code = 'window.location.reload();';
+            const code = 'window.location.reload();\n';
             return code;
         },
     });
