@@ -9,6 +9,8 @@
 const processBlocklyCode = (workspaceBlockData: any): any => {
   const result: any = {
     original: workspaceBlockData,
+    navigation: {},
+    initial: null,
   };
 
   const navigationBlockTypes = [
@@ -56,7 +58,7 @@ const findNavigationSegments = (
     // Clona o bloco de navegação para preservá-lo com seu código subsequente
     const navigationBlock = JSON.parse(JSON.stringify(block));
     if (navigationBlock.next) {
-      result[block.id] = navigationBlock.next;
+      result.navigation[block.id] = navigationBlock.next;
     }
   }
 
