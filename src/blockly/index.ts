@@ -37,7 +37,13 @@ const updateCode = async (event: any) => {
         initial,
         navigation,
     } = processBlocklyCode(blocks);
+
     const code = generateCodeFromBlocks(initial);
+
+    Object.entries(navigation).forEach(([key, value]: [string, any]) => {
+        const navigationCode = generateCodeFromBlocks(value);
+        navigation[key] = navigationCode;
+    });
 
     // TODO: se eu usar o updateAgentPartial não preciso desse "as TypeAgent"
     const actualState = await getBlocklyState(workspaceName) as TypeAgent;

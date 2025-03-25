@@ -28,17 +28,14 @@ const handleAgentExecution = async () => {
 
         console.log('fetchAgentByNavigationBlockId - agent', agent);
 
-        const blocks = agent.navigation[data.blockId];
+        const code = agent.navigation[data.blockId];
 
-        if (!blocks) {
-            console.log('fetchAgentByNavigationBlockId - blocks não encontrado');
+        if (!code) {
+            console.log('fetchAgentByNavigationBlockId - code não encontrado');
             return;
         }
 
-
-        const code = generateCodeFromBlocks(blocks);
-
-        console.log('generateCodeFromBlocks - code', code);
+        console.log('fetchAgentByNavigationBlockId - code', code);
         executeCode(code);
     });
 };

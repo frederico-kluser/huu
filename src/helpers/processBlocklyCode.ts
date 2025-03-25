@@ -1,3 +1,5 @@
+import { block } from "blockly/core/tooltip";
+
 type TypeProcessBlocklyCode = {
   original: any;
   navigation: {
@@ -42,6 +44,12 @@ const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => 
     JSON.parse(JSON.stringify(workspaceBlockData)),
     navigationBlockTypes,
   );
+
+  Object.entries(result.navigation).forEach(([key, value]: [string, any]) => {
+    const cloneInitial = JSON.parse(JSON.stringify(result.initial));
+    cloneInitial.blocks.blocks = [value.block];
+    result.navigation[key] = cloneInitial;
+  });
 
   return result;
 };
