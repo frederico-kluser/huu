@@ -4,11 +4,11 @@ import InsertPageAgents from './helpers/insertPageAgents';
 import elementSelection from './helpers/elementSelection';
 import configNavigation from './helpers/configNavigation';
 import enums from '../../types/enums';
-import { fetchNavigation } from '../../core/storage/navigation';
+import { fetchNavigationAgent } from '../../core/storage/navigation';
 import handleNavigation from './helpers/handleNavigation';
 import { fetchAgentByNavigationBlockId } from '../../core/storage/agents';
 import getTabId from './helpers/getTabId';
-import checkIfTabExists from './helpers/checkIfTabExists';
+// import checkIfTabExists from '../Background/helpers/checkIfTabExists';
 
 console.log('Content script works!');
 
@@ -22,26 +22,26 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     handleNavigation(changes[enums.SITE_NAVIGATION]?.newValue);
 });
 
-fetchNavigation().then(async (data) => {
+fetchNavigationAgent().then(async (data) => {
     console.log('fetchNavigation - data', data);
 
     if (!data) {
         return;
     }
 
-    const tabExist = await checkIfTabExists(data.tabId);
-
-    if (!tabExist) {
-        console.log('checkIfTabExists - tab não existe');
-        return;
-    }
-
     const tabId = await getTabId();
-
     if (data.tabId !== tabId) {
         console.log(`fetchNavigation - diferente tabId: ${tabId} != ${data.tabId}`);
         return;
     }
+
+    // const tabExist = await checkIfTabExists(data.tabId);
+
+    // if (!tabExist) {
+    //     console.log('checkIfTabExists - tab não existe');
+    //     return;
+    // }
+
 
     const agent = await fetchAgentByNavigationBlockId(data.blockId);
 
