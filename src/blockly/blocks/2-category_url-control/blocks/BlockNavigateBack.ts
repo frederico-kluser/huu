@@ -13,7 +13,7 @@ const setBlockNavigateBack = () => {
         tooltip: 'Navega para a página anterior no histórico do navegador.',
         fields: [],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
-            const code = `window.configNavigation = ({
+            const code = `window.configNavigation({
             \tblockId: '${block.id}',
             \ttype: 'back',
         });\n`;

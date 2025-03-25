@@ -9,7 +9,7 @@ const setBlockPromptUser = () => {
         colour: Colors.MISCELLANEOUS,
         hasOutput: 'String',
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/prompt',
-        message: 'Perguntar ao usuário: %1',
+        message: 'Perguntar ao usuário: %1 valor padrão: %2',
         name: 'BlockPromptUser',
         tooltip: 'Exibe um prompt para o usuário e retorna a entrada digitada.',
         fields: [
@@ -23,11 +23,23 @@ const setBlockPromptUser = () => {
                         TEXT: 'Digite algo'
                     }
                 }
+            },
+            {
+                type: 'input_value',
+                name: 'DEFAULT_VALUE',
+                check: BlocklyTypes.STRING,
+                shadow: {
+                    type: 'text',
+                    fields: {
+                        TEXT: 'Valor padrão'
+                    }
+                }
             }
         ],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
             const promptMessage = generator.valueToCode(block, 'MESSAGE', Order.ATOMIC) || '""';
-            const code = `window.prompt(${promptMessage})`;
+            const defaultValue = generator.valueToCode(block, 'DEFAULT_VALUE', Order.ATOMIC) || '""';
+            const code = `window.prompt(${promptMessage}, ${defaultValue})`;
             return [code, Order.FUNCTION_CALL];
         }
     });

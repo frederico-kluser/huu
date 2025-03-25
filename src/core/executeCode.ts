@@ -29,6 +29,9 @@ const executeCode = (code: string) => {
             alert: window.alert.bind(window),
             confirm: window.confirm.bind(window),
             addEventListener: window.addEventListener.bind(window),
+            prompt: window.prompt.bind(window),
+            open: window.open.bind(window),
+            location: window.location,
             // Outras funções e propriedades necessárias
         },
         // Classes e construtores

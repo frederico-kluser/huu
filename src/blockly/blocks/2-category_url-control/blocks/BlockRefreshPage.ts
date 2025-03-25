@@ -13,7 +13,7 @@ const setBlockRefreshPage = () => {
         tooltip: 'Recarrega a página atual.',
         fields: [],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
-            const code = `window.configNavigation = ({
+            const code = `window.configNavigation({
                     \tblockId: '${block.id}',
                     \ttype: 'refresh',
                 });\n`;

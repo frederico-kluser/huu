@@ -30,10 +30,11 @@ const setBlockNavigateToUrlText = () => {
             // Obter o código para o valor da URL
             const url = generator.valueToCode(block, 'URL', Order.ASSIGNMENT) || "'https://www.google.com'";
 
-            const code = `window.configNavigation = ({
+            const code = `var newUrl = ${url};
+            window.configNavigation({
                     \tblockId: '${block.id}',
                     \ttype: 'url',
-                    \turl: '${url}',
+                    \turl: newUrl,
                 });\n`;
             return code;
         },
