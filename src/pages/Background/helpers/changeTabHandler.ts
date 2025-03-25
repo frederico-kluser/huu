@@ -1,3 +1,5 @@
+import agentGarbageHandler from "./agentGarbageHandler";
+
 const changeTabHandler = () => {
     // quando a aba ativa muda
     chrome.tabs.onActivated.addListener((activeInfo) => {
@@ -38,6 +40,8 @@ const changeTabHandler = () => {
             "windowId": 1656147162
         }
         */
+
+        agentGarbageHandler();
     });
 };
 
