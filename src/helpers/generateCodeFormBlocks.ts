@@ -1,4 +1,4 @@
-import Blockly from 'blockly';
+import * as Blockly from 'blockly';
 import { javascriptGenerator } from 'blockly/javascript';
 
 function generateCodeFromBlocks(blocksJson: any): string {

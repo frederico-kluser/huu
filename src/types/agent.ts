@@ -19,14 +19,13 @@ type TypeAgent = {
     name: string; // also the id
     blocks: TypeBlock;
     code: string;
+    navigation: {
+        [key: string]: any;
+    };
     urls: string;
     mode: TypeMode;
     active: boolean;
     lastUpdate: number;
-    codes?: {
-        initial: any;
-        [key: string]: any;
-    };
     actualCode?: 'initial' | string;
 };
 

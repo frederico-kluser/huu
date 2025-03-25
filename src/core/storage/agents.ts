@@ -12,10 +12,14 @@ export const fetchActualAgent = async () => {
 };
 
 export const saveOrUpdateAgent = (agentId: string, agent: TypeAgent) => {
-    return setItem<TypeAgent>(agentId, {
+    const agentData = {
         ...agent,
         lastUpdate: Date.now(),
-    });
+    };
+
+    console.log('Saving agent', agentId, agentData);
+
+    return setItem<TypeAgent>(agentId, agentData);
 };
 
 export const updateAgentPartial = async (agentId: string, partial: Partial<TypeAgent>) => {
@@ -37,9 +41,7 @@ export const createAgent = async (name: string, urls: string) => {
         urls,
         blocks: {},
         code: '',
-        codes: {
-            initial: '',
-        },
+        navigation: {},
         mode: '',
         active: false,
         lastUpdate: Date.now(),

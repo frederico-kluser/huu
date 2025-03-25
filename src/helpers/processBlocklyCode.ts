@@ -1,3 +1,11 @@
+type TypeProcessBlocklyCode = {
+  original: any;
+  navigation: {
+    [key: string]: any;
+  };
+  initial: any;
+};
+
 /**
  * Processa uma estrutura blockly para separar blocos de navegação e seus códigos subsequentes.
  * Retorna um objeto contendo a estrutura original, código inicial antes da navegação,
@@ -6,7 +14,7 @@
  * @param {any} workspaceBlockData - A estrutura blockly a ser processada
  * @returns {any} Um objeto contendo a estrutura original e segmentos de código organizados
  */
-const processBlocklyCode = (workspaceBlockData: any): any => {
+const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => {
   const result: any = {
     original: workspaceBlockData,
     navigation: {},

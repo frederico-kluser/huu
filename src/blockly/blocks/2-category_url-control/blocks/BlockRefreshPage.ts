@@ -17,7 +17,7 @@ const setBlockRefreshPage = () => {
 chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
     var currentTabId = tabs[0].id;
     chrome.storage.local.set({
-        huuNavigation: {
+        navigation: {
             blockId: ${block.id},
             type: 'refresh',
             tabId: currentTabId
