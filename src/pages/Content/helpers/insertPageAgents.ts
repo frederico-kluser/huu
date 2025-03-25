@@ -1,5 +1,5 @@
 import executeCode from "../../../core/executeCode";
-import getTabAgents from "../../../core/storage/getTabAgents";
+import fetchAgentsMatchingUrl from "../../../core/storage/getTabAgents";
 import { registerShortcut, ValidKey } from "../../../helpers/registerShortcut";
 import TypeHandlerShortcut from "../../../types/shortcuts";
 
@@ -17,7 +17,7 @@ const InsertPageAgents = () => {
         delete removeShortcuts[key];
     });
 
-    getTabAgents(window.location.href).then((agents) => {
+    fetchAgentsMatchingUrl(window.location.href).then((agents) => {
         console.log('agents:', agents);
 
         agents.forEach((agent) => {

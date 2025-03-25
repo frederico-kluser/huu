@@ -1,3 +1,4 @@
+import { updateNavigation } from "../../core/storage/navigation";
 import enums from "../../types/enums";
 
 console.log('This is the background page.');
@@ -116,13 +117,11 @@ chrome.runtime.onMessage.addListener((
     if (message.action === 'navigate' && sender.tab?.id) {
         const { blockId, type, url } = message.data;
 
-        chrome.storage.local.set({
-            [enums.SITE_NAVIGATION]: {
-                blockId,
-                type,
-                tabId: sender.tab?.id,
-                url,
-            }
+        updateNavigation({
+            blockId,
+            type,
+            tabId: sender.tab?.id,
+            url,
         });
     }
     return true; // Importante para manter a conexão aberta para respostas assíncronas

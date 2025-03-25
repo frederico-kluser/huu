@@ -1,4 +1,4 @@
-import { TypeNavigation } from "../../../types/agent";
+import { TypeNavigation } from "../../../types/storage";
 
 const configNavigation = ({
     blockId,

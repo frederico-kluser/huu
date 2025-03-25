@@ -5,7 +5,7 @@ import { fetchWorkspaceNames } from "./workspace";
 
 var agentToListener: string[] = [];
 
-const getTabAgents = async (url: string): Promise<TypeAgent[]> => {
+const fetchAgentsMatchingUrl = async (url: string): Promise<TypeAgent[]> => {
     const workspaces = await fetchWorkspaceNames();
 
     const agents = await Promise.all(
@@ -32,4 +32,4 @@ const getTabAgents = async (url: string): Promise<TypeAgent[]> => {
     return filteredAgents;
 };
 
-export default getTabAgents;
+export default fetchAgentsMatchingUrl;
