@@ -34,7 +34,7 @@ const setBlockNavigateToUrlText = () => {
             const allVariables = block.workspace.getAllVariables();
 
             // Create variable collection code for runtime values
-            let variableCollectionCode = 'const variableValues = {};\n';
+            let variableCollectionCode = 'var variableValues = {};\n';
             allVariables.forEach(v => {
                 const varName = generator?.nameDB_?.getName(v.getId(), Blockly.VARIABLE_CATEGORY_NAME);
                 variableCollectionCode += `variableValues["${varName}"] = ${varName};\n`;

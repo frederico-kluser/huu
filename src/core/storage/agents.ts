@@ -1,6 +1,6 @@
 import { getItem, setItem } from ".";
 import TypeAgent from "../../types/agent";
-import { fetchActualWorkspaceName } from "./workspace";
+import { fetchActualWorkspaceName, fetchWorkspaceNames } from "./workspace";
 
 export const fetchAgentById = async (agentId: string) => {
     return getItem<TypeAgent | null>(agentId);
@@ -11,7 +11,32 @@ export const fetchActualAgent = async () => {
     return fetchAgentById(agentId);
 };
 
-export const saveOrUpdateAgent = (agentId: string, agent: TypeAgent) => {
+export const fetchAgentByNavigationBlockId = async (blockId: string) => {
+    const workspaces = await fetchWorkspaceNames();
+
+    const agents = await Promise.all(
+        workspaces.map(async (workspace) => {
+            const agent = await fetchAgentById(workspace);
+            return agent;
+        })
+    );
+
+    const activeAgent = agents.find((agent) => {
+        if (!agent) {
+            return false;
+        }
+
+        if (!agent.navigation) {
+            return false;
+        }
+
+        return agent.navigation[blockId];
+    });
+
+    return activeAgent;
+};
+
+export const updateOrCreateAgent = (agentId: string, agent: TypeAgent) => {
     const agentData = {
         ...agent,
         lastUpdate: Date.now(),
@@ -22,10 +47,10 @@ export const saveOrUpdateAgent = (agentId: string, agent: TypeAgent) => {
     return setItem<TypeAgent>(agentId, agentData);
 };
 
-export const updateAgentPartial = async (agentId: string, partial: Partial<TypeAgent>) => {
+export const updateAgentAttributes = async (agentId: string, partial: Partial<TypeAgent>) => {
     const agent = await fetchAgentById(agentId);
     if (agent) {
-        saveOrUpdateAgent(agentId, {
+        updateOrCreateAgent(agentId, {
             ...agent,
             ...partial,
             lastUpdate: Date.now(),

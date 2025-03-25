@@ -115,13 +115,11 @@ chrome.runtime.onMessage.addListener((
         sendResponse({ tabId: sender.tab.id });
     }
     if (message.action === 'navigate' && sender.tab?.id) {
-        const { blockId, type, url } = message.data;
+        const { data } = message;
 
         updateNavigation({
-            blockId,
-            type,
+            ...data,
             tabId: sender.tab?.id,
-            url,
         });
     }
     return true; // Importante para manter a conexão aberta para respostas assíncronas

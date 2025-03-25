@@ -4,7 +4,7 @@ import blocklyOptions from './config/options';
 import blocklyContextMenus from './config/contextMenu';
 import BlocklyTypes from './config/types';
 import TypeAgent, { TypeBlock } from '../types/agent';
-import { fetchAgentById, saveOrUpdateAgent } from '../core/storage/agents';
+import { fetchAgentById, updateOrCreateAgent } from '../core/storage/agents';
 import processBlocklyCode from '../helpers/processBlocklyCode';
 import generateCodeFromBlocks from '../helpers/generateCodeFormBlocks';
 
@@ -42,7 +42,7 @@ const updateCode = async (event: any) => {
     // TODO: se eu usar o updateAgentPartial não preciso desse "as TypeAgent"
     const actualState = await getBlocklyState(workspaceName) as TypeAgent;
 
-    await saveOrUpdateAgent(workspaceName, {
+    await updateOrCreateAgent(workspaceName, {
         ...actualState,
         name: workspaceName,
         blocks,
