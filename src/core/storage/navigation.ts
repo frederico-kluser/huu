@@ -6,3 +6,17 @@ export const updateNavigation = async (data: TypeNavigation): Promise<void> => {
         [enums.SITE_NAVIGATION]: data
     });
 };
+
+export const fetchNavigation = async (): Promise<TypeNavigation | undefined> => {
+    return new Promise((resolve) => {
+        chrome.storage.local.get([enums.SITE_NAVIGATION], (result) => {
+            if (result[enums.SITE_NAVIGATION]) {
+                const data = result[enums.SITE_NAVIGATION] as TypeNavigation;
+
+                resolve(data);
+            } else {
+                resolve(undefined);
+            }
+        });
+    });
+}
