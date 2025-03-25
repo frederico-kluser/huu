@@ -13,7 +13,19 @@ const setBlockRefreshPage = () => {
         tooltip: 'Recarrega a página atual.',
         fields: [],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
-            const code = 'window.location.reload();\n';
+            const code = `
+chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+    var currentTabId = tabs[0].id;
+    chrome.storage.local.set({
+        huuNavigation: {
+            blockId: ${block.id},
+            type: 'refresh',
+            tabId: currentTabId
+        }
+    }, function() {
+        window.location.reload();
+    });
+});\n`;
             return code;
         },
     });

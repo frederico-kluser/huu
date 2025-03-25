@@ -13,7 +13,19 @@ const setBlockNavigateBack = () => {
         tooltip: 'Navega para a página anterior no histórico do navegador.',
         fields: [],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
-            const code = 'window.history.back();\n';
+            const code = `
+chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+    var currentTabId = tabs[0].id;
+    chrome.storage.local.set({
+        huuNavigation: {
+            blockId: ${block.id},
+            type: 'back',
+            tabId: currentTabId
+        }
+    }, function() {
+        window.history.back();
+    });
+});\n`;
             return code;
         },
     });

@@ -30,8 +30,21 @@ const setBlockNavigateToUrlText = () => {
             // Obter o código para o valor da URL
             const url = generator.valueToCode(block, 'URL', Order.ASSIGNMENT) || "'https://www.google.com'";
 
-            // Gerar o código para navegar para a URL
-            const code = `window.location.href = ${url};\n`;
+            // Gerar o código para salvar na storage e navegar para a URL
+            const code = `
+chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+    var currentTabId = tabs[0].id;
+    chrome.storage.local.set({
+        huuNavigation: {
+            blockId: ${block.id},
+            type: 'url',
+            tabId: currentTabId,
+            url: ${url}
+        }
+    }, function() {
+        window.location.href = ${url};
+    });
+});\n`;
 
             return code;
         }

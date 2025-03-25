@@ -13,7 +13,19 @@ const setBlockNavigateForward = () => {
         tooltip: 'Navega para a próxima página no histórico do navegador.',
         fields: [],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
-            const code = 'window.history.forward();\n';
+            const code = `
+chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+    var currentTabId = tabs[0].id;
+    chrome.storage.local.set({
+        huuNavigation: {
+            blockId: ${block.id},
+            type: 'forward',
+            tabId: currentTabId
+        }
+    }, function() {
+        window.history.forward();
+    });
+});\n`;
             return code;
         },
     });
