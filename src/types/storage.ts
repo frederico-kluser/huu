@@ -1,5 +1,5 @@
 export type TypeNavigation = {
-    blockId: number;
+    blockId: string;
     type: 'refresh' | 'back' | 'forward' | 'url' | '';
     tabId: number;
     url?: string;

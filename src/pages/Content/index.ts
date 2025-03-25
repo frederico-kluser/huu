@@ -6,6 +6,9 @@ import configNavigation from './helpers/configNavigation';
 import enums from '../../types/enums';
 import { fetchNavigation } from '../../core/storage/navigation';
 import handleNavigation from './helpers/handleNavigation';
+import { fetchAgentByNavigationBlockId } from '../../core/storage/agents';
+import getTabId from './helpers/getTabId';
+import checkIfTabExists from './helpers/checkIfTabExists';
 
 console.log('Content script works!');
 
@@ -17,13 +20,36 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     InsertPageAgents();
     elementSelection(changes);
     handleNavigation(changes[enums.SITE_NAVIGATION]?.newValue);
-
-    // TODO: criar um verificador de memória do enums.SITE_NAVIGATION para saber se vou ter que executar outros blocos a paritr do ultimo bloco de navegação, o blockId de navegação está disponível no enums.SITE_NAVIGATION
-    // TODO: preciso cuidar das variáveis, para não ter problemas durante a navegação, para isso vou ter que ter blocos de set, para as variáveis e nesses blocos preciso salvar as variáveis no chrome.storage.local
 });
 
-fetchNavigation().then((data) => {
+fetchNavigation().then(async (data) => {
     console.log('fetchNavigation - data', data);
+
+    if (!data) {
+        return;
+    }
+
+    const tabExist = await checkIfTabExists(data.tabId);
+
+    if (!tabExist) {
+        console.log('checkIfTabExists - tab não existe');
+        return;
+    }
+
+    const tabId = await getTabId();
+
+    if (data.tabId !== tabId) {
+        console.log(`fetchNavigation - diferente tabId: ${tabId} != ${data.tabId}`);
+        return;
+    }
+
+    const agent = await fetchAgentByNavigationBlockId(data.blockId);
+
+    if (!agent) {
+        return;
+    }
+
+    console.log('fetchAgentByNavigationBlockId - agent', agent);
 });
 
 InsertPageAgents();
