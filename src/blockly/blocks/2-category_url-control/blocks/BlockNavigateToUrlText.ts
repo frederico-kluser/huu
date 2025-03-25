@@ -30,12 +30,24 @@ const setBlockNavigateToUrlText = () => {
             // Obter o código para o valor da URL
             const url = generator.valueToCode(block, 'URL', Order.ASSIGNMENT) || "'https://www.google.com'";
 
-            const code = `var newUrl = ${url};
-            window.configNavigation({
-                    \tblockId: '${block.id}',
-                    \ttype: 'url',
-                    \turl: newUrl,
-                });\n`;
+            // Get all variables from the workspace
+            const allVariables = block.workspace.getAllVariables();
+
+            // Create variable collection code for runtime values
+            let variableCollectionCode = 'const variableValues = {};\n';
+            allVariables.forEach(v => {
+                const varName = generator?.nameDB_?.getName(v.getId(), Blockly.VARIABLE_CATEGORY_NAME);
+                variableCollectionCode += `variableValues["${varName}"] = ${varName};\n`;
+            });
+
+            const code = `${variableCollectionCode}
+var newUrl = ${url};
+window.configNavigation({
+    blockId: '${block.id}',
+    type: 'url',
+    url: newUrl,
+    variables: variableValues,
+});\n`;
             return code;
         },
     });

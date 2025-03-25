@@ -13,10 +13,22 @@ const setBlockRefreshPage = () => {
         tooltip: 'Recarrega a página atual.',
         fields: [],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
-            const code = `window.configNavigation({
-                    \tblockId: '${block.id}',
-                    \ttype: 'refresh',
-                });\n`;
+            // Get all variables from the workspace
+            const allVariables = block.workspace.getAllVariables();
+
+            // Create variable collection code for runtime values
+            let variableCollectionCode = 'const variableValues = {};\n';
+            allVariables.forEach(v => {
+                const varName = generator?.nameDB_?.getName(v.getId(), Blockly.VARIABLE_CATEGORY_NAME);
+                variableCollectionCode += `variableValues["${varName}"] = ${varName};\n`;
+            });
+
+            const code = `${variableCollectionCode}
+window.configNavigation({
+    blockId: '${block.id}',
+    type: 'refresh',
+    variables: variableValues,
+});\n`;
             return code;
         },
     });
