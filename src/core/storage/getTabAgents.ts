@@ -1,7 +1,7 @@
-import urlMatchesPattern from "./urlMatchePattern";
-import TypeAgent from "../types/agent";
-import { fetchAgentById } from "../core/storage/agents";
-import { fetchWorkspaceNames } from "../core/storage/workspace";
+import urlMatchesPattern from "../../helpers/urlMatchePattern";
+import TypeAgent from "../../types/agent";
+import { fetchAgentById } from "./agents";
+import { fetchWorkspaceNames } from "./workspace";
 
 var agentToListener: string[] = [];
 

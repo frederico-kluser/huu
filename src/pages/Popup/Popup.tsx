@@ -11,7 +11,7 @@ import { fetchWorkspaceNames, updateActualWorkspace, updateWorkspaceNames } from
 
 import '../../assets/css/pico.min.css';
 import './Popup.css';
-import { fetchNavigation, updateNavigation } from '../../core/storage/navigation';
+import { fetchPopupNavigation, updatePopupNavigation } from '../../core/storage/popupNavigation';
 import { createAgent } from '../../core/storage/agents';
 import isValidUrlPatterns from '../../helpers/isValidPatterns';
 
@@ -36,7 +36,7 @@ const Popup = () => {
       setIsMainPage(!actualWorkspace && !!loadedWorkspaces.length);
     });
 
-    fetchNavigation().then((navigation) => {
+    fetchPopupNavigation().then((navigation) => {
       setActualWorkspace(navigation);
     });
   }, []);
@@ -48,7 +48,7 @@ const Popup = () => {
   }, [workspaces]);
 
   useEffect(() => {
-    updateNavigation(actualWorkspace);
+    updatePopupNavigation(actualWorkspace);
     if (!actualWorkspace) return;
 
     blocklySetup();

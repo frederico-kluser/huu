@@ -39,6 +39,17 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
                 break;
         };
     };
+
+    // TODO: criar um verificador de memória do enums.SITE_NAVIGATION para saber se vou ter que executar outros blocos a paritr do ultimo bloco de navegação, o blockId de navegação está disponível no enums.SITE_NAVIGATION
+    // TODO: preciso cuidar das variáveis, para não ter problemas durante a navegação, para isso vou ter que ter blocos de set, para as variáveis e nesses blocos preciso salvar as variáveis no chrome.storage.local
+});
+
+chrome.storage.local.get([enums.SITE_NAVIGATION], (result) => {
+    if (result[enums.SITE_NAVIGATION]) {
+        const data = result[enums.SITE_NAVIGATION];
+
+        console.log('SITE_NAVIGATION - data', data);
+    }
 });
 
 InsertPageAgents();
