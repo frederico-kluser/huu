@@ -15,6 +15,12 @@ export type TypeBlock = {
     [key: string]: any;
 };
 
+export type TypeNavigation = {
+    blockId: string;
+    type: 'refresh' | 'back' | 'forward' | 'url' | '';
+    url?: string;
+};
+
 type TypeAgent = {
     name: string; // also the id
     blocks: TypeBlock;
