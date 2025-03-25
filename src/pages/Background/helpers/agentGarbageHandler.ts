@@ -1,8 +1,8 @@
-import { clearNavigationAgent, fetchNavigationAgent } from "../../../core/storage/navigation";
+import { clearNavigationAgent, fetchAgentNavigationCode } from "../../../core/storage/navigation";
 import checkIfTabExists from "./checkIfTabExists";
 
 const agentGarbageHandler = async () => {
-    const agent = await fetchNavigationAgent();
+    const agent = await fetchAgentNavigationCode();
 
     if (!agent) {
         return;

@@ -1,4 +1,4 @@
-import { updateNavigationAgent } from "../../../core/storage/navigation";
+import { updateAgentNavigationCode } from "../../../core/storage/navigation";
 
 // No seu background script (service worker)
 interface TabIdMessage {
@@ -25,7 +25,7 @@ const messageHandler = () => {
 
             case 'navigate':
                 const { data } = message;
-                updateNavigationAgent({
+                updateAgentNavigationCode({
                     ...data,
                     tabId: sender.tab.id,
                 });

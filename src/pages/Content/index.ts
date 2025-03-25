@@ -4,10 +4,8 @@ import InsertPageAgents from './helpers/insertPageAgents';
 import elementSelection from './helpers/elementSelection';
 import configNavigation from './helpers/configNavigation';
 import enums from '../../types/enums';
-import { fetchNavigationAgent } from '../../core/storage/navigation';
 import handleNavigation from './helpers/handleNavigation';
-import { fetchAgentByNavigationBlockId } from '../../core/storage/agents';
-import getTabId from './helpers/getTabId';
+import handleAgentExecution from './helpers/handleAgentExecution';
 
 console.log('Content script works!');
 
@@ -21,28 +19,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     handleNavigation(changes[enums.SITE_NAVIGATION]?.newValue);
 });
 
-fetchNavigationAgent().then(async (data) => {
-    console.log('fetchNavigation - data', data);
-
-    if (!data) {
-        return;
-    }
-
-    const tabId = await getTabId();
-    if (data.tabId !== tabId) {
-        console.log(`fetchNavigation - diferente tabId: ${tabId} != ${data.tabId}`);
-        return;
-    }
-
-    const agent = await fetchAgentByNavigationBlockId(data.blockId);
-
-    if (!agent) {
-        return;
-    }
-
-    console.log('fetchAgentByNavigationBlockId - agent', agent);
-});
-
+handleAgentExecution();
 InsertPageAgents();
 
 registerShortcut([ValidKey.ControlLeft, ValidKey.Digit1], setupElementInspector);

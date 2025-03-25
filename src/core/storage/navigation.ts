@@ -1,13 +1,13 @@
 import enums from "../../types/enums";
 import { TypeNavigation } from "../../types/storage";
 
-export const updateNavigationAgent = async (data: TypeNavigation): Promise<void> => {
+export const updateAgentNavigationCode = async (data: TypeNavigation): Promise<void> => {
     return chrome.storage.local.set({
         [enums.SITE_NAVIGATION]: data
     });
 };
 
-export const fetchNavigationAgent = async (): Promise<TypeNavigation | undefined> => {
+export const fetchAgentNavigationCode = async (): Promise<TypeNavigation | undefined> => {
     return new Promise((resolve) => {
         chrome.storage.local.get([enums.SITE_NAVIGATION], (result) => {
             if (result[enums.SITE_NAVIGATION]) {
