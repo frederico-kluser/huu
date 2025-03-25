@@ -1,3 +1,5 @@
+import enums from "../../types/enums";
+
 console.log('This is the background page.');
 console.log('Put the background scripts here.');
 
@@ -98,6 +100,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 // No seu background script (service worker)
 interface TabIdMessage {
     action: string;
+    data?: any;
 }
 
 chrome.runtime.onMessage.addListener((
@@ -105,8 +108,22 @@ chrome.runtime.onMessage.addListener((
     sender: chrome.runtime.MessageSender,
     sendResponse: (response?: any) => void,
 ): boolean => {
+    console.log('background -> message', message);
+
     if (message.action === 'getTabId' && sender.tab?.id) {
         sendResponse({ tabId: sender.tab.id });
+    }
+    if (message.action === 'navigate' && sender.tab?.id) {
+        const { blockId, type, url } = message.data;
+
+        chrome.storage.local.set({
+            [enums.SITE_NAVIGATION]: {
+                blockId,
+                type,
+                tabId: sender.tab?.id,
+                url,
+            }
+        });
     }
     return true; // Importante para manter a conexão aberta para respostas assíncronas
 });

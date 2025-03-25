@@ -4,13 +4,47 @@ import { getConditionalAi, getGeneratedText, getSummarizedText, getTranslatedTex
 const executeCode = (code: string) => {
     // Exponha TUDO que será usado no código do eval5
     const context = {
-        chrome, // APIs da extensão
         console,
         fetch: window.fetch.bind(window),
         getConditionalAi,
         getGeneratedText,
         getSummarizedText,
         getTranslatedText,
+        // Adiciona o objeto chrome com as funcionalidades do runtime
+        chrome: {
+            runtime: {
+                // Implementação do sendMessage
+                sendMessage: (
+                    message: any,
+                    responseCallback?: (response: any) => void
+                ) => {
+                    if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+                        return chrome.runtime.sendMessage(message, responseCallback);
+                    } else {
+                        console.error("chrome.runtime.sendMessage não está disponível");
+                        return undefined;
+                    }
+                },
+                // Adicione outras funções do chrome.runtime que você precisa
+                onMessage: {
+                    addListener: (
+                        callback: (
+                            message: any,
+                            sender: chrome.runtime.MessageSender,
+                            sendResponse: (response?: any) => void
+                        ) => void
+                    ) => {
+                        if (chrome && chrome.runtime && chrome.runtime.onMessage) {
+                            chrome.runtime.onMessage.addListener(callback);
+                        } else {
+                            console.error("chrome.runtime.onMessage não está disponível");
+                        }
+                    }
+                },
+                // Se precisar adicionar mais métodos do chrome.runtime, adicione aqui
+            },
+            // Adicione outros namespaces do chrome se necessário (como chrome.tabs, chrome.storage, etc.)
+        },
         // Objetos do DOM com bind
         document: {
             ...document,
