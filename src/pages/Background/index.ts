@@ -1,5 +1,6 @@
 import { updateNavigation } from "../../core/storage/navigation";
 import enums from "../../types/enums";
+import handleMessage from "./helpers/handlerMessage";
 
 console.log('This is the background page.');
 console.log('Put the background scripts here.');
@@ -98,29 +99,4 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 }
 */
 
-// No seu background script (service worker)
-interface TabIdMessage {
-    action: string;
-    data?: any;
-}
-
-chrome.runtime.onMessage.addListener((
-    message: TabIdMessage,
-    sender: chrome.runtime.MessageSender,
-    sendResponse: (response?: any) => void,
-): boolean => {
-    console.log('background -> message', message);
-
-    if (message.action === 'getTabId' && sender.tab?.id) {
-        sendResponse({ tabId: sender.tab.id });
-    }
-    if (message.action === 'navigate' && sender.tab?.id) {
-        const { data } = message;
-
-        updateNavigation({
-            ...data,
-            tabId: sender.tab?.id,
-        });
-    }
-    return true; // Importante para manter a conexão aberta para respostas assíncronas
-});
+handleMessage();
