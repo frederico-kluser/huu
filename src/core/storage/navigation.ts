@@ -2,7 +2,7 @@ import enums from "../../types/enums";
 import { TypeNavigation } from "../../types/storage";
 
 export const updateNavigationAgent = async (data: TypeNavigation): Promise<void> => {
-    chrome.storage.local.set({
+    return chrome.storage.local.set({
         [enums.SITE_NAVIGATION]: data
     });
 };
@@ -20,3 +20,7 @@ export const fetchNavigationAgent = async (): Promise<TypeNavigation | undefined
         });
     });
 }
+
+export const clearNavigationAgent = async (): Promise<void> => {
+    return chrome.storage.local.remove([enums.SITE_NAVIGATION]);
+};

@@ -8,7 +8,6 @@ import { fetchNavigationAgent } from '../../core/storage/navigation';
 import handleNavigation from './helpers/handleNavigation';
 import { fetchAgentByNavigationBlockId } from '../../core/storage/agents';
 import getTabId from './helpers/getTabId';
-// import checkIfTabExists from '../Background/helpers/checkIfTabExists';
 
 console.log('Content script works!');
 
@@ -34,14 +33,6 @@ fetchNavigationAgent().then(async (data) => {
         console.log(`fetchNavigation - diferente tabId: ${tabId} != ${data.tabId}`);
         return;
     }
-
-    // const tabExist = await checkIfTabExists(data.tabId);
-
-    // if (!tabExist) {
-    //     console.log('checkIfTabExists - tab não existe');
-    //     return;
-    // }
-
 
     const agent = await fetchAgentByNavigationBlockId(data.blockId);
 
