@@ -30,7 +30,6 @@ const setBlockSelectHTMLElement = () => {
         type: 'field_dropdown',
         name: 'TARGET_SELECTOR',
         options: [
-          ['XPath', 'xpath'],
           ['CSS', 'css'],
           ['ID', 'id'],
           ['Class', 'class'],
@@ -57,9 +56,6 @@ const setBlockSelectHTMLElement = () => {
         case 'tag':
           code = `document.getElementsByTagName(${selector})[0]`;
           break;
-        case 'xpath':
-          code = `document.evaluate(${selector}, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue`;
-          break;
         default:
           code = `document.querySelector(${selector})`;
       }
@@ -69,7 +65,7 @@ const setBlockSelectHTMLElement = () => {
   });
 };
 
-type TypeSelectors = 'css' | 'id' | 'class' | 'tag' | 'xpath';
+type TypeSelectors = 'css' | 'id' | 'class' | 'tag';
 
 export const getBlockSelectHTMLElement = (selector: TypeSelectors, value: string) => {
   return ({

@@ -58,6 +58,10 @@ const executeCode = (code: string) => {
             evaluate: document.evaluate.bind(document),
             body: document.body,
         },
+        Document: window.Document,
+        Element: window.Element,
+        Node: window.Node,
+        // Objetos do
         window: {
             ...window,
             alert: window.alert.bind(window),

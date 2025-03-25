@@ -1,7 +1,6 @@
 import executeCode from "../../../core/executeCode";
 import { fetchAgentByNavigationBlockId } from "../../../core/storage/agents";
 import { fetchAgentNavigationCode } from "../../../core/storage/navigation";
-import generateCodeFromBlocks from "../../../helpers/generateCodeFormBlocks";
 import getTabId from "./getTabId";
 
 const handleAgentExecution = async () => {
