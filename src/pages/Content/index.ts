@@ -5,11 +5,11 @@ import elementSelection from './helpers/elementSelection';
 import enums from '../../types/enums';
 import handleNavigation from './helpers/handleNavigation';
 import handleAgentExecution from './helpers/handleAgentExecution';
-import injectCodes from './injectCodes';
+import injectFeatures from './injectFeatures';
 
 console.log('Content script works!');
 
-Object.entries(injectCodes).forEach(([key, value]) => {
+Object.entries(injectFeatures).forEach(([key, value]) => {
     (window as any)[key] = value;
 });
 
@@ -21,7 +21,6 @@ window.onload = () => {
         elementSelection(changes);
         handleNavigation(changes[enums.SITE_NAVIGATION]?.newValue);
     });
-
 
     handleAgentExecution();
     InsertPageAgents();

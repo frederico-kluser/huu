@@ -16,16 +16,16 @@ const handleNavigation = async (navigation: TypeNavigation): Promise<void> => {
     }
 
     switch (type) {
-        case 'forward':
+        case 'navigate-block-forward':
             window.history.forward();
             break;
-        case 'back':
+        case 'navigate-block-back':
             window.history.back();
             break;
-        case 'refresh':
+        case 'navigate-block-refresh':
             window.location.reload();
             break;
-        case 'none':
+        case 'navigate-block-none':
             break;
         default:
             if (url) {
