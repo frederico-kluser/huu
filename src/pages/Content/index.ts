@@ -2,14 +2,16 @@ import { registerShortcut, ValidKey } from '../../helpers/registerShortcut';
 import setupElementInspector from '../../core/setupElementInspector';
 import InsertPageAgents from './helpers/insertPageAgents';
 import elementSelection from './helpers/elementSelection';
-import configNavigation from './helpers/configNavigation';
 import enums from '../../types/enums';
 import handleNavigation from './helpers/handleNavigation';
 import handleAgentExecution from './helpers/handleAgentExecution';
+import injectCodes from './injectCodes';
 
 console.log('Content script works!');
 
-(window as any).configNavigation = configNavigation;
+Object.entries(injectCodes).forEach(([key, value]) => {
+    (window as any)[key] = value;
+});
 
 window.onload = () => {
     chrome.storage.onChanged.addListener((changes, areaName) => {

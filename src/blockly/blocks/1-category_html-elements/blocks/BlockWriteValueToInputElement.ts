@@ -41,7 +41,8 @@ const setBlockWriteValueToInputElement = () => {
             const valueCode = generator.valueToCode(block, 'VALUE', Order.NONE) || '""';
 
             // Gerar o código para definir o value do elemento de input
-            const code = `${elementSelector}.value = ${valueCode};\n`;
+            // const code = `${elementSelector}.value = ${valueCode};\n`;
+            const code = `window.setInputValue(${elementSelector}, ${valueCode});\n`;
 
             return code;
         }

@@ -11,11 +11,11 @@ const messageHandler = () => {
         message: TabIdMessage,
         sender: chrome.runtime.MessageSender,
         sendResponse: (response?: any) => void,
-    ): boolean => {
+    ): void => {
         console.log('background -> message', message);
 
         if (!sender.tab?.id) {
-            return true;
+            return;
         }
 
         switch (message.action) {
@@ -36,7 +36,7 @@ const messageHandler = () => {
                 break;
         }
 
-        return true; // Importante para manter a conexão aberta para respostas assíncronas
+        return; // Importante para manter a conexão aberta para respostas assíncronas
     });
 };
 
