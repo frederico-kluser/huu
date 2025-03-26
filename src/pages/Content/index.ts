@@ -11,16 +11,19 @@ console.log('Content script works!');
 
 (window as any).configNavigation = configNavigation;
 
-chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== 'local') return;
+window.onload = () => {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== 'local') return;
 
+        InsertPageAgents();
+        elementSelection(changes);
+        handleNavigation(changes[enums.SITE_NAVIGATION]?.newValue);
+    });
+
+
+    handleAgentExecution();
     InsertPageAgents();
-    elementSelection(changes);
-    handleNavigation(changes[enums.SITE_NAVIGATION]?.newValue);
-});
 
-handleAgentExecution();
-InsertPageAgents();
-
-registerShortcut([ValidKey.ControlLeft, ValidKey.Digit1], setupElementInspector);
-registerShortcut([ValidKey.ControlRight, ValidKey.Digit1], setupElementInspector);
+    registerShortcut([ValidKey.ControlLeft, ValidKey.Digit1], setupElementInspector);
+    registerShortcut([ValidKey.ControlRight, ValidKey.Digit1], setupElementInspector);
+};

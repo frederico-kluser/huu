@@ -1,6 +1,7 @@
 import executeCode from "../../../core/executeCode";
 import { fetchAgentByNavigationBlockId } from "../../../core/storage/agents";
-import { fetchAgentNavigationCode } from "../../../core/storage/navigation";
+import { clearNavigationAgent, fetchAgentNavigationCode } from "../../../core/storage/navigation";
+import injectStringCodeVariables from "../../../helpers/injectVariables";
 import getTabId from "./getTabId";
 
 const handleAgentExecution = async () => {
@@ -27,14 +28,19 @@ const handleAgentExecution = async () => {
 
         console.log('fetchAgentByNavigationBlockId - agent', agent);
 
-        const code = agent.navigation[data.blockId];
+        const unformattedCode = agent.navigation[data.blockId];
+
+        const code = injectStringCodeVariables(data.variables as any, unformattedCode);
 
         if (!code) {
             console.log('fetchAgentByNavigationBlockId - code não encontrado');
             return;
         }
 
-        console.log('fetchAgentByNavigationBlockId - code', code);
+        clearNavigationAgent();
+        console.log('fetchAgentByNavigationBlockId - code');
+        console.log(code);
+
         executeCode(code);
     });
 };

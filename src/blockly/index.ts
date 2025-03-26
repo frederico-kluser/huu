@@ -33,14 +33,10 @@ export const loadWorkspace = async (wsName: string) => {
 
 const updateCode = async (event: any) => {
     const blocks = Blockly.serialization.workspaces.save(workspace);
-    const processedBlocklyCode = processBlocklyCode(blocks);
-
-    console.log('processBlocklyCode(blocks)', processedBlocklyCode);
-
     const {
         initial,
         navigation,
-    } = processedBlocklyCode;
+    } = processBlocklyCode(blocks);
 
     const code = generateCodeFromBlocks(initial);
 
