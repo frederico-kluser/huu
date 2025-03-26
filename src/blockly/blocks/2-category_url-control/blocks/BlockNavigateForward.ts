@@ -26,7 +26,7 @@ const setBlockNavigateForward = () => {
             const code = `${variableCollectionCode}
 window.configNavigation({
     blockId: '${block.id}',
-    type: 'forward',
+    type: 'navigate-block-forward',
     variables: variableValues,
 });\n`;
             return code;

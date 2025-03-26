@@ -27,12 +27,15 @@ const handleNavigation = async (navigation: TypeNavigation): Promise<void> => {
             break;
         case 'navigate-block-none':
             break;
-        default:
+        case 'navigate-block-url':
             if (url) {
                 window.location.href = url;
             } else {
                 console.error('URL não informada');
             }
+            break;
+        default:
+            console.error('Tipo de navegação não reconhecido');
             break;
     };
 };

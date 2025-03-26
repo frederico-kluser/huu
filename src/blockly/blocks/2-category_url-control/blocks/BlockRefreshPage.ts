@@ -26,7 +26,7 @@ const setBlockRefreshPage = () => {
             const code = `${variableCollectionCode}
 window.configNavigation({
     blockId: '${block.id}',
-    type: 'refresh',
+    type: 'navigate-block-refresh',
     variables: variableValues,
 });\n`;
             return code;

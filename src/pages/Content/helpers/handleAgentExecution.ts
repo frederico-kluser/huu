@@ -21,6 +21,14 @@ const handleAgentExecution = async () => {
             return;
         }
 
+        if (data.type === 'navigate-block-none') {
+            // chrome.tabs.remove(data.tabId, function () {
+            //     console.log("Tab de ID " + tabId + " foi fechada");
+            // });
+            console.log("chrome");
+            console.log(chrome);
+        }
+
         const agent = await fetchAgentByNavigationBlockId(data.blockId);
 
         if (!agent) {

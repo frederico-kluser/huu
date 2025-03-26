@@ -26,7 +26,7 @@ const setBlockNavigate = () => {
             const code = `${variableCollectionCode}
 window.configNavigation({
     blockId: '${block.id}',
-    type: 'none',
+    type: 'navigate-block-none',
     variables: variableValues, 
 });\n`;
             return code;
