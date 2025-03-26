@@ -11,7 +11,7 @@ const setBlockWriteValueToInputElement = () => {
         hasPreviousConnection: null,
         helpUrl:
             'https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input#value',
-        message: 'colocar valor %1\nno input %2',
+        message: 'escrever %1\nno input %2',
         name: 'BlockWriteValueToInputElement',
         tooltip:
             'Define o valor de um elemento de formulário (input, textarea ou select) HTML previamente selecionado.',

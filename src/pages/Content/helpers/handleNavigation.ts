@@ -25,6 +25,8 @@ const handleNavigation = async (navigation: TypeNavigation): Promise<void> => {
         case 'refresh':
             window.location.reload();
             break;
+        case 'none':
+            break;
         default:
             if (url) {
                 window.location.href = url;
