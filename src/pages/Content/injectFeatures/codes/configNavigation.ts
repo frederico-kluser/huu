@@ -1,4 +1,4 @@
-import { TypeNavigation } from "../../../types/storage";
+import { TypeNavigation } from "../../../../types/storage";
 
 const configNavigation = ({
     blockId,
@@ -9,4 +9,4 @@ const configNavigation = ({
     chrome.runtime.sendMessage({ action: 'navigate', data: { blockId, type, url, variables } });
 };
 
-export default configNavigation;
+export default configNavigation; 

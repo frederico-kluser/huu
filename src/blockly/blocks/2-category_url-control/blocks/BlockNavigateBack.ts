@@ -26,7 +26,7 @@ const setBlockNavigateBack = () => {
             const code = `${variableCollectionCode}
 window.configNavigation({
     blockId: '${block.id}',
-    type: 'back',
+    type: 'navigate-block-back',
     variables: variableValues,
 });\n`;
             return code;

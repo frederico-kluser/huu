@@ -44,7 +44,7 @@ const setBlockNavigateToUrlText = () => {
 var newUrl = ${url};
 window.configNavigation({
     blockId: '${block.id}',
-    type: 'url',
+    type: 'navigate-block-url',
     url: newUrl,
     variables: variableValues,
 });\n`;

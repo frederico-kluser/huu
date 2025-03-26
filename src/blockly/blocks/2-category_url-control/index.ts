@@ -1,4 +1,5 @@
 import { TypeBlockly } from "../../helpers/blockConstructor";
+import setBlockNavigate from "./blocks/BlockNavigate";
 import setBlockNavigateBack from "./blocks/BlockNavigateBack";
 import setBlockNavigateForward from "./blocks/BlockNavigateForward";
 import setBlockNavigateToUrlText from "./blocks/BlockNavigateToUrlText";
@@ -10,6 +11,7 @@ const configURLActions = (): TypeBlockly[] => {
         setBlockRefreshPage(),
         setBlockNavigateBack(),
         setBlockNavigateForward(),
+        setBlockNavigate(),
     ];
 };
 

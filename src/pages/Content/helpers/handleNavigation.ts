@@ -16,21 +16,26 @@ const handleNavigation = async (navigation: TypeNavigation): Promise<void> => {
     }
 
     switch (type) {
-        case 'forward':
+        case 'navigate-block-forward':
             window.history.forward();
             break;
-        case 'back':
+        case 'navigate-block-back':
             window.history.back();
             break;
-        case 'refresh':
+        case 'navigate-block-refresh':
             window.location.reload();
             break;
-        default:
+        case 'navigate-block-none':
+            break;
+        case 'navigate-block-url':
             if (url) {
                 window.location.href = url;
             } else {
                 console.error('URL não informada');
             }
+            break;
+        default:
+            console.error('Tipo de navegação não reconhecido');
             break;
     };
 };

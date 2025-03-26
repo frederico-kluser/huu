@@ -24,6 +24,7 @@ const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => 
   };
 
   const navigationBlockTypes = [
+    'BlockNavigate',
     'BlockNavigateToUrlText',
     'BlockNavigateBack',
     'BlockNavigateForward',

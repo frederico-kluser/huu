@@ -14,9 +14,19 @@ const handleAgentExecution = async () => {
 
         const tabId = await getTabId();
 
-        if (data.tabId !== tabId) {
+        // Solução caso tenhamos problemas com novas tabs: && data.type !== 'navigate-block-none'
+        // caso precise aceitar diferentes tabs, terei que mudar a tab default para a nova tab e fechar a tab antiga TALVEZ
+        if (data.tabId !== tabId && data.type !== 'navigate-block-none') {
             console.log(`fetchNavigation - diferente tabId: ${tabId} != ${data.tabId}`);
             return;
+        }
+
+        if (data.type === 'navigate-block-none') {
+            // chrome.tabs.remove(data.tabId, function () {
+            //     console.log("Tab de ID " + tabId + " foi fechada");
+            // });
+            console.log("chrome");
+            console.log(chrome);
         }
 
         const agent = await fetchAgentByNavigationBlockId(data.blockId);
