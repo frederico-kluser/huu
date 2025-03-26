@@ -18,11 +18,15 @@ export type TypeBlock = {
 type TypeAgent = {
     name: string; // also the id
     blocks: TypeBlock;
-    urls: string;
     code: string;
+    navigation: {
+        [key: string]: any;
+    };
+    urls: string;
     mode: TypeMode;
     active: boolean;
     lastUpdate: number;
+    actualCode?: 'initial' | string;
 };
 
 export default TypeAgent;

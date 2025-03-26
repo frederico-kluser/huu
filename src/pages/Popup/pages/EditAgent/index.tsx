@@ -5,7 +5,7 @@ import { fetchActualWorkspaceIndex, updateActualWorkspace } from "../../../../co
 import TypeAgent, { TypeBlock } from "../../../../types/agent";
 import isValidUrlPatterns from "../../../../helpers/isValidPatterns";
 import { removeItem } from "../../../../core/storage";
-import { fetchAgentById, saveOrUpdateAgent } from "../../../../core/storage/agents";
+import { fetchAgentById, updateOrCreateAgent } from "../../../../core/storage/agents";
 
 interface EditAgentProps {
     handleCreateAgent: () => void
@@ -108,7 +108,7 @@ const EditAgent = ({
             localAgentName = workspaceName;
         }
 
-        saveOrUpdateAgent(localAgentName, newAgentValue);
+        updateOrCreateAgent(localAgentName, newAgentValue);
 
         handleGoHome();
     };

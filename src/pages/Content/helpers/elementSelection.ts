@@ -1,8 +1,8 @@
 import { getBlockSelectHTMLElement } from "../../../blockly/blocks/1-category_html-elements/blocks/BlockSelectHTMLElement";
-import createUniqueElementSelector from "../../../core/createUniqueElementSelector";
-import replaceBlockById from "../../../core/replaceBlockId";
+import createUniqueElementSelector from "../../../helpers/createUniqueElementSelector";
+import replaceBlockById from "../../../helpers/replaceBlockId";
 import setupElementInspector from "../../../core/setupElementInspector";
-import { fetchAgentById, updateAgentPartial } from "../../../core/storage/agents";
+import { fetchAgentById, updateAgentAttributes } from "../../../core/storage/agents";
 import { getElementSelection, removeElementSelection } from "../../../core/storage/elementSelection";
 import enums from "../../../types/enums";
 import getTabId from "./getTabId";
@@ -46,7 +46,7 @@ const elementSelection = async (changes: {
     }
 
     await removeElementSelection(); // this need run before updateAgentPartial to avoid infinite loop
-    await updateAgentPartial(agentId, {
+    await updateAgentAttributes(agentId, {
         blocks: replaceBlockById(agent.blocks, blockId, getBlockSelectHTMLElement('css', elementInspector)),
         code: '', // Limpa o código para forçar a recompilação
     });

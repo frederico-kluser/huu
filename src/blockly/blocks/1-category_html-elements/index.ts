@@ -7,6 +7,7 @@ import setBlockScrollToElement from "./blocks/BlockScrollToElement";
 import setBlockSelectHTMLElement from "./blocks/BlockSelectHTMLElement";
 import setBlockWaitForElement from "./blocks/BlockWaitForElement";
 import setBlockWriteTextToHTMLElement from "./blocks/BlockWriteTextToHTMLElement";
+import setBlockWriteValueToInputElement from "./blocks/BlockWriteValueToInputElement";
 
 const configHTMLInterection = (): Array<TypeBlockly | TypeBlocklyButton> => {
     return [
@@ -20,6 +21,7 @@ const configHTMLInterection = (): Array<TypeBlockly | TypeBlocklyButton> => {
         setBlockDblClickHTMLElement(),
         // Manipulação de texto
         setBlockWriteTextToHTMLElement(),
+        setBlockWriteValueToInputElement(),
         setBlockGetElementInnerText(),
     ];
 };

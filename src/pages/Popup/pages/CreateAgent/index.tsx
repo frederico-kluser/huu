@@ -17,7 +17,7 @@ const CreateAgent = ({
 
     // validateOpenAIApiKey
 
-    const handlerChangeValue = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleChangeValue = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setOpenaiKey(value)
 
@@ -41,7 +41,7 @@ const CreateAgent = ({
         }
     };
 
-    const handlerMiddleware = async () => {
+    const handleMiddleware = async () => {
         setItem(enums.OPENAI_KEY, openaiKey).then(handleCreateAgent);
     };
 
@@ -50,12 +50,12 @@ const CreateAgent = ({
             <h1>huu</h1>
             {isLoading && <span aria-busy="true">Validando chave da OpenAI...</span>}
             {!isLoading && <>
-                <input placeholder='Insira sua chave da OpenAI para criar um agente' type="password" value={openaiKey} onChange={handlerChangeValue} aria-invalid={agentInputStatus} style={styles.input} />
+                <input placeholder='Insira sua chave da OpenAI para criar um agente' type="password" value={openaiKey} onChange={handleChangeValue} aria-invalid={agentInputStatus} style={styles.input} />
                 <p>Insira sua chave da OpenAI para criar um agente</p>
                 <p>Para obter sua chave, acesse <a href="https://platform.openai.com/account/api-keys" target
                     ="_blank">https://platform.openai.com/account/api-keys</a></p>
                 <p>Depois de criar um agente, você pode editá-lo na página de edição de agentes</p>
-                <button onClick={handlerMiddleware} disabled={agentInputStatus !== "false"}>Criar Agente</button>
+                <button onClick={handleMiddleware} disabled={agentInputStatus !== "false"}>Criar Agente</button>
             </>}
         </div>
     )

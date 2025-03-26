@@ -1,9 +1,9 @@
 import executeCode from "../../../core/executeCode";
-import getTabAgents from "../../../core/getTabAgents";
+import fetchAgentsMatchingUrl from "../../../core/storage/getTabAgents";
 import { registerShortcut, ValidKey } from "../../../helpers/registerShortcut";
-import TypeHandlerShortcut from "../../../types/shortcuts";
+import TypeHandleShortcut from "../../../types/shortcuts";
 
-const Window = window as Window & typeof globalThis & { removeShortcuts: TypeHandlerShortcut };
+const Window = window as Window & typeof globalThis & { removeShortcuts: TypeHandleShortcut };
 Window['removeShortcuts'] = {};
 
 // TODO: melhorar aparentemente estamos tendo problemas com a execução do código
@@ -17,7 +17,7 @@ const InsertPageAgents = () => {
         delete removeShortcuts[key];
     });
 
-    getTabAgents(window.location.href).then((agents) => {
+    fetchAgentsMatchingUrl(window.location.href).then((agents) => {
         console.log('agents:', agents);
 
         agents.forEach((agent) => {

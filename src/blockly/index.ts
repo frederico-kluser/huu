@@ -1,10 +1,11 @@
 import * as Blockly from 'blockly/core';
-import { javascriptGenerator } from 'blockly/javascript';
 import blocklyOptions from './config/options';
 import blocklyContextMenus from './config/contextMenu';
 import BlocklyTypes from './config/types';
 import TypeAgent, { TypeBlock } from '../types/agent';
-import { fetchAgentById, saveOrUpdateAgent } from '../core/storage/agents';
+import { fetchAgentById, updateOrCreateAgent } from '../core/storage/agents';
+import processBlocklyCode from '../helpers/processBlocklyCode';
+import generateCodeFromBlocks from '../helpers/generateCodeFormBlocks';
 
 var workspace: Blockly.Workspace;
 var workspaceName = "";
@@ -30,25 +31,35 @@ export const loadWorkspace = async (wsName: string) => {
 }
 
 const updateCode = async (event: any) => {
-    const code = javascriptGenerator.workspaceToCode(workspace);
-    // console.clear();
-    console.log("code:");
-    console.log(code);
-    console.log("----");
     const blocks = Blockly.serialization.workspaces.save(workspace);
-    console.log("blocks:");
-    console.log(blocks);
-    console.log("----");
 
+    if (Object.keys(blocks).length === 0) {
+        return;
+    }
+
+    console.log("blocks", blocks);
+
+    const {
+        initial,
+        navigation,
+    } = processBlocklyCode(blocks);
+
+    const code = generateCodeFromBlocks(initial);
+
+    Object.entries(navigation).forEach(([key, value]: [string, any]) => {
+        const navigationCode = generateCodeFromBlocks(value);
+        navigation[key] = navigationCode;
+    });
 
     // TODO: se eu usar o updateAgentPartial não preciso desse "as TypeAgent"
     const actualState = await getBlocklyState(workspaceName) as TypeAgent;
 
-    await saveOrUpdateAgent(workspaceName, {
+    await updateOrCreateAgent(workspaceName, {
         ...actualState,
         name: workspaceName,
         blocks,
         code,
+        navigation,
     });
 }
 

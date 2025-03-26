@@ -3,7 +3,7 @@ import isValidAgent from '../../../../helpers/isValidAgent';
 import { TypeMode } from '../../../../types/agent';
 import Colors from '../../../../types/colors';
 import TypePageStyle from '../../../../types/pageStyle';
-import { fetchAgentById, updateAgentPartial } from '../../../../core/storage/agents';
+import { fetchAgentById, updateAgentAttributes } from '../../../../core/storage/agents';
 import urlMatchesPattern from '../../../../helpers/urlMatchePattern';
 import Gap from '../../../../components/Gap';
 
@@ -51,7 +51,7 @@ const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent }: MainPageProp
 
         return (
             <button onClick={() => {
-                updateAgentPartial(agentName, {
+                updateAgentAttributes(agentName, {
                     active: !active,
                 });
 
@@ -61,7 +61,7 @@ const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent }: MainPageProp
     };
 
     const handleEditMode = async (agentName: string, mode: TypeMode) => {
-        await updateAgentPartial(agentName, {
+        await updateAgentAttributes(agentName, {
             mode,
         });
 

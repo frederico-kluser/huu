@@ -13,7 +13,22 @@ const setBlockNavigateBack = () => {
         tooltip: 'Navega para a página anterior no histórico do navegador.',
         fields: [],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
-            const code = 'window.history.back();\n';
+            // Get all variables from the workspace
+            const allVariables = block.workspace.getAllVariables();
+
+            // Create variable collection code for runtime values
+            let variableCollectionCode = 'var variableValues = {};\n';
+            allVariables.forEach(v => {
+                const varName = generator?.nameDB_?.getName(v.getId(), Blockly.VARIABLE_CATEGORY_NAME);
+                variableCollectionCode += `var ${varName};\nvariableValues["${varName}"] = ${varName};\n`;
+            });
+
+            const code = `${variableCollectionCode}
+window.configNavigation({
+    blockId: '${block.id}',
+    type: 'back',
+    variables: variableValues,
+});\n`;
             return code;
         },
     });
