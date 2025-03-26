@@ -1,5 +1,4 @@
 import * as Blockly from 'blockly/core';
-import { javascriptGenerator } from 'blockly/javascript';
 import blocklyOptions from './config/options';
 import blocklyContextMenus from './config/contextMenu';
 import BlocklyTypes from './config/types';
@@ -33,6 +32,13 @@ export const loadWorkspace = async (wsName: string) => {
 
 const updateCode = async (event: any) => {
     const blocks = Blockly.serialization.workspaces.save(workspace);
+
+    if (Object.keys(blocks).length === 0) {
+        return;
+    }
+
+    console.log("blocks", blocks);
+
     const {
         initial,
         navigation,

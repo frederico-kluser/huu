@@ -20,7 +20,7 @@ const setBlockNavigateForward = () => {
             let variableCollectionCode = 'var variableValues = {};\n';
             allVariables.forEach(v => {
                 const varName = generator?.nameDB_?.getName(v.getId(), Blockly.VARIABLE_CATEGORY_NAME);
-                variableCollectionCode += `variableValues["${varName}"] = ${varName};\n`;
+                variableCollectionCode += `var ${varName};\nvariableValues["${varName}"] = ${varName};\n`;
             });
 
             const code = `${variableCollectionCode}
