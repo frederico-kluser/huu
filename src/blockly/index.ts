@@ -51,6 +51,12 @@ const updateCode = async (event: any) => {
         navigation[key] = navigationCode;
     });
 
+    const viewportState = {
+        scale: (workspace as any)?.scale,
+        scrollX: (workspace as any)?.scrollX,
+        scrollY: (workspace as any)?.scrollY
+    };
+
     // TODO: se eu usar o updateAgentPartial não preciso desse "as TypeAgent"
     const actualState = await getBlocklyState(workspaceName) as TypeAgent;
 
@@ -60,6 +66,7 @@ const updateCode = async (event: any) => {
         blocks,
         code,
         navigation,
+        viewportState,
     });
 }
 
