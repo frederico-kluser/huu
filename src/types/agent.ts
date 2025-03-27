@@ -27,6 +27,11 @@ type TypeAgent = {
     active: boolean;
     lastUpdate: number;
     actualCode?: 'initial' | string;
+    viewportState?: {
+        scale: number;
+        scrollX: number;
+        scrollY: number;
+    };
 };
 
 export default TypeAgent;

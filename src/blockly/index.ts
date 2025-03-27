@@ -26,8 +26,20 @@ export const getBlocklyState = async (localWorkspaceName: string): Promise<Parti
 export const loadWorkspace = async (wsName: string) => {
     workspaceName = wsName;
     const workspaceState = await getBlocklyState(wsName);
-    const { blocks } = workspaceState;
+    const { blocks, viewportState } = workspaceState;
+
+    // Carregar os blocos
     Blockly.serialization.workspaces.load(blocks as TypeBlock, workspace);
+
+    // Restaurar o estado do viewport se disponível
+    if (viewportState) {
+        (workspace as any).scale = viewportState.scale;
+        (workspace as any).scrollX = viewportState.scrollX;
+        (workspace as any).scrollY = viewportState.scrollY;
+
+        // Forçar a atualização da visualização
+        (workspace as any).scroll(viewportState.scrollX, viewportState.scrollY); // Isso força uma atualização da visualização
+    }
 }
 
 const updateCode = async (event: any) => {
@@ -51,6 +63,12 @@ const updateCode = async (event: any) => {
         navigation[key] = navigationCode;
     });
 
+    const viewportState = {
+        scale: (workspace as any)?.scale,
+        scrollX: (workspace as any)?.scrollX,
+        scrollY: (workspace as any)?.scrollY
+    };
+
     // TODO: se eu usar o updateAgentPartial não preciso desse "as TypeAgent"
     const actualState = await getBlocklyState(workspaceName) as TypeAgent;
 
@@ -60,6 +78,7 @@ const updateCode = async (event: any) => {
         blocks,
         code,
         navigation,
+        viewportState,
     });
 }
 
