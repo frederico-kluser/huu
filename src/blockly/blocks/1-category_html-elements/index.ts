@@ -1,6 +1,7 @@
 import { TypeBlockly, TypeBlocklyButton } from "../../helpers/blockConstructor";
 import setBlockClickHTMLElement from "./blocks/BlockClickHTMLElement";
 import setBlockDblClickHTMLElement from "./blocks/BlockDblClickHTMLElement";
+import setBlockDeleteHTMLElement from "./blocks/BlockDeleteHTMLElement";
 import setBlockExtractSiteContent from "./blocks/BlockExtractSiteContent";
 import setBlockGetElementInnerText from "./blocks/BlockGetElementInnerText";
 import setBlockIfElementExists from "./blocks/BlockIfElementExists";
@@ -25,6 +26,7 @@ const configHTMLInterection = (): Array<TypeBlockly | TypeBlocklyButton> => {
         setBlockWriteValueToInputElement(),
         setBlockGetElementInnerText(),
         setBlockExtractSiteContent(),
+        setBlockDeleteHTMLElement(),
     ];
 };
 
