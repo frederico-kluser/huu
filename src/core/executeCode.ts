@@ -43,6 +43,21 @@ const executeCode = (code: string) => {
                 },
                 // Se precisar adicionar mais métodos do chrome.runtime, adicione aqui
             },
+            // Adicionar o namespace scripting com executeScript
+            scripting: {
+                executeScript: (
+                    injection: any,
+                    callback?: (results: any[]) => void
+                ) => {
+                    if (chrome && chrome.scripting && chrome.scripting.executeScript) {
+                        return chrome.scripting.executeScript(injection, callback);
+                    } else {
+                        console.error("chrome.scripting.executeScript não está disponível");
+                        return undefined;
+                    }
+                }
+                // Adicione outras funções do chrome.scripting se necessário
+            },
             // Adicione outros namespaces do chrome se necessário (como chrome.tabs, chrome.storage, etc.)
         },
         // Objetos do DOM com bind
