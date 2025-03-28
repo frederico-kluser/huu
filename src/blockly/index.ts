@@ -54,11 +54,19 @@ const updateCode = async (event: any) => {
         navigation,
     } = processBlocklyCode(blocks);
 
+    const newNavigation: {
+        [key: string]: any;
+    } = [];
+
     const code = generateCodeFromBlocks(initial);
 
     Object.entries(navigation).forEach(([key, value]: [string, any]) => {
-        const navigationCode = generateCodeFromBlocks(value);
-        navigation[key] = navigationCode;
+        try {
+            const navigationCode = generateCodeFromBlocks(value);
+            newNavigation[key] = navigationCode;
+        } catch (error) {
+            console.error(`Error generating code for navigation block ${key}:`, value, error);
+        }
     });
 
     const viewportState = {
@@ -75,7 +83,7 @@ const updateCode = async (event: any) => {
         name: workspaceName,
         blocks,
         code,
-        navigation,
+        navigation: newNavigation,
         viewportState,
     });
 }
