@@ -6,7 +6,7 @@ import BlocklyTypes from '../../config/types';
 
 const setBlockSetHtmlVariable = () => {
     return blockConstructor({
-        colour: Colors.VARIABLES_DYNAMIC,
+        colour: Colors.HTML,
         hasPreviousConnection: null,
         hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Element',
