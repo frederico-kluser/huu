@@ -8,6 +8,7 @@ import { setElementSelection } from '../../../core/storage/elementSelection';
 import { fetchActualWorkspaceName } from '../../../core/storage/workspace';
 import { fetchActualAgent } from '../../../core/storage/agents';
 import urlMatchesPattern from '../../../helpers/urlMatchePattern';
+import extractNavigateUrls from '../../../pages/Content/helpers/extractNavigateUrls';
 
 const blockName = 'BlockDynamicElementSelector';
 
@@ -42,14 +43,6 @@ const setBlockDynamicElementSelector = () => {
                     !block.workspace.isFlyout &&
                     block.isEnabled()) {
 
-                    const userInput = window.confirm('Deseja ajuda para selecionar um elemento da página?');
-
-                    if (!userInput) {
-                        window.alert('Usuário cancelou a seleção de elemento');
-                        block.dispose();
-                        return;
-                    }
-
                     fetchActualAgent().then((actialAgent) => {
                         if (!actialAgent) {
                             window.alert('Não foi possível obter o agente atual, tente novamente.');
@@ -57,9 +50,12 @@ const setBlockDynamicElementSelector = () => {
                             return;
                         }
 
+                        console.log("actialAgent", actialAgent);
+
                         const {
                             name: workspaceName,
                             urls: workspaceUrls,
+                            blocks,
                         } = actialAgent;
 
 
@@ -76,8 +72,15 @@ const setBlockDynamicElementSelector = () => {
                                     throw new Error('Não foi possível obter a URL da aba, tente novamente.');
                                 }
 
-                                if (!urlMatchesPattern(tabUrl, workspaceUrls)) {
-                                    throw new Error('A URL da aba não corresponde a nenhum padrão de URL do agente atual.');
+                                let isUrlNavigationNotFound = true;
+                                extractNavigateUrls(blocks).forEach((navigationURL) => {
+                                    if (urlMatchesPattern(tabUrl, navigationURL)) {
+                                        isUrlNavigationNotFound = false;
+                                    }
+                                });
+
+                                if (!urlMatchesPattern(tabUrl, workspaceUrls) && isUrlNavigationNotFound) {
+                                    throw new Error('A URL da aba atual não corresponde a nenhuma das URLs configuradas para este agente ou aos padrões de navegação definidos nos blocos. Verifique as configurações e tente novamente.');
                                 }
                             } catch (error) {
                                 window.alert(error);
