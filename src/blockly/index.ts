@@ -49,8 +49,6 @@ const updateCode = async (event: any) => {
         return;
     }
 
-    console.log("blocks", blocks);
-
     const {
         initial,
         navigation,

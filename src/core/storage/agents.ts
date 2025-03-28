@@ -42,6 +42,8 @@ export const updateOrCreateAgent = (agentId: string, agent: TypeAgent) => {
         lastUpdate: Date.now(),
     };
 
+    console.log("agente atualizado", agentData);
+
     return setItem<TypeAgent>(agentId, agentData);
 };
 
