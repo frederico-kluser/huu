@@ -12,6 +12,8 @@ const elementSelection = async (changes: {
 }) => {
     if (!changes[enums.ELEMENT_SELECTION]?.newValue) return;
 
+    console.log('elementSelection - changes', changes[enums.ELEMENT_SELECTION]?.newValue);
+
     const result = await getElementSelection();
 
     if (!result) return;
