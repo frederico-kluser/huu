@@ -49,7 +49,9 @@ const handleAgentExecution = async () => {
 
         clearNavigationAgent();
         console.log('fetchAgentByNavigationBlockId - code');
-        console.log(code);
+        console.log({
+            code,
+        });
 
         executeCode(code);
     });
