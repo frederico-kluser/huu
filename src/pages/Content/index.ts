@@ -30,25 +30,23 @@ const executeContentCode = (): void => {
     registerShortcut([ValidKey.ControlRight, ValidKey.Digit1], setupElementInspector);
 };
 
-// Variável para controlar se o código já foi executado
-let codeExecuted = false;
+let isTimeoutExecuted = false;
 
-// Função para garantir que o código seja executado apenas uma vez
-const safeExecute = (): void => {
-    if (!codeExecuted) {
-        codeExecuted = true;
-        executeContentCode();
-    }
-};
-
-// Definir um timeout de 5 segundos (5000ms)
-const timeoutId = setTimeout(() => {
-    safeExecute();
+const timeout = setTimeout(() => {
+    isTimeoutExecuted = true;
+    console.log('executeContentCode - timeout executed');
+    executeContentCode();
 }, 5000);
 
 // Ainda usar o window.onload para casos onde a página carrega rapidamente
 window.addEventListener('load', () => {
-    // Limpar o timeout se a página carregar antes dos 5 segundos
-    clearTimeout(timeoutId);
-    safeExecute();
+    if (isTimeoutExecuted) {
+        return;
+    }
+    console.log('executeContentCode - timeout cancelled');
+    clearTimeout(timeout);
+    setTimeout(() => {
+        executeContentCode();
+        console.log('executeContentCode - window.onload - setTimeout');
+    }, 1000);
 });
