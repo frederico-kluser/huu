@@ -2,8 +2,6 @@ import { TypeNavigation } from "../../../types/storage";
 import getTabId from "./getTabId";
 
 const handleNavigation = async (navigation: TypeNavigation): Promise<void> => {
-    console.log('changes[enums.SITE_NAVIGATION]?.newValue', navigation);
-
     if (!navigation) return;
 
     const { type, url, tabId } = navigation;

@@ -20,6 +20,7 @@ const executeContentCode = (): void => {
 
         InsertPageAgents();
         elementSelection(changes);
+        console.log("changes[enums.SITE_NAVIGATION]", changes[enums.SITE_NAVIGATION]);
         handleNavigation(changes[enums.SITE_NAVIGATION]?.newValue);
     });
 
