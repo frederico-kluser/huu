@@ -1,41 +1,65 @@
 const setupElementInspector = (): Promise<HTMLElement | null> => new Promise((resolve) => {
-    // Interface para estender o HTMLElement com propriedades personalizadas
-    interface ExtendedHTMLElement extends HTMLElement {
-        _originalOutline: string;
-        _originalOutlineOffset: string;
-        _originalBgColor: string;
-    }
-
     // Variável para controlar se o seletor está ativo
     let isActive: boolean = false;
 
     // Elemento que está atualmente destacado
-    let currentHighlightedElement: ExtendedHTMLElement | null = null;
+    let currentHighlightedElement: HTMLElement | null = null;
+
+    // Elemento overlay para o destaque
+    let highlightOverlay: HTMLElement | null = null;
 
     // Elemento para exibir informações sobre o elemento atual
     let infoBox: HTMLDivElement | null = null;
 
+    // ID único para nossos elementos injetados
+    const uniqueId = `element-inspector-${Date.now()}`;
+
+    // Função para injetar os estilos CSS necessários
+    const injectStyles = (): void => {
+        const styleEl = document.createElement('style');
+        styleEl.id = `${uniqueId}-styles`;
+        styleEl.textContent = `
+            #${uniqueId}-overlay {
+                position: absolute;
+                box-shadow: 0 0 0 2px #4285f4;
+                background-color: rgba(66, 133, 244, 0.1);
+                pointer-events: none;
+                z-index: 2147483646;
+                transition: all 0.1s ease;
+            }
+            #${uniqueId}-info {
+                position: fixed;
+                left: 0;
+                bottom: 0;
+                background-color: #333;
+                color: white;
+                font-family: monospace;
+                padding: 5px 10px;
+                border-top-right-radius: 3px;
+                z-index: 2147483647;
+                font-size: 12px;
+                pointer-events: none;
+                max-width: 100%;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+        `;
+        document.head.appendChild(styleEl);
+    };
+
+    // Função para criar o overlay de destaque
+    const createHighlightOverlay = (): void => {
+        highlightOverlay = document.createElement('div');
+        highlightOverlay.id = `${uniqueId}-overlay`;
+        highlightOverlay.style.display = 'none';
+        document.body.appendChild(highlightOverlay);
+    };
+
     // Criar a caixa de informações
     const createInfoBox = (): void => {
         infoBox = document.createElement('div');
-        infoBox.id = 'element-selector-info';
-        infoBox.style.cssText = `
-      position: fixed;
-      left: 0;
-      bottom: 0;
-      background-color: #333;
-      color: white;
-      font-family: monospace;
-      padding: 5px 10px;
-      border-top-right-radius: 3px;
-      z-index: 2147483647;
-      font-size: 12px;
-      pointer-events: none;
-      max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    `;
+        infoBox.id = `${uniqueId}-info`;
         document.body.appendChild(infoBox);
     };
 
@@ -99,46 +123,42 @@ const setupElementInspector = (): Promise<HTMLElement | null> => new Promise((re
         const selector = generateSelector(element);
 
         infoBox.innerHTML = `
-      <div>${tagName}${id}${classes} ${dimensions}px</div>
-      <div style="opacity: 0.8; font-size: 10px;">${selector}</div>
-    `;
+            <div>${tagName}${id}${classes} ${dimensions}px</div>
+            <div style="opacity: 0.8; font-size: 10px;">${selector}</div>
+        `;
+    };
+
+    // Posiciona o overlay em cima do elemento
+    const positionOverlay = (element: HTMLElement): void => {
+        if (!highlightOverlay) return;
+
+        const rect = element.getBoundingClientRect();
+
+        highlightOverlay.style.display = 'block';
+        highlightOverlay.style.top = `${window.scrollY + rect.top}px`;
+        highlightOverlay.style.left = `${window.scrollX + rect.left}px`;
+        highlightOverlay.style.width = `${rect.width}px`;
+        highlightOverlay.style.height = `${rect.height}px`;
     };
 
     // Função para destacar um elemento 
     const highlightElement = (element: HTMLElement): void => {
-        const extendedElement = element as ExtendedHTMLElement;
-
-        if (currentHighlightedElement) {
-            // Remove o destaque do elemento anterior
-            currentHighlightedElement.style.outline = currentHighlightedElement._originalOutline;
-            currentHighlightedElement.style.outlineOffset = currentHighlightedElement._originalOutlineOffset;
-            currentHighlightedElement.style.backgroundColor = currentHighlightedElement._originalBgColor;
-        }
-
-        // Salva os estilos originais específicos
-        extendedElement._originalOutline = extendedElement.style.outline;
-        extendedElement._originalOutlineOffset = extendedElement.style.outlineOffset;
-        extendedElement._originalBgColor = extendedElement.style.backgroundColor;
-
-        // Aplica o estilo de destaque
-        extendedElement.style.outline = '2px solid #4285f4';
-        extendedElement.style.outlineOffset = '-1px';
-        extendedElement.style.backgroundColor = 'rgba(66, 133, 244, 0.1)';
-
         // Atualiza o elemento atualmente destacado
-        currentHighlightedElement = extendedElement;
+        currentHighlightedElement = element;
+
+        // Posiciona o overlay
+        positionOverlay(element);
 
         // Atualiza a caixa de informações
         updateInfoBox(element);
     };
 
-    // Função para remover o destaque de todos os elementos
-    const removeAllHighlights = (): void => {
-        if (currentHighlightedElement) {
-            currentHighlightedElement.style.outline = currentHighlightedElement._originalOutline;
-            currentHighlightedElement.style.outlineOffset = currentHighlightedElement._originalOutlineOffset;
-            currentHighlightedElement.style.backgroundColor = currentHighlightedElement._originalBgColor;
-            currentHighlightedElement = null;
+    // Função para remover o destaque
+    const removeHighlight = (): void => {
+        currentHighlightedElement = null;
+
+        if (highlightOverlay) {
+            highlightOverlay.style.display = 'none';
         }
 
         if (infoBox) {
@@ -160,8 +180,8 @@ const setupElementInspector = (): Promise<HTMLElement | null> => new Promise((re
                     infoBox.innerHTML = '<div style="color: #8efa00">✓ Seletor copiado para a área de transferência</div>';
 
                     setTimeout(() => {
-                        if (infoBox) {
-                            infoBox.innerHTML = originalTextContent;
+                        if (infoBox && currentHighlightedElement) {
+                            updateInfoBox(currentHighlightedElement);
                         }
                     }, 1000);
                 }
@@ -176,21 +196,17 @@ const setupElementInspector = (): Promise<HTMLElement | null> => new Promise((re
         if (!isActive) return;
 
         const mouseEvent = event as MouseEvent;
-        // Impede a propagação para elementos pais
         mouseEvent.stopPropagation();
 
-        // Destaca o elemento
-        highlightElement(mouseEvent.target as HTMLElement);
-    };
+        const target = mouseEvent.target as HTMLElement;
 
-    // Manipulador de evento para mouseout
-    const handleMouseOut = (event: Event): void => {
-        if (!isActive) return;
-
-        // Remove destaque ao sair da página
-        if (event.target === document.documentElement) {
-            removeAllHighlights();
+        // Não destacamos nossos próprios elementos
+        if (target.id === `${uniqueId}-overlay` || target.id === `${uniqueId}-info`) {
+            return;
         }
+
+        // Destaca o elemento
+        highlightElement(target);
     };
 
     // Manipulador de evento para click
@@ -198,34 +214,61 @@ const setupElementInspector = (): Promise<HTMLElement | null> => new Promise((re
         if (!isActive) return;
 
         const mouseEvent = event as MouseEvent;
-        // Impede o comportamento padrão do clique para não navegar ou acionar scripts
         mouseEvent.preventDefault();
         mouseEvent.stopPropagation();
 
         // Salva o elemento clicado
         const clickedElement = mouseEvent.target as HTMLElement;
 
+        // Não processamos cliques em nossos próprios elementos
+        if (clickedElement.id === `${uniqueId}-overlay` || clickedElement.id === `${uniqueId}-info`) {
+            return;
+        }
+
         // Faz o console.log do elemento
         console.log('%cElemento selecionado:', 'color: #4285f4; font-weight: bold', clickedElement);
 
-        resolve(clickedElement);
+        // Desativa o seletor (isso chamará cleanupUI)
+        toggleSelector(false);
 
-        // Desativa o seletor para restaurar o comportamento normal do site
-        toggleSelector();
+        // Resolve após desativar o seletor
+        resolve(clickedElement);
     };
 
     // Manipulador de evento para teclas (Esc para sair)
     const handleKeyDown = (event: Event): void => {
         const keyEvent = event as KeyboardEvent;
         if (keyEvent.key === 'Escape' && isActive) {
+            toggleSelector(false);
             resolve(null);
-            toggleSelector();
+        }
+    };
+
+    // Função para limpar a UI
+    const cleanupUI = (): void => {
+        removeHighlight();
+
+        // Remove os elementos da UI
+        if (highlightOverlay) {
+            highlightOverlay.remove();
+            highlightOverlay = null;
+        }
+
+        if (infoBox) {
+            infoBox.remove();
+            infoBox = null;
+        }
+
+        // Remove os estilos injetados
+        const styleEl = document.getElementById(`${uniqueId}-styles`);
+        if (styleEl) {
+            styleEl.remove();
         }
     };
 
     // Ativa ou desativa o seletor
-    const toggleSelector = (): string => {
-        isActive = !isActive;
+    const toggleSelector = (state?: boolean): string => {
+        isActive = state !== undefined ? state : !isActive;
 
         if (isActive) {
             console.log('%c✓ Seletor de elementos ativado', 'color: #4285f4; font-weight: bold');
@@ -233,28 +276,27 @@ const setupElementInspector = (): Promise<HTMLElement | null> => new Promise((re
             console.log('Clique em um elemento para selecionar e parar o seletor');
             console.log('Pressione ESC para desativar o seletor');
 
-            if (!infoBox) {
-                createInfoBox();
-            }
+            // Injeta os estilos
+            injectStyles();
 
+            // Cria os elementos de UI
+            createHighlightOverlay();
+            createInfoBox();
+
+            // Adiciona os event listeners
             document.addEventListener('mouseover', handleMouseOver, true);
-            document.addEventListener('mouseout', handleMouseOut, true);
             document.addEventListener('click', handleClick, true);
             document.addEventListener('keydown', handleKeyDown);
         } else {
             console.log('%c✗ Seletor de elementos desativado', 'color: #ea4335; font-weight: bold');
 
+            // Remove os event listeners
             document.removeEventListener('mouseover', handleMouseOver, true);
-            document.removeEventListener('mouseout', handleMouseOut, true);
             document.removeEventListener('click', handleClick, true);
             document.removeEventListener('keydown', handleKeyDown);
 
-            removeAllHighlights();
-
-            if (infoBox) {
-                infoBox.remove();
-                infoBox = null;
-            }
+            // Limpa a UI
+            cleanupUI();
         }
 
         return isActive ? 'Seletor ativado' : 'Seletor desativado';
@@ -264,7 +306,7 @@ const setupElementInspector = (): Promise<HTMLElement | null> => new Promise((re
     const cleanupSelector = (): string => {
         // Garantir que o seletor esteja desativado
         if (isActive) {
-            toggleSelector();
+            toggleSelector(false);
         }
 
         // Remover a função global
@@ -277,7 +319,7 @@ const setupElementInspector = (): Promise<HTMLElement | null> => new Promise((re
     };
 
     // Ativa o seletor automaticamente ao executar o script
-    toggleSelector();
+    toggleSelector(true);
 
     // Expõe as funções no escopo global
     (window as any).toggleElementSelector = toggleSelector;
