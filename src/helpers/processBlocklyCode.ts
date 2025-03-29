@@ -37,6 +37,7 @@ const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => 
 
   // Extrai todos os segmentos de navegação (incluindo o próprio bloco de navegação)
   if (workspaceClone.blocks.blocks.length > 0) {
+    console.log('findNavigationSegments(workspaceClone.blocks.blocks[0], result, navigationBlockTypes)', workspaceClone.blocks.blocks[0], result, navigationBlockTypes);
     findNavigationSegments(workspaceClone.blocks.blocks[0], result, navigationBlockTypes);
   }
 
@@ -64,33 +65,70 @@ const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => 
  * @param {string[]} navigationBlockTypes - Array de tipos de blocos considerados como navegação
  */
 const findNavigationSegments = (
-  block: any,
+  blocks: any,
   result: any,
   navigationBlockTypes: string[],
 ): void => {
-  if (!block) return;
+  // Se não existir uma propriedade 'navigation', cria ela
+  if (!result.navigation) {
+    result.navigation = {};
+  }
 
-  // Verifica se este é um bloco de navegação
-  if (navigationBlockTypes.includes(block.type)) {
-    // Clona o bloco de navegação para preservá-lo com seu código subsequente
-    const navigationBlock = JSON.parse(JSON.stringify(block));
-    if (navigationBlock.next) {
-      result.navigation[block.id] = navigationBlock.next;
+  // Função auxiliar para processar a estrutura de blocos
+  const processBlockStructure = (blocksToProcess: any): void => {
+    // Verifica se 'blocks' está na estrutura esperada
+    if (blocksToProcess?.original?.blocks?.blocks) {
+      // Processa os blocos em original
+      processBlocks(blocksToProcess.original.blocks.blocks);
     }
-  }
 
-  // Processa inputs (para blocos aninhados)
-  if (block.inputs) {
-    Object.entries(block.inputs).forEach(([inputName, input]: [string, any]) => {
-      if (input.block) {
-        findNavigationSegments(input.block, result, navigationBlockTypes);
+    // Se não estiver em uma estrutura aninhada, tenta processar diretamente
+    if (Array.isArray(blocksToProcess)) {
+      processBlocks(blocksToProcess);
+    } else if (blocksToProcess && typeof blocksToProcess === 'object') {
+      processBlock(blocksToProcess);
+    }
+  };
+
+  // Processa uma lista de blocos
+  const processBlocks = (blocksList: any[]): void => {
+    if (Array.isArray(blocksList)) {
+      blocksList.forEach(block => processBlock(block));
+    }
+  };
+
+  // Processa um único bloco e seus filhos recursivamente
+  const processBlock = (block: any): void => {
+    if (!block || typeof block !== 'object') return;
+
+    // Verifica se é um bloco de navegação
+    if (block.type && navigationBlockTypes.includes(block.type)) {
+      if (block.next) {
+        result.navigation[block.id] = block.next;
       }
-    });
-  }
+    }
 
-  // Processa blocos seguintes
-  if (block.next?.block) {
-    findNavigationSegments(block.next.block, result, navigationBlockTypes);
+    // Processa inputs (para blocos aninhados)
+    if (block.inputs) {
+      Object.values(block.inputs).forEach((input: any) => {
+        if (input && input.block) {
+          processBlock(input.block);
+        }
+      });
+    }
+
+    // Processa o próximo bloco
+    if (block.next && block.next.block) {
+      processBlock(block.next.block);
+    }
+  };
+
+  // Inicia o processamento
+  processBlockStructure(blocks);
+
+  // Também processa a estrutura result se for diferente de blocks
+  if (blocks !== result) {
+    processBlockStructure(result);
   }
 };
 
