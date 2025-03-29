@@ -28,6 +28,7 @@ const messageHandler = () => {
                 updateAgentNavigationCode({
                     ...data,
                     tabId: sender.tab.id,
+                    timestamp: Date.now(), // salvou tudo, porque o problema era que o set do chrome verifica o objeto, então se não fosse um novo objeto, não atualizava
                 });
                 break;
 

@@ -6,7 +6,15 @@ const configNavigation = ({
     url,
     variables,
 }: TypeNavigation) => {
-    chrome.runtime.sendMessage({ action: 'navigate', data: { blockId, type, url, variables } });
+    const data = {
+        blockId,
+        type,
+        url,
+        variables,
+    };
+
+    console.log("chrome.runtime.sendMessage({ action: 'navigate', data });", data);
+    chrome.runtime.sendMessage({ action: 'navigate', data });
 };
 
 export default configNavigation; 
