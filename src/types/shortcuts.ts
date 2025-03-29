@@ -1,8 +1,3 @@
-type TypeHandleShortcut = {
-    [key: string]: {
-        removeListener: Array<() => void>;
-        lastUpdate: number;
-    };
-};
+type TypeHandleShortcut = Array<() => void>;
 
 export default TypeHandleShortcut;
