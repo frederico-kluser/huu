@@ -20,7 +20,7 @@ const setBlockNavigate = () => {
             let variableCollectionCode = 'var variableValues = {};\n';
             allVariables.forEach(v => {
                 const varName = generator?.nameDB_?.getName(v.getId(), Blockly.VARIABLE_CATEGORY_NAME);
-                variableCollectionCode += `var ${varName};\nvariableValues["${varName}"] = ${varName};\n`;
+                variableCollectionCode += `try { variableValues["${varName}"] = ${varName}; } catch(e) { /* Variable not defined in scope */ }\n`;
             });
 
             const code = `${variableCollectionCode}
