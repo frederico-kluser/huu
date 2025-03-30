@@ -1,10 +1,9 @@
 import { block } from "blockly/core/tooltip";
+import { TypeBlock } from "../types/agent";
 
 type TypeProcessBlocklyCode = {
   original: any;
-  navigation: {
-    [key: string]: any;
-  };
+  navigation: TypeBlock;
   initial: any;
 };
 
@@ -41,6 +40,11 @@ const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => 
     console.log('extractNavigationPaths(workspaceClone.blocks.blocks[0], result, navigationBlockTypes)', workspaceClone.blocks.blocks[0], result, navigationBlockTypes);
   }
 
+  /*
+    procedures_defnoreturn
+    procedures_callnoreturn
+  */
+
   // Adiciona a estrutura inicial (até encontrar blocos de navegação)
   result.initial = getCodeUntilNavigation(
     JSON.parse(JSON.stringify(workspaceBlockData)),
@@ -50,13 +54,19 @@ const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => 
   console.log("result.initial", result.initial);
   console.log("result.navigation", result.navigation);
 
-  Object.entries(result.navigation).forEach(([key, value]: [string, any]) => {
-    const cloneInitial = JSON.parse(JSON.stringify(result.initial));
+  return injectNavigationFunctions(result);
+};
+
+const injectNavigationFunctions = (result: any) => {
+  const resultClone = JSON.parse(JSON.stringify(result));
+
+  Object.entries(resultClone.navigation).forEach(([key, value]: [string, any]) => {
+    const cloneInitial = JSON.parse(JSON.stringify(resultClone.initial));
     cloneInitial.blocks.blocks = [value.block];
-    result.navigation[key] = cloneInitial;
+    resultClone.navigation[key] = cloneInitial;
   });
 
-  return result;
+  return resultClone;
 };
 
 /**
@@ -71,10 +81,8 @@ const extractNavigationPaths = (
   blocks: any,
   result: any,
   navigationBlockTypes: string[],
-) => {
-  var navigationClone: {
-    [key: string]: any;
-  } = result.navigation || {};
+): TypeBlock => {
+  var navigationClone: TypeBlock = result.navigation || {};
 
   // Função auxiliar para processar a estrutura de blocos
   const processBlockStructure = (blocksToProcess: any): void => {

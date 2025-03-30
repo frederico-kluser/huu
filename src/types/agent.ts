@@ -19,9 +19,7 @@ type TypeAgent = {
     name: string; // also the id
     blocks: TypeBlock;
     code: string;
-    navigation: {
-        [key: string]: any;
-    };
+    navigation: TypeBlock;
     urls: string;
     mode: TypeMode;
     active: boolean;
