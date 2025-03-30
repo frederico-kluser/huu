@@ -37,8 +37,8 @@ const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => 
 
   // Extrai todos os segmentos de navegação (incluindo o próprio bloco de navegação)
   if (workspaceClone.blocks.blocks.length > 0) {
-    console.log('findNavigationSegments(workspaceClone.blocks.blocks[0], result, navigationBlockTypes)', workspaceClone.blocks.blocks[0], result, navigationBlockTypes);
-    findNavigationSegments(workspaceClone.blocks.blocks[0], result, navigationBlockTypes);
+    result.navigation = extractNavigationPaths(workspaceClone.blocks.blocks[0], result, navigationBlockTypes);
+    console.log('extractNavigationPaths(workspaceClone.blocks.blocks[0], result, navigationBlockTypes)', workspaceClone.blocks.blocks[0], result, navigationBlockTypes);
   }
 
   // Adiciona a estrutura inicial (até encontrar blocos de navegação)
@@ -46,6 +46,9 @@ const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => 
     JSON.parse(JSON.stringify(workspaceBlockData)),
     navigationBlockTypes,
   );
+
+  console.log("result.initial", result.initial);
+  console.log("result.navigation", result.navigation);
 
   Object.entries(result.navigation).forEach(([key, value]: [string, any]) => {
     const cloneInitial = JSON.parse(JSON.stringify(result.initial));
@@ -64,15 +67,14 @@ const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => 
  * @param {any} result - O objeto de resultado sendo construído
  * @param {string[]} navigationBlockTypes - Array de tipos de blocos considerados como navegação
  */
-const findNavigationSegments = (
+const extractNavigationPaths = (
   blocks: any,
   result: any,
   navigationBlockTypes: string[],
-): void => {
-  // Se não existir uma propriedade 'navigation', cria ela
-  if (!result.navigation) {
-    result.navigation = {};
-  }
+) => {
+  var navigationClone: {
+    [key: string]: any;
+  } = result.navigation || {};
 
   // Função auxiliar para processar a estrutura de blocos
   const processBlockStructure = (blocksToProcess: any): void => {
@@ -104,7 +106,7 @@ const findNavigationSegments = (
     // Verifica se é um bloco de navegação
     if (block.type && navigationBlockTypes.includes(block.type)) {
       if (block.next) {
-        result.navigation[block.id] = block.next;
+        navigationClone[block.id] = block.next;
       }
     }
 
@@ -130,6 +132,8 @@ const findNavigationSegments = (
   if (blocks !== result) {
     processBlockStructure(result);
   }
+
+  return navigationClone;
 };
 
 /**
