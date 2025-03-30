@@ -17,8 +17,18 @@ const configVariables = (): Array<TypeBlockly | TypeBlocklyButton | any> => {
         },
         setBlockGetHtmlVariable(),
         setBlockSetHtmlVariable(),
+        {
+            kind: 'button',
+            text: 'Criar Variável Texto',
+            callbackKey: 'CREATE_STRING_VARIABLE'
+        },
         setBlockGetStringVariable(),
         setBlockSetStringVariable(),
+        {
+            kind: 'button',
+            text: 'Criar Variável Número',
+            callbackKey: 'CREATE_NUMBER_VARIABLE'
+        },
         setBlockGetNumberVariable(),
         setBlockSetNumberVariable(),
     ];

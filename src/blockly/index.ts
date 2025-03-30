@@ -106,5 +106,19 @@ export const blocklySetup = () => {
             BlocklyTypes.HTML_ELEMENT
         );
     });
+    Workspace.registerButtonCallback('CREATE_STRING_VARIABLE', function (button: any) {
+        Blockly.Variables.createVariableButtonHandler(
+            button.getTargetWorkspace(),
+            (variable) => { },
+            BlocklyTypes.STRING
+        );
+    });
+    Workspace.registerButtonCallback('CREATE_NUMBER_VARIABLE', function (button: any) {
+        Blockly.Variables.createVariableButtonHandler(
+            button.getTargetWorkspace(),
+            (variable) => { },
+            BlocklyTypes.NUMBER
+        );
+    });
     workspace.addChangeListener(updateCode);
 };
