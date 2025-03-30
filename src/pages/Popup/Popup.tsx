@@ -12,8 +12,9 @@ import { fetchWorkspaceNames, updateActualWorkspace, updateWorkspaceNames } from
 import '../../assets/css/pico.min.css';
 import './Popup.css';
 import { fetchPopupNavigation, updatePopupNavigation } from '../../core/storage/popupNavigation';
-import { createAgent } from '../../core/storage/agents';
+import { createFullAgent, createNewAgent } from '../../core/storage/agents';
 import isValidUrlPatterns from '../../helpers/isValidPatterns';
+import TypeAgent from '../../types/agent';
 
 Blockly.setLocale(PtBr as any);
 
@@ -63,6 +64,7 @@ const Popup = () => {
   const handleCreateAgent = async () => {
     const workspaceName = prompt('Digite o nome do agente', 'Agente 1');
     if (!workspaceName) return;
+
     if (!isValidJsonKey(workspaceName)) {
       alert('Nome inválido');
       return;
@@ -80,10 +82,32 @@ const Popup = () => {
       return;
     }
 
-    await createAgent(workspaceName, URLs);
+    await createNewAgent(workspaceName, URLs);
     setWorkspaces([...workspaces, workspaceName]);
     setActualWorkspace(workspaceName);
     await updateActualWorkspace(workspaces.length);
+    alert('Agente criado com sucesso');
+  };
+
+  const handleCreateFullAgent = async (agent: TypeAgent) => {
+    if (!isValidJsonKey(agent.name)) {
+      alert('Nome inválido');
+      return;
+    }
+    if (workspaces.includes(agent.name)) {
+      alert('Já existe um agente com esse nome');
+      return;
+    }
+    if (!isValidUrlPatterns(agent.urls)) {
+      alert('URL inválida');
+      return;
+    }
+
+    await createFullAgent(agent);
+    setWorkspaces([...workspaces, agent.name]);
+    setActualWorkspace(agent.name);
+    await updateActualWorkspace(workspaces.length);
+    alert('Agente criado com sucesso');
   };
 
   return (
@@ -102,6 +126,7 @@ const Popup = () => {
             setIsMainPage={setIsMainPage}
             workspaces={workspaces}
             handleCreateAgent={handleCreateAgent}
+            handleCreateFullAgent={handleCreateFullAgent}
           />) : <EditAgent
           handleCreateAgent={handleCreateAgent}
           setIsMainPage={setIsMainPage}

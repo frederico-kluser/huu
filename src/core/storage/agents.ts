@@ -1,6 +1,7 @@
 import { getItem, setItem } from ".";
 import TypeAgent from "../../types/agent";
 import { fetchActualWorkspaceName, fetchWorkspaceNames } from "./workspace";
+import { version } from "../../../package.json";
 
 export const fetchAgentById = async (agentId: string) => {
     return getItem<TypeAgent | null>(agentId);
@@ -40,6 +41,7 @@ export const updateOrCreateAgent = (agentId: string, agent: TypeAgent) => {
     const agentData = {
         ...agent,
         lastUpdate: Date.now(),
+        agentVersion: version,
     };
 
     console.log("agente atualizado", agentData);
@@ -54,13 +56,14 @@ export const updateAgentAttributes = async (agentId: string, partial: Partial<Ty
             ...agent,
             ...partial,
             lastUpdate: Date.now(),
+            agentVersion: version,
         });
     } else {
         throw new Error(`Agent ${agentId} not found`);
     }
 };
 
-export const createAgent = async (name: string, urls: string) => {
+export const createNewAgent = async (name: string, urls: string) => {
     return setItem<TypeAgent>(name, {
         name,
         urls,
@@ -69,7 +72,12 @@ export const createAgent = async (name: string, urls: string) => {
         navigation: {},
         mode: '',
         active: false,
-        lastUpdate: Date.now(),
         actualCode: 'initial',
+        lastUpdate: Date.now(),
+        agentVersion: version,
     });
+};
+
+export const createFullAgent = async (agent: TypeAgent) => {
+    return setItem<TypeAgent>(agent.name, agent);
 };

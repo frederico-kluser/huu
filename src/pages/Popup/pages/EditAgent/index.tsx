@@ -6,9 +6,10 @@ import TypeAgent, { TypeBlock } from "../../../../types/agent";
 import isValidUrlPatterns from "../../../../helpers/isValidPatterns";
 import { removeItem } from "../../../../core/storage";
 import { fetchAgentById, updateOrCreateAgent } from "../../../../core/storage/agents";
+import exportObjectAsJson from "../../../../helpers/exportObjectAsJson";
 
 interface EditAgentProps {
-    handleCreateAgent: () => void
+    handleCreateAgent: () => Promise<void>
     setIsMainPage: Dispatch<SetStateAction<boolean>>
     setActualWorkspace: Dispatch<SetStateAction<string>>
     setWorkspaces: Dispatch<SetStateAction<string[]>>
@@ -143,6 +144,11 @@ const EditAgent = ({
         removeItem(workspaceName);
     };
 
+    const handleExportAgent = async () => {
+        const agent = await fetchAgentById(agentName);
+        exportObjectAsJson(agent, agentName);
+    }
+
     const handleGoHome = () => {
         setIsMainPage(true);
     };
@@ -169,6 +175,7 @@ const EditAgent = ({
                 <button onClick={handleCreateAgent} className="contrast">Criar Novo Agente</button>
                 <button onClick={handleSave} disabled={!needToSave()}>Salvar</button>
                 <button onClick={handleLoadAgent}>Configurar Agente</button>
+                <button onClick={handleExportAgent} className="secondary">Exportar Agente</button>
                 <button onClick={handleDeleteAgent}>Deletar</button>
             </div>
         </main>
