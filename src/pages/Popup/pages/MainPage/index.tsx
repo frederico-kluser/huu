@@ -6,6 +6,7 @@ import TypePageStyle from '../../../../types/pageStyle';
 import { fetchAgentById, updateAgentAttributes } from '../../../../core/storage/agents';
 import urlMatchesPattern from '../../../../helpers/urlMatchePattern';
 import Gap from '../../../../components/Gap';
+import validateJsonAgent from '../../../../helpers/validateJsonAgent';
 
 interface MainPageProps {
     setIsMainPage: Dispatch<SetStateAction<boolean>>
@@ -121,6 +122,7 @@ const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent }: MainPageProp
             <Gap horizontal size={16}>
                 <button onClick={handleEditModels}>Editar Agentes</button>
                 <button onClick={handleCreateAgent} className="contrast">Criar Novo Agente</button>
+                <button onClick={validateJsonAgent} className="secondary">Importar Agente</button>
             </Gap>
         </div>
     )

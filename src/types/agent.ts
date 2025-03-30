@@ -30,6 +30,7 @@ type TypeAgent = {
         scrollX: number;
         scrollY: number;
     };
+    agentVersion: string;
 };
 
 export default TypeAgent;
