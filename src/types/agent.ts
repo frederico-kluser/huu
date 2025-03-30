@@ -1,0 +1,35 @@
+export type TypeMode =
+    | ''
+    | 'automatic-1'
+    | 'automatic'
+    | 'manual-shortcut-2'
+    | 'manual-shortcut-3'
+    | 'manual-shortcut-4'
+    | 'manual-shortcut-5'
+    | 'manual-shortcut-6'
+    | 'manual-shortcut-7'
+    | 'manual-shortcut-8'
+    | 'manual-shortcut-9'
+
+export type TypeBlock = {
+    [key: string]: any;
+};
+
+type TypeAgent = {
+    name: string; // also the id
+    blocks: TypeBlock;
+    code: string;
+    navigation: TypeBlock;
+    urls: string;
+    mode: TypeMode;
+    active: boolean;
+    lastUpdate: number;
+    actualCode?: 'initial' | string;
+    viewportState?: {
+        scale: number;
+        scrollX: number;
+        scrollY: number;
+    };
+};
+
+export default TypeAgent;

@@ -1,0 +1,41 @@
+import { TypeNavigation } from "../../../types/storage";
+import getTabId from "./getTabId";
+
+const handleNavigation = async (navigation: TypeNavigation): Promise<void> => {
+    if (!navigation) return;
+
+    const { type, url, tabId } = navigation;
+
+    const localTabId = await getTabId();
+
+    if (tabId != localTabId) {
+        console.log('TabId não corresponde, esperando a seleção do elemento na aba correta.');
+        return;
+    }
+
+    switch (type) {
+        case 'navigate-block-forward':
+            window.history.forward();
+            break;
+        case 'navigate-block-back':
+            window.history.back();
+            break;
+        case 'navigate-block-refresh':
+            window.location.reload();
+            break;
+        case 'navigate-block-none':
+            break;
+        case 'navigate-block-url':
+            if (url) {
+                window.location.href = url;
+            } else {
+                console.error('URL não informada');
+            }
+            break;
+        default:
+            console.error('Tipo de navegação não reconhecido');
+            break;
+    };
+};
+
+export default handleNavigation;
