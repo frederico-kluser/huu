@@ -1,4 +1,4 @@
-import { getBlockSelectHTMLElement } from "../../../blockly/blocks/1-category_html-elements/blocks/BlockSelectHTMLElement";
+import { getBlockSelectHTMLElement } from "../../../blockly/blocks/1-category_html-selector/blocks/BlockSelectHTMLElement";
 import createUniqueElementSelector from "../../../helpers/createUniqueElementSelector";
 import replaceBlockById from "../../../helpers/replaceBlockId";
 import setupElementInspector from "../../../core/setupElementInspector";

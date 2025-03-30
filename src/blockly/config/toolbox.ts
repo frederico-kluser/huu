@@ -1,23 +1,30 @@
 import { BlocklyOptions } from 'blockly';
-import configHTMLInterection from '../blocks/1-category_html-elements';
 import configURLActions from '../blocks/2-category_url-control';
 import configAiActions from '../blocks/3-category_ai-integration';
 import configMiscellaneousActions from '../blocks/4-category_miscellaneous';
-import configPageInterection from '../blocks/PageInterection';
+import configVariables from '../blocks/0-category_variables';
+import configHTMLSelectors from '../blocks/1-category_html-selector';
+import configHTMLInterection from '../blocks/1-category_html-actions';
 
 const blocklyToolbox: BlocklyOptions['toolbox'] = {
   kind: 'categoryToolbox',
   contents: [
     {
       kind: 'category',
-      name: 'Interação com a Página',
-      contents: configPageInterection(),
+      name: 'Variáveis',
+      contents: configVariables(),
     },
     {
       kind: 'category',
-      name: 'Elementos do Site',
+      name: 'Interações com o Site',
       // hidden: "true",
       contents: configHTMLInterection(),
+    },
+    {
+      kind: 'category',
+      name: 'Seletores de Elementos',
+      // hidden: "true",
+      contents: configHTMLSelectors(),
     },
     {
       kind: 'category',
@@ -803,12 +810,12 @@ const blocklyToolbox: BlocklyOptions['toolbox'] = {
     {
       kind: 'sep',
     },
-    {
-      kind: 'category',
-      name: 'Variables',
-      custom: 'VARIABLE',
-      categorystyle: 'variable_category',
-    },
+    // {
+    //   kind: 'category',
+    //   name: 'Variables',
+    //   custom: 'VARIABLE',
+    //   categorystyle: 'variable_category',
+    // },
     {
       kind: 'category',
       name: 'Functions',

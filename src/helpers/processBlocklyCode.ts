@@ -19,6 +19,10 @@ type TypeProcessBlocklyCode = {
  * @returns {any} Um objeto contendo a estrutura original e segmentos de código organizados
  */
 const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => {
+  if (!workspaceBlockData.blocks) {
+    throw new Error('Invalid workspace block data');
+  }
+
   const result: any = {
     original: workspaceBlockData,
     navigation: {},
@@ -36,6 +40,8 @@ const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => 
 
   // Clone a estrutura para evitar modificar o original
   const workspaceClone = JSON.parse(JSON.stringify(workspaceBlockData));
+
+  console.log('workspaceClone', workspaceClone);
 
   // Extrai todos os segmentos de navegação (incluindo o próprio bloco de navegação)
   if (workspaceClone.blocks.blocks.length > 0) {

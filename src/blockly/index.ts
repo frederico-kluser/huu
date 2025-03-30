@@ -45,7 +45,22 @@ export const loadWorkspace = async (wsName: string) => {
 const updateCode = async (event: any) => {
     const blocks = Blockly.serialization.workspaces.save(workspace);
 
+    // TODO: se eu usar o updateAgentPartial não preciso desse "as TypeAgent"
+    const actualState = await getBlocklyState(workspaceName) as TypeAgent;
+
     if (Object.keys(blocks).length === 0) {
+        return;
+    } else if (!blocks.blocks) {
+        console.error('Sem blocos:', blocks);
+
+        await updateOrCreateAgent(workspaceName, {
+            ...actualState,
+            name: workspaceName,
+            blocks: {},
+            code: '',
+            navigation: {},
+        });
+
         return;
     }
 
@@ -71,9 +86,6 @@ const updateCode = async (event: any) => {
         scrollY: (workspace as any)?.scrollY
     };
 
-    // TODO: se eu usar o updateAgentPartial não preciso desse "as TypeAgent"
-    const actualState = await getBlocklyState(workspaceName) as TypeAgent;
-
     await updateOrCreateAgent(workspaceName, {
         ...actualState,
         name: workspaceName,
@@ -92,6 +104,20 @@ export const blocklySetup = () => {
             button.getTargetWorkspace(),
             (variable) => { },
             BlocklyTypes.HTML_ELEMENT
+        );
+    });
+    Workspace.registerButtonCallback('CREATE_STRING_VARIABLE', function (button: any) {
+        Blockly.Variables.createVariableButtonHandler(
+            button.getTargetWorkspace(),
+            (variable) => { },
+            BlocklyTypes.STRING
+        );
+    });
+    Workspace.registerButtonCallback('CREATE_NUMBER_VARIABLE', function (button: any) {
+        Blockly.Variables.createVariableButtonHandler(
+            button.getTargetWorkspace(),
+            (variable) => { },
+            BlocklyTypes.NUMBER
         );
     });
     workspace.addChangeListener(updateCode);

@@ -1,12 +1,12 @@
 import * as Blockly from 'blockly/core';
 import { Order } from 'blockly/javascript';
-import Colors from '../../config/colors';
-import blockConstructor from '../../helpers/blockConstructor';
-import BlocklyTypes from '../../config/types';
+import Colors from '../../../config/colors';
+import blockConstructor from '../../../helpers/blockConstructor';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockSetHtmlVariable = () => {
     return blockConstructor({
-        colour: Colors.HTML,
+        colour: Colors.VAR_HTML,
         hasPreviousConnection: null,
         hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Element',

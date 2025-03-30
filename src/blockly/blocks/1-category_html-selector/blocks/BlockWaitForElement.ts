@@ -3,11 +3,10 @@ import Colors from '../../../config/colors';
 import blockConstructor from '../../../helpers/blockConstructor';
 import { Order } from 'blockly/javascript';
 import BlocklyTypes from '../../../config/types';
-import generateUUID from '../../../../helpers/generateUUID';
 
 const setBlockWaitForElement = () => {
   return blockConstructor({
-    colour: Colors.HTML,
+    colour: Colors.SELECTORS,
     hasPreviousConnection: null,
     hasNextConnection: null,
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver',

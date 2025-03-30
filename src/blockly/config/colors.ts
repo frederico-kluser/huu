@@ -22,7 +22,9 @@
 */
 
 enum Colors {
-    HTML = 5,
+    HTML = 0,
+    VAR_HTML = 10,
+    SELECTORS = 15,
     URL = 220,
     AI = 120,
     MISCELLANEOUS = 300,
@@ -30,7 +32,9 @@ enum Colors {
     LOGIC = 210,
     LOOPS = 120,
     MATH = 230,
+    VAR_MATH = 220,
     TEXTS = 160,
+    VAR_TEXTS = 150,
     LISTS = 260,
     COLOUR = 0,
     VARIABLES = 330,
