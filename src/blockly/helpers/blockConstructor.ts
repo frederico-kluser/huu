@@ -6,6 +6,7 @@ import TypeInputBlock from '../types/blocklyInputs';
 import TypeBlockGenerator from '../types/blockGenerator';
 import BlocklyTypes from '../config/types';
 import { BlocklyEvent } from '../types/blockEvent';
+import { TypeBlock } from '../../types/agent';
 
 const blockListeners: Record<string, (workspace: Blockly.Workspace, event: any) => void> = {};
 const workspaceListeners: Record<string, boolean> = {};
@@ -85,9 +86,7 @@ const blockConstructor = (blockConfig: blockConstructorInterface): TypeBlockly =
     tooltip,
   } = blockConfig;
 
-  const jsonInitExtra: {
-    [key: string]: any;
-  } = {};
+  const jsonInitExtra: TypeBlock = {};
 
   if (hasNextConnection !== undefined) {
     jsonInitExtra['nextStatement'] = hasNextConnection;

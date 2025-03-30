@@ -1,10 +1,12 @@
 import { block } from "blockly/core/tooltip";
+import { TypeBlock } from "../types/agent";
+import extractNavigationPaths from "./extractNavigationPaths";
+import getCodeUntilNavigation from "./getCodeUntilNavigation";
+import injectNavigationFunctions from "./injectNavigationFunctions";
 
 type TypeProcessBlocklyCode = {
   original: any;
-  navigation: {
-    [key: string]: any;
-  };
+  navigation: TypeBlock;
   initial: any;
 };
 
@@ -37,8 +39,8 @@ const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => 
 
   // Extrai todos os segmentos de navegação (incluindo o próprio bloco de navegação)
   if (workspaceClone.blocks.blocks.length > 0) {
-    console.log('findNavigationSegments(workspaceClone.blocks.blocks[0], result, navigationBlockTypes)', workspaceClone.blocks.blocks[0], result, navigationBlockTypes);
-    findNavigationSegments(workspaceClone.blocks.blocks[0], result, navigationBlockTypes);
+    result.navigation = extractNavigationPaths(workspaceClone.blocks.blocks[0], result, navigationBlockTypes);
+    console.log('extractNavigationPaths(workspaceClone.blocks.blocks[0], result, navigationBlockTypes)', workspaceClone.blocks.blocks[0], result, navigationBlockTypes);
   }
 
   // Adiciona a estrutura inicial (até encontrar blocos de navegação)
@@ -47,150 +49,7 @@ const processBlocklyCode = (workspaceBlockData: any): TypeProcessBlocklyCode => 
     navigationBlockTypes,
   );
 
-  Object.entries(result.navigation).forEach(([key, value]: [string, any]) => {
-    const cloneInitial = JSON.parse(JSON.stringify(result.initial));
-    cloneInitial.blocks.blocks = [value.block];
-    result.navigation[key] = cloneInitial;
-  });
-
-  return result;
-};
-
-/**
- * Encontra recursivamente blocos de navegação e extrai os segmentos de código que incluem
- * o próprio bloco de navegação e seus blocos subsequentes.
- *
- * @param {any} block - O bloco a ser processado
- * @param {any} result - O objeto de resultado sendo construído
- * @param {string[]} navigationBlockTypes - Array de tipos de blocos considerados como navegação
- */
-const findNavigationSegments = (
-  blocks: any,
-  result: any,
-  navigationBlockTypes: string[],
-): void => {
-  // Se não existir uma propriedade 'navigation', cria ela
-  if (!result.navigation) {
-    result.navigation = {};
-  }
-
-  // Função auxiliar para processar a estrutura de blocos
-  const processBlockStructure = (blocksToProcess: any): void => {
-    // Verifica se 'blocks' está na estrutura esperada
-    if (blocksToProcess?.original?.blocks?.blocks) {
-      // Processa os blocos em original
-      processBlocks(blocksToProcess.original.blocks.blocks);
-    }
-
-    // Se não estiver em uma estrutura aninhada, tenta processar diretamente
-    if (Array.isArray(blocksToProcess)) {
-      processBlocks(blocksToProcess);
-    } else if (blocksToProcess && typeof blocksToProcess === 'object') {
-      processBlock(blocksToProcess);
-    }
-  };
-
-  // Processa uma lista de blocos
-  const processBlocks = (blocksList: any[]): void => {
-    if (Array.isArray(blocksList)) {
-      blocksList.forEach(block => processBlock(block));
-    }
-  };
-
-  // Processa um único bloco e seus filhos recursivamente
-  const processBlock = (block: any): void => {
-    if (!block || typeof block !== 'object') return;
-
-    // Verifica se é um bloco de navegação
-    if (block.type && navigationBlockTypes.includes(block.type)) {
-      if (block.next) {
-        result.navigation[block.id] = block.next;
-      }
-    }
-
-    // Processa inputs (para blocos aninhados)
-    if (block.inputs) {
-      Object.values(block.inputs).forEach((input: any) => {
-        if (input && input.block) {
-          processBlock(input.block);
-        }
-      });
-    }
-
-    // Processa o próximo bloco
-    if (block.next && block.next.block) {
-      processBlock(block.next.block);
-    }
-  };
-
-  // Inicia o processamento
-  processBlockStructure(blocks);
-
-  // Também processa a estrutura result se for diferente de blocks
-  if (blocks !== result) {
-    processBlockStructure(result);
-  }
-};
-
-/**
- * Processa o workspace para obter apenas o código até encontrar um bloco de navegação.
- * Preserva a estrutura até os blocos de navegação, mas interrompe os caminhos nestes blocos.
- *
- * @param {any} workspace - O workspace a ser processado
- * @param {string[]} navigationBlockTypes - Array de tipos de blocos considerados como navegação
- * @returns {any} O workspace modificado contendo apenas o código até os blocos de navegação
- */
-const getCodeUntilNavigation = (
-  workspace: any,
-  navigationBlockTypes: string[],
-): any => {
-  // Processa cada bloco de nível superior
-  if (workspace.blocks.blocks.length > 0) {
-    workspace.blocks.blocks.forEach((block: any) => {
-      processUntilNavigation(block, null, navigationBlockTypes);
-    });
-  }
-
-  return workspace;
-};
-
-/**
- * Processa recursivamente a estrutura de blocos, preservando o caminho até 
- * encontrar blocos de navegação, onde interrompe a recursão.
- *
- * @param {any} block - O bloco a ser processado
- * @param {any} parent - O bloco pai (se houver)
- * @param {string[]} navigationBlockTypes - Array de tipos de blocos considerados como navegação
- * @param {string | null} parentInputName - O nome do input no pai (se houver)
- */
-const processUntilNavigation = (
-  block: any,
-  parent: any,
-  navigationBlockTypes: string[],
-  parentInputName: string | null = null,
-): void => {
-  if (!block) return;
-
-  // Se este é um bloco de navegação, preserva o bloco mas remove seus blocos subsequentes
-  if (navigationBlockTypes.includes(block.type)) {
-    // Preserva o bloco de navegação, mas remove seus blocos subsequentes
-    block.next = null;
-    return; // Para de processar este ramo
-  }
-
-  // Processa inputs (para blocos aninhados)
-  if (block.inputs) {
-    Object.entries(block.inputs).forEach(([inputName, input]: [string, any]) => {
-      if (input.block) {
-        processUntilNavigation(input.block, block, navigationBlockTypes, inputName);
-      }
-    });
-  }
-
-  // Processa blocos seguintes
-  if (block.next?.block) {
-    processUntilNavigation(block.next.block, block, navigationBlockTypes);
-  }
+  return injectNavigationFunctions(result);
 };
 
 export default processBlocklyCode;
