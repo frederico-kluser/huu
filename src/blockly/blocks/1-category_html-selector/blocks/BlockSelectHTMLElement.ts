@@ -7,7 +7,7 @@ import generateUUID from '../../../../helpers/generateUUID';
 
 const setBlockSelectHTMLElement = () => {
   return blockConstructor({
-    colour: Colors.HTML,
+    colour: Colors.SELECTORS,
     hasOutput: 'String',
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Scripting/Variables',
     message: 'seletor de elemento %1\nTipo de seletor %2',

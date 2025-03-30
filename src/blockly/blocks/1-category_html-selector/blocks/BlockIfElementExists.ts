@@ -6,7 +6,7 @@ import BlocklyTypes from '../../../config/types';
 
 const setBlockIfElementExists = () => {
     return blockConstructor({
-        colour: Colors.HTML,
+        colour: Colors.SELECTORS,
         hasPreviousConnection: null,
         hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Document/querySelector',

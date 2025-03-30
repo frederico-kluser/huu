@@ -810,12 +810,12 @@ const blocklyToolbox: BlocklyOptions['toolbox'] = {
     {
       kind: 'sep',
     },
-    {
-      kind: 'category',
-      name: 'Variables',
-      custom: 'VARIABLE',
-      categorystyle: 'variable_category',
-    },
+    // {
+    //   kind: 'category',
+    //   name: 'Variables',
+    //   custom: 'VARIABLE',
+    //   categorystyle: 'variable_category',
+    // },
     {
       kind: 'category',
       name: 'Functions',

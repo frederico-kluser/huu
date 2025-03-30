@@ -6,7 +6,7 @@ import BlocklyTypes from '../../../config/types';
 
 const setBlockSetStringVariable = () => {
     return blockConstructor({
-        colour: Colors.TEXTS,
+        colour: Colors.VAR_TEXTS,
         hasPreviousConnection: null,
         hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String',

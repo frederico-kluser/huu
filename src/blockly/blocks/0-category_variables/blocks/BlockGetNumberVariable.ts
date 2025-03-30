@@ -6,7 +6,7 @@ import BlocklyTypes from '../../../config/types';
 
 const setBlockGetNumberVariable = () => {
     return blockConstructor({
-        colour: Colors.MATH,
+        colour: Colors.VAR_MATH,
         hasOutput: BlocklyTypes.NUMBER,  // Este bloco produz um valor numérico
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number',
         message: 'obter variável número %1',

@@ -6,7 +6,7 @@ import BlocklyTypes from '../../../config/types';
 
 const setBlockGetHtmlVariable = () => {
     return blockConstructor({
-        colour: Colors.HTML,
+        colour: Colors.VAR_HTML,
         hasOutput: BlocklyTypes.HTML_ELEMENT,  // Este bloco produz um valor, não é um comando
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Element',
         message: 'obter variável HTML %1',

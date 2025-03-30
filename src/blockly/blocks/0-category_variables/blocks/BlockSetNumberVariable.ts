@@ -6,7 +6,7 @@ import BlocklyTypes from '../../../config/types';
 
 const setBlockSetNumberVariable = () => {
     return blockConstructor({
-        colour: Colors.MATH,
+        colour: Colors.VAR_MATH,
         hasPreviousConnection: null,
         hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number',

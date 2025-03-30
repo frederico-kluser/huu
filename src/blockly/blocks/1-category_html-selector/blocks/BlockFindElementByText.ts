@@ -6,7 +6,7 @@ import BlocklyTypes from '../../../config/types';
 
 const setBlockFindElementByText = () => {
   return blockConstructor({
-    colour: Colors.HTML,
+    colour: Colors.SELECTORS,
     hasOutput: 'String',
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Document/querySelectorAll',
     message: 'encontrar elemento com seletor %1\ne texto igual a %2',

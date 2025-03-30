@@ -6,7 +6,7 @@ import BlocklyTypes from '../../../config/types';
 
 const setBlockGetStringVariable = () => {
     return blockConstructor({
-        colour: Colors.TEXTS,
+        colour: Colors.VAR_TEXTS,
         hasOutput: BlocklyTypes.STRING,  // Este bloco produz um valor de texto
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String',
         message: 'obter variável texto %1',
