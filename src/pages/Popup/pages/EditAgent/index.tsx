@@ -28,29 +28,36 @@ const EditAgent = ({
     const [agentName, setAgentName] = useState('');
     const [agentSite, setAgentSite] = useState('');
     const [isBackButtonDisabled, setIsBackButtonDisabled] = useState(true);
+    const [isSaveButtonDisabled, setIsSaveButtonDisabled] = useState(true);
 
     const canSave = isValidJsonKey(agentName) && isValidUrlPatterns(agentSite) && !(agentName !== workspaces[Number(agentSelectRef.current?.value)] && workspaces.includes(agentName));
 
-    const needToSave = async () => {
+    const needToSave = () => {
         if (!canSave) {
-            return false;
+            setIsSaveButtonDisabled(true);
+            return;
         }
 
-        const agentItem = await fetchAgentById(agentName);
+        fetchAgentById(agentName).then((agentItem) => {
 
-        if (!agentItem) {
-            return true;
-        }
+            if (!agentItem) {
+                setIsSaveButtonDisabled(false);
+                return;
+            }
 
-        if (agentItem.urls !== agentSite) {
-            return true;
-        }
+            if (agentItem.urls !== agentSite) {
+                setIsSaveButtonDisabled(false);
+                return;
+            }
 
-        if (agentName !== workspaces[Number(agentSelectRef.current?.value)]) {
-            return true;
-        }
+            if (agentName !== workspaces[Number(agentSelectRef.current?.value)]) {
+                setIsSaveButtonDisabled(false);
+                return;
+            }
 
-        return false;
+            setIsSaveButtonDisabled(true);
+            return;
+        });
     };
 
     useEffect(() => {
@@ -68,6 +75,8 @@ const EditAgent = ({
     }, [workspaces]);
 
     useEffect(() => {
+        needToSave();
+
         if (!canSave) {
             setIsBackButtonDisabled(true);
             return;
@@ -109,9 +118,9 @@ const EditAgent = ({
             localAgentName = workspaceName;
         }
 
-        updateOrCreateAgent(localAgentName, newAgentValue);
-
-        handleGoHome();
+        updateOrCreateAgent(localAgentName, newAgentValue).then(() => {
+            needToSave();
+        });
     };
 
     const handleLoadAgent = () => {
@@ -173,7 +182,7 @@ const EditAgent = ({
             <small>Para criar padrões de URL, basta escrever o domínio e o caminho, usando o caractere <code>*</code> onde quiser aceitar qualquer parte variável. Por exemplo, <code>exemplo.com/*</code> permite combinar tudo que esteja em “exemplo.com” sem se preocupar com o que vem depois da barra. Se quiser abranger subdomínios, faça algo como <code>*.exemplo.com/*</code>, que vale para qualquer coisa antes de “.exemplo.com”. Você pode escrever vários padrões separados por vírgula; por exemplo, <code>exemplo.com/*, outro.com/pasta/*</code> cobre “exemplo.com” e qualquer página na pasta “pasta” de “outro.com”.</small>
             <div role="group">
                 <button onClick={handleCreateAgent} className="contrast">Criar Novo Agente</button>
-                <button onClick={handleSave} disabled={!needToSave()}>Salvar</button>
+                <button onClick={handleSave} disabled={isSaveButtonDisabled}>Salvar</button>
                 <button onClick={handleLoadAgent}>Configurar Agente</button>
                 <button onClick={handleExportAgent} className="secondary">Exportar Agente</button>
                 <button onClick={handleDeleteAgent}>Deletar</button>
