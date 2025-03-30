@@ -1,14 +1,14 @@
 import * as Blockly from 'blockly/core';
-import blockConstructor from '../../helpers/blockConstructor';
-import Colors from '../../config/colors';
-import BlocklyTypes from '../../config/types';
+import blockConstructor from '../../../helpers/blockConstructor';
+import Colors from '../../../config/colors';
+import BlocklyTypes from '../../../config/types';
 import { Order } from 'blockly/javascript';
-import { BlocklyEvent } from '../../types/blockEvent';
-import { setElementSelection } from '../../../core/storage/elementSelection';
-import { fetchActualWorkspaceName } from '../../../core/storage/workspace';
-import { fetchActualAgent } from '../../../core/storage/agents';
-import urlMatchesPattern from '../../../helpers/urlMatchePattern';
-import extractNavigateUrls from '../../../pages/Content/helpers/extractNavigateUrls';
+import { BlocklyEvent } from '../../../types/blockEvent';
+import { setElementSelection } from '../../../../core/storage/elementSelection';
+import { fetchActualWorkspaceName } from '../../../../core/storage/workspace';
+import { fetchActualAgent } from '../../../../core/storage/agents';
+import urlMatchesPattern from '../../../../helpers/urlMatchePattern';
+import extractNavigateUrls from '../../../../pages/Content/helpers/extractNavigateUrls';
 
 const blockName = 'BlockDynamicElementSelector';
 

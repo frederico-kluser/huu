@@ -1,8 +1,7 @@
 import { TypeBlockly, TypeBlocklyButton } from "../../helpers/blockConstructor";
-import BlockDynamicElementSelector from "./BlockDynamicElementSelector";
 import setBlockSetHtmlVariable from "./BlockSetHtmlVariable";
 
-const configPageInterection = (): Array<TypeBlockly | TypeBlocklyButton> => {
+const configVariables = (): Array<TypeBlockly | TypeBlocklyButton> => {
     return [
         // Criação de variável HTML
         {
@@ -10,9 +9,8 @@ const configPageInterection = (): Array<TypeBlockly | TypeBlocklyButton> => {
             text: 'Criar Variável HTML',
             callbackKey: 'CREATE_HTML_VARIABLE'
         },
-        BlockDynamicElementSelector(),
         setBlockSetHtmlVariable(),
     ];
 };
 
-export default configPageInterection;
+export default configVariables;
