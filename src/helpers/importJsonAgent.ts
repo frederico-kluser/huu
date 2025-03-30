@@ -1,16 +1,13 @@
 import packageJson from '../../package.json';
-
-interface JsonData {
-    version: string;
-    [key: string]: any;
-}
+import TypeAgent from '../types/agent';
+import { validateTypeAgent } from './validateTypeAgent';
 
 /**
  * Valida se a versão do JSON importado corresponde à versão do package.json
  * Injeta um input invisível, dispara a seleção de arquivo e o remove após processar
  * @returns {Promise<boolean>} Promise resolvida com true se as versões coincidirem, false caso contrário
  */
-const validateJsonAgent = (): Promise<boolean> => {
+const importJsonAgent = (): Promise<TypeAgent> => {
     return new Promise((resolve, reject): void => {
         // Criar input invisível
         const fileInput = document.createElement('input');
@@ -35,29 +32,28 @@ const validateJsonAgent = (): Promise<boolean> => {
             reader.onload = (loadEvent: ProgressEvent<FileReader>): void => {
                 try {
                     const jsonContent = loadEvent.target?.result as string;
-                    const importedJson = JSON.parse(jsonContent) as JsonData;
+                    const importedJson = JSON.parse(jsonContent) as TypeAgent;
 
                     // Remover o input após processar
                     document.body.removeChild(fileInput);
 
-                    if (!importedJson.version) {
-                        reject(new Error('Propriedade "version" não encontrada no JSON'));
+                    const result = validateTypeAgent(importedJson);
+
+                    if (result.isValid) {
+                        if (importedJson.agentVersion !== packageJson.version) {
+                            const answer = confirm("A versão do JSON importado não coincide com a versão do package.json. Deseja continuar?");
+
+                            if (!answer) {
+                                reject(new Error('Versão do JSON não coincide com a versão do package.json'));
+                                return;
+                            }
+                        }
+                    } else {
+                        reject(new Error('Erro ao validar o JSON, erro: ' + result.errors[0]));
                         return;
                     }
 
-                    const isVersionMatch = importedJson.version === packageJson.version;
-
-                    if (isVersionMatch) {
-                        console.log('OK');
-                        // Alerta de OK
-                        alert('OK');
-                    } else {
-                        console.log('NOT OK');
-                        // Alerta de NOT OK
-                        alert('NOT OK');
-                    }
-
-                    resolve(isVersionMatch);
+                    resolve(importedJson);
                 } catch (error) {
                     document.body.removeChild(fileInput);
                     reject(error instanceof Error ? error : new Error('Erro desconhecido ao processar arquivo'));
@@ -78,4 +74,4 @@ const validateJsonAgent = (): Promise<boolean> => {
     });
 };
 
-export default validateJsonAgent;
+export default importJsonAgent;

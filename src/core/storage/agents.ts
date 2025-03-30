@@ -41,6 +41,7 @@ export const updateOrCreateAgent = (agentId: string, agent: TypeAgent) => {
     const agentData = {
         ...agent,
         lastUpdate: Date.now(),
+        agentVersion: version,
     };
 
     console.log("agente atualizado", agentData);
@@ -62,7 +63,7 @@ export const updateAgentAttributes = async (agentId: string, partial: Partial<Ty
     }
 };
 
-export const createAgent = async (name: string, urls: string) => {
+export const createNewAgent = async (name: string, urls: string) => {
     return setItem<TypeAgent>(name, {
         name,
         urls,
@@ -71,8 +72,12 @@ export const createAgent = async (name: string, urls: string) => {
         navigation: {},
         mode: '',
         active: false,
-        lastUpdate: Date.now(),
         actualCode: 'initial',
+        lastUpdate: Date.now(),
         agentVersion: version,
     });
+};
+
+export const createFullAgent = async (agent: TypeAgent) => {
+    return setItem<TypeAgent>(agent.name, agent);
 };

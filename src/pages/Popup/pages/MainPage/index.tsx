@@ -1,20 +1,21 @@
 import React, { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import isValidAgent from '../../../../helpers/isValidAgent';
-import { TypeMode } from '../../../../types/agent';
+import TypeAgent, { TypeMode } from '../../../../types/agent';
 import Colors from '../../../../types/colors';
 import TypePageStyle from '../../../../types/pageStyle';
 import { fetchAgentById, updateAgentAttributes } from '../../../../core/storage/agents';
 import urlMatchesPattern from '../../../../helpers/urlMatchePattern';
 import Gap from '../../../../components/Gap';
-import validateJsonAgent from '../../../../helpers/validateJsonAgent';
+import importJsonAgent from '../../../../helpers/importJsonAgent';
 
 interface MainPageProps {
     setIsMainPage: Dispatch<SetStateAction<boolean>>
     workspaces: string[]
-    handleCreateAgent: () => void
+    handleCreateAgent: () => Promise<void>
+    handleCreateFullAgent: (agent: TypeAgent) => Promise<void>
 }
 
-const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent }: MainPageProps) => {
+const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent, handleCreateFullAgent }: MainPageProps) => {
     const [validatedAgents, setValidatedAgents] = useState<string[]>([]);
     const [agentItems, setAgentItems] = useState<JSX.Element[]>([]);
     const [url, setUrl] = useState<string>('');
@@ -111,6 +112,15 @@ const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent }: MainPageProp
         setIsMainPage(false);
     };
 
+    const handleImportJsonAgent = async () => {
+        importJsonAgent().then((importedAgent) => {
+            handleCreateFullAgent(importedAgent);
+        }).catch((error) => {
+            console.error('Erro ao importar agente:', error);
+            alert('Erro ao importar agente: ' + error.message);
+        });
+    };
+
     return (
         <div style={styles.container}>
             <h1>huu</h1>
@@ -122,7 +132,7 @@ const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent }: MainPageProp
             <Gap horizontal size={16}>
                 <button onClick={handleEditModels}>Editar Agentes</button>
                 <button onClick={handleCreateAgent} className="contrast">Criar Novo Agente</button>
-                <button onClick={validateJsonAgent} className="secondary">Importar Agente</button>
+                <button onClick={handleImportJsonAgent} className="secondary">Importar Agente</button>
             </Gap>
         </div>
     )

@@ -6,7 +6,7 @@
  */
 const exportObjectAsJson = <T>(
     data: T,
-    filename: string = 'exported-data.json'
+    filename: string = 'exported-data'
 ): Promise<void> => {
     return new Promise((resolve, reject): void => {
         try {
@@ -22,7 +22,7 @@ const exportObjectAsJson = <T>(
             // Criar elemento de link invisível
             const downloadLink = document.createElement('a');
             downloadLink.href = url;
-            downloadLink.download = filename;
+            downloadLink.download = `${filename}.json`;
             downloadLink.style.display = 'none';
             document.body.appendChild(downloadLink);
 
