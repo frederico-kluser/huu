@@ -55,7 +55,7 @@ export type TypeBlockly = {
 interface blockConstructorInterface {
   colour: TypeColorBlock;
   fields: TypeBlocklyFields[];
-  generator?: TypeBlockGenerator;
+  generator?: TypeBlockGenerator | any;
   hasNextConnection?: TypeConnection;
   hasOutput?: TypeConnection;
   hasPreviousConnection?: TypeConnection;

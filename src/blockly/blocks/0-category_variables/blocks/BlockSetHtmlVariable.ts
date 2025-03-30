@@ -1,8 +1,8 @@
 import * as Blockly from 'blockly/core';
 import { Order } from 'blockly/javascript';
-import Colors from '../../config/colors';
-import blockConstructor from '../../helpers/blockConstructor';
-import BlocklyTypes from '../../config/types';
+import Colors from '../../../config/colors';
+import blockConstructor from '../../../helpers/blockConstructor';
+import BlocklyTypes from '../../../config/types';
 
 const setBlockSetHtmlVariable = () => {
     return blockConstructor({
