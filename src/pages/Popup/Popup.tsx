@@ -22,6 +22,7 @@ const Popup = () => {
   const [workspaces, setWorkspaces] = useState<string[]>([]);
   const [actualWorkspace, setActualWorkspace] = useState('');
   const [isMainPage, setIsMainPage] = useState(false);
+  const [mode, setMode] = useState('normal');
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -40,6 +41,32 @@ const Popup = () => {
     fetchPopupNavigation().then((navigation) => {
       setActualWorkspace(navigation);
     });
+
+    const params = new URLSearchParams(window.location.search);
+    const layoutParam = params.get('large');
+
+    console.log('layoutParam', layoutParam);
+    if (layoutParam) {
+      setMode(layoutParam);
+
+      // Criar elemento de estilo
+      const style = document.createElement('style');
+      style.textContent = `
+      body,
+      .App,
+      .blockly-container {
+          max-width: initial !important;
+          max-height: initial !important;
+          width: 100vw !important;
+          height: 100vh !important;
+      }
+    `;
+
+      // Adicionar ao head para ter alta prioridade
+      document.head.appendChild(style);
+      console.log('Modo grande ativado');
+      console.log(style);
+    }
   }, []);
 
   useEffect(() => {
@@ -59,6 +86,10 @@ const Popup = () => {
 
   const handleBack = () => {
     setActualWorkspace('');
+  };
+
+  const lunchLargeMode = () => {
+    chrome.tabs.create({ url: "popup.html?large=true" });
   };
 
   const handleCreateAgent = async () => {
@@ -117,6 +148,9 @@ const Popup = () => {
           <div id="blocklyDiv" className="blockly-container"></div>
           <div className="blockly-content">
             <button onClick={handleBack}>Voltar</button>
+            <button onClick={lunchLargeMode} className="secondary">
+              Abrir modo grande
+            </button>
           </div>
         </>
       )}

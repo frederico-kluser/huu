@@ -36,6 +36,8 @@
   padding: 16px;
   position: absolute;
   z-index: 2;
+  display: flex;
+  gap: 16px;
 }
 
 .content {
