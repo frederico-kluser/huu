@@ -22,7 +22,7 @@ const Popup = () => {
   const [workspaces, setWorkspaces] = useState<string[]>([]);
   const [actualWorkspace, setActualWorkspace] = useState('');
   const [isMainPage, setIsMainPage] = useState(false);
-  const [mode, setMode] = useState('normal');
+  const [isLargeMode, setIsLargeMode] = useState(false);
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -47,7 +47,7 @@ const Popup = () => {
 
     console.log('layoutParam', layoutParam);
     if (layoutParam) {
-      setMode(layoutParam);
+      setIsLargeMode(true);
 
       // Criar elemento de estilo
       const style = document.createElement('style');
@@ -148,9 +148,11 @@ const Popup = () => {
           <div id="blocklyDiv" className="blockly-container"></div>
           <div className="blockly-content">
             <button onClick={handleBack}>Voltar</button>
-            <button onClick={lunchLargeMode} className="secondary">
-              Abrir modo grande
-            </button>
+            {!isLargeMode && (
+              <button onClick={lunchLargeMode} className="secondary">
+                Abrir modo grande
+              </button>
+            )}
           </div>
         </>
       )}
