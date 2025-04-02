@@ -1,0 +1,88 @@
+# Dependência Técnica em blockly/blocks/3-category_ai-integration/blocks/BlockAiGenerateText.ts
+
+## Problema: Tratamento de erros inadequado no bloco de geração de texto AI
+
+O arquivo `BlockAiGenerateText.ts` nas linhas 46-51 gera código que usa a função `getGeneratedText` com um callback, mas não implementa tratamento de erros adequado:
+
+```typescript
+// Usando uma função com callback em vez de await/Promise
+const code = `getGeneratedText(${promptCode}, function(result) {\n` +
+    `  ${varName} = result;\n` +
+    `  ${statementCode.replace(/^  /gm, '  ')}\n` +
+    `});\n`;
+```
+
+## Por que é um problema
+
+- Se a chamada para `getGeneratedText` falhar, não há tratamento do erro no código gerado
+- A função `getGeneratedText` pode lançar exceções (como visto em src/core/IA/index.ts), que não serão capturadas
+- O fluxo de execução poderá ser interrompido sem executar os blocos aninhados
+- Não há mecanismo para informar o usuário quando ocorrer uma falha na API
+- O bloco pode parecer "travado" ou não responder quando ocorrer um erro
+
+## Solução recomendada
+
+1. Adicionar tratamento de erros no código gerado:
+
+```typescript
+const code = `try {\n` +
+    `  getGeneratedText(${promptCode}, function(result) {\n` +
+    `    try {\n` +
+    `      ${varName} = result;\n` +
+    `      ${statementCode.replace(/^  /gm, '      ')}\n` +
+    `    } catch (innerError) {\n` +
+    `      console.error("Erro no processamento do resultado:", innerError);\n` +
+    `      alert("Erro ao processar o texto gerado: " + innerError.message);\n` +
+    `    }\n` +
+    `  });\n` +
+    `} catch (error) {\n` +
+    `  console.error("Erro na geração de texto:", error);\n` +
+    `  alert("Erro ao gerar texto: " + error.message);\n` +
+    `}\n`;
+```
+
+2. Modificar a API de `getGeneratedText` para receber um callback de erro:
+
+```typescript
+// Modificar a API para aceitar um callback de erro
+// Em src/core/IA/index.ts:
+export const getGeneratedText = async (prompt: string, successCallback: (text: string) => void, errorCallback: (error: Error) => void) => {
+  try {
+    const data = await generateResponseJSON<{ result: string }>(/* ... */);
+    if ('error' in data) {
+      errorCallback(new Error(data.error.message));
+    } else {
+      successCallback(data.response.result);
+    }
+  } catch (error) {
+    errorCallback(error instanceof Error ? error : new Error('Erro desconhecido'));
+  }
+};
+
+// E no BlockAiGenerateText.ts:
+const code = `getGeneratedText(${promptCode}, function(result) {\n` +
+    `  ${varName} = result;\n` +
+    `  ${statementCode.replace(/^  /gm, '  ')}\n` +
+    `}, function(error) {\n` +
+    `  console.error("Erro na geração de texto:", error);\n` +
+    `  alert("Erro ao gerar texto: " + error.message);\n` +
+    `});\n`;
+```
+
+3. Implementar um indicador visual no bloco para mostrar quando está processando:
+
+```typescript
+// Adicionar ao código gerado
+const code = `// Mostrar indicador de carregamento\n` +
+    `const blockId = "${block.id}";\n` +
+    `window.blocklySetBlockState(blockId, "loading");\n` +
+    `getGeneratedText(${promptCode}, function(result) {\n` +
+    `  ${varName} = result;\n` +
+    `  window.blocklySetBlockState(blockId, "success");\n` +
+    `  ${statementCode.replace(/^  /gm, '  ')}\n` +
+    `}, function(error) {\n` +
+    `  console.error("Erro:", error);\n` +
+    `  window.blocklySetBlockState(blockId, "error");\n` +
+    `  alert("Erro: " + error.message);\n` +
+    `});\n`;
+```

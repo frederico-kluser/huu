@@ -1,0 +1,75 @@
+# Dependência Técnica em helpers/processBlocklyCode.ts
+
+## Problema 1: Referência a bloco não definido no código
+
+O arquivo `processBlocklyCode.ts` na linha 38 inclui uma referência a um bloco chamado `BlockNavigateRefresh` no array `navigationBlockTypes`, mas este bloco não parece estar definido nas categorias de blocos do projeto:
+
+```typescript
+const navigationBlockTypes = [
+  'BlockNavigate',
+  'BlockNavigateToUrlText',
+  'BlockNavigateBack',
+  'BlockNavigateForward',
+  'BlockRefreshPage',
+  'BlockNavigateRefresh', // Este bloco não existe nas definições
+];
+```
+
+## Por que é um problema
+
+- Referência a um bloco que não existe pode causar comportamento imprevisível
+- Durante o processamento de blocos, o código pode tentar manipular um tipo de bloco inexistente
+- Inconsistência na base de código entre blocos definidos e blocos referenciados
+
+## Solução recomendada
+
+1. Remover a referência ao bloco inexistente se ele não é mais utilizado:
+```typescript
+const navigationBlockTypes = [
+  'BlockNavigate',
+  'BlockNavigateToUrlText',
+  'BlockNavigateBack',
+  'BlockNavigateForward',
+  'BlockRefreshPage',
+  // Remover BlockNavigateRefresh se não existir
+];
+```
+
+2. Ou, se o bloco deveria existir, criar a definição correspondente em uma das categorias apropriadas:
+```typescript
+// Em src/blockly/blocks/2-category_url-control/blocks/BlockNavigateRefresh.ts
+import * as Blockly from 'blockly/core';
+import Colors from '../../../config/colors';
+import blockConstructor from '../../../helpers/blockConstructor';
+
+const setBlockNavigateRefresh = () => {
+  return blockConstructor({
+    // Definição do bloco
+  });
+};
+
+export default setBlockNavigateRefresh;
+```
+
+## Problema 2: Importação não utilizada
+
+O arquivo importa o objeto `block` da biblioteca Blockly, mas não o utiliza no código:
+
+```typescript
+import { block } from "blockly/core/tooltip";
+```
+
+## Por que é um problema
+
+- Importações não utilizadas aumentam o tamanho do bundle final
+- Criam dependências desnecessárias
+- Podem causar confusão durante a manutenção do código
+
+## Solução recomendada
+
+Remover a importação não utilizada:
+
+```typescript
+// Remover esta linha
+import { block } from "blockly/core/tooltip";
+```

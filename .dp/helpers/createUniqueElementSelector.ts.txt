@@ -1,0 +1,43 @@
+# Dependência Técnica em createUniqueElementSelector.ts
+
+## Problema: Uso do seletor CSS :contains() não padronizado
+
+O arquivo `createUniqueElementSelector.ts` nas linhas 210-223 utiliza o seletor CSS `:contains()` que não é um seletor padrão CSS e não está implementado na maioria dos navegadores. Este seletor é uma extensão do jQuery e não funciona nativamente em navegadores.
+
+Exemplo do problema:
+```typescript
+const selector = `${tag}:contains("${cssEscape(text)}")`;
+if (isValidUniqueSelector(selector)) {
+  return selector;
+}
+```
+
+## Por que é um problema
+
+- O seletor `:contains()` não é suportado nativamente pelos navegadores, o que causará falhas ao tentar selecionar elementos com base no texto
+- Isso resultará em falsos negativos durante a validação de seletores e causará problemas na seleção de elementos durante a execução de agentes
+- Pode haver comportamento inconsistente entre diferentes navegadores
+
+## Solução recomendada
+
+Substituir o uso de `:contains()` com uma abordagem padronizada de seleção por texto:
+
+1. Use `querySelector` para selecionar elementos por tag
+2. Implemente uma função auxiliar que filtre os elementos pelo conteúdo de texto
+3. Alternativamente, use XPath que tem suporte nativo para selecionar por conteúdo de texto: `//tag[contains(text(), 'texto')]`
+
+Exemplo de solução:
+```typescript
+// Em vez de usar :contains, usar XPath ou uma abordagem com filtro
+const xpathSelector = `//${tag}[contains(text(), "${text.replace(/"/g, '\"')}")][1]`;
+// OU
+function findElementByTextContent(tagName, textContent) {
+  const elements = document.querySelectorAll(tagName);
+  for (const el of elements) {
+    if (el.textContent?.includes(textContent)) {
+      return el;
+    }
+  }
+  return null;
+}
+```

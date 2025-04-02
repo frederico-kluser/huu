@@ -1,0 +1,92 @@
+# Dependência Técnica em core/executeCode.ts
+
+## Problema: Manipulação inadequada de funções assíncronas na integração com eval5
+
+O arquivo `executeCode.ts` importa e expõe funções IA que utilizam callbacks (`getConditionalAi`, `getGeneratedText`, etc.) para o interpretador eval5, mas não implementa um mecanismo adequado para lidar com erros assíncronos e promessas:
+
+```typescript
+// Linha 2
+import { getConditionalAi, getGeneratedText, getSummarizedText, getTranslatedText } from "./IA";
+
+// Linhas 9-12
+const context = {
+  // ...
+  getConditionalAi,
+  getGeneratedText,
+  getSummarizedText,
+  getTranslatedText,
+  // ...
+}
+```
+
+## Por que é um problema
+
+- A biblioteca eval5 não suporta nativamente `async/await` e possui limitações no tratamento de promessas
+- Erros que ocorrem em código assíncrono dentro das funções IA podem não ser capturados pelo bloco try/catch que envolve o interpreter.evaluate()
+- Não há um mecanismo claro para encerrar a execução do código quando uma função assíncrona falha
+- Se uma função IA lançar uma exceção, ela pode não ser corretamente propagada para o manipulador de erros
+
+## Solução recomendada
+
+1. Implementar um wrapper para cada função assíncrona que garanta tratamento adequado de erros:
+
+```typescript
+const safeGetGeneratedText = (prompt, callback) => {
+  try {
+    getGeneratedText(prompt, (result) => {
+      try {
+        callback(result);
+      } catch (error) {
+        console.error('Error in callback for getGeneratedText:', error);
+      }
+    }).catch(error => {
+      console.error('Error in getGeneratedText:', error);
+    });
+  } catch (error) {
+    console.error('Error calling getGeneratedText:', error);
+  }
+};
+```
+
+2. Adicionar um mecanismo de timeout para funções assíncronas para evitar execuções que nunca são concluídas:
+
+```typescript
+const timeoutPromise = (promise, timeout) => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Operation timed out')), timeout)
+    )
+  ]);
+};
+
+// Uso
+const safeGetGeneratedText = (prompt, callback) => {
+  try {
+    timeoutPromise(getGeneratedText(prompt, callback), 30000)
+      .catch(error => console.error('Error or timeout in getGeneratedText:', error));
+  } catch (error) {
+    console.error('Error calling getGeneratedText:', error);
+  }
+};
+```
+
+3. Considerar a modificação das funções IA para retornar promessas e valores diretamente, em vez de usar callbacks, o que simplificaria a integração:
+
+```typescript
+// Modificar a API IA para:
+export const getGeneratedText = async (prompt: string): Promise<string> => {
+  // implementação...
+  return result;
+};
+
+// E então no executeCode:
+context.getGeneratedText = async (prompt) => {
+  try {
+    return await getGeneratedText(prompt);
+  } catch (error) {
+    console.error('Error in getGeneratedText:', error);
+    throw error; // ou retornar um valor padrão
+  }
+};
+```

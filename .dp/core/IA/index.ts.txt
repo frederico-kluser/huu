@@ -1,0 +1,63 @@
+# Dependência Técnica em core/IA/index.ts
+
+## Problema: Tipagem incorreta de callbacks
+
+O arquivo `core/IA/index.ts` define várias funções que aceitam callbacks, mas a tipagem desses callbacks está incorreta. Os callbacks são tipados como funções que retornam `{}` (um objeto vazio) em vez de `void`:
+
+```typescript
+// Linha 3
+export const getConditionalAi = async (booleanQuestion: string, callback: (bool: boolean) => {}): Promise<void>
+
+// Linha 24
+export const getGeneratedText = async (prompt: string, callback: (text: string) => {})
+
+// Linha 44
+export const getSummarizedText = async (text: string, callback: (summary: string) => {}): Promise<void>
+
+// Linha 66
+export const getTranslatedText = async (text: string, targetLanguage: TypeLanguage, callback: (translatedText: string) => {}): Promise<void>
+```
+
+## Por que é um problema
+
+- A tipagem `=> {}` indica que a função deve retornar um objeto vazio, o que não é a intenção
+- Isso pode causar erros de tipo se callbacks que não retornam um objeto vazio forem passados
+- Não segue as melhores práticas de tipagem do TypeScript para callbacks
+- Causa inconsistência na base de código com outras definições de callback
+
+## Solução recomendada
+
+Corrigir a tipagem dos callbacks para indicar que eles não precisam retornar nada:
+
+```typescript
+// Corrigir para
+export const getConditionalAi = async (booleanQuestion: string, callback: (bool: boolean) => void): Promise<void>
+
+export const getGeneratedText = async (prompt: string, callback: (text: string) => void): Promise<void>
+
+export const getSummarizedText = async (text: string, callback: (summary: string) => void): Promise<void>
+
+export const getTranslatedText = async (text: string, targetLanguage: TypeLanguage, callback: (translatedText: string) => void): Promise<void>
+```
+
+Essa mudança garante que o TypeScript entenda que os callbacks não precisam retornar nenhum valor específico, o que é consistente com o uso desses callbacks no código.
+
+Também é recomendável implementar tratamento de erros consistente dentro de todos os callbacks, possivelmente permitindo que o callback receba um segundo parâmetro de erro:
+
+```typescript
+export const getGeneratedText = async (
+  prompt: string, 
+  callback: (result: string | null, error?: Error) => void
+): Promise<void> => {
+  try {
+    const data = await generateResponseJSON<{ result: string }>(/* ... */);
+    if ('error' in data) {
+      callback(null, new Error(data.error.message));
+    } else {
+      callback(data.response.result);
+    }
+  } catch (error) {
+    callback(null, error instanceof Error ? error : new Error('Unknown error'));
+  }
+};
+```

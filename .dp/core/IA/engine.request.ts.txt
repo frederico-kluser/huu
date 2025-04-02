@@ -1,0 +1,59 @@
+# Dependência Técnica em core/IA/engine.request.ts
+
+## Problema: Acesso inseguro ao primeiro elemento de array sem verificação
+
+O arquivo `engine.request.ts` na linha 42 acessa o primeiro elemento de um array retornado pela função `extractCodeBlocks(code)` sem verificar se esse array contém elementos:
+
+```typescript
+const { codeValue } = extractCodeBlocks(code)[0];
+```
+
+## Por que é um problema
+
+- Se a resposta da IA não contiver blocos de código, `extractCodeBlocks(code)` pode retornar um array vazio
+- Acessar o índice 0 de um array vazio resultará em `undefined`
+- Tentar desestruturar propriedades de `undefined` resultará em um erro de execução: "Cannot destructure property 'codeValue' of 'undefined'"
+- Isso causará falha na função quando a resposta da IA não contiver nenhum bloco de código, o que é uma possibilidade real
+
+## Solução recomendada
+
+Adicionar uma verificação para garantir que o array contenha elementos antes de acessar o primeiro elemento:
+
+```typescript
+const codeBlocks = extractCodeBlocks(code);
+if (codeBlocks.length > 0) {
+  const { codeValue } = codeBlocks[0];
+  try {
+    JsonParse = JSON.parse(codeValue);
+    whileCondition = false;
+  } catch (error) {
+    console.error('error', error);
+  } finally {
+    temperature += 1;
+  }
+} else {
+  // Lidar com o caso de não haver blocos de código
+  console.error('No code blocks found in response');
+  temperature += 1;
+}
+```
+
+Outra abordagem seria usar o operador de encadeamento opcional para evitar o erro:
+
+```typescript
+const codeBlock = extractCodeBlocks(code)[0];
+if (codeBlock?.codeValue) {
+  try {
+    JsonParse = JSON.parse(codeBlock.codeValue);
+    whileCondition = false;
+  } catch (error) {
+    console.error('error', error);
+  } finally {
+    temperature += 1;
+  }
+} else {
+  // Lidar com o caso de não haver codeValue
+  console.error('No valid code value found in response');
+  temperature += 1;
+}
+```

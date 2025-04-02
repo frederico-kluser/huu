@@ -1,0 +1,58 @@
+# Dependência Técnica em pages/Popup/Popup.tsx
+
+## Problema: Cast inseguro para tipagem de localização do Blockly
+
+O arquivo `Popup.tsx` na linha 19 executa um cast inseguro de `PtBr` para o tipo `any`, em vez de usar a tipagem adequada para os arquivos de localização do Blockly:
+
+```typescript
+Blockly.setLocale(PtBr as any);
+```
+
+## Por que é um problema
+
+- O uso do cast `as any` ignora o sistema de tipos do TypeScript, eliminando suas vantagens de segurança
+- Se a estrutura do objeto `PtBr` mudar ou for incompatível com o que `Blockly.setLocale` espera, erros só serão detectados em tempo de execução
+- Dificulta refatorações e atualizações da biblioteca Blockly, pois o compilador não detectará incompatibilidades
+- Cria um precedente para ignorar tipagens em outros lugares do código
+
+## Solução recomendada
+
+1. Usar a tipagem correta fornecida pela biblioteca Blockly:
+
+```typescript
+import { Msg } from 'blockly/msg/pt_br';
+// ou
+import * as PtBr from 'blockly/msg/pt_br';
+
+Blockly.setLocale(PtBr);
+```
+
+2. Se a biblioteca não exporta o tipo adequado, criar uma interface que represente a estrutura esperada:
+
+```typescript
+interface BlocklyLocale {
+  [key: string]: string;
+}
+
+// Verificar se o objeto tem a estrutura esperada
+const isPtBrValid = (obj: any): obj is BlocklyLocale => {
+  return obj && typeof obj === 'object';
+};
+
+// Uso
+if (isPtBrValid(PtBr)) {
+  Blockly.setLocale(PtBr);
+} else {
+  console.error('Invalid locale object');
+}
+```
+
+3. Se possível, contribuir com definições de tipo para a biblioteca Blockly, especialmente para funcionalidades relacionadas à internacionalização.
+
+4. Como último recurso, se nenhuma das opções acima for viável, documentar claramente por que o cast `as any` é necessário e as validações que deveriam ser feitas:
+
+```typescript
+// FIXME: Usar tipagem adequada quando disponível na biblioteca Blockly
+// O objeto PtBr deve conter as chaves de string para as mensagens em português
+Blockly.setLocale(PtBr as any);
+```
