@@ -9,10 +9,10 @@ const setBlockFindElementByText = () => {
     colour: Colors.SELECTORS,
     hasOutput: 'String',
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Document/querySelectorAll',
-    message: 'encontrar elemento com seletor %1\ne texto igual a %2',
+    message: 'encontrar elemento com seletor %1\nque contenha texto %2',
     name: 'BlockFindElementByText',
     output: BlocklyTypes.HTML_ELEMENT,
-    tooltip: 'Encontra o primeiro elemento que corresponda ao seletor CSS e tenha o texto exato especificado.',
+    tooltip: 'Localiza o primeiro elemento da página que corresponda ao seletor CSS (ex: "div", "p", ".classe") e contenha exatamente o texto especificado. Útil para encontrar elementos específicos baseados em seu conteúdo textual.',
     fields: [
       {
         type: 'input_value',

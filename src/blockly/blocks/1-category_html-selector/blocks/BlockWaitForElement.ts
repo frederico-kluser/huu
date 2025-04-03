@@ -10,9 +10,9 @@ const setBlockWaitForElement = () => {
     hasPreviousConnection: null,
     hasNextConnection: null,
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver',
-    message: 'esperar seletor %1\ntipo %2\n%3 por %4 segundos\nse encontrar %5\nse tempo esgotar %6',
+    message: 'aguardar até que elemento %1\ntipo %2\n%3 por até %4 segundos\nquando encontrar faça %5\nse esgotar tempo faça %6',
     name: 'BlockWaitForElement',
-    tooltip: 'Espera até que um elemento HTML apareça ou desapareça na página por um determinado tempo.',
+    tooltip: 'Aguarda até que um elemento apareça ou desapareça na página, com tempo limite. Útil para elementos que carregam de forma assíncrona. Se o elemento for encontrado dentro do tempo, executa o primeiro bloco; caso contrário, executa o segundo.',
     fields: [
       {
         type: 'input_value',

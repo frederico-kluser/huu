@@ -10,10 +10,10 @@ const setBlockSelectHTMLElement = () => {
     colour: Colors.SELECTORS,
     hasOutput: 'String',
     helpUrl: 'https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Scripting/Variables',
-    message: 'seletor de elemento %1\nTipo de seletor %2',
+    message: 'encontrar elemento com %1\nusando seletor tipo %2',
     name: 'BlockSelectHTMLElement',
     output: BlocklyTypes.HTML_ELEMENT,
-    tooltip: 'Variável que armazena um elemento HTML.',
+    tooltip: 'Localiza um elemento na página usando um dos métodos disponíveis: CSS (como ".classe", "#id"), por ID, classe ou tag HTML. Escolha o tipo de seletor mais adequado para seu caso.',
     fields: [
       {
         type: 'input_value',

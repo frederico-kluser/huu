@@ -10,9 +10,9 @@ const setBlockGetElementInnerText = () => {
         colour: Colors.HTML,
         hasOutput: 'String',
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/innerText',
-        message: 'obter o texto de\n%1',
+        message: 'extrair texto do elemento\n%1',
         name: 'BlockGetElementInnerText',
-        tooltip: 'Extrai o innerText de um elemento HTML armazenado em uma variável.',
+        tooltip: 'Extrai o texto visível contido em um elemento HTML selecionado. Retorna apenas o conteúdo textual, ignorando tags HTML e elementos não visíveis.',
         fields: [
             {
                 type: 'field_variable',

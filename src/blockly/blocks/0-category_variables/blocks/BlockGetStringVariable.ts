@@ -9,9 +9,9 @@ const setBlockGetStringVariable = () => {
         colour: Colors.VAR_TEXTS,
         hasOutput: BlocklyTypes.STRING,  // Este bloco produz um valor de texto
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String',
-        message: 'obter variável texto %1',
+        message: 'obter valor da variável de texto %1',
         name: 'BlockGetStringVariable',
-        tooltip: 'Obtém o valor de uma variável de texto',
+        tooltip: 'Recupera o valor armazenado em uma variável de texto. Variáveis de texto são úteis para armazenar e manipular qualquer tipo de informação textual como nomes, mensagens ou dados extraídos de páginas.',
         fields: [
             {
                 type: 'field_variable',

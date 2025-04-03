@@ -10,9 +10,9 @@ const setBlockDelayWait = () => {
         hasPreviousConnection: null,
         hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout',
-        message: 'aguarde %1 milissegundos\ndepois faça %2',
+        message: 'pausar execução por %1 milissegundos\ndepois continuar com %2',
         name: 'BlockDelayWait',
-        tooltip: 'Aguarda um intervalo de tempo antes de executar os blocos aninhados.',
+        tooltip: 'Pausa a execução do agente pelo tempo especificado em milissegundos (1000ms = 1 segundo) antes de executar os blocos conectados. Útil para aguardar carregamento de conteúdo ou simular interações humanas.',
         fields: [
             {
                 type: 'input_value',
