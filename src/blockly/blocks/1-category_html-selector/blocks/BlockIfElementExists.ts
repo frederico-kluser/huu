@@ -10,9 +10,9 @@ const setBlockIfElementExists = () => {
         hasPreviousConnection: null,
         hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Document/querySelector',
-        message: 'se elemento %1 existe\nentão %2\nsenão %3',
+        message: 'se elemento %1 existir na página\nentão faça %2\nsenão faça %3',
         name: 'BlockIfElementExists',
-        tooltip: 'Verifica se um elemento existe na página. Se existir, executa o primeiro bloco de código, caso contrário, executa o segundo.',
+        tooltip: 'Verifica se um elemento específico existe na página atual. Se o elemento for encontrado, executa o primeiro bloco de código; caso não seja encontrado, executa o segundo bloco. Útil para criar fluxos condicionais baseados na presença de elementos na página.',
         fields: [
             {
                 type: 'input_value',

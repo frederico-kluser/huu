@@ -9,9 +9,9 @@ const setBlockAiConditional = () => {
         colour: Colors.AI,
         hasPreviousConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/if...else',
-        message: 'pergunta de sim ou não\n%1\nse sim\n%2\nsenao\n%3',
+        message: 'perguntar à IA (sim/não)\n%1\nse resposta for SIM, fazer\n%2\nse resposta for NÃO, fazer\n%3',
         name: 'BlockAiConditional',
-        tooltip: 'Pergunta ao usuário e executa um bloco de código se a resposta for verdadeira e outro se for falsa.',
+        tooltip: 'Envia uma pergunta para a Inteligência Artificial que exige resposta sim ou não. Dependendo da resposta, executa um dos dois caminhos possíveis. Ideal para criar decisões baseadas em análise de conteúdo ou contexto.',
         fields: [
             {
                 type: 'input_value',

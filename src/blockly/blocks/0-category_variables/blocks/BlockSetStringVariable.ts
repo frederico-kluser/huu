@@ -10,9 +10,9 @@ const setBlockSetStringVariable = () => {
         hasPreviousConnection: null,
         hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String',
-        message: 'definir variável texto %1 para %2',
+        message: 'armazenar na variável de texto %1 o valor %2',
         name: 'BlockSetStringVariable',
-        tooltip: 'Define o valor de uma variável de texto',
+        tooltip: 'Armazena um valor de texto em uma variável para uso posterior. Você pode usar textos diretos ou conectar outros blocos que retornam texto, como "extrair texto do elemento".',
         fields: [
             {
                 type: 'field_variable',

@@ -8,9 +8,9 @@ const setBlockRefreshPage = () => {
         hasNextConnection: null,
         hasPreviousConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Location/reload',
-        message: 'recarregar página',
+        message: 'atualizar página atual',
         name: 'BlockRefreshPage',
-        tooltip: 'Recarrega a página atual.',
+        tooltip: 'Força o recarregamento da página atual, como se o usuário pressionasse F5. Útil quando é necessário atualizar o conteúdo da página ou reiniciar elementos dinâmicos.',
         fields: [],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
             // Get all variables from the workspace

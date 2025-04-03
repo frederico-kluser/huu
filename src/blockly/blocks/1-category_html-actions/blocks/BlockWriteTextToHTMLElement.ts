@@ -11,10 +11,10 @@ const setBlockWriteTextToHTMLElement = () => {
         hasPreviousConnection: null,
         helpUrl:
             'https://developer.mozilla.org/en-US/docs/Web/API/Node/textContent',
-        message: 'modificar conteúdo\n do elemento %2\n pelo valor %1',
+        message: 'modificar conteúdo HTML\n do elemento %2\n com o texto %1',
         name: 'BlockWriteTextToHTMLElement',
         tooltip:
-            'Insere o texto de uma variável em um elemento HTML previamente salvo.',
+            'Substitui o conteúdo HTML de um elemento selecionado pelo texto especificado. Útil para modificar textos, links ou outros conteúdos na página.',
         fields: [
             {
                 type: 'input_value',

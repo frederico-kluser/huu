@@ -11,9 +11,9 @@ const setBlockClickHTMLElement = () => {
         hasNextConnection: null,
         hasPreviousConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/click',
-        message: 'clicar no elemento\n%1',
+        message: 'clicar no elemento selecionado\n%1',
         name: 'BlockClickHTMLElement',
-        tooltip: 'Clica no elemento HTML armazenado na variável.',
+        tooltip: 'Simula um clique do mouse no elemento HTML armazenado na variável. Use este bloco com um bloco seletor de elementos para interagir com botões e links na página.',
         fields: [
             {
                 type: 'field_variable',

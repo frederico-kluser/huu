@@ -10,9 +10,9 @@ const setBlockAiGenerateText = () => {
         colour: Colors.AI,
         hasPreviousConnection: null,
         helpUrl: 'https://platform.openai.com/docs/guides/prompt-engineering',
-        message: 'Pergunta para IA %1\nsalvar em %2\nfazer %3',
+        message: 'Pedir para IA gerar texto com prompt %1\nsalvar resultado em %2\ne então executar %3',
         name: 'BlockAiGenerateText',
-        tooltip: 'Envia um prompt para o ChatGPT, salva o texto gerado na variável e executa os blocos aninhados.',
+        tooltip: 'Envia uma instrução para a Inteligência Artificial gerar um texto, salva a resposta na variável escolhida e continua a execução. Útil para gerar conteúdo personalizado, respostas ou análises baseadas em dados do site.',
         fields: [
             {
                 type: 'input_value',

@@ -8,9 +8,9 @@ const setBlockNavigate = () => {
         hasNextConnection: null,
         hasPreviousConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Structuring_content/Creating_links',
-        message: 'mudou de página',
+        message: 'ponto de navegação entre páginas',
         name: 'BlockNavigate',
-        tooltip: 'Adicione esse bloco quando a página mudar.',
+        tooltip: 'Marca um ponto de continuação após uma navegação entre páginas. Coloque este bloco logo após qualquer bloco que cause mudança de página para manter o fluxo do seu agente entre navegações.',
         fields: [],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
             // Get all variables from the workspace

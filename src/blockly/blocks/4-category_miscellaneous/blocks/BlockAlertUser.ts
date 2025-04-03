@@ -11,9 +11,9 @@ const setBlockAlertUser = () => {
         hasPreviousConnection: null,
         hasNextConnection: null,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Window/alert',
-        message: 'exibe alerta: %1',
+        message: 'mostrar alerta para o usuário: %1',
         name: 'BlockAlertUser',
-        tooltip: 'Exibe um alerta com a mensagem especificada.',
+        tooltip: 'Exibe uma caixa de mensagem de alerta para o usuário do site com o texto especificado. O alerta interrompe a execução do agente até que o usuário clique em OK.',
         fields: [
             {
                 type: 'input_value',

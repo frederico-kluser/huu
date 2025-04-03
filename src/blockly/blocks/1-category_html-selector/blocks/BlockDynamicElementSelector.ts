@@ -17,9 +17,9 @@ const setBlockDynamicElementSelector = () => {
     const block = blockConstructor({
         colour: Colors.SELECTORS,
         helpUrl: 'https://developer.mozilla.org/en-US/docs/Web/API/Document/querySelector',
-        message: 'elemento da página',
+        message: 'selecionar elemento visualmente na página',
         name: blockName,
-        tooltip: 'Escolhe um elemento da página web quando conectado a outro bloco',
+        tooltip: 'Permite selecionar visualmente um elemento na página web clicando diretamente nele. Use este bloco conectado a outros para interagir com elementos da página.',
         hasOutput: BlocklyTypes.HTML_ELEMENT,
         fields: [],
         generator: function (block: Blockly.Block, generator: Blockly.CodeGenerator) {
