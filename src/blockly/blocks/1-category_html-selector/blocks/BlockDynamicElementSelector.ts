@@ -8,6 +8,7 @@ import { setElementSelection } from '../../../../core/storage/elementSelection';
 import { fetchActualAgent } from '../../../../core/storage/agents';
 import urlMatchesPattern from '../../../../helpers/urlMatchePattern';
 import extractNavigateUrls from '../../../../pages/Content/helpers/extractNavigateUrls';
+import { showAlert } from '../../../../helpers/ui/showAlert';
 
 const blockName = 'BlockDynamicElementSelector';
 
@@ -44,7 +45,7 @@ const setBlockDynamicElementSelector = () => {
 
                     fetchActualAgent().then((actialAgent) => {
                         if (!actialAgent) {
-                            window.alert('Não foi possível obter o agente atual, tente novamente.');
+                            showAlert('Não foi possível obter o agente atual, tente novamente.', 'danger');
                             block.dispose();
                             return;
                         }
@@ -82,14 +83,16 @@ const setBlockDynamicElementSelector = () => {
                                     throw new Error('A URL da aba atual não corresponde a nenhuma das URLs configuradas para este agente ou aos padrões de navegação definidos nos blocos. Verifique as configurações e tente novamente.');
                                 }
                             } catch (error) {
-                                window.alert(error);
+                                showAlert(error instanceof Error ? error.message : String(error), 'danger');
                                 block.dispose();
                                 return;
                             }
 
                             setElementSelection(block.id, workspaceName, tabId).then(() => {
-                                window.alert('Selecione um elemento da página clicando nele, veja qual é o elemento antes de clicar passando o mouse sobre ele.');
-                                window.close();
+                                showAlert('Selecione um elemento da página clicando nele, veja qual é o elemento antes de clicar passando o mouse sobre ele.', 'info');
+                                setTimeout(() => {
+                                    window.close();
+                                }, 2000); // Fechamos a janela após 2 segundos para dar tempo do usuário ver o alerta
                             });
                         });
                     });
