@@ -7,6 +7,9 @@ import { fetchAgentById, updateAgentAttributes } from '../../../../core/storage/
 import urlMatchesPattern from '../../../../helpers/urlMatchePattern';
 import Gap from '../../../../components/Gap';
 import importJsonAgent from '../../../../helpers/importJsonAgent';
+import { getItem, setItem } from '../../../../core/storage';
+import enums from '../../../../types/enums';
+import validateOpenAIApiKey from '../../../../helpers/validateOpenAiApiKey';
 
 interface MainPageProps {
     setIsMainPage: Dispatch<SetStateAction<boolean>>
@@ -19,6 +22,11 @@ const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent, handleCreateFu
     const [validatedAgents, setValidatedAgents] = useState<string[]>([]);
     const [agentItems, setAgentItems] = useState<JSX.Element[]>([]);
     const [url, setUrl] = useState<string>('');
+    const [openaiKey, setOpenaiKey] = useState<string>('');
+    const [showApiKeyManager, setShowApiKeyManager] = useState<boolean>(false);
+    const [newApiKey, setNewApiKey] = useState<string>('');
+    const [apiKeyStatus, setApiKeyStatus] = useState<string>('');
+    const [isValidatingKey, setIsValidatingKey] = useState<boolean>(false);
 
     useEffect(() => {
         chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
@@ -27,6 +35,14 @@ const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent, handleCreateFu
             // Exibir a URL no elemento com id "url"
             setUrl(currentTab.url || 'url não encontrada');
         });
+        
+        // Carregar a chave da OpenAI
+        const loadOpenAIKey = async () => {
+            const key = await getItem<string>(enums.OPENAI_KEY);
+            setOpenaiKey(key || '');
+        };
+        
+        loadOpenAIKey();
     }, []);
 
     const updateApprovedAgents = async () => {
@@ -58,7 +74,7 @@ const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent, handleCreateFu
                 });
 
                 updateApprovedAgents();
-            }} style={active ? styles.agentActivateButton : styles.agentDeactivateButton}>{active ? 'Desativar' : 'Ativar'}</button>
+            }} className={active ? "btn btn-success" : "btn btn-danger"} style={active ? styles.agentActivateButton : styles.agentDeactivateButton}>{active ? 'Desativar' : 'Ativar'}</button>
         );
     };
 
@@ -83,7 +99,7 @@ const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent, handleCreateFu
                     <div role="group" key={agent} style={styles.agentItem}>
                         {await getButton(agent)}
                         <h6 style={styles.agentTitle}>{agent}</h6>
-                        <select onChange={(e) => handleEditMode(agent, e.target.value as TypeMode)} value={mode}>
+                        <select className="form-select" onChange={(e) => handleEditMode(agent, e.target.value as TypeMode)} value={mode}>
                             <option value="">Selecione o modo de acionamento</option>
                             <option value="automatic-1">Acionar automaticamente uma vez</option>
                             <option value="automatic">Acionar automaticamente sem parar</option>
@@ -120,6 +136,47 @@ const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent, handleCreateFu
             alert('Erro ao importar agente: ' + error.message);
         });
     };
+    
+    const toggleApiKeyManager = () => {
+        setShowApiKeyManager(!showApiKeyManager);
+        setNewApiKey(openaiKey || '');
+        setApiKeyStatus('');
+    };
+    
+    const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setNewApiKey(e.target.value);
+        setApiKeyStatus('');
+    };
+    
+    const saveApiKey = async () => {
+        if (!newApiKey) {
+            setApiKeyStatus('error');
+            return;
+        }
+        
+        setIsValidatingKey(true);
+        
+        try {
+            const isValid = await validateOpenAIApiKey(newApiKey);
+            
+            if (isValid) {
+                await getItem(enums.OPENAI_KEY);
+                await setItem(enums.OPENAI_KEY, newApiKey);
+                setOpenaiKey(newApiKey);
+                setShowApiKeyManager(false);
+                setApiKeyStatus('');
+                alert('Chave da OpenAI atualizada com sucesso!');
+            } else {
+                setApiKeyStatus('error');
+                alert('Chave da OpenAI inválida!');
+            }
+        } catch (error) {
+            console.error('Erro ao validar chave:', error);
+            setApiKeyStatus('error');
+        } finally {
+            setIsValidatingKey(false);
+        }
+    };
 
     return (
         <div style={styles.container}>
@@ -130,10 +187,57 @@ const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent, handleCreateFu
                 {agentItems}
             </div>
             <Gap horizontal size={16}>
-                <button onClick={handleEditModels}>Editar Agentes</button>
-                <button onClick={handleCreateAgent} className="contrast">Criar Novo Agente</button>
-                <button onClick={handleImportJsonAgent} className="secondary">Importar Agente</button>
+                <button onClick={handleEditModels} className="btn btn-primary">Editar Agentes</button>
+                <button onClick={handleCreateAgent} className="btn btn-dark">Criar Novo Agente</button>
+                <button onClick={handleImportJsonAgent} className="btn btn-secondary">Importar Agente</button>
+                <button onClick={toggleApiKeyManager} className="btn btn-info">Gerenciar API Key</button>
             </Gap>
+            
+            {showApiKeyManager && (
+                <div className="mt-4 p-3 border rounded" style={{ width: '100%', maxWidth: '600px' }}>
+                    <h4>Gerenciar API Key da OpenAI</h4>
+                    <p>Sua chave atual: {openaiKey ? '••••••••' + openaiKey.substring(openaiKey.length - 4) : 'Não configurada'}</p>
+                    
+                    <div className="mb-3">
+                        <label htmlFor="apiKeyInput" className="form-label">Nova API Key:</label>
+                        <input 
+                            type="password" 
+                            id="apiKeyInput"
+                            className={`form-control ${apiKeyStatus === 'error' ? 'is-invalid' : ''}`}
+                            value={newApiKey} 
+                            onChange={handleApiKeyChange}
+                            disabled={isValidatingKey}
+                        />
+                        {apiKeyStatus === 'error' && (
+                            <div className="invalid-feedback">
+                                Chave inválida! Verifique e tente novamente.
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div className="d-flex justify-content-end gap-2">
+                        <button 
+                            className="btn btn-secondary" 
+                            onClick={toggleApiKeyManager}
+                            disabled={isValidatingKey}
+                        >
+                            Cancelar
+                        </button>
+                        <button 
+                            className="btn btn-primary" 
+                            onClick={saveApiKey}
+                            disabled={isValidatingKey}
+                        >
+                            {isValidatingKey ? (
+                                <>
+                                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                    Validando...
+                                </>
+                            ) : 'Salvar Nova Chave'}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     )
 };

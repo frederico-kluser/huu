@@ -9,7 +9,7 @@ import CreateAgent from './pages/CreateAgent';
 import isValidJsonKey from '../../helpers/isValidJsonKey';
 import { fetchWorkspaceNames, updateActualWorkspace, updateWorkspaceNames } from '../../core/storage/workspace';
 
-import '../../assets/css/pico.min.css';
+import 'bootstrap-dark-5/dist/css/bootstrap-dark.min.css';
 import './Popup.css';
 import { fetchPopupNavigation, updatePopupNavigation } from '../../core/storage/popupNavigation';
 import { createFullAgent, createNewAgent } from '../../core/storage/agents';
@@ -147,9 +147,9 @@ const Popup = () => {
         <>
           <div id="blocklyDiv" className="blockly-container"></div>
           <div className="blockly-content">
-            <button onClick={handleBack}>Voltar</button>
+            <button onClick={handleBack} className="btn btn-primary">Voltar</button>
             {!isLargeMode && (
-              <button onClick={lunchLargeMode} className="secondary">
+              <button onClick={lunchLargeMode} className="btn btn-secondary">
                 Abrir modo grande
               </button>
             )}

@@ -1,5 +1,5 @@
 .App {
-  border: 1px solid white;
+  border: 1px solid #444;
   bottom: 0px;
   box-sizing: border-box;
   color: white;
@@ -12,10 +12,11 @@
   right: 0px;
   text-align: center;
   top: 0px;
+  background-color: #212529;
 }
 
 .blockly-container {
-  background-color: white;
+  background-color: #343a40;
   border-radius: 10px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
   height: 600px;

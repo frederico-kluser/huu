@@ -165,27 +165,27 @@ const EditAgent = ({
     return (
         <main className="content">
             {/* <button onClick={handleGoHome} disabled={isBackButtonDisabled}>Voltar</button> */}
-            <button onClick={handleGoHome}>Voltar</button>
-            <select ref={agentSelectRef} onChange={handleChangeAgent}>
+            <button onClick={handleGoHome} className="btn btn-primary">Voltar</button>
+            <select ref={agentSelectRef} onChange={handleChangeAgent} className="form-select">
                 {workspaces.map((workspace, index) => (
                     <option key={workspace} value={index}>
                         {workspace}
                     </option>
                 ))}
             </select>
-            <input type="text" placeholder="Nome do agente" value={agentName} onChange={(e) => {
+            <input type="text" className="form-control" placeholder="Nome do agente" value={agentName} onChange={(e) => {
                 setAgentName(e.target.value);
             }} aria-invalid={!isValidJsonKey(agentName)} />
-            <input type="text" placeholder="Site que o agente irá funcionar" value={agentSite} onChange={(e) => {
+            <input type="text" className="form-control" placeholder="Site que o agente irá funcionar" value={agentSite} onChange={(e) => {
                 setAgentSite(e.target.value);
             }} aria-invalid={!isValidUrlPatterns(agentSite)} />
             <small>Para criar padrões de URL, basta escrever o domínio e o caminho, usando o caractere <code>*</code> onde quiser aceitar qualquer parte variável. Por exemplo, <code>exemplo.com/*</code> permite combinar tudo que esteja em “exemplo.com” sem se preocupar com o que vem depois da barra. Se quiser abranger subdomínios, faça algo como <code>*.exemplo.com/*</code>, que vale para qualquer coisa antes de “.exemplo.com”. Você pode escrever vários padrões separados por vírgula; por exemplo, <code>exemplo.com/*, outro.com/pasta/*</code> cobre “exemplo.com” e qualquer página na pasta “pasta” de “outro.com”.</small>
-            <div role="group">
-                <button onClick={handleCreateAgent} className="contrast">Criar Novo Agente</button>
-                <button onClick={handleSave} disabled={isSaveButtonDisabled}>Salvar</button>
-                <button onClick={handleLoadAgent}>Configurar Agente</button>
-                <button onClick={handleExportAgent} className="secondary">Exportar Agente</button>
-                <button onClick={handleDeleteAgent}>Deletar</button>
+            <div className="btn-group" role="group">
+                <button onClick={handleCreateAgent} className="btn btn-dark">Criar Novo Agente</button>
+                <button onClick={handleSave} className="btn btn-success" disabled={isSaveButtonDisabled}>Salvar</button>
+                <button onClick={handleLoadAgent} className="btn btn-primary">Configurar Agente</button>
+                <button onClick={handleExportAgent} className="btn btn-secondary">Exportar Agente</button>
+                <button onClick={handleDeleteAgent} className="btn btn-danger">Deletar</button>
             </div>
         </main>
     );

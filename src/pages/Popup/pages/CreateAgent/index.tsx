@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import TypePageStyle from '../../../../types/pageStyle';
-import { setItem } from '../../../../core/storage';
+import { getItem, setItem } from '../../../../core/storage';
 import enums from '../../../../types/enums';
 import validateOpenAIApiKey from '../../../../helpers/validateOpenAiApiKey';
 
@@ -14,6 +14,28 @@ const CreateAgent = ({
     const [openaiKey, setOpenaiKey] = useState<string>('');
     const [agentInputStatus, setAgentInputStatus] = useState<any>("");
     const [isLoading, setIsLoading] = useState<boolean>(false);
+    
+    useEffect(() => {
+        // Verificar se já existe uma chave salva
+        const checkExistingKey = async () => {
+            const savedKey = await getItem<string>(enums.OPENAI_KEY);
+            if (savedKey) {
+                setOpenaiKey(savedKey);
+                // Validar a chave existente
+                setIsLoading(true);
+                try {
+                    const isValid = await validateOpenAIApiKey(savedKey);
+                    setAgentInputStatus(isValid ? "false" : "true");
+                } catch (error) {
+                    setAgentInputStatus("true");
+                } finally {
+                    setIsLoading(false);
+                }
+            }
+        };
+        
+        checkExistingKey();
+    }, []);
 
     // validateOpenAIApiKey
 
@@ -50,12 +72,12 @@ const CreateAgent = ({
             <h1>huu</h1>
             {isLoading && <span aria-busy="true">Validando chave da OpenAI...</span>}
             {!isLoading && <>
-                <input placeholder='Insira sua chave da OpenAI para criar um agente' type="password" value={openaiKey} onChange={handleChangeValue} aria-invalid={agentInputStatus} style={styles.input} />
+                <input className="form-control" placeholder='Insira sua chave da OpenAI para criar um agente' type="password" value={openaiKey} onChange={handleChangeValue} aria-invalid={agentInputStatus} style={styles.input} />
                 <p>Insira sua chave da OpenAI para criar um agente</p>
                 <p>Para obter sua chave, acesse <a href="https://platform.openai.com/account/api-keys" target
                     ="_blank">https://platform.openai.com/account/api-keys</a></p>
                 <p>Depois de criar um agente, você pode editá-lo na página de edição de agentes</p>
-                <button onClick={handleMiddleware} disabled={agentInputStatus !== "false"}>Criar Agente</button>
+                <button className="btn btn-primary" onClick={handleMiddleware} disabled={agentInputStatus !== "false"}>Criar Agente</button>
             </>}
         </div>
     )

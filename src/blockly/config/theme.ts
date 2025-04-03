@@ -4,11 +4,11 @@ const blocklyTheme: BlocklyOptions['theme'] = {
   name: 'Dark',
   base: Themes.Classic,
   componentStyles: {
-    // toolboxBackgroundColour: '#bdbdbd',
-    toolboxForegroundColour: '#000000',
-    flyoutBackgroundColour: '#AAAAAA',
+    toolboxBackgroundColour: '#343a40',
+    toolboxForegroundColour: '#ffffff',
+    flyoutBackgroundColour: '#212529',
     flyoutOpacity: 1,
-    workspaceBackgroundColour: '#929292',
+    workspaceBackgroundColour: '#495057',
   },
   blockStyles: {
     colour_blocks: {
