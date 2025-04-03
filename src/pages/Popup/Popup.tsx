@@ -145,7 +145,7 @@ const Popup = () => {
     <div className="App">
       {actualWorkspace && (
         <>
-          <div id="blocklyDiv" className="blockly-container"></div>
+          <div id="blocklyDiv" data-testid="blocklyDiv" className="blockly-container"></div>
           <div className="blockly-content">
             <button onClick={handleBack} className="btn btn-primary">Voltar</button>
             {!isLargeMode && (

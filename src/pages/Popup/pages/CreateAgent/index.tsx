@@ -64,7 +64,13 @@ const CreateAgent = ({
     };
 
     const handleMiddleware = async () => {
-        setItem(enums.OPENAI_KEY, openaiKey).then(handleCreateAgent);
+        try {
+            await setItem(enums.OPENAI_KEY, openaiKey);
+            handleCreateAgent();
+        } catch (error) {
+            console.error('Erro ao salvar chave API:', error);
+            alert('Erro ao salvar chave. Tente novamente.');
+        }
     };
 
     return (

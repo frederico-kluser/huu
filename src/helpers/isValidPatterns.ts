@@ -8,7 +8,7 @@ function isValidURL(url: string): boolean {
 }
 
 function isValidUrlPatterns(patterns: string): boolean {
-    if (!patterns || patterns.trim() === '') {
+    if (!patterns || typeof patterns !== 'string' || patterns.trim() === '') {
         return false;
     }
     const patternList = patterns.split(',').map((p) => p.trim());

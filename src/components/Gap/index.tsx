@@ -1,9 +1,9 @@
 import React, { ReactNode } from "react";
 import TypePageStyle from "../../types/pageStyle";
 
-interface GapProps {
+interface GapProps extends React.HTMLAttributes<HTMLDivElement> {
   horizontal?: boolean;
-  size:
+  size?:
   | 4
   | 8
   | 12
@@ -27,13 +27,13 @@ interface GapProps {
   children?: ReactNode | ReactNode[];
 }
 
-const Gap: React.FC<GapProps> = ({ horizontal = false, size, children }) => {
+const Gap: React.FC<GapProps> = ({ horizontal = false, size = 8, children, className, ...rest }) => {
   const gapStyle = {
     display: horizontal ? "flex" : "grid",
     gap: `${size}px`,
   };
 
-  return <div style={gapStyle}>{children}</div>;
+  return <div style={gapStyle} className={className} {...rest}>{children}</div>;
 };
 
 export default Gap;
