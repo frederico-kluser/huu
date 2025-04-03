@@ -3,6 +3,7 @@ import { TypeBlock } from "../types/agent";
 /**
  * Encontra recursivamente blocos de navegação e extrai os segmentos de código que incluem
  * o próprio bloco de navegação e seus blocos subsequentes.
+ * Aprimorado para capturar o contexto completo de execução após a navegação.
  *
  * @param {any} block - O bloco a ser processado
  * @param {any} result - O objeto de resultado sendo construído
@@ -44,23 +45,39 @@ const extractNavigationPaths = (
 
         // Verifica se é um bloco de navegação
         if (block.type && navigationBlockTypes.includes(block.type)) {
+            // Captura toda a sequência de blocos após a navegação para 
+            // garantir que funções chamadas após navegação sejam incluídas
             if (block.next) {
-                navigationClone[block.id] = block.next;
-            }
-        }
-
-        // Processa inputs (para blocos aninhados)
-        if (block.inputs) {
-            Object.values(block.inputs).forEach((input: any) => {
-                if (input && input.block) {
-                    processBlock(input.block);
+                // Clona toda a estrutura subsequente para preservar o contexto completo
+                navigationClone[block.id] = JSON.parse(JSON.stringify(block.next));
+                
+                // Processa inputs (para blocos aninhados) do bloco de navegação
+                // para garantir que funções dentro de condicionais sejam capturadas
+                if (block.inputs) {
+                    Object.values(block.inputs).forEach((input: any) => {
+                        if (input && input.block) {
+                            processBlock(input.block);
+                        }
+                    });
                 }
-            });
-        }
+            } else {
+                // Mesmo sem blocos seguintes, registra para ter uma navegação vazia
+                navigationClone[block.id] = { block: null };
+            }
+        } else {
+            // Processa inputs (para blocos aninhados)
+            if (block.inputs) {
+                Object.values(block.inputs).forEach((input: any) => {
+                    if (input && input.block) {
+                        processBlock(input.block);
+                    }
+                });
+            }
 
-        // Processa o próximo bloco
-        if (block.next && block.next.block) {
-            processBlock(block.next.block);
+            // Processa o próximo bloco
+            if (block.next && block.next.block) {
+                processBlock(block.next.block);
+            }
         }
     };
 
