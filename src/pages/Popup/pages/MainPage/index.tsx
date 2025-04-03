@@ -10,6 +10,7 @@ import importJsonAgent from '../../../../helpers/importJsonAgent';
 import { getItem, setItem } from '../../../../core/storage';
 import enums from '../../../../types/enums';
 import validateOpenAIApiKey from '../../../../helpers/validateOpenAiApiKey';
+import { showAlert } from '../../../../helpers/ui/showAlert';
 
 interface MainPageProps {
     setIsMainPage: Dispatch<SetStateAction<boolean>>
@@ -133,7 +134,7 @@ const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent, handleCreateFu
             handleCreateFullAgent(importedAgent);
         }).catch((error) => {
             console.error('Erro ao importar agente:', error);
-            alert('Erro ao importar agente: ' + error.message);
+            showAlert('Erro ao importar agente: ' + error.message, 'danger');
         });
     };
     
@@ -165,10 +166,10 @@ const MainPage = ({ setIsMainPage, workspaces, handleCreateAgent, handleCreateFu
                 setOpenaiKey(newApiKey);
                 setShowApiKeyManager(false);
                 setApiKeyStatus('');
-                alert('Chave da OpenAI atualizada com sucesso!');
+                showAlert('Chave da OpenAI atualizada com sucesso!', 'success');
             } else {
                 setApiKeyStatus('error');
-                alert('Chave da OpenAI inválida!');
+                showAlert('Chave da OpenAI inválida!', 'danger');
             }
         } catch (error) {
             console.error('Erro ao validar chave:', error);

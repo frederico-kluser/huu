@@ -3,6 +3,7 @@ import TypePageStyle from '../../../../types/pageStyle';
 import { getItem, setItem } from '../../../../core/storage';
 import enums from '../../../../types/enums';
 import validateOpenAIApiKey from '../../../../helpers/validateOpenAiApiKey';
+import { showAlert } from '../../../../helpers/ui/showAlert';
 
 interface CreateAgentProps {
     handleCreateAgent: () => void
@@ -54,7 +55,7 @@ const CreateAgent = ({
             const isValid = await validateOpenAIApiKey(value);
             setAgentInputStatus(isValid ? "false" : "true");
             if (!isValid) {
-                alert('Chave inválida');
+                showAlert('Chave inválida', 'danger');
             }
         } catch (error) {
             setAgentInputStatus("true");
@@ -69,7 +70,7 @@ const CreateAgent = ({
             handleCreateAgent();
         } catch (error) {
             console.error('Erro ao salvar chave API:', error);
-            alert('Erro ao salvar chave. Tente novamente.');
+            showAlert('Erro ao salvar chave. Tente novamente.', 'danger');
         }
     };
 

@@ -15,6 +15,7 @@ import { fetchPopupNavigation, updatePopupNavigation } from '../../core/storage/
 import { createFullAgent, createNewAgent } from '../../core/storage/agents';
 import isValidUrlPatterns from '../../helpers/isValidPatterns';
 import TypeAgent from '../../types/agent';
+import { setupAlertReplacement, showAlert } from '../../helpers/ui/showAlert';
 
 Blockly.setLocale(PtBr as any);
 
@@ -25,6 +26,9 @@ const Popup = () => {
   const [isLargeMode, setIsLargeMode] = useState(false);
 
   useEffect(() => {
+    // Configurar substituição do alert
+    setupAlertReplacement();
+    
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs[0];
       console.log("tab.url");
@@ -97,19 +101,19 @@ const Popup = () => {
     if (!workspaceName) return;
 
     if (!isValidJsonKey(workspaceName)) {
-      alert('Nome inválido');
+      showAlert('Nome inválido', 'danger');
       return;
     }
 
     if (workspaces.includes(workspaceName)) {
-      alert('Já existe um agente com esse nome');
+      showAlert('Já existe um agente com esse nome', 'warning');
       return;
     }
 
     const URLs = prompt('Digite um padrão de URL. \n\nPara criar padrões de URL, basta escrever o domínio e o caminho, usando o caractere * onde quiser aceitar qualquer parte variável. Por exemplo, exemplo.com/* permite combinar tudo que esteja em “exemplo.com” sem se preocupar com o que vem depois da barra. Se quiser abranger subdomínios, faça algo como *.exemplo.com/*, que vale para qualquer coisa antes de “.exemplo.com”. Você pode escrever vários padrões separados por vírgula; por exemplo, exemplo.com/*, outro.com/pasta/* cobre “exemplo.com” e qualquer página na pasta “pasta” de “outro.com”.', 'google.com/*');
     if (!URLs) return;
     if (!isValidUrlPatterns(URLs)) {
-      alert('URL inválida');
+      showAlert('URL inválida', 'danger');
       return;
     }
 
@@ -117,20 +121,20 @@ const Popup = () => {
     setWorkspaces([...workspaces, workspaceName]);
     setActualWorkspace(workspaceName);
     await updateActualWorkspace(workspaces.length);
-    alert('Agente criado com sucesso');
+    showAlert('Agente criado com sucesso', 'success');
   };
 
   const handleCreateFullAgent = async (agent: TypeAgent) => {
     if (!isValidJsonKey(agent.name)) {
-      alert('Nome inválido');
+      showAlert('Nome inválido', 'danger');
       return;
     }
     if (workspaces.includes(agent.name)) {
-      alert('Já existe um agente com esse nome');
+      showAlert('Já existe um agente com esse nome', 'warning');
       return;
     }
     if (!isValidUrlPatterns(agent.urls)) {
-      alert('URL inválida');
+      showAlert('URL inválida', 'danger');
       return;
     }
 
@@ -138,7 +142,7 @@ const Popup = () => {
     setWorkspaces([...workspaces, agent.name]);
     setActualWorkspace(agent.name);
     await updateActualWorkspace(workspaces.length);
-    alert('Agente criado com sucesso');
+    showAlert('Agente criado com sucesso', 'success');
   };
 
   return (

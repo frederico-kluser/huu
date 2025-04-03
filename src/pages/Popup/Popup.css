@@ -74,3 +74,29 @@ textarea {
   bottom: 0px !important;
   right: 0px !important;
 }
+
+/* Estilos para os alertas Bootstrap customizados */
+#huu-alert-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  max-width: 350px;
+}
+
+#huu-alert-container .alert {
+  margin-bottom: 10px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  animation: huu-alert-slide-in 0.3s ease-in-out;
+}
+
+@keyframes huu-alert-slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

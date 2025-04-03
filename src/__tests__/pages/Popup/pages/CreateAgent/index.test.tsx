@@ -4,10 +4,15 @@ import CreateAgent from '../../../../../pages/Popup/pages/CreateAgent';
 import validateOpenAIApiKey from '../../../../../helpers/validateOpenAiApiKey';
 import { getItem, setItem } from '../../../../../core/storage';
 import enums from '../../../../../types/enums';
+import * as alertModule from '../../../../../helpers/ui/showAlert';
 
 // Mock dos módulos
 jest.mock('../../../../../helpers/validateOpenAiApiKey');
 jest.mock('../../../../../core/storage');
+jest.mock('../../../../../helpers/ui/showAlert', () => ({
+  showAlert: jest.fn(),
+  setupAlertReplacement: jest.fn()
+}));
 
 describe('CreateAgent Component', () => {
   // Props de teste
@@ -144,9 +149,9 @@ describe('CreateAgent Component', () => {
     const input = screen.getByPlaceholderText('Insira sua chave da OpenAI para criar um agente');
     fireEvent.change(input, { target: { value: 'invalid-key' } });
     
-    // Verificar que o alerta foi chamado
+    // Verificar que a função showAlert foi chamada em vez de window.alert
     await waitFor(() => {
-      expect(window.alert).toHaveBeenCalledWith('Chave inválida');
+      expect(alertModule.showAlert).toHaveBeenCalledWith('Chave inválida', 'danger');
     });
   });
 });
