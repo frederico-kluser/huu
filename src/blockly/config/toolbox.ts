@@ -2,6 +2,7 @@ import { BlocklyOptions } from 'blockly';
 import configURLActions from '../blocks/2-category_url-control';
 import configAiActions from '../blocks/3-category_ai-integration';
 import configMiscellaneousActions from '../blocks/4-category_miscellaneous';
+import configCookiesStorage from '../blocks/5-category_cookies-storage';
 import configVariables from '../blocks/0-category_variables';
 import configHTMLSelectors from '../blocks/1-category_html-selector';
 import configHTMLInterection from '../blocks/1-category_html-actions';
@@ -35,6 +36,11 @@ const blocklyToolbox: BlocklyOptions['toolbox'] = {
       kind: 'category',
       name: 'Ações de IA',
       contents: configAiActions(),
+    },
+    {
+      kind: 'category',
+      name: 'Manipulação de Cookies e Armazenamento',
+      contents: configCookiesStorage(),
     },
     {
       kind: 'category',
