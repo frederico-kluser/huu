@@ -1,0 +1,259 @@
+{
+  "description": "Documentação detalhada de todos os blocos customizados da Huu Extension",
+  "blocks": [
+    {
+      "category": "Variáveis",
+      "blocks": [
+        {
+          "name": "BlockGetHtmlVariable",
+          "displayName": "Obter valor da variável de elemento HTML",
+          "description": "Recupera um elemento HTML armazenado anteriormente em uma variável. Os elementos HTML são referências a elementos do DOM como botões, campos de texto, divs, etc. que foram selecionados e armazenados para uso posterior.",
+          "usage": "Use este bloco quando precisar acessar um elemento HTML que foi armazenado em uma variável para realizar operações como clique, extração de texto, ou verificação de propriedades.",
+          "example": "Pode ser conectado a blocos como 'clicar no elemento', 'extrair texto do elemento' ou outros blocos que exijam elementos HTML como entrada."
+        },
+        {
+          "name": "BlockSetHtmlVariable",
+          "displayName": "Armazenar na variável de elemento HTML",
+          "description": "Armazena uma referência a um elemento HTML (como um botão, campo de texto, ou qualquer outro elemento da página) em uma variável para uso posterior. Essencial para interagir com o mesmo elemento várias vezes ao longo do script.",
+          "usage": "Conecte um bloco que retorne um elemento HTML (como 'encontrar elemento com seletor') a este bloco para armazenar o elemento para uso posterior.",
+          "example": "Primeiro selecione um elemento com 'encontrar elemento com seletor \"#meuBotao\"', depois armazene-o com este bloco, e então você pode usá-lo em vários lugares com o bloco 'obter variável de elemento HTML'."
+        },
+        {
+          "name": "BlockGetStringVariable",
+          "displayName": "Obter valor da variável de texto",
+          "description": "Recupera o valor armazenado em uma variável de texto. Variáveis de texto são úteis para armazenar e manipular qualquer tipo de informação textual como nomes, mensagens ou dados extraídos de páginas.",
+          "usage": "Use este bloco quando precisar acessar texto que foi armazenado anteriormente em uma variável, para exibição, processamento ou envio para outros blocos.",
+          "example": "Pode ser usado em blocos como 'modificar conteúdo HTML' para inserir o texto armazenado em um elemento, ou em blocos de IA para gerar conteúdo baseado no texto armazenado."
+        },
+        {
+          "name": "BlockSetStringVariable",
+          "displayName": "Armazenar na variável de texto o valor",
+          "description": "Armazena um valor de texto em uma variável para uso posterior. Você pode usar textos diretos ou conectar outros blocos que retornam texto, como 'extrair texto do elemento'.",
+          "usage": "Use para armazenar informações textuais extraídas da página ou geradas durante a execução do script, que serão usadas posteriormente.",
+          "example": "Pode armazenar o texto extraído de um elemento para depois pesquisá-lo em outro campo ou usá-lo como parte de um prompt para IA."
+        },
+        {
+          "name": "BlockGetNumberVariable",
+          "displayName": "Obter valor da variável numérica",
+          "description": "Recupera o valor numérico armazenado em uma variável. Variáveis numéricas são úteis para armazenar e manipular valores como contadores, índices, ou valores extraídos de páginas.",
+          "usage": "Use este bloco quando precisar acessar um número que foi armazenado anteriormente, para cálculos, comparações ou outros processamentos.",
+          "example": "Pode ser usado em blocos de lógica para comparações (como 'se valor > 10') ou em blocos matemáticos para realizar cálculos."
+        },
+        {
+          "name": "BlockSetNumberVariable",
+          "displayName": "Armazenar na variável numérica o valor",
+          "description": "Armazena um valor numérico em uma variável para uso posterior. Pode armazenar números diretos ou o resultado de blocos que retornam valores numéricos.",
+          "usage": "Use para armazenar valores numéricos como contadores, resultados de cálculos, ou números extraídos da página.",
+          "example": "Pode armazenar o número de itens em uma lista, o índice atual em uma iteração, ou um valor extraído de um elemento da página."
+        }
+      ]
+    },
+    {
+      "category": "Interações com o Site",
+      "blocks": [
+        {
+          "name": "BlockClickHTMLElement",
+          "displayName": "Clicar no elemento selecionado",
+          "description": "Simula um clique do mouse no elemento HTML armazenado na variável. Use este bloco com um bloco seletor de elementos para interagir com botões e links na página.",
+          "usage": "Usado para clicar em elementos da página como botões, links, checkboxes ou qualquer elemento clicável.",
+          "example": "Selecione um botão com 'encontrar elemento com seletor \"#botaoEnviar\"', armazene-o em uma variável, e então use este bloco para clicar nele."
+        },
+        {
+          "name": "BlockWriteTextToHTMLElement",
+          "displayName": "Modificar conteúdo HTML do elemento com o texto",
+          "description": "Substitui o conteúdo HTML de um elemento selecionado pelo texto especificado. Útil para modificar textos, links ou outros conteúdos na página.",
+          "usage": "Use quando precisar alterar o conteúdo HTML de um elemento, seja para inserir texto, HTML formatado, ou outras estruturas.",
+          "example": "Pode ser usado para inserir um texto em um elemento div, alterar o texto de um parágrafo, ou modificar o conteúdo de qualquer elemento da página."
+        },
+        {
+          "name": "BlockWriteValueToInputElement",
+          "displayName": "Escrever em campo de entrada",
+          "description": "Insere texto em um campo de entrada como input text, textarea ou outros elementos similares. Simula a digitação de um usuário em formulários.",
+          "usage": "Use para preencher formulários, campos de busca, ou qualquer elemento de entrada na página.",
+          "example": "Selecione um campo de texto com 'encontrar elemento com seletor \"#campoEmail\"', e então use este bloco para inserir um email no campo."
+        },
+        {
+          "name": "BlockGetElementInnerText",
+          "displayName": "Extrair texto do elemento",
+          "description": "Extrai o texto visível contido em um elemento HTML selecionado. Retorna apenas o conteúdo textual, ignorando tags HTML e elementos não visíveis.",
+          "usage": "Use para capturar o texto presente em elementos como parágrafos, cabeçalhos, spans, e outros elementos que contêm texto.",
+          "example": "Pode extrair o texto de um elemento para armazená-lo em uma variável, processá-lo com IA, ou usá-lo em comparações."
+        },
+        {
+          "name": "BlockScrollToElement",
+          "displayName": "Rolar página até o elemento",
+          "description": "Faz a página rolar até que o elemento especificado fique visível na janela do navegador. Útil para acessar elementos que estão fora da área visível inicial.",
+          "usage": "Use quando precisar interagir com elementos que estão abaixo da área visível da página ou em longas páginas de rolagem.",
+          "example": "Selecione um elemento com 'encontrar elemento com seletor \".rodape\"', e então use este bloco para rolar a página até ele ficar visível."
+        },
+        {
+          "name": "BlockDblClickHTMLElement",
+          "displayName": "Duplo clique no elemento",
+          "description": "Simula um duplo clique do mouse em um elemento HTML selecionado. Algumas interfaces requerem duplo clique para ativar certas funções.",
+          "usage": "Use quando a interface da página requer duplo clique para uma determinada ação, como selecionar texto, abrir um item, ou ativar um modo de edição.",
+          "example": "Pode ser usado para interagir com interfaces que usam duplo clique para editar texto, abrir arquivos em exploradores web, ou ativar recursos específicos."
+        },
+        {
+          "name": "BlockExtractSiteContent",
+          "displayName": "Extrair conteúdo estruturado da página",
+          "description": "Analisa uma seção da página e extrai conteúdo estruturado como listas, tabelas ou dados repetitivos em um formato organizado.",
+          "usage": "Use para extrair dados estruturados de uma página, como produtos em uma lista, itens em uma tabela, ou qualquer conjunto de dados repetitivos.",
+          "example": "Pode extrair detalhes de produtos de uma página de e-commerce, resultados de pesquisa, ou linhas de uma tabela para processamento posterior."
+        },
+        {
+          "name": "BlockDeleteHTMLElement",
+          "displayName": "Remover elemento da página",
+          "description": "Remove um elemento HTML selecionado da página. Útil para limpar a interface ou remover elementos indesejados antes de extrair conteúdo.",
+          "usage": "Use quando precisar remover elementos da página, como anúncios, pop-ups, ou elementos que atrapalham a navegação ou extração de dados.",
+          "example": "Pode remover banners, notificações, ou elementos sobrepostos que impedem a interação com outros elementos da página."
+        }
+      ]
+    },
+    {
+      "category": "Seletores de Elementos",
+      "blocks": [
+        {
+          "name": "BlockSelectHTMLElement",
+          "displayName": "Encontrar elemento com seletor usando tipo",
+          "description": "Localiza um elemento na página usando um dos métodos disponíveis: CSS (como \".classe\", \"#id\"), por ID, classe ou tag HTML. Escolha o tipo de seletor mais adequado para seu caso.",
+          "usage": "Use este bloco como ponto de partida para selecionar elementos da página com os quais você deseja interagir.",
+          "example": "Encontrar elemento com 'CSS' usando seletor '.botao-enviar' ou encontrar elemento com 'ID' usando seletor 'meuFormulario'."
+        },
+        {
+          "name": "BlockFindElementByText",
+          "displayName": "Encontrar elemento com seletor que contenha texto",
+          "description": "Localiza o primeiro elemento da página que corresponda ao seletor CSS (ex: \"div\", \"p\", \".classe\") e contenha exatamente o texto especificado. Útil para encontrar elementos específicos baseados em seu conteúdo textual.",
+          "usage": "Use quando precisar encontrar um elemento específico baseado tanto em sua estrutura (tag/classe) quanto em seu conteúdo textual.",
+          "example": "Pode encontrar um botão específico com texto 'Confirmar Pedido' entre vários botões semelhantes, ou um link específico com determinado texto."
+        },
+        {
+          "name": "BlockIfElementExists",
+          "displayName": "Se elemento existir na página então faça senão faça",
+          "description": "Verifica se um elemento específico existe na página atual. Se o elemento for encontrado, executa o primeiro bloco de código; caso não seja encontrado, executa o segundo bloco. Útil para criar fluxos condicionais baseados na presença de elementos na página.",
+          "usage": "Use para criar fluxos condicionais baseados na presença ou ausência de elementos específicos na página.",
+          "example": "Verificar se um botão 'Aceitar Cookies' existe e clicar nele se estiver presente, ou continuar com a navegação caso contrário."
+        },
+        {
+          "name": "BlockWaitForElement",
+          "displayName": "Aguardar até que elemento apareça ou desapareça",
+          "description": "Aguarda até que um elemento apareça ou desapareça na página, com tempo limite. Útil para elementos que carregam de forma assíncrona. Se o elemento for encontrado dentro do tempo, executa o primeiro bloco; caso contrário, executa o segundo.",
+          "usage": "Use quando precisar esperar que um elemento apareça (como após carregamento AJAX) ou desapareça (como após uma submissão) antes de continuar.",
+          "example": "Aguardar até que um elemento de carregamento desapareça antes de tentar interagir com o conteúdo, ou esperar que um formulário seja exibido após clicar em um botão."
+        },
+        {
+          "name": "BlockDynamicElementSelector",
+          "displayName": "Selecionar elemento visualmente na página",
+          "description": "Permite selecionar visualmente um elemento na página web clicando diretamente nele. Use este bloco conectado a outros para interagir com elementos da página.",
+          "usage": "Use quando for mais fácil selecionar um elemento clicando nele diretamente do que escrever um seletor CSS ou ID.",
+          "example": "Clique neste bloco, depois clique no elemento desejado na página web. O elemento será selecionado e você poderá interagir com ele usando outros blocos."
+        }
+      ]
+    },
+    {
+      "category": "Ações de Navegação",
+      "blocks": [
+        {
+          "name": "BlockNavigateToUrlText",
+          "displayName": "Navegar para URL",
+          "description": "Navega para uma URL específica, carregando uma nova página no navegador. Permite acessar diferentes páginas web durante a execução do agente.",
+          "usage": "Use quando precisar abrir uma página específica pelo seu endereço URL, como página inicial de um site, resultado de busca, ou qualquer outra página acessível diretamente via URL.",
+          "example": "Navegar para 'https://exemplo.com/produtos' para acessar a página de produtos de um site."
+        },
+        {
+          "name": "BlockRefreshPage",
+          "displayName": "Atualizar página atual",
+          "description": "Força o recarregamento da página atual, como se o usuário pressionasse F5. Útil quando é necessário atualizar o conteúdo da página ou reiniciar elementos dinâmicos.",
+          "usage": "Use quando precisar recarregar a página para ver mudanças, atualizar conteúdo dinâmico, ou reiniciar o estado de algum elemento.",
+          "example": "Após submeter um formulário que não redireciona automaticamente, este bloco pode ser usado para recarregar a página e ver os resultados da submissão."
+        },
+        {
+          "name": "BlockNavigateBack",
+          "displayName": "Voltar para página anterior",
+          "description": "Navega para a página anterior no histórico do navegador, equivalente a clicar no botão Voltar do navegador. Útil para retornar a páginas já visitadas durante a execução.",
+          "usage": "Use para voltar a uma página anterior depois de ter navegado para outra página, sem precisar especificar a URL.",
+          "example": "Depois de acessar os detalhes de um produto, use este bloco para voltar à lista de produtos."
+        },
+        {
+          "name": "BlockNavigateForward",
+          "displayName": "Avançar para próxima página",
+          "description": "Navega para a próxima página no histórico do navegador, equivalente a clicar no botão Avançar do navegador. Só funciona se houver uma página 'para frente' no histórico.",
+          "usage": "Use para avançar para uma página que estava no histórico 'para frente', após ter usado o botão 'voltar'.",
+          "example": "Se você voltou de uma página de detalhes do produto para a lista, este bloco permite avançar de volta para a página de detalhes."
+        },
+        {
+          "name": "BlockNavigate",
+          "displayName": "Ponto de navegação entre páginas",
+          "description": "Marca um ponto de continuação após uma navegação entre páginas. Coloque este bloco logo após qualquer bloco que cause mudança de página para manter o fluxo do seu agente entre navegações.",
+          "usage": "Use este bloco SEMPRE após qualquer ação que cause navegação para outra página, para garantir que o agente continue funcionando corretamente após a mudança de página.",
+          "example": "Após um bloco 'Navegar para URL' ou após clicar em um link que leva a outra página, adicione este bloco para que o agente possa continuar funcionando na nova página."
+        }
+      ]
+    },
+    {
+      "category": "Ações de IA",
+      "blocks": [
+        {
+          "name": "BlockAiGenerateText",
+          "displayName": "Pedir para IA gerar texto com prompt",
+          "description": "Envia uma instrução para a Inteligência Artificial gerar um texto, salva a resposta na variável escolhida e continua a execução. Útil para gerar conteúdo personalizado, respostas ou análises baseadas em dados do site.",
+          "usage": "Use quando precisar de texto gerado pela IA baseado em um prompt ou instrução. O resultado pode ser usado para preencher campos, exibir ao usuário, ou processar posteriormente.",
+          "example": "Pode gerar resumos de textos longos, criar respostas para perguntas baseadas em conteúdo extraído, ou compor e-mails ou mensagens baseadas em dados."
+        },
+        {
+          "name": "BlockAiConditional",
+          "displayName": "Perguntar à IA (sim/não)",
+          "description": "Envia uma pergunta para a Inteligência Artificial que exige resposta sim ou não. Dependendo da resposta, executa um dos dois caminhos possíveis. Ideal para criar decisões baseadas em análise de conteúdo ou contexto.",
+          "usage": "Use quando precisar que a IA faça uma decisão de sim/não baseada em análise de texto, verificação de condições complexas, ou interpretação de dados.",
+          "example": "Perguntar 'Este produto está em promoção?' após extrair a descrição de um produto, e executar diferentes ações dependendo da resposta."
+        },
+        {
+          "name": "BlockAiSummarizeText",
+          "displayName": "Resumir texto com IA",
+          "description": "Envia um texto longo para a Inteligência Artificial e recebe um resumo conciso dos principais pontos. Útil para condensar grandes volumes de informação em pequenos resumos.",
+          "usage": "Use quando tiver textos longos extraídos de páginas e precisar de um resumo rápido dos pontos principais.",
+          "example": "Resumir a descrição completa de um produto, artigos de notícias, documentos técnicos, ou qualquer texto longo para facilitar a análise ou apresentação."
+        },
+        {
+          "name": "BlockAiTranslateText",
+          "displayName": "Traduzir texto com IA",
+          "description": "Traduz um texto de um idioma para outro usando Inteligência Artificial. Fornece uma tradução contextualizada e natural entre os idiomas especificados.",
+          "usage": "Use quando precisar traduzir conteúdo entre idiomas para processamento, apresentação, ou interação com sites em diferentes línguas.",
+          "example": "Traduzir descrições de produtos de inglês para português, traduzir comentários ou reviews, ou preparar conteúdo para análise em outro idioma."
+        }
+      ]
+    },
+    {
+      "category": "Ações Diversas",
+      "blocks": [
+        {
+          "name": "BlockDelayWait",
+          "displayName": "Pausar execução por milissegundos",
+          "description": "Pausa a execução do agente pelo tempo especificado em milissegundos (1000ms = 1 segundo) antes de executar os blocos conectados. Útil para aguardar carregamento de conteúdo ou simular interações humanas.",
+          "usage": "Use quando precisar inserir uma pausa temporal entre ações, seja para aguardar carregamentos, animações, ou para tornar a automação mais natural.",
+          "example": "Esperar 2000 milissegundos (2 segundos) após clicar em um botão para dar tempo do conteúdo carregar, ou pausar entre preenchimento de campos de um formulário."
+        },
+        {
+          "name": "BlockAlertUser",
+          "displayName": "Mostrar alerta para o usuário",
+          "description": "Exibe uma caixa de mensagem de alerta para o usuário do site com o texto especificado. O alerta interrompe a execução do agente até que o usuário clique em OK.",
+          "usage": "Use para exibir mensagens importantes, notificações, ou solicitar atenção do usuário durante a execução do agente.",
+          "example": "Exibir uma mensagem 'Processamento concluído!' ao final de uma operação, ou alertar o usuário sobre alguma condição encontrada durante a execução."
+        },
+        {
+          "name": "BlockConfirmUser",
+          "displayName": "Pedir confirmação ao usuário",
+          "description": "Exibe uma caixa de diálogo de confirmação com botões OK e Cancelar. Executa um caminho se o usuário confirmar (OK) e outro se cancelar. Permite decisões do usuário durante a execução.",
+          "usage": "Use quando precisar que o usuário tome uma decisão sim/não durante a execução do agente para determinar o próximo caminho a seguir.",
+          "example": "Perguntar 'Deseja continuar com a compra?' e processar a compra se o usuário confirmar, ou voltar ao carrinho se cancelar."
+        },
+        {
+          "name": "BlockPromptUser",
+          "displayName": "Solicitar entrada do usuário",
+          "description": "Exibe uma caixa de diálogo solicitando que o usuário digite um texto. O valor inserido é armazenado em uma variável para uso posterior no script.",
+          "usage": "Use quando precisar de entrada textual do usuário durante a execução do agente, como nomes, valores, ou outras informações.",
+          "example": "Solicitar que o usuário digite seu nome ou email antes de preencher um formulário, ou pedir um termo de busca para realizar uma pesquisa."
+        }
+      ]
+    }
+  ]
+}
