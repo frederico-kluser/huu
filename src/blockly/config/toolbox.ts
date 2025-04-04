@@ -39,7 +39,7 @@ const blocklyToolbox: BlocklyOptions['toolbox'] = {
     },
     {
       kind: 'category',
-      name: 'Manipulação de Cookies e Armazenamento',
+      name: 'Armazenamento',
       contents: configCookiesStorage(),
     },
     {

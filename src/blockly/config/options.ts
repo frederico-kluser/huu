@@ -9,7 +9,7 @@ import blocklyGrid from './grid';
 const blocklyOptions: BlocklyOptions = {
   collapse: true, // Allow the user to collapse blocks.
   comments: true, // Enable comments.
-  grid: blocklyGrid, // Enable grid and snap to grid.
+  // grid: blocklyGrid, // Enable grid and snap to grid.
   maxBlocks: Infinity, // Max blocks in workspace.
   maxTrashcanContents: 32, // The maximum number of deleted items to store in the trashcan.
   move: blocklyMove, // Enable workspace move.

@@ -15,6 +15,14 @@
   background-color: #212529;
 }
 
+.blocklyTrash {
+  opacity: 1 !important;
+}
+
+.blocklyZoom>image {
+  opacity: 1 !important;
+}
+
 .blockly-container {
   background-color: #343a40;
   border-radius: 10px;
@@ -86,7 +94,7 @@ textarea {
 
 #huu-alert-container .alert {
   margin-bottom: 10px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   animation: huu-alert-slide-in 0.3s ease-in-out;
 }
 
@@ -95,6 +103,7 @@ textarea {
     transform: translateX(100%);
     opacity: 0;
   }
+
   to {
     transform: translateX(0);
     opacity: 1;

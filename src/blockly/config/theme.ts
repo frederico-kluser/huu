@@ -8,7 +8,7 @@ const blocklyTheme: BlocklyOptions['theme'] = {
     toolboxForegroundColour: '#ffffff',
     flyoutBackgroundColour: '#212529',
     flyoutOpacity: 1,
-    workspaceBackgroundColour: '#495057',
+    workspaceBackgroundColour: '#1b2e41',
   },
   blockStyles: {
     colour_blocks: {
