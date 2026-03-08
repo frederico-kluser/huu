@@ -29,7 +29,7 @@ The skeleton. Nothing works end-to-end yet, but every piece can be tested in iso
 - [ ] Migration system (versioned schema changes)
 - [ ] Tests for all CRUD operations
 
-### 0.3 WorktreeManager
+### 0.3 WorktreeManager [depends: (0.1)]
 - [ ] `WorktreeManager` class wrapping simple-git `raw()` calls
 - [ ] `create(agentId, baseBranch)` — creates branch + worktree
 - [ ] `remove(agentId)` — removes worktree + optionally deletes branch
