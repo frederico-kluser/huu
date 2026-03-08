@@ -61,7 +61,7 @@ One agent working end-to-end. No orchestration yet — just proving the agent �
 - [ ] End-to-end test: receive subtask → create worktree → implement → commit → signal done
 - [ ] File change tracking (which files were created/modified/deleted)
 
-### 1.3 Merge Workflow (Tier 1-2)
+### 1.3 Merge Workflow (Tier 1-2) [depends: (0.2, 0.3)]
 - [ ] FIFO merge queue (SQLite-backed)
 - [ ] Tier 1: fast-forward detection and execution
 - [ ] Tier 2: recursive merge with automatic conflict detection
@@ -69,7 +69,7 @@ One agent working end-to-end. No orchestration yet — just proving the agent �
 - [ ] Merge result logging to SQLite
 - [ ] Tests for clean merges and conflict detection
 
-### 1.4 Basic CLI
+### 1.4 Basic CLI [depends: (1.1, 1.2, 1.3)]
 - [ ] `huu run "task description"` — single agent execution
 - [ ] `huu status` — show current state
 - [ ] Structured console output (not TUI yet, just formatted logs)
@@ -90,7 +90,7 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] Beat state persistence in SQLite
 - [ ] Visualization of beat sheet as structured text
 
-### 2.2 Orchestrator Loop
+### 2.2 Orchestrator Loop [depends: (1.4, 2.1)]
 - [ ] Main orchestrator loop: decompose → assign → monitor → collect → merge
 - [ ] Task assignment: match subtasks to agents by role
 - [ ] Parallel execution: spawn multiple agents concurrently
