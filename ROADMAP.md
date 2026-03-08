@@ -131,7 +131,7 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 
 The human interface. Everything that was CLI-only becomes visual and interactive.
 
-### 3.1 Kanban Board
+### 3.1 Kanban Board [depends: (0.2,2.1,2.2)]
 - [ ] Ink app shell with tab navigation (K/L/M/C/B)
 - [ ] 5-column Kanban: Backlog, Running, Review, Done, Failed
 - [ ] Card component: task ID, name, agent icon, model, elapsed time, cost
