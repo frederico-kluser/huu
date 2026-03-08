@@ -187,7 +187,7 @@ The system learns and improves with every session.
 - [ ] Suspicious action flagging (unusual patterns, unexpected file access)
 - [ ] Cost reporting per session, per feature, per agent
 
-### 4.4 MCP Bridge
+### 4.4 MCP Bridge [depends: (0.1,1.1,2.2)]
 - [ ] MCP client programmatic setup (`@modelcontextprotocol/sdk`)
 - [ ] Bridge: MCP tools → agent custom tools
 - [ ] Lazy-start servers (connect on first use, disconnect after idle)
