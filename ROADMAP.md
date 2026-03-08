@@ -112,7 +112,7 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] `debugger` — deep investigation
 - [ ] `context-curator` — post-activity memory curation
 
-### 2.4 Merge Workflow (Tier 3-4) [depends: (0.2,1.3,2.2)]
+### 2.4 Merge Workflow (Tier 3-4) [depends: (0.2,0.3,1.3,2.2,2.3)]
 - [ ] Tier 3: `ours`/`theirs` heuristic (last-touch-wins + file ownership tracking)
 - [ ] Tier 4: AI Resolver (send conflict to Claude with per-file conflict history)
 - [ ] Conflict history tracking in SQLite (which files conflict frequently)
