@@ -1,0 +1,2 @@
+// Shared type contracts
+export {};
