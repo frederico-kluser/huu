@@ -3,10 +3,16 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { WorktreeManager } from '../git/WorktreeManager.js';
 import type { MessageQueue } from '../db/queue.js';
 import type { AuditLogRepository } from '../db/repositories/audit-log.js';
-import type { AgentRunInput, AgentRunResult, RunState, RunUsage } from './types.js';
+import type { AgentRunInput, AgentRunResult, FileChangeSummary, RunState, RunUsage } from './types.js';
 import { resolveModelId, validateAgentDefinition } from './types.js';
 import { prepareContext } from './context.js';
 import type { ToolRegistry } from './tools.js';
+import {
+  getFileChangesFromCommit,
+  getFileChangesFromWorkingTree,
+  emptyFileChangeSummary,
+  flattenChangedFiles,
+} from './file-changes.js';
 import {
   createRunAbortController,
   composeRunSignal,
@@ -115,6 +121,8 @@ export async function spawnAgent(
       summary: '',
       artifacts: [],
       filesChanged: [],
+      fileChangeSummary: emptyFileChangeSummary(),
+      commitSha: null,
       usage: { inputTokens: 0, outputTokens: 0, totalCost: 0, turns: 0 },
       durationMs,
       error: errorMsg,
@@ -151,7 +159,8 @@ async function runAgentLifecycle(ctx: RunContext): Promise<AgentRunResult> {
   ctx.state = 'collecting';
   const durationMs = Date.now() - ctx.startTime;
   const summary = extractTextContent(finalContent);
-  const filesChanged = await getChangedFiles(ctx);
+  const { fileChangeSummary, commitSha } = await collectChanges(ctx);
+  const filesChanged = flattenChangedFiles(fileChangeSummary);
 
   const result: AgentRunResult = {
     runId: ctx.runId,
@@ -161,6 +170,8 @@ async function runAgentLifecycle(ctx: RunContext): Promise<AgentRunResult> {
     summary,
     artifacts: [],
     filesChanged,
+    fileChangeSummary,
+    commitSha,
     usage,
     durationMs,
   };
@@ -168,6 +179,8 @@ async function runAgentLifecycle(ctx: RunContext): Promise<AgentRunResult> {
   publishRunEvent(ctx.deps, ctx.input, ctx.runId, 'task_done', {
     state: 'completed' satisfies RunState,
     summary,
+    commitSha,
+    changed_files: fileChangeSummary,
     filesChanged,
     usage,
     durationMs,
@@ -303,18 +316,32 @@ function extractTextContent(content: Anthropic.ContentBlock[]): string {
     .join('\n');
 }
 
-async function getChangedFiles(ctx: RunContext): Promise<string[]> {
+async function collectChanges(
+  ctx: RunContext,
+): Promise<{ fileChangeSummary: FileChangeSummary; commitSha: string | null }> {
   try {
     const git = await ctx.deps.worktreeManager.getGit(ctx.runId);
-    const status = await git.status();
-    return [
-      ...status.created,
-      ...status.modified,
-      ...status.deleted,
-      ...status.renamed.map((r) => r.to),
-    ];
+
+    // Try to get the latest commit SHA
+    let commitSha: string | null = null;
+    try {
+      const log = await git.log({ maxCount: 1 });
+      commitSha = log.latest?.hash ?? null;
+    } catch {
+      // No commits yet or error
+    }
+
+    // If we have a commit, get changes from it; otherwise fall back to working tree
+    let fileChangeSummary: FileChangeSummary;
+    if (commitSha) {
+      fileChangeSummary = await getFileChangesFromCommit(git, commitSha);
+    } else {
+      fileChangeSummary = await getFileChangesFromWorkingTree(git);
+    }
+
+    return { fileChangeSummary, commitSha };
   } catch {
-    return [];
+    return { fileChangeSummary: emptyFileChangeSummary(), commitSha: null };
   }
 }
 

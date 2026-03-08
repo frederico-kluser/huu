@@ -54,6 +54,13 @@ export interface AgentRunInput {
   keepWorktree?: boolean | undefined;
 }
 
+export interface FileChangeSummary {
+  added: string[];
+  modified: string[];
+  deleted: string[];
+  renamed: Array<{ from: string; to: string }>;
+}
+
 export interface AgentRunResult {
   runId: string;
   taskId: string;
@@ -62,6 +69,8 @@ export interface AgentRunResult {
   summary: string;
   artifacts: string[];
   filesChanged: string[];
+  fileChangeSummary: FileChangeSummary;
+  commitSha: string | null;
   usage: RunUsage;
   durationMs: number;
   error?: string | undefined;

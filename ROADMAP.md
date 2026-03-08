@@ -57,10 +57,10 @@ One agent working end-to-end. No orchestration yet — just proving the agent �
 - [x] Cleanup: remove worktree on completion or abort
 - [x] Abort support via AbortController
 
-### [ ] 1.2 Builder Agent (first agent) [depends: (0.2,0.3,1.1)]
-- [ ] Builder agent definition (Sonnet, Read/Write/Edit/Bash tools)
-- [ ] End-to-end test: receive subtask → create worktree → implement → commit → signal done
-- [ ] File change tracking (which files were created/modified/deleted)
+### [x] 1.2 Builder Agent (first agent) [depends: (0.2,0.3,1.1)]
+- [x] Builder agent definition (Sonnet, Read/Write/Edit/Bash tools)
+- [x] End-to-end test: receive subtask → create worktree → implement → commit → signal done
+- [x] File change tracking (which files were created/modified/deleted)
 
 ### [ ] 1.3 Merge Workflow (Tier 1-2) [depends: (0.2,0.3,1.2)]
 - [ ] FIFO merge queue (SQLite-backed)
@@ -231,7 +231,7 @@ The system learns and improves with every session.
 | Phase | Name | Checkpoint | Key Deliverable | Progress |
 |-------|------|-----------|-----------------|----------|
 | 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
-| 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 1/4 |
+| 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 2/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 0/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 0/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |

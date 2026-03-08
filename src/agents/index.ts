@@ -2,6 +2,7 @@
 export type {
   AgentModel,
   AgentDefinition,
+  FileChangeSummary,
   RunState,
   AgentRunInput,
   AgentRunResult,
@@ -43,6 +44,22 @@ export type {
 } from './tools.js';
 
 export { ToolRegistry, createDefaultRegistry } from './tools.js';
+
+// ── File changes ────────────────────────────────────────────────────
+export type { FileChangeSummary as FileChangeSummaryUtil } from './file-changes.js';
+
+export {
+  getFileChangesFromCommit,
+  getFileChangesFromWorkingTree,
+  parseDiffTreeOutput,
+  parsePorcelainV2Output,
+  emptyFileChangeSummary,
+  hasChanges,
+  flattenChangedFiles,
+} from './file-changes.js';
+
+// ── Agent definitions ───────────────────────────────────────────────
+export { builderAgent, BUILDER_SYSTEM_PROMPT } from './definitions/builder.js';
 
 // ── Runtime ──────────────────────────────────────────────────────────
 export type { RuntimeDeps } from './runtime.js';
