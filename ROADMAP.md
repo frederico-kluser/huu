@@ -29,15 +29,16 @@ The skeleton. Nothing works end-to-end yet, but every piece can be tested in iso
 - [ ] Migration system (versioned schema changes)
 - [ ] Tests for all CRUD operations
 
-### [ ] 0.3 WorktreeManager [depends: (0.1)]
-- [ ] `WorktreeManager` class wrapping simple-git `raw()` calls
-- [ ] `create(agentId, baseBranch)` — creates branch + worktree
-- [ ] `remove(agentId)` — removes worktree + optionally deletes branch
-- [ ] `list()` — lists active worktrees with status
-- [ ] `getGit(agentId)` — returns isolated SimpleGit instance for a worktree
-- [ ] Mutex/semaphore for operations on shared refs
-- [ ] Symlink support for `node_modules` (avoid redundant installs)
-- [ ] Tests with real git repos (temp directories)
+### [x] 0.3 WorktreeManager [depends: (0.1)]
+- [x] `WorktreeManager` class wrapping simple-git `raw()` calls
+- [x] `create(agentId, baseBranch)` — creates branch + worktree
+- [x] `remove(agentId)` — removes worktree + optionally deletes branch
+- [x] `list()` — lists active worktrees with status
+- [x] `getGit(agentId)` — returns isolated SimpleGit instance for a worktree
+- [x] Mutex/semaphore for operations on shared refs
+- [x] Dependency workspace strategy (`node_modules`) with fallback
+- [x] Lifecycle management: stale detection + controlled prune
+- [x] Tests with real git repos (temp directories)
 
 **Checkpoint: Catalyst (~10%)** — Can we create worktrees, write to SQLite, and run tests?
 
@@ -229,7 +230,7 @@ The system learns and improves with every session.
 
 | Phase | Name | Checkpoint | Key Deliverable | Progress |
 |-------|------|-----------|-----------------|----------|
-| 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 1/3 |
+| 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 2/3 |
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 0/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 0/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 0/4 |
