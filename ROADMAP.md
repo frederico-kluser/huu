@@ -84,13 +84,13 @@ One agent working end-to-end. No orchestration yet — just proving the agent �
 
 The showrunner comes alive. Multiple agents working in parallel with coordination.
 
-### [ ] 2.1 Beat Sheet Engine [depends: (0.2,1.1)]
-- [ ] Beat sheet data model (4 levels: objective → acts → sequences → atomic tasks)
-- [ ] Decomposition prompt for planner agent (fractal: precondition → action → postcondition)
-- [ ] Checkpoint definitions (Catalyst, Midpoint, All Is Lost, Break Into Three, Final Image)
-- [ ] Dependency graph between atomic tasks (which can run in parallel)
-- [ ] Beat state persistence in SQLite
-- [ ] Visualization of beat sheet as structured text
+### [x] 2.1 Beat Sheet Engine [depends: (0.2,1.1)]
+- [x] Beat sheet data model (4 levels: objective → acts → sequences → atomic tasks)
+- [x] Decomposition prompt for planner agent (fractal: precondition → action → postcondition)
+- [x] Checkpoint definitions (Catalyst, Midpoint, All Is Lost, Break Into Three, Final Image)
+- [x] Dependency graph between atomic tasks (which can run in parallel)
+- [x] Beat state persistence in SQLite
+- [x] Visualization of beat sheet as structured text
 
 ### [ ] 2.2 Orchestrator Loop [depends: (1.1,1.3,1.4,2.1)]
 - [ ] Main orchestrator loop: decompose → assign → monitor → collect → merge
@@ -232,7 +232,7 @@ The system learns and improves with every session.
 |-------|------|-----------|-----------------|----------|
 | 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 1/4 |
-| 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 0/5 |
+| 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 1/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 0/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |
 | 5 | Polish | Final Image (100%) | Production-ready | 0/4 |
