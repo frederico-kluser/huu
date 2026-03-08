@@ -230,7 +230,7 @@ The system learns and improves with every session.
 
 | Phase | Name | Checkpoint | Key Deliverable | Progress |
 |-------|------|-----------|-----------------|----------|
-| 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 2/3 |
+| 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 0/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 0/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 0/4 |
