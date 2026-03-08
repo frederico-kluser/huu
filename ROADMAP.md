@@ -62,13 +62,13 @@ One agent working end-to-end. No orchestration yet — just proving the agent �
 - [x] End-to-end test: receive subtask → create worktree → implement → commit → signal done
 - [x] File change tracking (which files were created/modified/deleted)
 
-### [ ] 1.3 Merge Workflow (Tier 1-2) [depends: (0.2,0.3,1.2)]
-- [ ] FIFO merge queue (SQLite-backed)
-- [ ] Tier 1: fast-forward detection and execution
-- [ ] Tier 2: recursive merge with automatic conflict detection
-- [ ] Pre-merge detection via `git merge-tree --write-tree`
-- [ ] Merge result logging to SQLite
-- [ ] Tests for clean merges and conflict detection
+### [x] 1.3 Merge Workflow (Tier 1-2) [depends: (0.2,0.3,1.2)]
+- [x] FIFO merge queue (SQLite-backed)
+- [x] Tier 1: fast-forward detection and execution
+- [x] Tier 2: recursive merge with automatic conflict detection
+- [x] Pre-merge detection via `git merge-tree --write-tree`
+- [x] Merge result logging to SQLite
+- [x] Tests for clean merges and conflict detection
 
 ### [ ] 1.4 Basic CLI [depends: (0.1,1.1,1.2,1.3)]
 - [ ] `huu run "task description"` — single agent execution
@@ -231,7 +231,7 @@ The system learns and improves with every session.
 | Phase | Name | Checkpoint | Key Deliverable | Progress |
 |-------|------|-----------|-----------------|----------|
 | 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
-| 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 2/4 |
+| 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 3/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 1/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 0/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |

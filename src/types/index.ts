@@ -203,6 +203,73 @@ export interface AuditLogEntry {
   created_at: string;
 }
 
+// ── Merge queue types ─────────────────────────────────────────────────
+
+export const MERGE_QUEUE_STATUSES = [
+  'queued',
+  'in_progress',
+  'merged',
+  'conflict',
+  'failed',
+  'retry_wait',
+] as const;
+
+export type MergeQueueStatus = (typeof MERGE_QUEUE_STATUSES)[number];
+
+export interface MergeQueueItem {
+  id: number;
+  request_id: string;
+  source_branch: string;
+  source_head_sha: string;
+  target_branch: string;
+  status: MergeQueueStatus;
+  attempts: number;
+  max_attempts: number;
+  lease_owner: string | null;
+  lease_expires_at: string | null;
+  available_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const PREMERGE_STATUSES = ['clean', 'conflict', 'fatal', 'skipped'] as const;
+export type PremergeStatus = (typeof PREMERGE_STATUSES)[number];
+
+export const MERGE_TIERS = ['tier1', 'tier2', 'none'] as const;
+export type MergeTier = (typeof MERGE_TIERS)[number];
+
+export const MERGE_MODES = ['ff-only', 'no-ff-ort', 'noop_already_merged'] as const;
+export type MergeMode = (typeof MERGE_MODES)[number];
+
+export const MERGE_OUTCOMES = ['merged', 'conflict', 'failed'] as const;
+export type MergeOutcome = (typeof MERGE_OUTCOMES)[number];
+
+export interface MergeResult {
+  id: number;
+  request_id: string;
+  queue_id: number;
+  source_branch: string;
+  source_head_sha: string;
+  target_branch: string;
+  target_head_before: string | null;
+  target_head_after: string | null;
+  premerge_status: PremergeStatus;
+  tier_selected: MergeTier;
+  merge_mode: MergeMode | null;
+  outcome: MergeOutcome;
+  conflicts_json: string;
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string;
+  finished_at: string | null;
+  duration_ms: number | null;
+  attempt: number;
+  created_at: string;
+}
+
 // ── Schema migration types ─────────────────────────────────────────────
 
 export interface SchemaMigration {

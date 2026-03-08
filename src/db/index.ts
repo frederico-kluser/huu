@@ -11,3 +11,7 @@ export { ObservationRepository } from './repositories/observations.js';
 export { InstinctRepository } from './repositories/instincts.js';
 export { BeatStateRepository } from './repositories/beat-state.js';
 export { AuditLogRepository } from './repositories/audit-log.js';
+export { MergeQueueRepository } from './repositories/merge-queue.js';
+export type { EnqueueMergeParams } from './repositories/merge-queue.js';
+export { MergeResultsRepository } from './repositories/merge-results.js';
+export type { InsertMergeResultParams } from './repositories/merge-results.js';
