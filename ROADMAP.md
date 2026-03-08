@@ -69,10 +69,11 @@ One agent working end-to-end. No orchestration yet — just proving the agent �
 - [ ] Merge result logging to SQLite
 - [ ] Tests for clean merges and conflict detection
 
-### 1.4 Basic CLI [depends: (1.1,1.2,1.3)]
+### 1.4 Basic CLI [depends: (0.1,1.1,1.2,1.3)]
 - [ ] `huu run "task description"` — single agent execution
 - [ ] `huu status` — show current state
 - [ ] Structured console output (not TUI yet, just formatted logs)
+- [ ] CLI entry point + executable bin wiring (`src/cli.ts`, `bin/huu`, `package.json#bin`)
 
 **Checkpoint: Midpoint (~50%)** — Can one agent receive a task, implement it in a worktree, and merge back?
 
@@ -82,7 +83,7 @@ One agent working end-to-end. No orchestration yet — just proving the agent �
 
 The showrunner comes alive. Multiple agents working in parallel with coordination.
 
-### 2.1 Beat Sheet Engine
+### 2.1 Beat Sheet Engine [depends: (0.2,1.1)]
 - [ ] Beat sheet data model (4 levels: objective → acts → sequences → atomic tasks)
 - [ ] Decomposition prompt for planner agent (fractal: precondition → action → postcondition)
 - [ ] Checkpoint definitions (Catalyst, Midpoint, All Is Lost, Break Into Three, Final Image)
@@ -100,7 +101,7 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] Health check: periodic pings to detect stuck agents
 - [ ] Beat sheet advancement: move to next beat/sequence/act
 
-### 2.3 Remaining Agents [depends: (1.1,2.2)]
+### 2.3 Remaining Agents [depends: (1.1,1.2,2.2)]
 - [ ] `planner` — Beat Sheet decomposition
 - [ ] `tester` — TDD + test execution
 - [ ] `reviewer` — code review (read-only tools)
@@ -111,13 +112,13 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] `debugger` — deep investigation
 - [ ] `context-curator` — post-activity memory curation
 
-### 2.4 Merge Workflow (Tier 3-4) [depends: (1.3,2.2)]
+### 2.4 Merge Workflow (Tier 3-4) [depends: (0.2,1.3,2.2)]
 - [ ] Tier 3: `ours`/`theirs` heuristic (last-touch-wins + file ownership tracking)
 - [ ] Tier 4: AI Resolver (send conflict to Claude with per-file conflict history)
 - [ ] Conflict history tracking in SQLite (which files conflict frequently)
 - [ ] Human escalation path (pause queue, notify TUI)
 
-### 2.5 Context-Curator Integration [depends: (1.1,2.1,2.2,2.3)]
+### 2.5 Context-Curator Integration [depends: (0.2,1.1,2.1,2.2,2.3)]
 - [ ] Post-activity hook: curator runs after every agent completes
 - [ ] Scratchpad update logic: what changed, what to add/remove from knowledge base
 - [ ] Strategic compact at beat sheet checkpoints
@@ -131,7 +132,7 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 
 The human interface. Everything that was CLI-only becomes visual and interactive.
 
-### 3.1 Kanban Board
+### 3.1 Kanban Board [depends: (0.2,2.2)]
 - [ ] Ink app shell with tab navigation (K/L/M/C/B)
 - [ ] 5-column Kanban: Backlog, Running, Review, Done, Failed
 - [ ] Card component: task ID, name, agent icon, model, elapsed time, cost
@@ -139,20 +140,20 @@ The human interface. Everything that was CLI-only becomes visual and interactive
 - [ ] Keyboard navigation (arrow keys to select cards)
 - [ ] Auto-refresh from SQLite polling
 
-### 3.2 Detail View
+### 3.2 Detail View [depends: (1.1,3.1)]
 - [ ] Live log streaming from agent execution
 - [ ] Diff preview (files changed by agent)
 - [ ] Metrics panel: tokens used, context %, cost, elapsed
 - [ ] Context usage bar (visual)
 - [ ] ESC to return to Kanban
 
-### 3.3 Human Intervention [depends: (1.1,2.2,3.1)]
+### 3.3 Human Intervention [depends: (0.2,1.1,2.2,3.1,3.2)]
 - [ ] `[S]teer` — send redirect message to running agent
 - [ ] `[F]ollow-up` — queue instruction for after current turn
 - [ ] `[A]bort` — cancel agent, discard worktree, move to Failed
 - [ ] `[P]romote` — save learning from Done task to instincts
 
-### 3.4 Specialized Views
+### 3.4 Specialized Views [depends: (1.3,2.1,3.1)]
 - [ ] `[L]ogs` tab — aggregated log view from all agents
 - [ ] `[M]erge Queue` tab — FIFO queue with tier indicators
 - [ ] `[C]ost` tab — breakdown by agent, model, phase
@@ -164,7 +165,7 @@ The human interface. Everything that was CLI-only becomes visual and interactive
 
 The system learns and improves with every session.
 
-### 4.1 Anti-Hallucination Pipeline
+### 4.1 Anti-Hallucination Pipeline [depends: (2.1,2.3)]
 - [ ] L1: Prompt design templates with "I don't know" permission + source restriction
 - [ ] L2: Quote-first implementation for document-heavy tasks
 - [ ] L3: Reviewer agent loop (validate output vs requirements, max 3 iterations)
@@ -172,7 +173,7 @@ The system learns and improves with every session.
 - [ ] CoVe pipeline for critical outputs (4-step verification)
 - [ ] `critical: true` flag in beat sheet for high-risk tasks
 
-### 4.2 Memory & Learning
+### 4.2 Memory & Learning [depends: (0.2,2.5)]
 - [ ] Observation logging via tool call hooks (100% coverage)
 - [ ] Pattern detection (threshold: 20+ observations → Haiku analysis)
 - [ ] Instinct generation with confidence scores (0.3-0.85)
@@ -187,7 +188,7 @@ The system learns and improves with every session.
 - [ ] Suspicious action flagging (unusual patterns, unexpected file access)
 - [ ] Cost reporting per session, per feature, per agent
 
-### 4.4 MCP Bridge [depends: (1.1,2.2)]
+### 4.4 MCP Bridge [depends: (0.1,1.1,2.2)]
 - [ ] MCP client programmatic setup (`@modelcontextprotocol/sdk`)
 - [ ] Bridge: MCP tools → agent custom tools
 - [ ] Lazy-start servers (connect on first use, disconnect after idle)
@@ -197,26 +198,26 @@ The system learns and improves with every session.
 
 ## Phase 5 — Polish (Final Image)
 
-### 5.1 Developer Experience
+### 5.1 Developer Experience [depends: (1.4,2.1)]
 - [ ] `huu init` — initialize HUU in existing project
 - [ ] `huu config` — interactive configuration
 - [ ] Error messages with actionable suggestions
 - [ ] `--verbose` and `--quiet` modes
 - [ ] `--dry-run` for beat sheet preview without execution
 
-### 5.2 Resilience
+### 5.2 Resilience [depends: (0.2,0.3,2.2)]
 - [ ] Crash recovery: resume from last SQLite checkpoint
 - [ ] Stale worktree detection and cleanup
 - [ ] Agent timeout with automatic retry
 - [ ] Graceful shutdown (finish current agents, merge completed work)
 
-### 5.3 Performance
+### 5.3 Performance [depends: (0.3,2.2,3.4)]
 - [ ] Agent concurrency cap (configurable, default 5)
 - [ ] Coordination overhead metrics visible in TUI
 - [ ] SQLite query optimization for large histories
 - [ ] Worktree reuse (recycle instead of create/destroy)
 
-### 5.4 Documentation
+### 5.4 Documentation [depends: (all-previous-phases)]
 - [ ] API documentation
 - [ ] Contributing guide
 - [ ] Examples: common workflows with expected output
