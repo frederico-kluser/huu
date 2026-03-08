@@ -164,7 +164,7 @@ The human interface. Everything that was CLI-only becomes visual and interactive
 
 The system learns and improves with every session.
 
-### 4.1 Anti-Hallucination Pipeline
+### 4.1 Anti-Hallucination Pipeline [depends: (1.2,2.1,2.2,2.3)]
 - [ ] L1: Prompt design templates with "I don't know" permission + source restriction
 - [ ] L2: Quote-first implementation for document-heavy tasks
 - [ ] L3: Reviewer agent loop (validate output vs requirements, max 3 iterations)
