@@ -100,7 +100,7 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] Health check: periodic pings to detect stuck agents
 - [ ] Beat sheet advancement: move to next beat/sequence/act
 
-### 2.3 Remaining Agents
+### 2.3 Remaining Agents [depends: (0.2,1.1,1.2,2.1,2.2)]
 - [ ] `planner` — Beat Sheet decomposition
 - [ ] `tester` — TDD + test execution
 - [ ] `reviewer` — code review (read-only tools)
