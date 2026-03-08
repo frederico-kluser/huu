@@ -8,7 +8,7 @@
 
 The skeleton. Nothing works end-to-end yet, but every piece can be tested in isolation.
 
-### 0.1 Project Scaffolding
+### 0.1 Project Scaffolding [depends: (none)]
 - [ ] `npm init` + TypeScript config (tsx, strict mode)
 - [ ] Directory structure: `src/`, `src/agents/`, `src/db/`, `src/tui/`, `src/git/`, `src/orchestrator/`
 - [ ] Install core dependencies: simple-git, better-sqlite3, ink, @anthropic-ai/sdk, @modelcontextprotocol/sdk
