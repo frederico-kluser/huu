@@ -47,7 +47,7 @@ The skeleton. Nothing works end-to-end yet, but every piece can be tested in iso
 
 One agent working end-to-end. No orchestration yet — just proving the agent → worktree → merge pipeline.
 
-### 1.1 Agent Runtime
+### 1.1 Agent Runtime [depends: (0.2,0.3)]
 - [ ] Agent definition format (TypeScript interface matching YAML frontmatter)
 - [ ] Agent spawner: creates worktree, injects context, runs Claude API call
 - [ ] Context preparation: read from scratchpad, build focused prompt
@@ -56,12 +56,12 @@ One agent working end-to-end. No orchestration yet — just proving the agent �
 - [ ] Cleanup: remove worktree on completion or abort
 - [ ] Abort support via AbortController
 
-### 1.2 Builder Agent (first agent)
+### 1.2 Builder Agent (first agent) [depends: (1.1)]
 - [ ] Builder agent definition (Sonnet, Read/Write/Edit/Bash tools)
 - [ ] End-to-end test: receive subtask → create worktree → implement → commit → signal done
 - [ ] File change tracking (which files were created/modified/deleted)
 
-### 1.3 Merge Workflow (Tier 1-2)
+### 1.3 Merge Workflow (Tier 1-2) [depends: (0.2,0.3,1.2)]
 - [ ] FIFO merge queue (SQLite-backed)
 - [ ] Tier 1: fast-forward detection and execution
 - [ ] Tier 2: recursive merge with automatic conflict detection
@@ -69,7 +69,7 @@ One agent working end-to-end. No orchestration yet — just proving the agent �
 - [ ] Merge result logging to SQLite
 - [ ] Tests for clean merges and conflict detection
 
-### 1.4 Basic CLI
+### 1.4 Basic CLI [depends: (1.1,1.2)]
 - [ ] `huu run "task description"` — single agent execution
 - [ ] `huu status` — show current state
 - [ ] Structured console output (not TUI yet, just formatted logs)
@@ -90,7 +90,7 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] Beat state persistence in SQLite
 - [ ] Visualization of beat sheet as structured text
 
-### 2.2 Orchestrator Loop
+### 2.2 Orchestrator Loop [depends: (1.1,1.3,2.1)]
 - [ ] Main orchestrator loop: decompose → assign → monitor → collect → merge
 - [ ] Task assignment: match subtasks to agents by role
 - [ ] Parallel execution: spawn multiple agents concurrently
@@ -100,7 +100,7 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] Health check: periodic pings to detect stuck agents
 - [ ] Beat sheet advancement: move to next beat/sequence/act
 
-### 2.3 Remaining Agents
+### 2.3 Remaining Agents [depends: (1.1,2.2)]
 - [ ] `planner` — Beat Sheet decomposition
 - [ ] `tester` — TDD + test execution
 - [ ] `reviewer` — code review (read-only tools)
@@ -111,13 +111,13 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] `debugger` — deep investigation
 - [ ] `context-curator` — post-activity memory curation
 
-### 2.4 Merge Workflow (Tier 3-4)
+### 2.4 Merge Workflow (Tier 3-4) [depends: (1.3,2.2)]
 - [ ] Tier 3: `ours`/`theirs` heuristic (last-touch-wins + file ownership tracking)
 - [ ] Tier 4: AI Resolver (send conflict to Claude with per-file conflict history)
 - [ ] Conflict history tracking in SQLite (which files conflict frequently)
 - [ ] Human escalation path (pause queue, notify TUI)
 
-### 2.5 Context-Curator Integration
+### 2.5 Context-Curator Integration [depends: (1.1,2.1,2.2,2.3)]
 - [ ] Post-activity hook: curator runs after every agent completes
 - [ ] Scratchpad update logic: what changed, what to add/remove from knowledge base
 - [ ] Strategic compact at beat sheet checkpoints
@@ -146,7 +146,7 @@ The human interface. Everything that was CLI-only becomes visual and interactive
 - [ ] Context usage bar (visual)
 - [ ] ESC to return to Kanban
 
-### 3.3 Human Intervention
+### 3.3 Human Intervention [depends: (1.1,2.2,3.1)]
 - [ ] `[S]teer` — send redirect message to running agent
 - [ ] `[F]ollow-up` — queue instruction for after current turn
 - [ ] `[A]bort` — cancel agent, discard worktree, move to Failed
@@ -181,13 +181,13 @@ The system learns and improves with every session.
 - [ ] Session summary generation on completion
 - [ ] Context loading: last 7 days of sessions on startup
 
-### 4.3 Audit System
+### 4.3 Audit System [depends: (0.2,1.1)]
 - [ ] Complete tool call logging (timestamp, agent, tool, params, result)
 - [ ] Post-session audit report generation
 - [ ] Suspicious action flagging (unusual patterns, unexpected file access)
 - [ ] Cost reporting per session, per feature, per agent
 
-### 4.4 MCP Bridge
+### 4.4 MCP Bridge [depends: (1.1,2.2)]
 - [ ] MCP client programmatic setup (`@modelcontextprotocol/sdk`)
 - [ ] Bridge: MCP tools → agent custom tools
 - [ ] Lazy-start servers (connect on first use, disconnect after idle)
