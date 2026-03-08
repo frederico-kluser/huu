@@ -153,7 +153,7 @@ The human interface. Everything that was CLI-only becomes visual and interactive
 - [ ] `[A]bort` — cancel agent, discard worktree, move to Failed
 - [ ] `[P]romote` — save learning from Done task to instincts
 
-### 3.4 Specialized Views [depends: (1.3,2.1,3.1)]
+### 3.4 Specialized Views [depends: (0.2,1.3,2.1,2.2,3.1)]
 - [ ] `[L]ogs` tab — aggregated log view from all agents
 - [ ] `[M]erge Queue` tab — FIFO queue with tier indicators
 - [ ] `[C]ost` tab — breakdown by agent, model, phase
