@@ -117,7 +117,7 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] Conflict history tracking in SQLite (which files conflict frequently)
 - [ ] Human escalation path (pause queue, notify TUI)
 
-### 2.5 Context-Curator Integration
+### 2.5 Context-Curator Integration [depends: (0.2,1.1,2.1,2.2,2.3)]
 - [ ] Post-activity hook: curator runs after every agent completes
 - [ ] Scratchpad update logic: what changed, what to add/remove from knowledge base
 - [ ] Strategic compact at beat sheet checkpoints
