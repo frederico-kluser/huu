@@ -90,7 +90,7 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] Beat state persistence in SQLite
 - [ ] Visualization of beat sheet as structured text
 
-### 2.2 Orchestrator Loop
+### 2.2 Orchestrator Loop [depends: (1.1,1.3,2.1)]
 - [ ] Main orchestrator loop: decompose → assign → monitor → collect → merge
 - [ ] Task assignment: match subtasks to agents by role
 - [ ] Parallel execution: spawn multiple agents concurrently
