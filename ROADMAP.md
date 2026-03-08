@@ -16,18 +16,18 @@ The skeleton. Nothing works end-to-end yet, but every piece can be tested in iso
 - [x] `.gitignore`, `tsconfig.json`, `package.json` scripts
 - [x] Basic CLAUDE.md with project conventions
 
-### [ ] 0.2 SQLite Schema [depends: (0.1)]
-- [ ] Database initialization with WAL mode
-- [ ] `messages` table (typed mail system: task_assigned, task_done, merge_ready, escalation, health_check, broadcast, task_progress, merge_result)
-- [ ] `entities` table (knowledge graph: facts, decisions, patterns)
-- [ ] `relations` table (entity relationships)
-- [ ] `observations` table (tool usage events, 30-day decay)
-- [ ] `sessions` table (session summaries, 7-day window)
-- [ ] `instincts` table (learned patterns, confidence 0.3-0.85)
-- [ ] `beat_state` table (current beat sheet progress)
-- [ ] `audit_log` table (every tool call: timestamp, agent, tool, params, result)
-- [ ] Migration system (versioned schema changes)
-- [ ] Tests for all CRUD operations
+### [x] 0.2 SQLite Schema [depends: (0.1)]
+- [x] Database initialization with WAL mode
+- [x] `messages` table (typed mail system: task_assigned, task_done, merge_ready, escalation, health_check, broadcast, task_progress, merge_result)
+- [x] `entities` table (knowledge graph: facts, decisions, patterns)
+- [x] `relations` table (entity relationships)
+- [x] `observations` table (tool usage events, 30-day decay)
+- [x] `sessions` table (session summaries, 7-day window)
+- [x] `instincts` table (learned patterns, confidence 0.3-0.85)
+- [x] `beat_state` table (current beat sheet progress)
+- [x] `audit_log` table (every tool call: timestamp, agent, tool, params, result)
+- [x] Migration system (versioned schema changes)
+- [x] Tests for all CRUD operations
 
 ### [ ] 0.3 WorktreeManager [depends: (0.1)]
 - [ ] `WorktreeManager` class wrapping simple-git `raw()` calls
@@ -229,7 +229,7 @@ The system learns and improves with every session.
 
 | Phase | Name | Checkpoint | Key Deliverable | Progress |
 |-------|------|-----------|-----------------|----------|
-| 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 1/3 |
+| 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 2/3 |
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 0/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 0/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 0/4 |
