@@ -217,7 +217,7 @@ The system learns and improves with every session.
 - [ ] SQLite query optimization for large histories
 - [ ] Worktree reuse (recycle instead of create/destroy)
 
-### 5.4 Documentation [depends: (all-previous-phases)]
+### 5.4 Documentation [depends: (1.4,2.2,3.1,3.2,4.1,4.2,4.3)]
 - [ ] API documentation
 - [ ] Contributing guide
 - [ ] Examples: common workflows with expected output
