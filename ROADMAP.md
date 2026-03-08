@@ -48,14 +48,14 @@ The skeleton. Nothing works end-to-end yet, but every piece can be tested in iso
 
 One agent working end-to-end. No orchestration yet — just proving the agent → worktree → merge pipeline.
 
-### [ ] 1.1 Agent Runtime [depends: (0.2,0.3)]
-- [ ] Agent definition format (TypeScript interface matching YAML frontmatter)
-- [ ] Agent spawner: creates worktree, injects context, runs Claude API call
-- [ ] Context preparation: read from scratchpad, build focused prompt
-- [ ] Tool execution: map agent tools to actual implementations
-- [ ] Result collection: capture output, write to SQLite messages
-- [ ] Cleanup: remove worktree on completion or abort
-- [ ] Abort support via AbortController
+### [x] 1.1 Agent Runtime [depends: (0.2,0.3)]
+- [x] Agent definition format (TypeScript interface matching YAML frontmatter)
+- [x] Agent spawner: creates worktree, injects context, runs Claude API call
+- [x] Context preparation: read from scratchpad, build focused prompt
+- [x] Tool execution: map agent tools to actual implementations
+- [x] Result collection: capture output, write to SQLite messages
+- [x] Cleanup: remove worktree on completion or abort
+- [x] Abort support via AbortController
 
 ### [ ] 1.2 Builder Agent (first agent) [depends: (0.2,0.3,1.1)]
 - [ ] Builder agent definition (Sonnet, Read/Write/Edit/Bash tools)
@@ -231,7 +231,7 @@ The system learns and improves with every session.
 | Phase | Name | Checkpoint | Key Deliverable | Progress |
 |-------|------|-----------|-----------------|----------|
 | 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
-| 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 0/4 |
+| 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 1/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 0/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 0/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |
