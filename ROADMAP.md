@@ -82,7 +82,7 @@ One agent working end-to-end. No orchestration yet — just proving the agent �
 
 The showrunner comes alive. Multiple agents working in parallel with coordination.
 
-### 2.1 Beat Sheet Engine
+### 2.1 Beat Sheet Engine [depends: (0.2,1.1)]
 - [ ] Beat sheet data model (4 levels: objective → acts → sequences → atomic tasks)
 - [ ] Decomposition prompt for planner agent (fractal: precondition → action → postcondition)
 - [ ] Checkpoint definitions (Catalyst, Midpoint, All Is Lost, Break Into Three, Final Image)
@@ -90,7 +90,7 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] Beat state persistence in SQLite
 - [ ] Visualization of beat sheet as structured text
 
-### 2.2 Orchestrator Loop
+### 2.2 Orchestrator Loop [depends: (1.4,2.1)]
 - [ ] Main orchestrator loop: decompose → assign → monitor → collect → merge
 - [ ] Task assignment: match subtasks to agents by role
 - [ ] Parallel execution: spawn multiple agents concurrently
@@ -100,7 +100,7 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] Health check: periodic pings to detect stuck agents
 - [ ] Beat sheet advancement: move to next beat/sequence/act
 
-### 2.3 Remaining Agents
+### 2.3 Remaining Agents [depends: (1.1,2.1,2.2)]
 - [ ] `planner` — Beat Sheet decomposition
 - [ ] `tester` — TDD + test execution
 - [ ] `reviewer` — code review (read-only tools)
@@ -111,13 +111,13 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] `debugger` — deep investigation
 - [ ] `context-curator` — post-activity memory curation
 
-### 2.4 Merge Workflow (Tier 3-4)
+### 2.4 Merge Workflow (Tier 3-4) [depends: (1.3,2.2)]
 - [ ] Tier 3: `ours`/`theirs` heuristic (last-touch-wins + file ownership tracking)
 - [ ] Tier 4: AI Resolver (send conflict to Claude with per-file conflict history)
 - [ ] Conflict history tracking in SQLite (which files conflict frequently)
 - [ ] Human escalation path (pause queue, notify TUI)
 
-### 2.5 Context-Curator Integration
+### 2.5 Context-Curator Integration [depends: (0.2,2.2,2.3)]
 - [ ] Post-activity hook: curator runs after every agent completes
 - [ ] Scratchpad update logic: what changed, what to add/remove from knowledge base
 - [ ] Strategic compact at beat sheet checkpoints
