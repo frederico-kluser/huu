@@ -56,7 +56,7 @@ One agent working end-to-end. No orchestration yet — just proving the agent �
 - [ ] Cleanup: remove worktree on completion or abort
 - [ ] Abort support via AbortController
 
-### 1.2 Builder Agent (first agent) [depends: (1.1)]
+### 1.2 Builder Agent (first agent) [depends: (0.2,0.3,1.1)]
 - [ ] Builder agent definition (Sonnet, Read/Write/Edit/Bash tools)
 - [ ] End-to-end test: receive subtask → create worktree → implement → commit → signal done
 - [ ] File change tracking (which files were created/modified/deleted)
