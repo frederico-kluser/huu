@@ -146,7 +146,7 @@ The human interface. Everything that was CLI-only becomes visual and interactive
 - [ ] Context usage bar (visual)
 - [ ] ESC to return to Kanban
 
-### 3.3 Human Intervention
+### 3.3 Human Intervention [depends: (0.2,0.3,1.1,1.3,2.2,3.2)]
 - [ ] `[S]teer` — send redirect message to running agent
 - [ ] `[F]ollow-up` — queue instruction for after current turn
 - [ ] `[A]bort` — cancel agent, discard worktree, move to Failed
