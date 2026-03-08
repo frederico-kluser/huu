@@ -29,15 +29,16 @@ The skeleton. Nothing works end-to-end yet, but every piece can be tested in iso
 - [x] Migration system (versioned schema changes)
 - [x] Tests for all CRUD operations
 
-### [ ] 0.3 WorktreeManager [depends: (0.1)]
-- [ ] `WorktreeManager` class wrapping simple-git `raw()` calls
-- [ ] `create(agentId, baseBranch)` — creates branch + worktree
-- [ ] `remove(agentId)` — removes worktree + optionally deletes branch
-- [ ] `list()` — lists active worktrees with status
-- [ ] `getGit(agentId)` — returns isolated SimpleGit instance for a worktree
-- [ ] Mutex/semaphore for operations on shared refs
-- [ ] Symlink support for `node_modules` (avoid redundant installs)
-- [ ] Tests with real git repos (temp directories)
+### [x] 0.3 WorktreeManager [depends: (0.1)]
+- [x] `WorktreeManager` class wrapping simple-git `raw()` calls
+- [x] `create(agentId, baseBranch)` — creates branch + worktree
+- [x] `remove(agentId)` — removes worktree + optionally deletes branch
+- [x] `list()` — lists active worktrees with status
+- [x] `getGit(agentId)` — returns isolated SimpleGit instance for a worktree
+- [x] Mutex/semaphore for operations on shared refs
+- [x] Dependency workspace strategy (`node_modules`) with fallback
+- [x] Lifecycle management: stale detection + controlled prune
+- [x] Tests with real git repos (temp directories)
 
 **Checkpoint: Catalyst (~10%)** — Can we create worktrees, write to SQLite, and run tests?
 
