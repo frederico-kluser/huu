@@ -204,7 +204,7 @@ The system learns and improves with every session.
 - [ ] `--verbose` and `--quiet` modes
 - [ ] `--dry-run` for beat sheet preview without execution
 
-### 5.2 Resilience
+### 5.2 Resilience [depends: (0.2,0.3,1.1,1.3,2.1,2.2)]
 - [ ] Crash recovery: resume from last SQLite checkpoint
 - [ ] Stale worktree detection and cleanup
 - [ ] Agent timeout with automatic retry
