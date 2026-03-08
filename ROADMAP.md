@@ -16,7 +16,7 @@ The skeleton. Nothing works end-to-end yet, but every piece can be tested in iso
 - [ ] `.gitignore`, `tsconfig.json`, `package.json` scripts
 - [ ] Basic CLAUDE.md with project conventions
 
-### 0.2 SQLite Schema
+### 0.2 SQLite Schema [depends: (0.1)]
 - [ ] Database initialization with WAL mode
 - [ ] `messages` table (typed mail system: task_assigned, task_done, merge_ready, escalation, health_check, broadcast, task_progress, merge_result)
 - [ ] `entities` table (knowledge graph: facts, decisions, patterns)
