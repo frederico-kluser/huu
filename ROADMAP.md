@@ -172,7 +172,7 @@ The system learns and improves with every session.
 - [ ] CoVe pipeline for critical outputs (4-step verification)
 - [ ] `critical: true` flag in beat sheet for high-risk tasks
 
-### 4.2 Memory & Learning
+### 4.2 Memory & Learning [depends: (0.2,1.1,2.5)]
 - [ ] Observation logging via tool call hooks (100% coverage)
 - [ ] Pattern detection (threshold: 20+ observations → Haiku analysis)
 - [ ] Instinct generation with confidence scores (0.3-0.85)
