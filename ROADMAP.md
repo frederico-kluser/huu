@@ -210,7 +210,7 @@ The system learns and improves with every session.
 - [ ] Agent timeout with automatic retry
 - [ ] Graceful shutdown (finish current agents, merge completed work)
 
-### 5.3 Performance
+### 5.3 Performance [depends: (0.2,0.3,2.2,3.4,5.1)]
 - [ ] Agent concurrency cap (configurable, default 5)
 - [ ] Coordination overhead metrics visible in TUI
 - [ ] SQLite query optimization for large histories
