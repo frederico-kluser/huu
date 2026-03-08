@@ -140,7 +140,7 @@ The human interface. Everything that was CLI-only becomes visual and interactive
 - [ ] Keyboard navigation (arrow keys to select cards)
 - [ ] Auto-refresh from SQLite polling
 
-### 3.2 Detail View [depends: (1.1,3.1)]
+### 3.2 Detail View [depends: (0.2,1.1,1.2,2.2,3.1)]
 - [ ] Live log streaming from agent execution
 - [ ] Diff preview (files changed by agent)
 - [ ] Metrics panel: tokens used, context %, cost, elapsed
