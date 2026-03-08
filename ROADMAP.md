@@ -197,7 +197,7 @@ The system learns and improves with every session.
 
 ## Phase 5 — Polish (Final Image)
 
-### 5.1 Developer Experience
+### 5.1 Developer Experience [depends: (0.2,1.4,2.1)]
 - [ ] `huu init` — initialize HUU in existing project
 - [ ] `huu config` — interactive configuration
 - [ ] Error messages with actionable suggestions
