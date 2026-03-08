@@ -181,7 +181,7 @@ The system learns and improves with every session.
 - [ ] Session summary generation on completion
 - [ ] Context loading: last 7 days of sessions on startup
 
-### 4.3 Audit System
+### 4.3 Audit System [depends: (0.2,1.1,2.2,2.3,2.4,2.5,3.4,4.1)]
 - [ ] Complete tool call logging (timestamp, agent, tool, params, result)
 - [ ] Post-session audit report generation
 - [ ] Suspicious action flagging (unusual patterns, unexpected file access)
