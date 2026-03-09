@@ -42,13 +42,15 @@ export interface SchedulerContext {
  */
 const ROLE_KEYWORDS: Record<string, string[]> = {
   implementation: ['implement', 'create', 'build', 'add', 'write', 'develop', 'setup', 'scaffold', 'configure', 'install'],
+  planning: ['plan', 'decompose', 'break down', 'design', 'architect', 'scope', 'estimate'],
   testing: ['test', 'verify', 'validate', 'assert', 'check', 'coverage'],
   review: ['review', 'audit', 'inspect', 'lint'],
-  research: ['research', 'investigate', 'explore', 'analyze', 'document'],
+  research: ['research', 'investigate', 'explore', 'analyze'],
   refactoring: ['refactor', 'clean', 'optimize', 'simplify', 'restructure'],
   debugging: ['debug', 'fix', 'diagnose', 'troubleshoot', 'trace'],
-  documentation: ['doc', 'readme', 'comment', 'annotate'],
+  documentation: ['doc', 'readme', 'comment', 'annotate', 'document'],
   merging: ['merge', 'resolve', 'conflict', 'integrate'],
+  curation: ['curate', 'memory', 'knowledge', 'context', 'summarize'],
 };
 
 export function inferTaskRole(task: AtomicTask): string {
