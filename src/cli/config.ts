@@ -6,10 +6,24 @@ import { errors, CliError } from './errors.js';
 
 // ── Config schema ────────────────────────────────────────────────────
 
-export const CONFIG_VERSION = 1;
+export const CONFIG_VERSION = 2;
 export const CONFIG_FILENAME = 'config.json';
 export const HUU_DIR = '.huu';
 export const DB_FILENAME = 'huu.db';
+
+export interface AgentModelConfig {
+  orchestrator: string;
+  planner: string;
+  builder: string;
+  tester: string;
+  reviewer: string;
+  researcher: string;
+  merger: string;
+  refactorer: string;
+  'doc-writer': string;
+  debugger: string;
+  'context-curator': string;
+}
 
 export interface HuuConfig {
   version: number;
@@ -20,16 +34,56 @@ export interface HuuConfig {
   };
   orchestrator: {
     maxConcurrency: number;
+    /** @deprecated Use agentModels instead */
     defaultAgentModel: {
       orchestrator: string;
       worker: string;
       support: string;
     };
+    /** Per-agent OpenRouter model IDs */
+    agentModels: AgentModelConfig;
   };
   logging: {
     level: string;
   };
 }
+
+// ── All agent role names ─────────────────────────────────────────────
+
+export const AGENT_ROLES = [
+  'orchestrator',
+  'planner',
+  'builder',
+  'tester',
+  'reviewer',
+  'researcher',
+  'merger',
+  'refactorer',
+  'doc-writer',
+  'debugger',
+  'context-curator',
+] as const;
+
+export type AgentRoleName = (typeof AGENT_ROLES)[number];
+
+// ── Default model assignments (from docs/models-llm-openrouter-deep.md) ──
+
+export const DEFAULT_AGENT_MODELS: AgentModelConfig = {
+  // Tier Critical
+  orchestrator: 'anthropic/claude-sonnet-4.5',
+  reviewer: 'anthropic/claude-opus-4',
+  debugger: 'google/gemini-2.5-pro-preview-03-25',
+  // Tier Principal
+  planner: 'anthropic/claude-sonnet-4.5',
+  builder: 'anthropic/claude-sonnet-4',
+  tester: 'minimax/minimax-m2.5',
+  merger: 'openai/gpt-4.1',
+  // Tier Economy
+  researcher: 'google/gemini-2.5-flash-preview',
+  refactorer: 'deepseek/deepseek-chat',
+  'doc-writer': 'google/gemini-3.1-flash-lite',
+  'context-curator': 'google/gemini-2.5-flash-lite-preview',
+};
 
 // ── Defaults ─────────────────────────────────────────────────────────
 
@@ -48,6 +102,7 @@ export function createDefaultConfig(): HuuConfig {
         worker: 'sonnet',
         support: 'haiku',
       },
+      agentModels: { ...DEFAULT_AGENT_MODELS },
     },
     logging: {
       level: 'notice',
@@ -62,8 +117,12 @@ export interface ConfigValidationResult {
   errors: string[];
 }
 
-const VALID_MODELS = ['opus', 'sonnet', 'haiku'];
+const VALID_LEGACY_MODELS = ['opus', 'sonnet', 'haiku'];
 const VALID_LOG_LEVELS = ['quiet', 'notice', 'info', 'debug', 'trace'];
+
+function isValidOpenRouterModelId(id: unknown): boolean {
+  return typeof id === 'string' && id.includes('/') && id.length > 3;
+}
 
 export function validateConfig(config: unknown): ConfigValidationResult {
   const errs: string[] = [];
@@ -109,21 +168,39 @@ export function validateConfig(config: unknown): ConfigValidationResult {
     ) {
       errs.push('orchestrator.maxConcurrency: must be between 1 and 20');
     }
+
+    // Legacy defaultAgentModel (backward compatibility)
     if (
-      orch['defaultAgentModel'] === null ||
-      typeof orch['defaultAgentModel'] !== 'object'
+      orch['defaultAgentModel'] !== null &&
+      orch['defaultAgentModel'] !== undefined &&
+      typeof orch['defaultAgentModel'] === 'object'
     ) {
-      errs.push('orchestrator.defaultAgentModel: must be an object');
-    } else {
       const models = orch['defaultAgentModel'] as Record<string, unknown>;
       for (const role of ['orchestrator', 'worker', 'support'] as const) {
         if (
           typeof models[role] !== 'string' ||
-          !VALID_MODELS.includes(models[role] as string)
+          !VALID_LEGACY_MODELS.includes(models[role] as string)
         ) {
           errs.push(
-            `orchestrator.defaultAgentModel.${role}: must be one of ${VALID_MODELS.join(', ')}`,
+            `orchestrator.defaultAgentModel.${role}: must be one of ${VALID_LEGACY_MODELS.join(', ')}`,
           );
+        }
+      }
+    }
+
+    // New per-agent model configuration
+    if (orch['agentModels'] !== null && orch['agentModels'] !== undefined) {
+      if (typeof orch['agentModels'] !== 'object') {
+        errs.push('orchestrator.agentModels: must be an object');
+      } else {
+        const agentModels = orch['agentModels'] as Record<string, unknown>;
+        for (const role of AGENT_ROLES) {
+          const modelId = agentModels[role];
+          if (modelId !== undefined && !isValidOpenRouterModelId(modelId)) {
+            errs.push(
+              `orchestrator.agentModels.${role}: must be a valid OpenRouter model ID (e.g., "anthropic/claude-sonnet-4")`,
+            );
+          }
         }
       }
     }
@@ -189,12 +266,33 @@ export function loadConfig(cwd: string): HuuConfig {
     throw errors.configInvalid('config.json', 'file contains invalid JSON');
   }
 
-  const result = validateConfig(parsed);
+  // Migrate v1 configs to v2
+  const migrated = migrateConfig(parsed as Record<string, unknown>);
+
+  const result = validateConfig(migrated);
   if (!result.valid) {
     throw errors.configInvalid('config.json', result.errors.join('; '));
   }
 
-  return parsed as HuuConfig;
+  return migrated as unknown as HuuConfig;
+}
+
+/**
+ * Migrate older config versions to current.
+ */
+function migrateConfig(config: Record<string, unknown>): Record<string, unknown> {
+  const version = config['version'] as number;
+
+  // v1 → v2: add agentModels
+  if (version === 1) {
+    const orch = config['orchestrator'] as Record<string, unknown> | undefined;
+    if (orch && !orch['agentModels']) {
+      orch['agentModels'] = { ...DEFAULT_AGENT_MODELS };
+    }
+    config['version'] = CONFIG_VERSION;
+  }
+
+  return config;
 }
 
 /**
@@ -228,12 +326,18 @@ type ConfigKeyPath =
   | 'orchestrator.defaultAgentModel.orchestrator'
   | 'orchestrator.defaultAgentModel.worker'
   | 'orchestrator.defaultAgentModel.support'
+  | `orchestrator.agentModels.${AgentRoleName}`
   | 'logging.level';
 
 export function getConfigValue(
   config: HuuConfig,
   key: ConfigKeyPath,
 ): string | number {
+  if (key.startsWith('orchestrator.agentModels.')) {
+    const role = key.replace('orchestrator.agentModels.', '') as AgentRoleName;
+    return config.orchestrator.agentModels[role];
+  }
+
   switch (key) {
     case 'orchestrator.maxConcurrency':
       return config.orchestrator.maxConcurrency;
@@ -245,6 +349,8 @@ export function getConfigValue(
       return config.orchestrator.defaultAgentModel.support;
     case 'logging.level':
       return config.logging.level;
+    default:
+      return '';
   }
 }
 
@@ -253,6 +359,12 @@ export function setConfigValue(
   key: ConfigKeyPath,
   value: string | number,
 ): void {
+  if (key.startsWith('orchestrator.agentModels.')) {
+    const role = key.replace('orchestrator.agentModels.', '') as AgentRoleName;
+    config.orchestrator.agentModels[role] = String(value);
+    return;
+  }
+
   switch (key) {
     case 'orchestrator.maxConcurrency':
       config.orchestrator.maxConcurrency = Number(value);
@@ -275,7 +387,7 @@ export function setConfigValue(
 export const CONFIGURABLE_KEYS: {
   key: ConfigKeyPath;
   label: string;
-  type: 'number' | 'select';
+  type: 'number' | 'select' | 'model';
   options?: string[];
   min?: number;
   max?: number;
@@ -287,24 +399,31 @@ export const CONFIGURABLE_KEYS: {
     min: 1,
     max: 20,
   },
+  // Legacy model tiers (backward compatibility)
   {
     key: 'orchestrator.defaultAgentModel.orchestrator',
-    label: 'Orchestrator model',
+    label: 'Orchestrator tier (legacy)',
     type: 'select',
-    options: VALID_MODELS,
+    options: VALID_LEGACY_MODELS,
   },
   {
     key: 'orchestrator.defaultAgentModel.worker',
-    label: 'Worker model',
+    label: 'Worker tier (legacy)',
     type: 'select',
-    options: VALID_MODELS,
+    options: VALID_LEGACY_MODELS,
   },
   {
     key: 'orchestrator.defaultAgentModel.support',
-    label: 'Support model',
+    label: 'Support tier (legacy)',
     type: 'select',
-    options: VALID_MODELS,
+    options: VALID_LEGACY_MODELS,
   },
+  // Per-agent OpenRouter model configuration
+  ...AGENT_ROLES.map((role) => ({
+    key: `orchestrator.agentModels.${role}` as ConfigKeyPath,
+    label: `${role} model`,
+    type: 'model' as const,
+  })),
   {
     key: 'logging.level',
     label: 'Log level',

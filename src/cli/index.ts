@@ -55,7 +55,7 @@ program
 
 async function checkFirstRun(): Promise<void> {
   const cwd = process.cwd();
-  const hasApiKey = Boolean(process.env['ANTHROPIC_API_KEY']);
+  const hasApiKey = Boolean(process.env['OPENROUTER_API_KEY']);
   const hasInit = huuDirExists(cwd) && configExists(cwd);
 
   // If API key is missing or project not initialized, show setup wizard
@@ -64,7 +64,7 @@ async function checkFirstRun(): Promise<void> {
 
     // Set API key in environment for this session if provided
     if (result.apiKey) {
-      process.env['ANTHROPIC_API_KEY'] = result.apiKey;
+      process.env['OPENROUTER_API_KEY'] = result.apiKey;
     }
 
     // Run init if project wasn't initialized

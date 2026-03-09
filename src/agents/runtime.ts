@@ -1,13 +1,19 @@
 import crypto from 'node:crypto';
-import Anthropic from '@anthropic-ai/sdk';
+import type OpenAI from 'openai';
 import type { WorktreeManager } from '../git/WorktreeManager.js';
 import { detectDefaultBranch } from '../git/default-branch.js';
 import type { MessageQueue } from '../db/queue.js';
 import type { AuditLogRepository } from '../db/repositories/audit-log.js';
 import type { AgentRunInput, AgentRunResult, FileChangeSummary, RunState, RunUsage } from './types.js';
-import { resolveModelId, validateAgentDefinition } from './types.js';
+import { resolveAgentModelId, validateAgentDefinition } from './types.js';
 import { prepareContext } from './context.js';
 import type { ToolRegistry } from './tools.js';
+import {
+  createOpenRouterClient,
+  chatCompletion,
+} from '../models/openrouter.js';
+import type { ChatMessage, ToolDefinition, ToolCall } from '../models/openrouter.js';
+import { findModelById } from '../models/catalog.js';
 import {
   getFileChangesFromCommit,
   getFileChangesFromWorkingTree,
@@ -27,7 +33,7 @@ export interface RuntimeDeps {
   queue: MessageQueue;
   auditLog: AuditLogRepository;
   toolRegistry: ToolRegistry;
-  client?: Anthropic | undefined;
+  client?: OpenAI | undefined;
 }
 
 // ── Internal run context ─────────────────────────────────────────────
@@ -38,7 +44,7 @@ interface RunContext {
   deps: RuntimeDeps;
   cwd: string;
   signal: AbortSignal;
-  client: Anthropic;
+  client: OpenAI;
   state: RunState;
   startTime: number;
 }
@@ -87,8 +93,8 @@ export async function spawnAgent(
     );
     worktreePath = worktree.path;
 
-    // Create or reuse Anthropic client
-    const client = deps.client ?? new Anthropic();
+    // Create or reuse OpenRouter client
+    const client = deps.client ?? createOpenRouterClient();
 
     const ctx: RunContext = {
       runId,
@@ -161,7 +167,7 @@ async function runAgentLifecycle(ctx: RunContext): Promise<AgentRunResult> {
   // Collect results
   ctx.state = 'collecting';
   const durationMs = Date.now() - ctx.startTime;
-  const summary = extractTextContent(finalContent);
+  const summary = finalContent;
   const { fileChangeSummary, commitSha } = await collectChanges(ctx);
   const filesChanged = flattenChangedFiles(fileChangeSummary);
 
@@ -197,15 +203,34 @@ async function runAgentLifecycle(ctx: RunContext): Promise<AgentRunResult> {
 async function executeToolUseLoop(
   ctx: RunContext,
   prepared: ReturnType<typeof prepareContext>,
-): Promise<{ finalContent: Anthropic.ContentBlock[]; usage: RunUsage }> {
-  const model = resolveModelId(ctx.input.agent.model);
-  const tools = ctx.deps.toolRegistry.getToolsForAgent(ctx.input.agent);
+): Promise<{ finalContent: string; usage: RunUsage }> {
+  const model = resolveAgentModelId(ctx.input.agent);
+  const registryTools = ctx.deps.toolRegistry.getToolsForAgent(ctx.input.agent);
   const maxTurns = ctx.input.agent.maxTurns ?? DEFAULT_MAX_TURNS;
 
-  const messages: Anthropic.MessageParam[] = prepared.messages.map((m) => ({
-    role: m.role,
-    content: m.content,
+  // Convert registry tools to OpenAI-style tool definitions
+  const tools: ToolDefinition[] = registryTools.map((t) => ({
+    type: 'function' as const,
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.inputSchema as unknown as Record<string, unknown>,
+    },
   }));
+
+  // Build initial messages in OpenAI format
+  const messages: ChatMessage[] = [
+    { role: 'system', content: prepared.system },
+    ...prepared.messages.map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+    })),
+  ];
+
+  // Look up model pricing for cost calculation
+  const modelEntry = findModelById(model);
+  const inputCostPerToken = modelEntry ? modelEntry.pricing.input / 1_000_000 : 0;
+  const outputCostPerToken = modelEntry ? modelEntry.pricing.output / 1_000_000 : 0;
 
   const totalUsage: RunUsage = {
     inputTokens: 0,
@@ -221,52 +246,58 @@ async function executeToolUseLoop(
 
     totalUsage.turns = turn + 1;
 
-    const createParams: Anthropic.MessageCreateParamsNonStreaming = {
+    const chatParams: Parameters<typeof chatCompletion>[1] = {
       model,
-      max_tokens: MAX_TOKENS,
-      system: prepared.system,
       messages,
+      maxTokens: MAX_TOKENS,
+      signal: ctx.signal,
     };
     if (tools.length > 0) {
-      createParams.tools = tools;
+      chatParams.tools = tools;
     }
+    const response = await chatCompletion(ctx.client, chatParams);
 
-    const response = await ctx.client.messages.create(
-      createParams,
-      { signal: ctx.signal },
-    );
-
-    totalUsage.inputTokens += response.usage.input_tokens;
-    totalUsage.outputTokens += response.usage.output_tokens;
+    totalUsage.inputTokens += response.usage.promptTokens;
+    totalUsage.outputTokens += response.usage.completionTokens;
+    totalUsage.totalCost =
+      totalUsage.inputTokens * inputCostPerToken +
+      totalUsage.outputTokens * outputCostPerToken;
 
     publishRunEvent(ctx.deps, ctx.input, ctx.runId, 'task_progress', {
       state: 'running' satisfies RunState,
       turn: turn + 1,
-      stopReason: response.stop_reason,
+      stopReason: response.finishReason,
       inputTokens: totalUsage.inputTokens,
       outputTokens: totalUsage.outputTokens,
+      totalCost: totalUsage.totalCost,
     });
 
     // No more tool calls — done
-    if (response.stop_reason !== 'tool_use') {
-      return { finalContent: response.content, usage: totalUsage };
+    if (response.toolCalls.length === 0 || response.finishReason === 'stop') {
+      return { finalContent: response.content ?? '', usage: totalUsage };
     }
 
+    // Add assistant message with tool calls
+    messages.push({
+      role: 'assistant',
+      content: response.content,
+      tool_calls: response.toolCalls,
+    });
+
     // Process tool calls
-    const toolUseBlocks = response.content.filter(
-      (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use',
-    );
-
-    messages.push({ role: 'assistant', content: response.content });
-
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-    for (const toolUse of toolUseBlocks) {
+    for (const toolCall of response.toolCalls) {
       const startMs = Date.now();
 
+      let toolInput: Record<string, unknown>;
+      try {
+        toolInput = JSON.parse(toolCall.function.arguments);
+      } catch {
+        toolInput = {};
+      }
+
       const result = await ctx.deps.toolRegistry.execute(
-        toolUse.name,
-        toolUse.input as Record<string, unknown>,
+        toolCall.function.name,
+        toolInput,
         {
           runId: ctx.runId,
           cwd: ctx.cwd,
@@ -280,8 +311,8 @@ async function executeToolUseLoop(
       const auditParams: Parameters<typeof ctx.deps.auditLog.append>[0] = {
         project_id: ctx.input.projectId,
         agent_id: ctx.input.agent.name,
-        tool_name: toolUse.name,
-        params_json: JSON.stringify(toolUse.input),
+        tool_name: toolCall.function.name,
+        params_json: JSON.stringify(toolInput),
         result_json: JSON.stringify(result.content),
         result_status: result.isError ? 'error' : 'success',
         duration_ms: durationMs,
@@ -291,18 +322,13 @@ async function executeToolUseLoop(
       }
       ctx.deps.auditLog.append(auditParams);
 
-      const toolResultParam: Anthropic.ToolResultBlockParam = {
-        type: 'tool_result',
-        tool_use_id: toolUse.id,
-        content: result.content,
-      };
-      if (result.isError) {
-        toolResultParam.is_error = true;
-      }
-      toolResults.push(toolResultParam);
+      // Add tool result message
+      messages.push({
+        role: 'tool',
+        content: typeof result.content === 'string' ? result.content : JSON.stringify(result.content),
+        tool_call_id: toolCall.id,
+      });
     }
-
-    messages.push({ role: 'user', content: toolResults });
   }
 
   throw new Error(
@@ -311,13 +337,6 @@ async function executeToolUseLoop(
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
-
-function extractTextContent(content: Anthropic.ContentBlock[]): string {
-  return content
-    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-    .map((block) => block.text)
-    .join('\n');
-}
 
 async function collectChanges(
   ctx: RunContext,

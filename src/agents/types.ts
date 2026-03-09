@@ -1,16 +1,27 @@
 // ── Agent model mapping ──────────────────────────────────────────────
 
+/**
+ * Legacy model tiers kept for backward compatibility.
+ * New code should use OpenRouter model IDs directly via `modelId`.
+ */
 export type AgentModel = 'opus' | 'sonnet' | 'haiku' | 'inherit';
 
-const MODEL_MAP: Record<AgentModel, string> = {
-  opus: 'claude-opus-4-20250514',
-  sonnet: 'claude-sonnet-4-5-20250929',
-  haiku: 'claude-haiku-4-5-20251001',
-  inherit: 'claude-sonnet-4-5-20250929',
+const LEGACY_MODEL_MAP: Record<AgentModel, string> = {
+  opus: 'anthropic/claude-opus-4',
+  sonnet: 'anthropic/claude-sonnet-4',
+  haiku: 'anthropic/claude-haiku-4.5',
+  inherit: 'anthropic/claude-sonnet-4',
 };
 
-export function resolveModelId(model: AgentModel): string {
-  return MODEL_MAP[model];
+/**
+ * Resolve a legacy AgentModel tier to an OpenRouter model ID.
+ * If the input is already a full model ID (contains '/'), return as-is.
+ */
+export function resolveModelId(model: AgentModel | string): string {
+  if (typeof model === 'string' && model.includes('/')) {
+    return model; // Already an OpenRouter model ID
+  }
+  return LEGACY_MODEL_MAP[model as AgentModel] ?? LEGACY_MODEL_MAP['inherit'];
 }
 
 // ── Agent definition ─────────────────────────────────────────────────
@@ -20,6 +31,8 @@ export interface AgentDefinition {
   role: string;
   description: string;
   model: AgentModel;
+  /** OpenRouter model ID override. Takes precedence over `model` tier. */
+  modelId?: string | undefined;
   tools: string[];
   disallowedTools?: string[] | undefined;
   maxTurns?: number | undefined;
@@ -123,7 +136,15 @@ export function validateAgentDefinition(def: AgentDefinition): void {
     );
   }
 
-  if (!VALID_MODELS.includes(def.model)) {
+  // Accept both legacy tier names and OpenRouter model IDs
+  if (def.modelId) {
+    if (typeof def.modelId !== 'string' || !def.modelId.includes('/')) {
+      throw new AgentDefinitionError(
+        'Agent modelId must be a valid OpenRouter model ID (e.g., "anthropic/claude-sonnet-4")',
+        'modelId',
+      );
+    }
+  } else if (!VALID_MODELS.includes(def.model)) {
     throw new AgentDefinitionError(
       `Agent model must be one of: ${VALID_MODELS.join(', ')}`,
       'model',
@@ -167,6 +188,15 @@ export function validateAgentDefinition(def: AgentDefinition): void {
       'maxTurns',
     );
   }
+}
+
+/**
+ * Resolve the effective model ID for an agent definition.
+ * Priority: modelId > model tier mapping.
+ */
+export function resolveAgentModelId(def: AgentDefinition): string {
+  if (def.modelId) return def.modelId;
+  return resolveModelId(def.model);
 }
 
 /**

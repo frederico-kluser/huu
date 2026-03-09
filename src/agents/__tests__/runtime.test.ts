@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
-import type Anthropic from '@anthropic-ai/sdk';
+import type OpenAI from 'openai';
 import { openDatabase } from '../../db/connection.js';
 import { migrate } from '../../db/migrator.js';
 import { MessageQueue } from '../../db/queue.js';
@@ -36,22 +36,39 @@ function testInput(overrides: Partial<AgentRunInput> = {}): AgentRunInput {
   };
 }
 
-function makeMessage(
+/** Create a mock OpenAI chat completion response */
+function makeChatResponse(
   overrides: Partial<{
-    stop_reason: string;
-    content: Array<{ type: string; text?: string; name?: string; id?: string; input?: unknown }>;
-    usage: { input_tokens: number; output_tokens: number };
+    finish_reason: string;
+    content: string | null;
+    tool_calls: Array<{
+      id: string;
+      type: 'function';
+      function: { name: string; arguments: string };
+    }>;
+    usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   }> = {},
 ) {
   return {
-    id: 'msg_test',
-    type: 'message',
-    role: 'assistant',
-    model: 'claude-sonnet-4-5-20250929',
-    stop_reason: 'end_turn',
-    content: [{ type: 'text', text: 'Done!' }],
-    usage: { input_tokens: 100, output_tokens: 50 },
-    ...overrides,
+    id: 'chatcmpl-test',
+    object: 'chat.completion',
+    model: 'anthropic/claude-sonnet-4',
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: overrides.content ?? 'Done!',
+          tool_calls: overrides.tool_calls ?? undefined,
+        },
+        finish_reason: overrides.finish_reason ?? 'stop',
+      },
+    ],
+    usage: overrides.usage ?? {
+      prompt_tokens: 100,
+      completion_tokens: 50,
+      total_tokens: 150,
+    },
   };
 }
 
@@ -82,19 +99,21 @@ function createMockWorktreeManager(): WorktreeManager {
 }
 
 function createMockClient(
-  responses: ReturnType<typeof makeMessage>[],
-): Anthropic {
+  responses: ReturnType<typeof makeChatResponse>[],
+): OpenAI {
   let callIndex = 0;
   return {
-    messages: {
-      create: vi.fn(async () => {
-        const response = responses[callIndex];
-        if (!response) throw new Error('No more mock responses');
-        callIndex++;
-        return response;
-      }),
+    chat: {
+      completions: {
+        create: vi.fn(async () => {
+          const response = responses[callIndex];
+          if (!response) throw new Error('No more mock responses');
+          callIndex++;
+          return response;
+        }),
+      },
     },
-  } as unknown as Anthropic;
+  } as unknown as OpenAI;
 }
 
 // ── Test suite ───────────────────────────────────────────────────────
@@ -137,7 +156,7 @@ describe('spawnAgent', () => {
       queue,
       auditLog,
       toolRegistry: registry,
-      client: createMockClient([makeMessage()]),
+      client: createMockClient([makeChatResponse()]),
       ...overrides,
     };
   }
@@ -191,21 +210,23 @@ describe('spawnAgent', () => {
 
   it('handles tool use loop', async () => {
     const client = createMockClient([
-      makeMessage({
-        stop_reason: 'tool_use',
-        content: [
-          { type: 'text', text: 'Let me use the tool.' },
+      makeChatResponse({
+        finish_reason: 'tool_calls',
+        content: 'Let me use the tool.',
+        tool_calls: [
           {
-            type: 'tool_use',
-            id: 'toolu_001',
-            name: 'echo',
-            input: { text: 'hello' },
+            id: 'call_001',
+            type: 'function',
+            function: {
+              name: 'echo',
+              arguments: JSON.stringify({ text: 'hello' }),
+            },
           },
         ],
       }),
-      makeMessage({
-        stop_reason: 'end_turn',
-        content: [{ type: 'text', text: 'Tool result received. All done!' }],
+      makeChatResponse({
+        finish_reason: 'stop',
+        content: 'Tool result received. All done!',
       }),
     ]);
 
@@ -236,10 +257,12 @@ describe('spawnAgent', () => {
 
   it('returns failed status on API error', async () => {
     const client = {
-      messages: {
-        create: vi.fn().mockRejectedValue(new Error('API rate limit')),
+      chat: {
+        completions: {
+          create: vi.fn().mockRejectedValue(new Error('API rate limit')),
+        },
       },
-    } as unknown as Anthropic;
+    } as unknown as OpenAI;
 
     const deps = makeDeps({ client });
     const result = await spawnAgent(testInput(), deps);
@@ -251,10 +274,12 @@ describe('spawnAgent', () => {
   it('cleans up worktree on API error', async () => {
     const wm = createMockWorktreeManager();
     const client = {
-      messages: {
-        create: vi.fn().mockRejectedValue(new Error('API error')),
+      chat: {
+        completions: {
+          create: vi.fn().mockRejectedValue(new Error('API error')),
+        },
       },
-    } as unknown as Anthropic;
+    } as unknown as OpenAI;
 
     const deps = makeDeps({ worktreeManager: wm, client });
     await spawnAgent(testInput(), deps);
@@ -277,10 +302,12 @@ describe('spawnAgent', () => {
 
   it('publishes escalation on failure', async () => {
     const client = {
-      messages: {
-        create: vi.fn().mockRejectedValue(new Error('boom')),
+      chat: {
+        completions: {
+          create: vi.fn().mockRejectedValue(new Error('boom')),
+        },
       },
-    } as unknown as Anthropic;
+    } as unknown as OpenAI;
 
     const deps = makeDeps({ client });
     await spawnAgent(testInput(), deps);
@@ -320,20 +347,22 @@ describe('spawnAgent', () => {
     });
 
     const client = createMockClient([
-      makeMessage({
-        stop_reason: 'tool_use',
-        content: [
+      makeChatResponse({
+        finish_reason: 'tool_calls',
+        tool_calls: [
           {
-            type: 'tool_use',
-            id: 'toolu_002',
-            name: 'echo',
-            input: { text: 'hello' },
+            id: 'call_002',
+            type: 'function',
+            function: {
+              name: 'echo',
+              arguments: JSON.stringify({ text: 'hello' }),
+            },
           },
         ],
       }),
-      makeMessage({
-        stop_reason: 'end_turn',
-        content: [{ type: 'text', text: 'Handled the error' }],
+      makeChatResponse({
+        finish_reason: 'stop',
+        content: 'Handled the error',
       }),
     ]);
 
@@ -362,14 +391,16 @@ describe('spawnAgent', () => {
 
   it('exhausts maxTurns and fails', async () => {
     // Agent that always wants to use tools (infinite loop)
-    const toolUseResponse = makeMessage({
-      stop_reason: 'tool_use',
-      content: [
+    const toolUseResponse = makeChatResponse({
+      finish_reason: 'tool_calls',
+      tool_calls: [
         {
-          type: 'tool_use',
-          id: 'toolu_loop',
-          name: 'echo',
-          input: { text: 'again' },
+          id: 'call_loop',
+          type: 'function',
+          function: {
+            name: 'echo',
+            arguments: JSON.stringify({ text: 'again' }),
+          },
         },
       ],
     });

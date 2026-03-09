@@ -36,7 +36,7 @@ describe('huu init', () => {
   it('should create a valid config file', async () => {
     await initAction({ yes: true });
     const config = loadConfig(tmpDir);
-    expect(config.version).toBe(1);
+    expect(config.version).toBe(2);
     expect(config.database.journalMode).toBe('WAL');
     expect(config.orchestrator.maxConcurrency).toBe(5);
   });
@@ -84,7 +84,7 @@ describe('huu init', () => {
 
     // Everything should still be valid
     const config = loadConfig(tmpDir);
-    expect(config.version).toBe(1);
+    expect(config.version).toBe(2);
 
     const Database = (await import('better-sqlite3')).default;
     const db = new Database(path.join(tmpDir, '.huu', 'huu.db'));
