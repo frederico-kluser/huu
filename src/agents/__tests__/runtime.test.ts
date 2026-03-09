@@ -31,6 +31,7 @@ function testInput(overrides: Partial<AgentRunInput> = {}): AgentRunInput {
     taskId: 'task-1',
     taskPrompt: 'Build a hello world function',
     projectId: 'test-project',
+    baseBranch: 'main',
     ...overrides,
   };
 }

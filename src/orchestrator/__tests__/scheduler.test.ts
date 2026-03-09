@@ -44,6 +44,7 @@ function makeAgent(overrides: Partial<AgentDefinition> & { name: string }): Agen
 
 const defaultConfig: OrchestratorConfig = {
   projectId: 'test',
+  baseBranch: 'main',
   maxConcurrentAgents: 5,
   maxPendingTasks: 50,
   roleCaps: { implementation: 3, testing: 1 },

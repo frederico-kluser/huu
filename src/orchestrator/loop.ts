@@ -46,6 +46,7 @@ import { buildContextPack, renderContextPack } from './retrieval-jit.js';
 
 export const DEFAULT_CONFIG: OrchestratorConfig = {
   projectId: 'default',
+  baseBranch: 'main',
   maxConcurrentAgents: 5,
   maxPendingTasks: 50,
   roleCaps: { builder: 3, tester: 2, reviewer: 1 },
@@ -470,7 +471,7 @@ export class OrchestratorLoop {
             this.deps.mergeManager.enqueue({
               source_branch: `huu-agent/${agentRunId}`,
               source_head_sha: payload['commitSha'] as string,
-              target_branch: 'main',
+              target_branch: this.config.baseBranch,
               request_id: `task-${taskId}-${agentRunId}`,
             });
 
@@ -808,6 +809,7 @@ export class OrchestratorLoop {
         taskId: task.id,
         taskPrompt,
         projectId: this.state.projectId,
+        baseBranch: this.config.baseBranch,
         parentSignal,
         keepWorktree: true, // Keep worktree for merge
       },

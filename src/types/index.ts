@@ -330,6 +330,7 @@ export interface AgentSlot {
 
 export interface OrchestratorConfig {
   projectId: string;
+  baseBranch: string;
   maxConcurrentAgents: number;
   maxPendingTasks: number;
   roleCaps: Record<string, number>;

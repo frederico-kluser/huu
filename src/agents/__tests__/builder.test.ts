@@ -21,6 +21,7 @@ function builderInput(overrides: Partial<AgentRunInput> = {}): AgentRunInput {
     taskId: 'task-builder-1',
     taskPrompt: 'Add function sum(a, b) that returns a + b in src/math.ts',
     projectId: 'test-project',
+    baseBranch: 'main',
     ...overrides,
   };
 }

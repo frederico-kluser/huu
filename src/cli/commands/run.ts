@@ -8,6 +8,7 @@ import { MergeQueueRepository } from '../../db/repositories/merge-queue.js';
 import { MergeResultsRepository } from '../../db/repositories/merge-results.js';
 import { WorktreeManager } from '../../git/WorktreeManager.js';
 import { MergeManager } from '../../git/MergeManager.js';
+import { detectDefaultBranch } from '../../git/default-branch.js';
 import { spawnAgent } from '../../agents/runtime.js';
 import { createDefaultRegistry } from '../../agents/tools.js';
 import { builderAgent } from '../../agents/definitions/builder.js';
@@ -81,7 +82,8 @@ export async function runSingleAgentTask(
     const mergeQueueRepo = new MergeQueueRepository(db);
     const mergeResultsRepo = new MergeResultsRepository(db);
 
-    printSuccess('Infrastructure ready');
+    const defaultBranch = await detectDefaultBranch(worktreeManager.getRootGit());
+    printSuccess(`Infrastructure ready (branch: ${defaultBranch})`);
 
     // 2. Spawn builder agent
     printEvent('agent', `Spawning builder agent for task`, taskId.slice(0, 8));
@@ -93,7 +95,7 @@ export async function runSingleAgentTask(
         taskId,
         taskPrompt: options.taskDescription,
         projectId: PROJECT_ID,
-        baseBranch: 'main',
+        baseBranch: defaultBranch,
         keepWorktree: false, // branch is preserved for merge
       },
       {
@@ -165,7 +167,7 @@ export async function runSingleAgentTask(
     mergeManager.enqueue({
       source_branch: sourceBranch,
       source_head_sha: agentResult.commitSha,
-      target_branch: 'main',
+      target_branch: defaultBranch,
       request_id: `run-${runId}`,
     });
 

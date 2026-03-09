@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import type { WorktreeManager } from '../git/WorktreeManager.js';
+import { detectDefaultBranch } from '../git/default-branch.js';
 import type { MessageQueue } from '../db/queue.js';
 import type { AuditLogRepository } from '../db/repositories/audit-log.js';
 import type { AgentRunInput, AgentRunResult, FileChangeSummary, RunState, RunUsage } from './types.js';
@@ -78,9 +79,11 @@ export async function spawnAgent(
     });
 
     // Create isolated worktree
+    const baseBranch = input.baseBranch
+      ?? await detectDefaultBranch(deps.worktreeManager.getRootGit());
     const worktree = await deps.worktreeManager.create(
       runId,
-      input.baseBranch ?? 'main',
+      baseBranch,
     );
     worktreePath = worktree.path;
 

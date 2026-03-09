@@ -1,3 +1,4 @@
+export { detectDefaultBranch } from './default-branch.js';
 export { WorktreeManager, WorktreeError, parseWorktreePorcelain } from './WorktreeManager.js';
 export { MergeManager, MergeError } from './MergeManager.js';
 export type {
