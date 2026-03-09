@@ -26,19 +26,37 @@ function formatCost(usd: number): string {
   return `$${usd.toFixed(2)}`;
 }
 
+const COLUMN_STATUS_ICON: Record<string, string> = {
+  backlog: '\u25CB',   // empty circle
+  running: '\u25B6',   // play
+  review: '\u25CF',    // filled circle
+  done: '\u2714',      // check
+  failed: '\u2716',    // x
+};
+
+const COLUMN_COLORS: Record<string, string> = {
+  backlog: 'gray',
+  running: 'yellow',
+  review: 'blue',
+  done: 'green',
+  failed: 'red',
+};
+
 export function Card({
   task,
   isSelected,
   density,
 }: CardProps): React.JSX.Element {
-  const borderStyle = isSelected ? ('bold' as const) : ('single' as const);
-  const colorProps = isSelected ? { borderColor: 'cyan' as const } : {};
+  const borderStyle = isSelected ? ('bold' as const) : ('round' as const);
+  const borderColor = isSelected ? 'cyan' : (COLUMN_COLORS[task.column] ?? 'gray');
+  const statusIcon = COLUMN_STATUS_ICON[task.column] ?? '\u25CB';
 
   if (density === 'compact') {
     return (
-      <Box borderStyle={borderStyle} {...colorProps}>
-        <Text wrap="truncate">
-          {task.id} {task.name}
+      <Box borderStyle={borderStyle} borderColor={borderColor} paddingX={1}>
+        <Text color={borderColor}>{statusIcon} </Text>
+        <Text wrap="truncate" bold={isSelected}>
+          {task.name}
         </Text>
       </Box>
     );
@@ -48,17 +66,19 @@ export function Card({
     <Box
       flexDirection="column"
       borderStyle={borderStyle}
-      {...colorProps}
+      borderColor={borderColor}
       paddingX={1}
     >
-      <Text bold wrap="truncate">
-        {task.id} {task.name}
-      </Text>
       <Box>
-        <Text dimColor>
-          {task.agent} {task.model}
+        <Text color={borderColor}>{statusIcon} </Text>
+        <Text bold wrap="truncate">
+          {task.name}
         </Text>
-        <Text> {formatElapsed(task.elapsedMs)} </Text>
+      </Box>
+      <Box gap={1}>
+        <Text color="magenta">{task.agent}</Text>
+        <Text dimColor>{task.model}</Text>
+        <Text color="yellow">{formatElapsed(task.elapsedMs)}</Text>
         <Text color="green">{formatCost(task.costUsd)}</Text>
       </Box>
     </Box>

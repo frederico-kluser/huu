@@ -14,6 +14,8 @@ import {
 } from './errors.js';
 import { Logger, getLogger, setGlobalLogger, resolveVerbosity } from './logger.js';
 import type { VerbosityLevel } from './errors.js';
+import { huuDirExists, configExists } from './config.js';
+import { renderSetupWizard } from './render.js';
 
 const program = new Command();
 
@@ -49,6 +51,29 @@ program
     setGlobalLogger(new Logger(level));
   });
 
+// ── Setup check (first-run experience) ──────────────────────────────
+
+async function checkFirstRun(): Promise<void> {
+  const cwd = process.cwd();
+  const hasApiKey = Boolean(process.env['ANTHROPIC_API_KEY']);
+  const hasInit = huuDirExists(cwd) && configExists(cwd);
+
+  // If API key is missing or project not initialized, show setup wizard
+  if (!hasApiKey || !hasInit) {
+    const result = await renderSetupWizard({ hasApiKey, hasInit });
+
+    // Set API key in environment for this session if provided
+    if (result.apiKey) {
+      process.env['ANTHROPIC_API_KEY'] = result.apiKey;
+    }
+
+    // Run init if project wasn't initialized
+    if (!hasInit) {
+      await initAction({ yes: true });
+    }
+  }
+}
+
 // ── Commands ─────────────────────────────────────────────────────────
 
 program
@@ -68,29 +93,23 @@ program
     }
 
     if (opts.dryRun) {
-      // Dry-run mode: show preview without execution
       const log = getLogger();
       log.info(
         'Dry-run mode — generating plan preview without execution.',
       );
-      log.info(
-        'Note: Full dry-run requires the Beat Sheet Engine (2.1) decomposition. Showing plan structure.',
-      );
       log.divider();
       log.keyValue('Task', trimmed);
       log.keyValue('Mode', 'dry-run (no side effects)');
-      log.info(
-        'To execute with the full decomposition pipeline, run without --dry-run.',
-      );
       return;
     }
 
+    // Auto-init and API key check happen inside runAction now
     await runAction(trimmed);
   });
 
 program
   .command('status')
-  .description('Show current single-agent execution status')
+  .description('Show current execution status')
   .action(async () => {
     await statusAction();
   });
@@ -104,11 +123,21 @@ program
   .option('--dry-run', 'show plan only, no side effects')
   .action(
     async (opts: Record<string, unknown>) => {
+      const nonInteractive = opts['nonInteractive'] === true;
+      const yes = opts['yes'] === true;
+      const dryRun = opts['dryRun'] === true;
+
+      if (!nonInteractive && !yes && !dryRun) {
+        // Interactive init: use setup wizard
+        await checkFirstRun();
+        return;
+      }
+
       await initAction({
-        yes: opts['yes'] === true,
-        nonInteractive: opts['nonInteractive'] === true,
+        yes,
+        nonInteractive,
         force: opts['force'] === true,
-        dryRun: opts['dryRun'] === true,
+        dryRun,
       });
     },
   );
@@ -136,6 +165,23 @@ program
       });
     },
   );
+
+// ── Default command (no subcommand) — show setup or dashboard ────────
+
+program
+  .command('dashboard', { isDefault: true })
+  .description('Launch the interactive TUI dashboard')
+  .action(async () => {
+    await checkFirstRun();
+
+    // Launch the dashboard TUI
+    const React = await import('react');
+    const { render } = await import('ink');
+    const { default: App } = await import('../tui/App.js');
+
+    const instance = render(React.createElement(App));
+    await instance.waitUntilExit().catch(() => {});
+  });
 
 // ── Unknown commands ─────────────────────────────────────────────────
 
