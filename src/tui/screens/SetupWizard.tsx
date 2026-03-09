@@ -149,9 +149,9 @@ export function SetupWizard({
     }
   }, [currentGroupIdx, currentRoleIdx, currentRole]);
 
-  // Permite pular configuração de modelos com 'd' para usar padrões
+  // Permite pular configuração de modelos com '!' para usar padrões
   useInput((input: string) => {
-    if (step === 'models' && input === 'd') {
+    if (step === 'models' && input === '!') {
       setAgentModels({ ...DEFAULT_AGENT_MODELS });
       setStep('initializing');
     }
@@ -388,7 +388,7 @@ export function SetupWizard({
 
         <Box marginTop={1}>
           <KeyHint bindings={[
-            { key: 'D', label: 'Usar todos os padrões' },
+            { key: '!', label: 'Usar todos os padrões' },
           ]} />
         </Box>
       </Box>
