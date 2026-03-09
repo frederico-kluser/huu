@@ -141,12 +141,12 @@ The human interface. Everything that was CLI-only becomes visual and interactive
 - [x] Keyboard navigation (arrow keys to select cards)
 - [x] Auto-refresh from SQLite polling
 
-### [ ] 3.2 Detail View [depends: (0.2,1.1,1.2,2.2,3.1)]
-- [ ] Live log streaming from agent execution
-- [ ] Diff preview (files changed by agent)
-- [ ] Metrics panel: tokens used, context %, cost, elapsed
-- [ ] Context usage bar (visual)
-- [ ] ESC to return to Kanban
+### [x] 3.2 Detail View [depends: (0.2,1.1,1.2,2.2,3.1)]
+- [x] Live log streaming from agent execution
+- [x] Diff preview (files changed by agent)
+- [x] Metrics panel: tokens used, context %, cost, elapsed
+- [x] Context usage bar (visual)
+- [x] ESC to return to Kanban
 
 ### [ ] 3.3 Human Intervention [depends: (0.2,0.3,1.1,1.3,2.2,3.1,3.2)]
 - [ ] `[S]teer` — send redirect message to running agent
@@ -232,8 +232,8 @@ The system learns and improves with every session.
 |-------|------|-----------|-----------------|----------|
 | 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 4/4 |
-| 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 4/5 |
-| 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 1/4 |
+| 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 5/5 |
+| 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 2/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |
 | 5 | Polish | Final Image (100%) | Production-ready | 0/4 |
 
