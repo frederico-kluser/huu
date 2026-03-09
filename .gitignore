@@ -7,3 +7,6 @@ coverage/
 *.db
 *.db-wal
 *.db-shm
+docs/api-site/
+docs/demo/*.gif
+docs/demo/*.mp4

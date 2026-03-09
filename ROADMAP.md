@@ -219,11 +219,11 @@ The system learns and improves with every session.
 - [x] SQLite query optimization for large histories
 - [x] Worktree reuse (recycle instead of create/destroy)
 
-### [ ] 5.4 Documentation [depends: (1.4,2.2,3.1,3.2,4.1,4.2,4.3)]
-- [ ] API documentation
-- [ ] Contributing guide
-- [ ] Examples: common workflows with expected output
-- [ ] Video demo
+### [x] 5.4 Documentation [depends: (1.4,2.2,3.1,3.2,4.1,4.2,4.3)]
+- [x] API documentation
+- [x] Contributing guide
+- [x] Examples: common workflows with expected output
+- [x] Video demo
 
 ---
 
@@ -236,7 +236,7 @@ The system learns and improves with every session.
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 5/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 4/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 4/4 |
-| 5 | Polish | Final Image (100%) | Production-ready | 3/4 |
+| 5 | Polish | Final Image (100%) | Production-ready | 4/4 |
 
 ---
 

@@ -1,21 +1,3 @@
 ultrathink
 
-faça a atividade @roadmap/3.3-human-intervention.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
-
-===
-
-ultrathink
-
-faça a atividade @roadmap/4.2-memory-and-learning.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
-
-===
-
-ultrathink
-
-faça a atividade @roadmap/4.3-audit-system.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
-
-===
-
-ultrathink
-
-faça a atividade @roadmap/5.3-performance.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
+faça a atividade @roadmap/5.4-documentation.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit

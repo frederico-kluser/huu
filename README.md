@@ -1,5 +1,10 @@
 # HUU
 
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B-green?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-1214%20passing-brightgreen)](./ROADMAP.md)
+
 A multi-agent orchestrator for software development that thinks like a **showrunner**.
 
 HUU decomposes complex tasks into a **narrative arc** (Beat Sheet), delegates to **11 specialized agents** running in isolated Git worktrees, and integrates their work through a **4-tier progressive merge** pipeline. All communication, memory, and audit logs live in a single **SQLite WAL** database. You control everything through an interactive **Kanban TUI** built with React Ink.
@@ -154,10 +159,31 @@ If all tiers fail → escalation to human via TUI.
 8. **Human-in-the-loop on demand** — steer/follow-up/abort always available
 9. **Simplicity first** — start simple, measure, scale with evidence
 
+## Quick Start
+
+```bash
+# Install
+git clone https://github.com/frederico-kluser/huu.git
+cd huu && npm install
+
+# Initialize in your project
+huu init
+
+# Run a task
+huu run "Add a health check endpoint"
+
+# Check status
+huu status
+```
+
 ## Documentation
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — full architectural manifest with all 12 decisions and rationale
 - [ROADMAP.md](./ROADMAP.md) — implementation phases and milestones
+- [CONTRIBUTING.md](./CONTRIBUTING.md) — setup, conventions, and PR workflow
+- [API Reference](./docs/api.md) — public API overview with examples
+- [Examples](./examples/) — common workflows with expected output
+- [Demo](./docs/demo/) — VHS tape for reproducible terminal demo
 
 ## License
 

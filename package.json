@@ -19,7 +19,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "check": "npm run typecheck && npm run test"
+    "check": "npm run typecheck && npm run test",
+    "docs:api": "typedoc",
+    "docs:api:check": "typedoc --logLevel Verbose"
   },
   "repository": {
     "type": "git",
@@ -39,6 +41,7 @@
     "@types/react": "^19.2.14",
     "@vitest/coverage-v8": "^4.0.18",
     "tsx": "^4.21.0",
+    "typedoc": "^0.28.17",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   },
