@@ -47,6 +47,7 @@ import { buildContextPack, renderContextPack } from './retrieval-jit.js';
 export const DEFAULT_CONFIG: OrchestratorConfig = {
   projectId: 'default',
   maxConcurrentAgents: 5,
+  maxPendingTasks: 50,
   roleCaps: { builder: 3, tester: 2, reviewer: 1 },
   pollIntervalActiveMs: 500,
   pollIntervalIdleMs: 2000,

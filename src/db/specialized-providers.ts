@@ -25,6 +25,9 @@ import type {
   BeatViewStatus,
   CheckpointView,
   CheckpointName,
+  CoordinationMetricsProvider,
+  CoordinationMetricsSnapshot,
+  OverheadLevel,
 } from '../tui/types.js';
 
 // ── Logs Provider ───────────────────────────────────────────────────
@@ -645,4 +648,138 @@ export class SqliteBeatSheetProvider implements BeatSheetDataProvider {
     }
     return statuses;
   }
+}
+
+// ── Coordination Metrics Provider ───────────────────────────────────
+
+function toOverheadLevel(ratio: number): OverheadLevel {
+  if (ratio < 0.25) return 'green';
+  if (ratio <= 0.40) return 'yellow';
+  return 'red';
+}
+
+export class SqliteCoordinationMetricsProvider implements CoordinationMetricsProvider {
+  private schedulerRunning = 0;
+  private schedulerPending = 0;
+  private schedulerSaturated = false;
+
+  constructor(
+    private readonly db: Database.Database,
+    private readonly sessionId: string,
+  ) {}
+
+  /** Update scheduler stats from the SchedulerQueue (called externally). */
+  updateSchedulerStats(running: number, pending: number, saturated: boolean): void {
+    this.schedulerRunning = running;
+    this.schedulerPending = pending;
+    this.schedulerSaturated = saturated;
+  }
+
+  getWatermark(): string {
+    try {
+      const row = this.db
+        .prepare(
+          `SELECT COALESCE(MAX(id), 0) || '|' || COUNT(*) AS wm
+           FROM task_runtime_metrics
+           WHERE session_id = ?`,
+        )
+        .get(this.sessionId) as { wm: string } | undefined;
+      return (row?.wm ?? '') + `|${this.schedulerRunning}|${this.schedulerPending}`;
+    } catch {
+      return '';
+    }
+  }
+
+  getSnapshot(): CoordinationMetricsSnapshot {
+    const empty: CoordinationMetricsSnapshot = {
+      coordinationMs: 0,
+      executionMs: 0,
+      ratio: 0,
+      level: 'green',
+      taskCount: 0,
+      p50QueueWaitMs: 0,
+      p95QueueWaitMs: 0,
+      avgMergeWaitMs: 0,
+      tasksPerSecond: 0,
+      schedulerRunning: this.schedulerRunning,
+      schedulerPending: this.schedulerPending,
+      schedulerSaturated: this.schedulerSaturated,
+      watermark: this.getWatermark(),
+    };
+
+    try {
+      const row = this.db
+        .prepare(
+          `SELECT
+            COALESCE(SUM(coordination_ms), 0) AS coordination_ms,
+            COALESCE(SUM(execution_ms), 0) AS execution_ms,
+            COUNT(*) AS task_count,
+            COALESCE(MIN(task_queued_at), 0) AS first_queued,
+            COALESCE(MAX(agent_done_at), 0) AS last_done
+          FROM task_runtime_metrics
+          WHERE session_id = ?`,
+        )
+        .get(this.sessionId) as {
+        coordination_ms: number;
+        execution_ms: number;
+        task_count: number;
+        first_queued: number;
+        last_done: number;
+      } | undefined;
+
+      if (!row || row.task_count === 0) return empty;
+
+      const total = row.coordination_ms + row.execution_ms;
+      const ratio = total > 0 ? row.coordination_ms / total : 0;
+      const roundedRatio = Math.round(ratio * 10000) / 10000;
+      const durationSec = row.last_done > row.first_queued
+        ? (row.last_done - row.first_queued) / 1000
+        : 1;
+
+      // Percentiles for queue wait
+      const queueWaits = this.db
+        .prepare(
+          `SELECT queue_wait_ms FROM task_runtime_metrics
+           WHERE session_id = ? AND queue_wait_ms IS NOT NULL
+           ORDER BY queue_wait_ms ASC`,
+        )
+        .all(this.sessionId) as Array<{ queue_wait_ms: number }>;
+
+      const values = queueWaits.map((r) => r.queue_wait_ms);
+      const p50 = percentileValue(values, 0.5);
+      const p95 = percentileValue(values, 0.95);
+
+      const mergeRow = this.db
+        .prepare(
+          `SELECT COALESCE(AVG(merge_wait_ms), 0) AS avg_mw
+           FROM task_runtime_metrics
+           WHERE session_id = ? AND merge_wait_ms IS NOT NULL`,
+        )
+        .get(this.sessionId) as { avg_mw: number };
+
+      return {
+        coordinationMs: row.coordination_ms,
+        executionMs: row.execution_ms,
+        ratio: roundedRatio,
+        level: toOverheadLevel(roundedRatio),
+        taskCount: row.task_count,
+        p50QueueWaitMs: p50,
+        p95QueueWaitMs: p95,
+        avgMergeWaitMs: Math.round(mergeRow.avg_mw),
+        tasksPerSecond: Math.round((row.task_count / durationSec) * 100) / 100,
+        schedulerRunning: this.schedulerRunning,
+        schedulerPending: this.schedulerPending,
+        schedulerSaturated: this.schedulerSaturated,
+        watermark: this.getWatermark(),
+      };
+    } catch {
+      return empty;
+    }
+  }
+}
+
+function percentileValue(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.ceil(p * sorted.length) - 1;
+  return sorted[Math.max(0, idx)]!;
 }

@@ -254,6 +254,31 @@ export interface BeatSheetDataProvider {
   getSnapshot(): BeatSheetSnapshot;
 }
 
+// ── Coordination metrics view ─────────────────────────────────────────
+
+export type OverheadLevel = 'green' | 'yellow' | 'red';
+
+export interface CoordinationMetricsSnapshot {
+  coordinationMs: number;
+  executionMs: number;
+  ratio: number;
+  level: OverheadLevel;
+  taskCount: number;
+  p50QueueWaitMs: number;
+  p95QueueWaitMs: number;
+  avgMergeWaitMs: number;
+  tasksPerSecond: number;
+  schedulerRunning: number;
+  schedulerPending: number;
+  schedulerSaturated: boolean;
+  watermark: string;
+}
+
+export interface CoordinationMetricsProvider {
+  getWatermark(): string;
+  getSnapshot(): CoordinationMetricsSnapshot;
+}
+
 // ── Layout density (responsive breakpoints) ─────────────────────────
 
 export type Density = 'compact' | 'normal' | 'wide';
