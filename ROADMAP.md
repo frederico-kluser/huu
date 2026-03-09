@@ -133,13 +133,13 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 
 The human interface. Everything that was CLI-only becomes visual and interactive.
 
-### [ ] 3.1 Kanban Board [depends: (0.2,2.1,2.2)]
-- [ ] Ink app shell with tab navigation (K/L/M/C/B)
-- [ ] 5-column Kanban: Backlog, Running, Review, Done, Failed
-- [ ] Card component: task ID, name, agent icon, model, elapsed time, cost
-- [ ] Header: current act, current beat, total cost
-- [ ] Keyboard navigation (arrow keys to select cards)
-- [ ] Auto-refresh from SQLite polling
+### [x] 3.1 Kanban Board [depends: (0.2,2.1,2.2)]
+- [x] Ink app shell with tab navigation (K/L/M/C/B)
+- [x] 5-column Kanban: Backlog, Running, Review, Done, Failed
+- [x] Card component: task ID, name, agent icon, model, elapsed time, cost
+- [x] Header: current act, current beat, total cost
+- [x] Keyboard navigation (arrow keys to select cards)
+- [x] Auto-refresh from SQLite polling
 
 ### [ ] 3.2 Detail View [depends: (0.2,1.1,1.2,2.2,3.1)]
 - [ ] Live log streaming from agent execution
@@ -233,7 +233,7 @@ The system learns and improves with every session.
 | 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 4/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 3/5 |
-| 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 0/4 |
+| 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 1/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |
 | 5 | Polish | Final Image (100%) | Production-ready | 0/4 |
 
