@@ -62,6 +62,77 @@ export type AgentRole =
   | 'debugger'
   | 'context-curator';
 
+// ── Agent Role Descriptions ──────────────────────────────────────────
+// Displayed in the Setup Wizard to explain what each agent does and
+// why the recommended model was chosen.
+
+export interface AgentRoleInfo {
+  /** Human-readable role name */
+  displayName: string;
+  /** Short description of what this agent does */
+  description: string;
+  /** Why the recommended model fits this role */
+  modelRationale: string;
+}
+
+export const AGENT_ROLE_INFO: Record<AgentRole, AgentRoleInfo> = {
+  orchestrator: {
+    displayName: 'Orchestrator',
+    description: 'Showrunner — decomposes tasks, delegates to agents, maintains project coherence.',
+    modelRationale: 'Needs extended thinking for complex reasoning. Prompt caching via API saves ~80% on recurring input. Sonnet 4.5 balances quality and cost for strategic decisions.',
+  },
+  planner: {
+    displayName: 'Planner',
+    description: 'Decomposes work into a hierarchical Beat Sheet — the fractal task structure.',
+    modelRationale: 'Thinking mode enables structured decomposition. MiniMax M2.5 "Architect Mode" is a strong fallback for planning tasks at 13x lower cost.',
+  },
+  builder: {
+    displayName: 'Builder',
+    description: 'Implements code in isolated Git worktrees. Handles the bulk of development work.',
+    modelRationale: 'Sonnet 4.6 leads SWE-Bench at 79.6% with 1M context. MiniMax M2.5 (80.2% SWE-Bench) is the best-value fallback for simpler features.',
+  },
+  tester: {
+    displayName: 'Tester',
+    description: 'Writes and validates tests using TDD methodology. Ensures code correctness.',
+    modelRationale: 'MiniMax M2.5 excels at tool calling (76.8% BFCL Multi-Turn vs Opus 63.3%). Test generation depends on robust sequential tool use — M2.5 reduces re-prompt rate by ~20%.',
+  },
+  reviewer: {
+    displayName: 'Reviewer',
+    description: 'Reviews code quality, validates against requirements. Low hallucination is critical.',
+    modelRationale: 'Opus 4.6 with 1M context can review entire codebases. API-direct for prompt caching. Low hallucination rate is essential for accurate reviews.',
+  },
+  researcher: {
+    displayName: 'Researcher',
+    description: 'Gathers context from the codebase and external sources via search.',
+    modelRationale: 'Gemini 2.5 Flash offers 1M context for extensive documentation with implicit caching. Cost-effective for high-volume search and context gathering.',
+  },
+  merger: {
+    displayName: 'Merger',
+    description: 'Resolves Git conflicts and executes merges across agent worktrees.',
+    modelRationale: 'GPT-4.1 with 1.05M context handles large diffs. Optimized for precision in patch application and conflict resolution.',
+  },
+  refactorer: {
+    displayName: 'Refactorer',
+    description: 'Cleanup, dead code removal, and mechanical code transformations.',
+    modelRationale: 'DeepSeek V3.2 at $0.25/$0.40 is ideal for mechanical transformations — 73% SWE-Bench at minimal cost with automatic 0.1x cache pricing.',
+  },
+  'doc-writer': {
+    displayName: 'Doc Writer',
+    description: 'Keeps documentation synchronized with code changes.',
+    modelRationale: 'Gemini 3.1 Flash Lite with thinking levels and 1M context. Better structured prose output than GPT-5 Mini at similar cost.',
+  },
+  debugger: {
+    displayName: 'Debugger',
+    description: 'Deep investigation of bugs with access to logs, traces, and the full codebase.',
+    modelRationale: 'Gemini 3.1 Pro leads Terminal-Bench 2.0 at 78.4%. 1M context for analyzing extensive logs and stack traces.',
+  },
+  'context-curator': {
+    displayName: 'Context Curator',
+    description: 'Post-activity memory curation — decides what knowledge persists in the scratchpad.',
+    modelRationale: 'Gemini 2.5 Flash Lite at $0.10/$0.40 is ultra-cheap with 1M context. Curation is filtering and summarizing — ideal for an economy model.',
+  },
+};
+
 // ── Model Catalog ────────────────────────────────────────────────────
 
 export const MODEL_CATALOG: ModelEntry[] = [
@@ -382,15 +453,25 @@ export function findModelById(id: string): ModelEntry | undefined {
 }
 
 /**
- * Format model info for display in TUI selection.
+ * Format model info for display in TUI selection with aligned columns.
  */
-export function formatModelOption(scored: CostBenefitScore): string {
+export function formatModelOption(scored: CostBenefitScore, defaultModelId?: string): string {
   const m = scored.model;
+  const isDefault = defaultModelId !== undefined && m.id === defaultModelId;
+  const star = isDefault ? '\u2605 ' : '  ';
+  const name = m.name.padEnd(22);
   const swe = m.benchmarks.sweBenchVerified !== null
-    ? `${m.benchmarks.sweBenchVerified}%`
-    : 'N/A';
-  const cost = `$${scored.blendedCostPerMTok.toFixed(2)}/MTok`;
-  return `${m.name} — SWE: ${swe} | ${cost} | CB: ${scored.label}`;
+    ? `${m.benchmarks.sweBenchVerified.toFixed(1)}%`.padStart(6)
+    : '  N/A '.padStart(6);
+  const cost = `$${scored.blendedCostPerMTok.toFixed(2)}`.padStart(6);
+  const ctx = formatContextWindow(m.contextWindow).padStart(5);
+  const cb = scored.label.padEnd(11);
+  return `${star}${name} ${swe}  ${cost}/MTok  ${ctx}  ${cb}`;
+}
+
+function formatContextWindow(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
+  return `${Math.round(tokens / 1000)}K`;
 }
 
 // ── Role Requirements ────────────────────────────────────────────────

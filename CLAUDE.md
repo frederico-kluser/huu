@@ -14,7 +14,7 @@ Human interface is a TUI Kanban built with React Ink.
 - **TUI:** React Ink 6.x
 - **Database:** better-sqlite3 (WAL mode)
 - **Git:** simple-git + `raw()` for worktree operations
-- **AI:** @anthropic-ai/sdk
+- **AI:** @anthropic-ai/sdk via OpenRouter (per-agent model routing)
 - **MCP:** @modelcontextprotocol/sdk
 - **Tests:** Vitest 4.x with v8 coverage
 
@@ -26,6 +26,7 @@ src/
   tui/            # React Ink components (UI layer)
   orchestrator/   # Showrunner loop
   agents/         # Agent runtimes and definitions
+  models/         # OpenRouter model catalog, pricing, and per-agent selection
   db/             # SQLite connection, schema, repositories
   git/            # WorktreeManager and Git operations
   types/          # Shared type contracts
@@ -75,3 +76,5 @@ test/             # Integration/smoke tests
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — 12 architectural decisions
 - [ROADMAP.md](./ROADMAP.md) — Implementation phases
+- [Model Catalog](./docs/models-llm-openrouter-deep.md) — OpenRouter model analysis and tiering
+- [Ink TUI Guide](./docs/ink-react-terminal-do-zero-ao-dashboard.md) — React Ink tutorial with setup wizard

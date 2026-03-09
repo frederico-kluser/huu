@@ -23,6 +23,7 @@ import {
   getModelsForRole,
   getDefaultModelForRole,
   formatModelOption,
+  AGENT_ROLE_INFO,
 } from '../../models/catalog.js';
 import type { AgentRole } from '../../models/catalog.js';
 import { DEFAULT_AGENT_MODELS } from '../../cli/config.js';
@@ -132,8 +133,9 @@ export function SetupWizard({
 
   // Get models for current role
   const modelsForRole = currentRole ? getModelsForRole(currentRole) : [];
+  const defaultModelId = currentRole ? getDefaultModelForRole(currentRole) : '';
   const modelOptions = modelsForRole.map((scored) => ({
-    label: formatModelOption(scored),
+    label: formatModelOption(scored, defaultModelId),
     value: scored.model.id,
   }));
 
@@ -326,7 +328,7 @@ export function SetupWizard({
     }
     completedRoles += currentRoleIdx;
 
-    const defaultModelId = currentRole ? getDefaultModelForRole(currentRole) : '';
+    const roleInfo = currentRole ? AGENT_ROLE_INFO[currentRole] : null;
 
     return (
       <Box flexDirection="column" paddingX={2} paddingY={1}>
@@ -335,7 +337,7 @@ export function SetupWizard({
 
         <Box marginTop={1}>
           <Panel
-            title={`Model Config: ${currentRole} (${completedRoles + 1}/${totalRoles})`}
+            title={`Model Config: ${roleInfo?.displayName ?? currentRole} (${completedRoles + 1}/${totalRoles})`}
             titleColor="magenta"
             borderColor="magenta"
           >
@@ -349,14 +351,37 @@ export function SetupWizard({
                 </Text>
               </Box>
 
-              <Text dimColor>
-                Choose model for <Text bold color="white">{currentRole}</Text> agent:
-              </Text>
-              <Text dimColor>
-                Models ranked by cost-benefit (SWE-Bench score / cost). {'\u2605'} = recommended.
-              </Text>
+              {/* Agent role explanation */}
+              {roleInfo && (
+                <Box flexDirection="column">
+                  <Text bold color="white">
+                    {roleInfo.displayName}
+                  </Text>
+                  <Text>
+                    {roleInfo.description}
+                  </Text>
+                  <Box marginTop={1}>
+                    <Text dimColor italic>
+                      {'\u{1F4A1}'} {roleInfo.modelRationale}
+                    </Text>
+                  </Box>
+                </Box>
+              )}
 
-              <Box marginTop={1}>
+              {/* Table header */}
+              <Box marginTop={1} flexDirection="column">
+                <Text dimColor>
+                  {'\u2605'} = recommended  |  Ranked by cost-benefit (SWE-Bench / cost)
+                </Text>
+                <Text dimColor bold>
+                  {'  '}{'Model'.padEnd(22)} {'SWE-B'.padStart(6)}  {'  Cost'.padStart(6)}{'/MTok'}  {'  Ctx'.padStart(5)}  {'Rating'}
+                </Text>
+                <Text dimColor>
+                  {'  '}{'─'.repeat(22)} {'─'.repeat(6)}  {'─'.repeat(11)}  {'─'.repeat(5)}  {'─'.repeat(11)}
+                </Text>
+              </Box>
+
+              <Box>
                 <SelectInput
                   items={modelOptions}
                   initialIndex={Math.max(0, modelOptions.findIndex((o) => o.value === defaultModelId))}
