@@ -1,9 +1,9 @@
 // First-run setup wizard:
 // 1. Show welcome screen with logo
-// 2. Check for ANTHROPIC_API_KEY
-// 3. Prompt for API key if missing
-// 4. Auto-initialize project if needed
-// 5. Show model configuration
+// 2. Check for OPENROUTER_API_KEY
+// 3. Prompt for API key if missing (validate format)
+// 4. Show model configuration with cost-benefit rankings
+// 5. Auto-initialize project if needed
 // 6. Confirm and proceed
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -16,6 +16,17 @@ import { Divider } from '../components/Divider.js';
 import { KeyHint } from '../components/KeyHint.js';
 import { Panel } from '../components/Panel.js';
 import { StatusBadge } from '../components/StatusBadge.js';
+import {
+  validateOpenRouterKey,
+} from '../../models/openrouter.js';
+import {
+  getModelsForRole,
+  getDefaultModelForRole,
+  formatModelOption,
+} from '../../models/catalog.js';
+import type { AgentRole } from '../../models/catalog.js';
+import { DEFAULT_AGENT_MODELS } from '../../cli/config.js';
+import type { AgentModelConfig } from '../../cli/config.js';
 
 type WizardStep = 'welcome' | 'api-key' | 'models' | 'initializing' | 'done';
 
@@ -31,30 +42,45 @@ export interface SetupResult {
   orchestratorModel: string;
   workerModel: string;
   supportModel: string;
+  agentModels: AgentModelConfig;
 }
 
-const MODEL_OPTIONS = [
-  { label: 'opus   — Best quality, higher cost ($15/MTok)', value: 'opus' },
-  { label: 'sonnet — Balanced quality and speed ($3/MTok)', value: 'sonnet' },
-  { label: 'haiku  — Fast and affordable ($0.80/MTok)', value: 'haiku' },
+// Agent roles grouped by tier for the wizard
+const WIZARD_AGENT_GROUPS = [
+  {
+    tier: 'Critical',
+    tierColor: 'red' as const,
+    description: 'Strategic decisions, review, debugging',
+    roles: ['orchestrator', 'reviewer', 'debugger'] as AgentRole[],
+  },
+  {
+    tier: 'Principal',
+    tierColor: 'yellow' as const,
+    description: 'Planning, building, testing, merging',
+    roles: ['planner', 'builder', 'tester', 'merger'] as AgentRole[],
+  },
+  {
+    tier: 'Economy',
+    tierColor: 'green' as const,
+    description: 'Research, refactoring, docs, context',
+    roles: ['researcher', 'refactorer', 'doc-writer', 'context-curator'] as AgentRole[],
+  },
 ];
 
 export function SetupWizard({
   hasApiKey,
   hasInit,
   onComplete,
-  onSkip,
 }: SetupWizardProps): React.JSX.Element {
   const { exit } = useApp();
 
-  const initialStep: WizardStep = hasApiKey ? (hasInit ? 'done' : 'initializing') : 'welcome';
+  const initialStep: WizardStep = hasApiKey ? (hasInit ? 'done' : 'models') : 'welcome';
   const [step, setStep] = useState<WizardStep>(initialStep);
   const [apiKey, setApiKey] = useState('');
   const [apiKeyError, setApiKeyError] = useState('');
-  const [orchModel, setOrchModel] = useState('opus');
-  const [workerModel, setWorkerModel] = useState('sonnet');
-  const [supportModel, setSupportModel] = useState('haiku');
-  const [modelStep, setModelStep] = useState<'orchestrator' | 'worker' | 'support'>('orchestrator');
+  const [agentModels, setAgentModels] = useState<AgentModelConfig>({ ...DEFAULT_AGENT_MODELS });
+  const [currentGroupIdx, setCurrentGroupIdx] = useState(0);
+  const [currentRoleIdx, setCurrentRoleIdx] = useState(0);
   const [initStatus, setInitStatus] = useState<'running' | 'done' | 'error'>('running');
   const [initMessage, setInitMessage] = useState('Creating .huu/ directory...');
 
@@ -69,17 +95,18 @@ export function SetupWizard({
       if (hasInit) {
         onComplete({
           apiKey: null,
-          orchestratorModel: orchModel,
-          workerModel,
-          supportModel,
+          orchestratorModel: 'opus',
+          workerModel: 'sonnet',
+          supportModel: 'haiku',
+          agentModels,
         });
       } else {
-        setStep('initializing');
+        setStep('models');
       }
     } else {
       setStep('api-key');
     }
-  }, [hasApiKey, hasInit, onComplete, orchModel, workerModel, supportModel]);
+  }, [hasApiKey, hasInit, onComplete, agentModels]);
 
   useInput((_input, key) => {
     if (key.return) {
@@ -89,12 +116,9 @@ export function SetupWizard({
 
   const handleApiKeySubmit = useCallback((value: string) => {
     const trimmed = value.trim();
-    if (!trimmed.startsWith('sk-ant-')) {
-      setApiKeyError('API key should start with "sk-ant-"');
-      return;
-    }
-    if (trimmed.length < 20) {
-      setApiKeyError('API key seems too short');
+    const validation = validateOpenRouterKey(trimmed);
+    if (!validation.valid) {
+      setApiKeyError(validation.error ?? 'Invalid API key');
       return;
     }
     setApiKeyError('');
@@ -102,18 +126,45 @@ export function SetupWizard({
     setStep('models');
   }, []);
 
+  // Get current role being configured
+  const currentGroup = WIZARD_AGENT_GROUPS[currentGroupIdx];
+  const currentRole = currentGroup?.roles[currentRoleIdx];
+
+  // Get models for current role
+  const modelsForRole = currentRole ? getModelsForRole(currentRole) : [];
+  const modelOptions = modelsForRole.map((scored) => ({
+    label: formatModelOption(scored),
+    value: scored.model.id,
+  }));
+
   const handleModelSelect = useCallback((item: { value: string }) => {
-    if (modelStep === 'orchestrator') {
-      setOrchModel(item.value);
-      setModelStep('worker');
-    } else if (modelStep === 'worker') {
-      setWorkerModel(item.value);
-      setModelStep('support');
+    if (!currentRole) return;
+
+    setAgentModels((prev) => ({
+      ...prev,
+      [currentRole]: item.value,
+    }));
+
+    // Move to next role
+    const group = WIZARD_AGENT_GROUPS[currentGroupIdx]!;
+    if (currentRoleIdx < group.roles.length - 1) {
+      setCurrentRoleIdx(currentRoleIdx + 1);
+    } else if (currentGroupIdx < WIZARD_AGENT_GROUPS.length - 1) {
+      setCurrentGroupIdx(currentGroupIdx + 1);
+      setCurrentRoleIdx(0);
     } else {
-      setSupportModel(item.value);
+      // All roles configured, proceed to init
       setStep('initializing');
     }
-  }, [modelStep]);
+  }, [currentGroupIdx, currentRoleIdx, currentRole]);
+
+  // Allow skipping model config with 'd' for defaults
+  useInput((input) => {
+    if (step === 'models' && input === 'd') {
+      setAgentModels({ ...DEFAULT_AGENT_MODELS });
+      setStep('initializing');
+    }
+  }, { isActive: step === 'models' });
 
   // Simulate initialization
   useEffect(() => {
@@ -139,9 +190,10 @@ export function SetupWizard({
             if (!cancelled) {
               onComplete({
                 apiKey: apiKey || null,
-                orchestratorModel: orchModel,
-                workerModel,
-                supportModel,
+                orchestratorModel: 'opus',
+                workerModel: 'sonnet',
+                supportModel: 'haiku',
+                agentModels,
               });
             }
           }, 800);
@@ -159,7 +211,7 @@ export function SetupWizard({
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [step, apiKey, orchModel, workerModel, supportModel, onComplete]);
+  }, [step, apiKey, agentModels, onComplete]);
 
   // ── Welcome step ──────────────────────────────────────────────────
   if (step === 'welcome') {
@@ -180,12 +232,15 @@ export function SetupWizard({
               <Text>
                 into a narrative arc and delegates to 11 specialized agents.
               </Text>
+              <Text dimColor>
+                Powered by OpenRouter — access 100+ models from one API key.
+              </Text>
 
               <Box marginTop={1} flexDirection="column">
                 <Box gap={1}>
                   <StatusBadge
                     variant={hasApiKey ? 'success' : 'warning'}
-                    label={hasApiKey ? 'API Key found (ANTHROPIC_API_KEY)' : 'API Key not found'}
+                    label={hasApiKey ? 'API Key found (OPENROUTER_API_KEY)' : 'OpenRouter API Key not found'}
                   />
                 </Box>
                 <Box gap={1}>
@@ -216,13 +271,13 @@ export function SetupWizard({
         <Divider />
 
         <Box marginTop={1}>
-          <Panel title="Anthropic API Key" titleColor="yellow" borderColor="yellow">
+          <Panel title="OpenRouter API Key" titleColor="yellow" borderColor="yellow">
             <Box flexDirection="column" gap={1} paddingY={1}>
               <Text>
-                HUU needs an Anthropic API key to communicate with Claude models.
+                HUU uses OpenRouter to access multiple AI models (Claude, GPT, Gemini, etc).
               </Text>
               <Text dimColor>
-                Get your key at: https://console.anthropic.com/settings/keys
+                Get your key at: https://openrouter.ai/keys
               </Text>
 
               <Box marginTop={1}>
@@ -231,7 +286,7 @@ export function SetupWizard({
                   value={apiKey}
                   onChange={(v) => { setApiKey(v); setApiKeyError(''); }}
                   onSubmit={handleApiKeySubmit}
-                  placeholder="sk-ant-api03-..."
+                  placeholder="sk-or-v1-..."
                   mask="*"
                 />
               </Box>
@@ -243,7 +298,10 @@ export function SetupWizard({
               )}
 
               <Text dimColor>
-                The key will be stored in .huu/config.json (add .huu/ to .gitignore)
+                The key is stored in environment only (not written to disk).
+              </Text>
+              <Text dimColor>
+                Set OPENROUTER_API_KEY in your shell profile for persistence.
               </Text>
             </Box>
           </Panel>
@@ -261,11 +319,14 @@ export function SetupWizard({
 
   // ── Model selection step ──────────────────────────────────────────
   if (step === 'models') {
-    const modelLabels: Record<string, string> = {
-      orchestrator: 'Orchestrator (decisions, planning, review)',
-      worker: 'Worker (building, testing, merging)',
-      support: 'Support (research, docs, cleanup)',
-    };
+    const totalRoles = WIZARD_AGENT_GROUPS.reduce((sum, g) => sum + g.roles.length, 0);
+    let completedRoles = 0;
+    for (let i = 0; i < currentGroupIdx; i++) {
+      completedRoles += WIZARD_AGENT_GROUPS[i]!.roles.length;
+    }
+    completedRoles += currentRoleIdx;
+
+    const defaultModelId = currentRole ? getDefaultModelForRole(currentRole) : '';
 
     return (
       <Box flexDirection="column" paddingX={2} paddingY={1}>
@@ -274,31 +335,46 @@ export function SetupWizard({
 
         <Box marginTop={1}>
           <Panel
-            title={`Model Tier: ${modelLabels[modelStep]}`}
+            title={`Model Config: ${currentRole} (${completedRoles + 1}/${totalRoles})`}
             titleColor="magenta"
             borderColor="magenta"
           >
             <Box flexDirection="column" gap={1} paddingY={1}>
+              <Box gap={2}>
+                <Text color={currentGroup?.tierColor ?? 'white'} bold>
+                  Tier: {currentGroup?.tier}
+                </Text>
+                <Text dimColor>
+                  {currentGroup?.description}
+                </Text>
+              </Box>
+
               <Text dimColor>
-                Choose the default Claude model for {modelStep} agents:
+                Choose model for <Text bold color="white">{currentRole}</Text> agent:
+              </Text>
+              <Text dimColor>
+                Models ranked by cost-benefit (SWE-Bench score / cost). {'\u2605'} = recommended.
               </Text>
 
               <Box marginTop={1}>
                 <SelectInput
-                  items={MODEL_OPTIONS}
+                  items={modelOptions}
+                  initialIndex={Math.max(0, modelOptions.findIndex((o) => o.value === defaultModelId))}
                   onSelect={handleModelSelect}
                 />
               </Box>
 
-              <Box marginTop={1} gap={2}>
-                <Text dimColor>Selected:</Text>
-                {modelStep !== 'orchestrator' && (
-                  <Text color="green">{'\u2714'} Orchestrator: {orchModel}</Text>
-                )}
-                {modelStep === 'support' && (
-                  <Text color="green">{'\u2714'} Worker: {workerModel}</Text>
-                )}
-              </Box>
+              {/* Show already configured models */}
+              {completedRoles > 0 && (
+                <Box marginTop={1} flexDirection="column">
+                  <Text dimColor bold>Configured:</Text>
+                  {WIZARD_AGENT_GROUPS.flatMap((g) => g.roles).slice(0, completedRoles).map((role) => (
+                    <Text key={role} dimColor>
+                      {'\u2714'} {role}: {agentModels[role as keyof AgentModelConfig]}
+                    </Text>
+                  ))}
+                </Box>
+              )}
             </Box>
           </Panel>
         </Box>
@@ -307,6 +383,7 @@ export function SetupWizard({
           <KeyHint bindings={[
             { key: '\u2191\u2193', label: 'Navigate' },
             { key: 'Enter', label: 'Select' },
+            { key: 'D', label: 'Use all defaults' },
           ]} />
         </Box>
       </Box>
@@ -338,6 +415,22 @@ export function SetupWizard({
                 <Text dimColor>Project directory: .huu/</Text>
                 <Text dimColor>Database: .huu/huu.db (WAL mode)</Text>
                 <Text dimColor>Config: .huu/config.json</Text>
+                <Text dimColor>Provider: OpenRouter (multi-model)</Text>
+              </Box>
+
+              {/* Summary of model selections */}
+              <Box marginTop={1} flexDirection="column">
+                <Text bold>Model Configuration:</Text>
+                {WIZARD_AGENT_GROUPS.map((group) => (
+                  <Box key={group.tier} flexDirection="column" marginTop={1}>
+                    <Text color={group.tierColor ?? 'white'} bold>{group.tier} Tier:</Text>
+                    {group.roles.map((role) => (
+                      <Text key={role} dimColor>
+                        {'\u2022'} {role}: {agentModels[role as keyof AgentModelConfig]}
+                      </Text>
+                    ))}
+                  </Box>
+                ))}
               </Box>
             </Box>
           </Panel>

@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 const SENSITIVE_KEYS = /^(api[_-]?key|token|password|secret|authorization|auth|credential|private[_-]?key|access[_-]?key|session[_-]?token|bearer|cookie)$/i;
 const SENSITIVE_VALUE_PATTERNS = [
   /^(sk|pk|rk|ak)[-_][a-zA-Z0-9]{20,}/,    // API key prefixes
+  /^sk-or-v1-[a-zA-Z0-9]{20,}/,             // OpenRouter API keys
   /^Bearer\s+\S+/i,                          // Bearer tokens
   /^Basic\s+\S+/i,                           // Basic auth
   /^ghp_[a-zA-Z0-9]{36}/,                    // GitHub tokens

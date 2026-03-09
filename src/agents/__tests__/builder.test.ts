@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
-import type Anthropic from '@anthropic-ai/sdk';
+import type OpenAI from 'openai';
 import { openDatabase } from '../../db/connection.js';
 import { migrate } from '../../db/migrator.js';
 import { MessageQueue } from '../../db/queue.js';
@@ -26,28 +26,39 @@ function builderInput(overrides: Partial<AgentRunInput> = {}): AgentRunInput {
   };
 }
 
-function makeMessage(
+/** Create a mock OpenAI chat completion response */
+function makeChatResponse(
   overrides: Partial<{
-    stop_reason: string;
-    content: Array<{
-      type: string;
-      text?: string;
-      name?: string;
-      id?: string;
-      input?: unknown;
+    finish_reason: string;
+    content: string | null;
+    tool_calls: Array<{
+      id: string;
+      type: 'function';
+      function: { name: string; arguments: string };
     }>;
-    usage: { input_tokens: number; output_tokens: number };
+    usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   }> = {},
 ) {
   return {
-    id: 'msg_test',
-    type: 'message',
-    role: 'assistant',
-    model: 'claude-sonnet-4-5-20250929',
-    stop_reason: 'end_turn',
-    content: [{ type: 'text', text: 'Done! Created sum function.' }],
-    usage: { input_tokens: 200, output_tokens: 100 },
-    ...overrides,
+    id: 'chatcmpl-test',
+    object: 'chat.completion',
+    model: 'anthropic/claude-sonnet-4',
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: overrides.content ?? 'Done! Created sum function.',
+          tool_calls: overrides.tool_calls ?? undefined,
+        },
+        finish_reason: overrides.finish_reason ?? 'stop',
+      },
+    ],
+    usage: overrides.usage ?? {
+      prompt_tokens: 200,
+      completion_tokens: 100,
+      total_tokens: 300,
+    },
   };
 }
 
@@ -84,19 +95,21 @@ function createMockWorktreeManager(): WorktreeManager {
 }
 
 function createMockClient(
-  responses: ReturnType<typeof makeMessage>[],
-): Anthropic {
+  responses: ReturnType<typeof makeChatResponse>[],
+): OpenAI {
   let callIndex = 0;
   return {
-    messages: {
-      create: vi.fn(async () => {
-        const response = responses[callIndex];
-        if (!response) throw new Error('No more mock responses');
-        callIndex++;
-        return response;
-      }),
+    chat: {
+      completions: {
+        create: vi.fn(async () => {
+          const response = responses[callIndex];
+          if (!response) throw new Error('No more mock responses');
+          callIndex++;
+          return response;
+        }),
+      },
     },
-  } as unknown as Anthropic;
+  } as unknown as OpenAI;
 }
 
 // ── Builder definition tests ─────────────────────────────────────────
@@ -170,7 +183,7 @@ describe('builder agent runtime', () => {
       queue,
       auditLog,
       toolRegistry: createDefaultRegistry(),
-      client: createMockClient([makeMessage()]),
+      client: createMockClient([makeChatResponse()]),
       ...overrides,
     };
   }
@@ -215,23 +228,23 @@ describe('builder agent runtime', () => {
 
   it('handles tool use loop with builder tools', async () => {
     const client = createMockClient([
-      makeMessage({
-        stop_reason: 'tool_use',
-        content: [
-          { type: 'text', text: 'Let me read the existing files.' },
+      makeChatResponse({
+        finish_reason: 'tool_calls',
+        content: 'Let me read the existing files.',
+        tool_calls: [
           {
-            type: 'tool_use',
-            id: 'toolu_001',
-            name: 'list_files',
-            input: { path: '.' },
+            id: 'call_001',
+            type: 'function',
+            function: {
+              name: 'list_files',
+              arguments: JSON.stringify({ path: '.' }),
+            },
           },
         ],
       }),
-      makeMessage({
-        stop_reason: 'end_turn',
-        content: [
-          { type: 'text', text: 'Created the sum function. Task complete.' },
-        ],
+      makeChatResponse({
+        finish_reason: 'stop',
+        content: 'Created the sum function. Task complete.',
       }),
     ]);
 
@@ -257,20 +270,22 @@ describe('builder agent runtime', () => {
     });
 
     const client = createMockClient([
-      makeMessage({
-        stop_reason: 'tool_use',
-        content: [
+      makeChatResponse({
+        finish_reason: 'tool_calls',
+        tool_calls: [
           {
-            type: 'tool_use',
-            id: 'toolu_003',
-            name: 'dangerous_tool',
-            input: {},
+            id: 'call_003',
+            type: 'function',
+            function: {
+              name: 'dangerous_tool',
+              arguments: JSON.stringify({}),
+            },
           },
         ],
       }),
-      makeMessage({
-        stop_reason: 'end_turn',
-        content: [{ type: 'text', text: 'Tool was rejected.' }],
+      makeChatResponse({
+        finish_reason: 'stop',
+        content: 'Tool was rejected.',
       }),
     ]);
 
@@ -291,10 +306,12 @@ describe('builder agent runtime', () => {
 
   it('returns empty fileChangeSummary on failure', async () => {
     const client = {
-      messages: {
-        create: vi.fn().mockRejectedValue(new Error('API error')),
+      chat: {
+        completions: {
+          create: vi.fn().mockRejectedValue(new Error('API error')),
+        },
       },
-    } as unknown as Anthropic;
+    } as unknown as OpenAI;
 
     const deps = makeDeps({ client });
     const result = await spawnAgent(builderInput(), deps);

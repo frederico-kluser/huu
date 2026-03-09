@@ -8,6 +8,7 @@ import type { TuiScreen } from '../tui/TuiApp.js';
 import type { SetupResult } from '../tui/screens/SetupWizard.js';
 import type { RunPhase, RunLogEntry, RunMetrics } from '../tui/screens/RunScreen.js';
 import type { StatusSnapshot } from './commands/status.js';
+import { DEFAULT_AGENT_MODELS } from './config.js';
 import type { HuuConfig } from './config.js';
 
 // ── Setup Wizard ────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ export async function renderSetupWizard(options: SetupOptions): Promise<SetupRes
         orchestratorModel: 'opus',
         workerModel: 'sonnet',
         supportModel: 'haiku',
+        agentModels: { ...DEFAULT_AGENT_MODELS },
       });
     });
   });

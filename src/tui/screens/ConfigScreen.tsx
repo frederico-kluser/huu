@@ -25,7 +25,7 @@ interface ConfigField {
   key: string;
   label: string;
   value: string | number;
-  type: 'number' | 'select';
+  type: 'number' | 'select' | 'model';
   options?: string[] | undefined;
   min?: number | undefined;
   max?: number | undefined;

@@ -1,7 +1,6 @@
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import type Anthropic from '@anthropic-ai/sdk';
 import type { AgentDefinition } from './types.js';
 import { effectiveTools } from './types.js';
 
@@ -24,10 +23,17 @@ export type ToolHandler = (
   ctx: ToolExecutionContext,
 ) => Promise<ToolResult>;
 
+/** JSON Schema object for tool input parameters. */
+export interface ToolInputSchema {
+  type: 'object';
+  properties: Record<string, unknown>;
+  required?: string[];
+}
+
 export interface ToolDefinition {
   name: string;
   description: string;
-  inputSchema: Anthropic.Tool['input_schema'];
+  inputSchema: ToolInputSchema;
   handler: ToolHandler;
 }
 
@@ -57,21 +63,18 @@ export class ToolRegistry {
   }
 
   /**
-   * Get Anthropic-compatible tool definitions filtered by agent policy.
+   * Get tool definitions filtered by agent policy, in a format
+   * suitable for conversion to OpenAI function-calling tools.
    * Applies allowlist (agent.tools) and denylist (agent.disallowedTools).
    */
-  getToolsForAgent(agent: AgentDefinition): Anthropic.Tool[] {
+  getToolsForAgent(agent: AgentDefinition): ToolDefinition[] {
     const allowed = effectiveTools(agent);
-    const result: Anthropic.Tool[] = [];
+    const result: ToolDefinition[] = [];
 
     for (const name of allowed) {
       const tool = this.tools.get(name);
       if (tool) {
-        result.push({
-          name: tool.name,
-          description: tool.description,
-          input_schema: tool.inputSchema,
-        });
+        result.push(tool);
       }
     }
 

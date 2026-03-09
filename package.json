@@ -57,6 +57,7 @@
     "ink-select-input": "^6.2.0",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
+    "openai": "^6.27.0",
     "picocolors": "^1.1.1",
     "react": "^19.2.4",
     "simple-git": "^3.32.3"

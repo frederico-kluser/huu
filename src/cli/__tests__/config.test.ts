@@ -32,7 +32,7 @@ describe('Config', () => {
   describe('createDefaultConfig', () => {
     it('should create a valid default config', () => {
       const config = createDefaultConfig();
-      expect(config.version).toBe(1);
+      expect(config.version).toBe(2);
       expect(config.projectRoot).toBe('.');
       expect(config.database.journalMode).toBe('WAL');
       expect(config.orchestrator.maxConcurrency).toBe(5);
