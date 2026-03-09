@@ -1,45 +1,21 @@
 ultrathink
 
-faça a atividade @roadmap/2.4-merge-workflow-tier-3-4.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
+faça a atividade @roadmap/3.3-human-intervention.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
 
 ===
 
 ultrathink
 
-faça a atividade @roadmap/2.5-context-curator-integration.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
+faça a atividade @roadmap/4.2-memory-and-learning.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
 
 ===
 
 ultrathink
 
-faça a atividade @roadmap/3.2-detail-view.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
+faça a atividade @roadmap/4.3-audit-system.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
 
 ===
 
 ultrathink
 
-faça a atividade @roadmap/3.4-specialized-views.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
-
-===
-
-ultrathink
-
-faça a atividade @roadmap/4.1-anti-hallucination-pipeline.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
-
-===
-
-ultrathink
-
-faça a atividade @roadmap/4.4-mcp-bridge.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
-
-===
-
-ultrathink
-
-faça a atividade @roadmap/5.1-developer-experience.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
-
-===
-
-ultrathink
-
-faça a atividade @roadmap/5.2-resilience.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
+faça a atividade @roadmap/5.3-performance.md do inicio ao fim e quando terminar atualize o @ROADMAP.md e faça git e commit
