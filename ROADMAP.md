@@ -206,11 +206,12 @@ The system learns and improves with every session.
 - [ ] `--verbose` and `--quiet` modes
 - [ ] `--dry-run` for beat sheet preview without execution
 
-### [ ] 5.2 Resilience [depends: (0.2,0.3,1.1,1.3,2.1,2.2)]
-- [ ] Crash recovery: resume from last SQLite checkpoint
-- [ ] Stale worktree detection and cleanup
-- [ ] Agent timeout with automatic retry
-- [ ] Graceful shutdown (finish current agents, merge completed work)
+### [x] 5.2 Resilience [depends: (0.2,0.3,1.1,1.3,2.1,2.2)]
+- [x] Crash recovery: resume from last SQLite checkpoint
+- [x] Stale worktree detection and cleanup
+- [x] Agent timeout with automatic retry
+- [x] Graceful shutdown (finish current agents, merge completed work)
+- [x] State machine recovery patterns for orchestrator
 
 ### [ ] 5.3 Performance [depends: (0.2,0.3,2.2,3.4,5.1)]
 - [ ] Agent concurrency cap (configurable, default 5)
@@ -235,7 +236,7 @@ The system learns and improves with every session.
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 3/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 1/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |
-| 5 | Polish | Final Image (100%) | Production-ready | 0/4 |
+| 5 | Polish | Final Image (100%) | Production-ready | 1/4 |
 
 ---
 
