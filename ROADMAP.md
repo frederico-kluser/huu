@@ -119,11 +119,11 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [ ] Conflict history tracking in SQLite (which files conflict frequently)
 - [ ] Human escalation path (pause queue, notify TUI)
 
-### [ ] 2.5 Context-Curator Integration [depends: (0.2,1.1,2.1,2.2,2.3)]
-- [ ] Post-activity hook: curator runs after every agent completes
-- [ ] Scratchpad update logic: what changed, what to add/remove from knowledge base
-- [ ] Strategic compact at beat sheet checkpoints
-- [ ] Retrieval just-in-time: load relevant context per agent, not everything
+### [x] 2.5 Context-Curator Integration [depends: (0.2,1.1,2.1,2.2,2.3)]
+- [x] Post-activity hook: curator runs after every agent completes
+- [x] Scratchpad update logic: what changed, what to add/remove from knowledge base
+- [x] Strategic compact at beat sheet checkpoints
+- [x] Retrieval just-in-time: load relevant context per agent, not everything
 
 **Checkpoint: All Is Lost (~75%)** — What's the biggest risk? Likely: context quality degradation over long sessions, or coordination overhead exceeding productivity gains. Measure and adapt.
 
@@ -232,7 +232,7 @@ The system learns and improves with every session.
 |-------|------|-----------|-----------------|----------|
 | 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 4/4 |
-| 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 3/5 |
+| 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 4/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 1/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |
 | 5 | Polish | Final Image (100%) | Production-ready | 0/4 |
