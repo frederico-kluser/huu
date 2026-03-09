@@ -119,11 +119,11 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [x] Conflict history tracking in SQLite (frequency, strategies, outcomes, confidence)
 - [x] Human escalation path (pause queue item, blocked_human state, operator actions)
 
-### [ ] 2.5 Context-Curator Integration [depends: (0.2,1.1,2.1,2.2,2.3)]
-- [ ] Post-activity hook: curator runs after every agent completes
-- [ ] Scratchpad update logic: what changed, what to add/remove from knowledge base
-- [ ] Strategic compact at beat sheet checkpoints
-- [ ] Retrieval just-in-time: load relevant context per agent, not everything
+### [x] 2.5 Context-Curator Integration [depends: (0.2,1.1,2.1,2.2,2.3)]
+- [x] Post-activity hook: curator runs after every agent completes
+- [x] Scratchpad update logic: what changed, what to add/remove from knowledge base
+- [x] Strategic compact at beat sheet checkpoints
+- [x] Retrieval just-in-time: load relevant context per agent, not everything
 
 **Checkpoint: All Is Lost (~75%)** — What's the biggest risk? Likely: context quality degradation over long sessions, or coordination overhead exceeding productivity gains. Measure and adapt.
 

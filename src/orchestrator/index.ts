@@ -130,3 +130,61 @@ export {
   DEFAULT_CONFIG,
   OrchestratorLoop,
 } from './loop.js';
+
+// ── Context Curator ──────────────────────────────────────────────
+export type {
+  TaskDoneEvent,
+  CurationResult,
+  TaskDelta,
+  DeltaItem,
+} from './curator.js';
+
+export {
+  onTaskDone,
+  buildTaskDelta,
+  classifyDelta,
+  CuratorStore,
+} from './curator.js';
+
+// ── Scratchpad ───────────────────────────────────────────────────
+export type {
+  Signal,
+  CurationDecision,
+  CuratedItem,
+  ApplyResult,
+} from './scratchpad.js';
+
+export {
+  computeKeepScore,
+  classify,
+  Scratchpad,
+} from './scratchpad.js';
+
+// ── Strategic Compact ────────────────────────────────────────────
+export type {
+  CompactTrigger,
+  CompactSnapshot,
+  CompactSummary,
+} from './strategic-compact.js';
+
+export {
+  CHECKPOINT_FOCUS,
+  CompactSnapshotStore,
+  buildCompactSummary,
+  partitionEntities,
+  strategicCompact,
+} from './strategic-compact.js';
+
+// ── Retrieval JIT ────────────────────────────────────────────────
+export type {
+  ContextPack,
+  ContextItem,
+  ContextReference,
+  RetrievalQuery,
+} from './retrieval-jit.js';
+
+export {
+  ROLE_TOKEN_BUDGETS,
+  buildContextPack,
+  renderContextPack,
+} from './retrieval-jit.js';

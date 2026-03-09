@@ -22,7 +22,9 @@ import { BeatSheetPersistence } from './beatsheet-persistence.js';
 import {
   evaluateAllCheckpoints,
   applyCheckpointResults,
+  getCurrentCheckpoint,
 } from './checkpoints.js';
+import type { CheckpointName } from './checkpoints.js';
 import { OrchestratorMonitor, parsePayload } from './monitor.js';
 import type { ClassifiedMessages } from './monitor.js';
 import { HealthChecker, computeLoopDelay, updateHeartbeat } from './health.js';
@@ -35,6 +37,10 @@ import type { SchedulerContext, TaskAssignment } from './scheduler.js';
 import { EscalationManager, determineAction, classifyEscalation } from './escalations.js';
 import type { MergeManager } from '../git/MergeManager.js';
 import type { MessageQueue } from '../db/queue.js';
+import { onTaskDone as curatorOnTaskDone } from './curator.js';
+import type { TaskDoneEvent } from './curator.js';
+import { strategicCompact } from './strategic-compact.js';
+import { buildContextPack, renderContextPack } from './retrieval-jit.js';
 
 // ── Default configuration ────────────────────────────────────────────
 
@@ -485,6 +491,31 @@ export class OrchestratorLoop {
             );
           }
         }
+
+        // ── Context Curator: post-activity hook ──────────────────
+        // Runs after every task_done to curate memory (idempotent).
+        try {
+          const curatorEvt: TaskDoneEvent = {
+            taskId,
+            agentId: msg.sender_agent,
+            runId: agentRunId ?? this.state.runId,
+            projectId: this.state.projectId,
+            summary: payload['summary'] as string | undefined,
+            commitSha: payload['commitSha'] as string | undefined,
+            filesChanged: payload['filesChanged'] as string[] | undefined,
+            fileChangeSummary: payload['changed_files'] as TaskDoneEvent['fileChangeSummary'],
+            usage: payload['usage'] as TaskDoneEvent['usage'],
+            durationMs: payload['durationMs'] as number | undefined,
+          };
+          await curatorOnTaskDone(this.deps.db, curatorEvt);
+        } catch (err) {
+          // Curator failure is non-fatal but auditable
+          this.emit('loop_error', {
+            source: 'curator',
+            taskId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     }
 
@@ -617,9 +648,30 @@ export class OrchestratorLoop {
     }
 
     // Evaluate checkpoints
+    const prevCheckpoint = getCurrentCheckpoint(this.beatSheet.checkpoints);
     const evaluations = evaluateAllCheckpoints(this.beatSheet);
     const newCheckpoints = applyCheckpointResults(evaluations);
     this.beatSheet.checkpoints = newCheckpoints;
+    const newCheckpoint = getCurrentCheckpoint(newCheckpoints);
+
+    // ── Strategic Compact at checkpoint transitions ───────────
+    // If we advanced past a checkpoint, trigger compaction.
+    if (prevCheckpoint && prevCheckpoint !== newCheckpoint) {
+      try {
+        strategicCompact(
+          this.deps.db,
+          this.state.projectId,
+          prevCheckpoint,
+          this.beatSheet,
+        );
+      } catch (err) {
+        this.emit('loop_error', {
+          source: 'strategic_compact',
+          checkpoint: prevCheckpoint,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
 
     // Persist updated beat sheet
     this.persistence.save(this.state.projectId, this.state.runId, this.beatSheet);
@@ -718,12 +770,36 @@ export class OrchestratorLoop {
       score: assignment.score,
     });
 
+    // ── Retrieval JIT: build context pack for this agent ───────
+    let scratchpadContext: string | undefined;
+    if (this.beatSheet) {
+      try {
+        const contextPack = buildContextPack(this.deps.db, {
+          projectId: this.state.projectId,
+          task,
+          agentRole: agent.role,
+          sheet: this.beatSheet,
+        });
+        if (contextPack.decisions.length > 0 || contextPack.risks.length > 0) {
+          scratchpadContext = renderContextPack(contextPack);
+        }
+      } catch {
+        // JIT retrieval failure is non-fatal
+      }
+    }
+
+    // Build task prompt with optional JIT context
+    let taskPrompt = `Task: ${task.title}\n\nAction: ${task.action}\n\nPrecondition: ${task.precondition}\n\nPostcondition: ${task.postcondition}\n\nVerification: ${task.verification}`;
+    if (scratchpadContext) {
+      taskPrompt = `<context>\n${scratchpadContext}\n</context>\n\n${taskPrompt}`;
+    }
+
     // Spawn agent asynchronously — don't await, let it run in background
     const spawnPromise = spawnAgent(
       {
         agent,
         taskId: task.id,
-        taskPrompt: `Task: ${task.title}\n\nAction: ${task.action}\n\nPrecondition: ${task.precondition}\n\nPostcondition: ${task.postcondition}\n\nVerification: ${task.verification}`,
+        taskPrompt,
         projectId: this.state.projectId,
         parentSignal,
         keepWorktree: true, // Keep worktree for merge
