@@ -64,19 +64,19 @@ HUU decomposes complex tasks into a **narrative arc** (Beat Sheet), delegates to
 
 ### The 11 Agents
 
-| Agent | Model | Role |
-|-------|-------|------|
-| `orchestrator` | Opus | Showrunner — decomposes, delegates, maintains coherence |
-| `planner` | Sonnet | Hierarchical Beat Sheet decomposition |
-| `builder` | Sonnet | Code implementation |
-| `tester` | Sonnet | TDD + test validation |
-| `reviewer` | Opus | Code review + quality verification |
-| `researcher` | Haiku | Search + context gathering |
-| `merger` | Sonnet | Conflict resolution + merge execution |
-| `refactorer` | Haiku | Cleanup + dead code removal |
-| `doc-writer` | Haiku | Documentation sync |
-| `debugger` | Opus | Deep bug investigation |
-| `context-curator` | Haiku | Post-activity memory curation |
+| Agent | Default Model | Role |
+|-------|---------------|------|
+| `orchestrator` | Claude Sonnet 4.5 | Showrunner — decomposes, delegates, maintains coherence |
+| `planner` | Claude Sonnet 4.5 | Hierarchical Beat Sheet decomposition |
+| `builder` | Claude Sonnet 4 | Code implementation |
+| `tester` | MiniMax M2.5 | TDD + test validation |
+| `reviewer` | Claude Opus 4 | Code review + quality verification |
+| `researcher` | Gemini 2.5 Flash | Search + context gathering |
+| `merger` | GPT-4.1 | Conflict resolution + merge execution |
+| `refactorer` | DeepSeek V3.2 | Cleanup + dead code removal |
+| `doc-writer` | Gemini 3.1 Flash Lite | Documentation sync |
+| `debugger` | Gemini 2.5 Pro | Deep bug investigation |
+| `context-curator` | Gemini 2.5 Flash Lite | Post-activity memory curation |
 
 ### Model Tiering (via OpenRouter)
 
@@ -88,7 +88,9 @@ HUU routes each agent through [OpenRouter](https://openrouter.ai/), selecting th
 | **Principal** | planner, builder, tester, merger | Sonnet 4.5/4.6, MiniMax M2.5, GPT-4.1 | $0.86–$11.40 |
 | **Economy** | researcher, refactorer, doc-writer, context-curator | Gemini Flash, DeepSeek V3.2, Flash Lite | $0.10–$2.50 |
 
-The Setup Wizard lets you choose models per agent with cost-benefit rankings and explanations.
+The Setup Wizard lets you choose models per agent with cost-benefit rankings, input/output pricing, and explanations. All 28 models from the catalog are available for every agent — recommended models appear first, with the rest accessible by scrolling. A text filter (`/`) makes it easy to search through models.
+
+You can also change agent models at runtime via the `G` hotkey from the main TUI.
 
 Estimated cost per feature: **~$0.20–$0.55** (depends on caching and model choices)
 
@@ -142,16 +144,20 @@ If all tiers fail → escalation to human via TUI.
 
 ## TUI Controls
 
+The TUI interface is in **Brazilian Portuguese (pt-BR)**.
+
 | Key | Action |
 |-----|--------|
 | `↑↓←→` | Navigate Kanban cards |
 | `Enter` | Open Detail View |
-| `Esc` | Back to Kanban |
+| `Esc` | Back to Kanban / Cancel |
+| `G` | Open agent model settings (guided flow) |
 | `S` | Steer agent (redirect now) |
 | `F` | Follow-up (queue for after current turn) |
 | `A` | Abort agent (discard worktree) |
 | `P` | Promote learning to instinct |
-| `K/L/M/C/B` | Switch tabs |
+| `K/L/M/C/B` | Switch tabs (Kanban, Logs, Merge, Custo, Beat Sheet) |
+| `/` | Text filter (in model/agent selection screens) |
 | `Q` | Quit |
 
 ## Guiding Principles

@@ -13,11 +13,11 @@ export const KANBAN_COLUMNS: readonly KanbanColumn[] = [
 ];
 
 export const COLUMN_LABELS: Record<KanbanColumn, string> = {
-  backlog: 'Backlog',
-  running: 'Running',
-  review: 'Review',
-  done: 'Done',
-  failed: 'Failed',
+  backlog: 'Pendente',
+  running: 'Executando',
+  review: 'Revisão',
+  done: 'Concluído',
+  failed: 'Falhou',
 };
 
 // ── Task data for Kanban cards ──────────────────────────────────────
@@ -74,8 +74,8 @@ export const TAB_BY_KEY: Record<string, AppTab> = {
 export const TAB_LABELS: Record<AppTab, string> = {
   kanban: '[K]anban',
   logs: '[L]ogs',
-  merge: '[M]erge Queue',
-  cost: '[C]ost',
+  merge: '[M]erge',
+  cost: '[C]usto',
   beat: '[B]eat Sheet',
 };
 

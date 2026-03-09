@@ -1,28 +1,25 @@
-// First-run setup wizard:
-// 1. Show welcome screen with logo
-// 2. Check for OPENROUTER_API_KEY
-// 3. Prompt for API key if missing (validate format)
-// 4. Show model configuration with cost-benefit rankings
-// 5. Auto-initialize project if needed
-// 6. Confirm and proceed
+// Assistente de configuração inicial:
+// 1. Mostra tela de boas-vindas com logo
+// 2. Verifica OPENROUTER_API_KEY
+// 3. Solicita chave API se ausente (valida formato)
+// 4. Mostra configuração de modelos com rankings custo-benefício
+// 5. Auto-inicializa projeto se necessário
+// 6. Confirma e prossegue
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import TextInput from 'ink-text-input';
-import SelectInput from 'ink-select-input';
 import Spinner from 'ink-spinner';
 import { Logo } from '../components/Logo.js';
 import { Divider } from '../components/Divider.js';
 import { KeyHint } from '../components/KeyHint.js';
 import { Panel } from '../components/Panel.js';
 import { StatusBadge } from '../components/StatusBadge.js';
+import { ModelSelector } from '../components/ModelSelector.js';
 import {
   validateOpenRouterKey,
 } from '../../models/openrouter.js';
 import {
-  getModelsForRole,
-  getDefaultModelForRole,
-  formatModelOption,
   AGENT_ROLE_INFO,
 } from '../../models/catalog.js';
 import type { AgentRole } from '../../models/catalog.js';
@@ -46,24 +43,24 @@ export interface SetupResult {
   agentModels: AgentModelConfig;
 }
 
-// Agent roles grouped by tier for the wizard
+// Grupos de agentes por tier para o assistente
 const WIZARD_AGENT_GROUPS = [
   {
-    tier: 'Critical',
+    tier: 'Crítico',
     tierColor: 'red' as const,
-    description: 'Strategic decisions, review, debugging',
+    description: 'Decisões estratégicas, revisão, depuração',
     roles: ['orchestrator', 'reviewer', 'debugger'] as AgentRole[],
   },
   {
     tier: 'Principal',
     tierColor: 'yellow' as const,
-    description: 'Planning, building, testing, merging',
+    description: 'Planejamento, construção, testes, integração',
     roles: ['planner', 'builder', 'tester', 'merger'] as AgentRole[],
   },
   {
-    tier: 'Economy',
+    tier: 'Econômico',
     tierColor: 'green' as const,
-    description: 'Research, refactoring, docs, context',
+    description: 'Pesquisa, refatoração, documentação, contexto',
     roles: ['researcher', 'refactorer', 'doc-writer', 'context-curator'] as AgentRole[],
   },
 ];
@@ -83,9 +80,9 @@ export function SetupWizard({
   const [currentGroupIdx, setCurrentGroupIdx] = useState(0);
   const [currentRoleIdx, setCurrentRoleIdx] = useState(0);
   const [initStatus, setInitStatus] = useState<'running' | 'done' | 'error'>('running');
-  const [initMessage, setInitMessage] = useState('Creating .huu/ directory...');
+  const [initMessage, setInitMessage] = useState('Criando diretório .huu/...');
 
-  useInput((input, key) => {
+  useInput((input: string, key: { escape: boolean }) => {
     if (key.escape || input === 'q') {
       exit();
     }
@@ -109,7 +106,7 @@ export function SetupWizard({
     }
   }, [hasApiKey, hasInit, onComplete, agentModels]);
 
-  useInput((_input, key) => {
+  useInput((_input: string, key: { return: boolean }) => {
     if (key.return) {
       handleWelcomeContinue();
     }
@@ -119,7 +116,7 @@ export function SetupWizard({
     const trimmed = value.trim();
     const validation = validateOpenRouterKey(trimmed);
     if (!validation.valid) {
-      setApiKeyError(validation.error ?? 'Invalid API key');
+      setApiKeyError(validation.error ?? 'Chave API inválida');
       return;
     }
     setApiKeyError('');
@@ -127,27 +124,19 @@ export function SetupWizard({
     setStep('models');
   }, []);
 
-  // Get current role being configured
+  // Papel atual sendo configurado
   const currentGroup = WIZARD_AGENT_GROUPS[currentGroupIdx];
   const currentRole = currentGroup?.roles[currentRoleIdx];
 
-  // Get models for current role
-  const modelsForRole = currentRole ? getModelsForRole(currentRole) : [];
-  const defaultModelId = currentRole ? getDefaultModelForRole(currentRole) : '';
-  const modelOptions = modelsForRole.map((scored) => ({
-    label: formatModelOption(scored, defaultModelId),
-    value: scored.model.id,
-  }));
-
-  const handleModelSelect = useCallback((item: { value: string }) => {
+  const handleModelSelect = useCallback((modelId: string) => {
     if (!currentRole) return;
 
-    setAgentModels((prev) => ({
+    setAgentModels((prev: AgentModelConfig) => ({
       ...prev,
-      [currentRole]: item.value,
+      [currentRole]: modelId,
     }));
 
-    // Move to next role
+    // Avança para o próximo papel
     const group = WIZARD_AGENT_GROUPS[currentGroupIdx]!;
     if (currentRoleIdx < group.roles.length - 1) {
       setCurrentRoleIdx(currentRoleIdx + 1);
@@ -155,39 +144,39 @@ export function SetupWizard({
       setCurrentGroupIdx(currentGroupIdx + 1);
       setCurrentRoleIdx(0);
     } else {
-      // All roles configured, proceed to init
+      // Todos os papéis configurados, prossegue para inicialização
       setStep('initializing');
     }
   }, [currentGroupIdx, currentRoleIdx, currentRole]);
 
-  // Allow skipping model config with 'd' for defaults
-  useInput((input) => {
+  // Permite pular configuração de modelos com 'd' para usar padrões
+  useInput((input: string) => {
     if (step === 'models' && input === 'd') {
       setAgentModels({ ...DEFAULT_AGENT_MODELS });
       setStep('initializing');
     }
   }, { isActive: step === 'models' });
 
-  // Simulate initialization
+  // Simula inicialização
   useEffect(() => {
     if (step !== 'initializing') return;
 
     const steps = [
-      { msg: 'Creating .huu/ directory...', delay: 400 },
-      { msg: 'Initializing SQLite database (WAL mode)...', delay: 600 },
-      { msg: 'Running schema migrations...', delay: 500 },
-      { msg: 'Writing configuration...', delay: 300 },
-      { msg: 'Project initialized!', delay: 200 },
+      { msg: 'Criando diretório .huu/...', delay: 400 },
+      { msg: 'Inicializando banco SQLite (modo WAL)...', delay: 600 },
+      { msg: 'Executando migrações de schema...', delay: 500 },
+      { msg: 'Gravando configuração...', delay: 300 },
+      { msg: 'Projeto inicializado!', delay: 200 },
     ];
 
     let cancelled = false;
-    let timeout: NodeJS.Timeout;
+    let timeout: ReturnType<typeof setTimeout>;
 
     const runStep = (idx: number) => {
       if (cancelled || idx >= steps.length) {
         if (!cancelled) {
           setInitStatus('done');
-          setInitMessage('Project initialized successfully!');
+          setInitMessage('Projeto inicializado com sucesso!');
           setTimeout(() => {
             if (!cancelled) {
               onComplete({
@@ -215,7 +204,7 @@ export function SetupWizard({
     };
   }, [step, apiKey, agentModels, onComplete]);
 
-  // ── Welcome step ──────────────────────────────────────────────────
+  // ── Etapa Boas-vindas ──────────────────────────────────────────────
   if (step === 'welcome') {
     return (
       <Box flexDirection="column" paddingX={2} paddingY={1}>
@@ -226,29 +215,29 @@ export function SetupWizard({
         </Box>
 
         <Box marginTop={1} flexDirection="column" gap={1}>
-          <Panel title="Welcome" titleColor="cyan" borderColor="cyan">
+          <Panel title="Bem-vindo" titleColor="cyan" borderColor="cyan">
             <Box flexDirection="column" gap={1} paddingY={1}>
               <Text>
-                HUU is a multi-agent orchestrator that decomposes complex tasks
+                HUU é um orquestrador multi-agente que decompõe tarefas complexas
               </Text>
               <Text>
-                into a narrative arc and delegates to 11 specialized agents.
+                em um arco narrativo e delega para 11 agentes especializados.
               </Text>
               <Text dimColor>
-                Powered by OpenRouter — access 100+ models from one API key.
+                Alimentado por OpenRouter — acesse 100+ modelos com uma única chave API.
               </Text>
 
               <Box marginTop={1} flexDirection="column">
                 <Box gap={1}>
                   <StatusBadge
                     variant={hasApiKey ? 'success' : 'warning'}
-                    label={hasApiKey ? 'API Key found (OPENROUTER_API_KEY)' : 'OpenRouter API Key not found'}
+                    label={hasApiKey ? 'Chave API encontrada (OPENROUTER_API_KEY)' : 'Chave API OpenRouter não encontrada'}
                   />
                 </Box>
                 <Box gap={1}>
                   <StatusBadge
                     variant={hasInit ? 'success' : 'info'}
-                    label={hasInit ? 'Project initialized (.huu/)' : 'Project needs initialization'}
+                    label={hasInit ? 'Projeto inicializado (.huu/)' : 'Projeto precisa de inicialização'}
                   />
                 </Box>
               </Box>
@@ -257,15 +246,15 @@ export function SetupWizard({
         </Box>
 
         <Box marginTop={1} justifyContent="center">
-          <Text color="cyan" bold>Press Enter to continue</Text>
+          <Text color="cyan" bold>Pressione Enter para continuar</Text>
           <Text dimColor>  |  </Text>
-          <Text dimColor>Q to quit</Text>
+          <Text dimColor>Q para sair</Text>
         </Box>
       </Box>
     );
   }
 
-  // ── API Key step ──────────────────────────────────────────────────
+  // ── Etapa Chave API ────────────────────────────────────────────────
   if (step === 'api-key') {
     return (
       <Box flexDirection="column" paddingX={2} paddingY={1}>
@@ -273,20 +262,20 @@ export function SetupWizard({
         <Divider />
 
         <Box marginTop={1}>
-          <Panel title="OpenRouter API Key" titleColor="yellow" borderColor="yellow">
+          <Panel title="Chave API OpenRouter" titleColor="yellow" borderColor="yellow">
             <Box flexDirection="column" gap={1} paddingY={1}>
               <Text>
-                HUU uses OpenRouter to access multiple AI models (Claude, GPT, Gemini, etc).
+                HUU usa OpenRouter para acessar múltiplos modelos de IA (Claude, GPT, Gemini, etc).
               </Text>
               <Text dimColor>
-                Get your key at: https://openrouter.ai/keys
+                Obtenha sua chave em: https://openrouter.ai/keys
               </Text>
 
               <Box marginTop={1}>
                 <Text bold color="cyan">{'\u276F'} </Text>
                 <TextInput
                   value={apiKey}
-                  onChange={(v) => { setApiKey(v); setApiKeyError(''); }}
+                  onChange={(v: string) => { setApiKey(v); setApiKeyError(''); }}
                   onSubmit={handleApiKeySubmit}
                   placeholder="sk-or-v1-..."
                   mask="*"
@@ -300,10 +289,10 @@ export function SetupWizard({
               )}
 
               <Text dimColor>
-                The key is stored in environment only (not written to disk).
+                A chave é armazenada apenas em variável de ambiente (não é gravada em disco).
               </Text>
               <Text dimColor>
-                Set OPENROUTER_API_KEY in your shell profile for persistence.
+                Defina OPENROUTER_API_KEY no perfil do seu shell para persistência.
               </Text>
             </Box>
           </Panel>
@@ -311,15 +300,15 @@ export function SetupWizard({
 
         <Box marginTop={1}>
           <KeyHint bindings={[
-            { key: 'Enter', label: 'Submit' },
-            { key: 'Esc', label: 'Skip (use env var later)' },
+            { key: 'Enter', label: 'Enviar' },
+            { key: 'Esc', label: 'Pular (usar variável de ambiente depois)' },
           ]} />
         </Box>
       </Box>
     );
   }
 
-  // ── Model selection step ──────────────────────────────────────────
+  // ── Etapa Seleção de Modelos ──────────────────────────────────────
   if (step === 'models') {
     const totalRoles = WIZARD_AGENT_GROUPS.reduce((sum, g) => sum + g.roles.length, 0);
     let completedRoles = 0;
@@ -337,7 +326,7 @@ export function SetupWizard({
 
         <Box marginTop={1}>
           <Panel
-            title={`Model Config: ${roleInfo?.displayName ?? currentRole} (${completedRoles + 1}/${totalRoles})`}
+            title={`Configuração de Modelo: ${roleInfo?.displayName ?? currentRole} (${completedRoles + 1}/${totalRoles})`}
             titleColor="magenta"
             borderColor="magenta"
           >
@@ -351,7 +340,7 @@ export function SetupWizard({
                 </Text>
               </Box>
 
-              {/* Agent role explanation */}
+              {/* Explicação do papel do agente */}
               {roleInfo && (
                 <Box flexDirection="column">
                   <Text bold color="white">
@@ -368,36 +357,29 @@ export function SetupWizard({
                 </Box>
               )}
 
-              {/* Table header */}
-              <Box marginTop={1} flexDirection="column">
-                <Text dimColor>
-                  {'\u2605'} = recommended  |  Ranked by cost-benefit (SWE-Bench / cost)
-                </Text>
-                <Text dimColor bold>
-                  {'  '}{'Model'.padEnd(22)} {'SWE-B'.padStart(6)}  {'  Cost'.padStart(6)}{'/MTok'}  {'  Ctx'.padStart(5)}  {'Rating'}
-                </Text>
-                <Text dimColor>
-                  {'  '}{'─'.repeat(22)} {'─'.repeat(6)}  {'─'.repeat(11)}  {'─'.repeat(5)}  {'─'.repeat(11)}
-                </Text>
-              </Box>
+              {/* Seletor de modelo compartilhado */}
+              {currentRole && (
+                <Box marginTop={1}>
+                  <ModelSelector
+                    role={currentRole}
+                    onSelect={handleModelSelect}
+                    isActive={step === 'models'}
+                  />
+                </Box>
+              )}
 
-              <Box>
-                <SelectInput
-                  items={modelOptions}
-                  initialIndex={Math.max(0, modelOptions.findIndex((o) => o.value === defaultModelId))}
-                  onSelect={handleModelSelect}
-                />
-              </Box>
-
-              {/* Show already configured models */}
+              {/* Modelos já configurados */}
               {completedRoles > 0 && (
                 <Box marginTop={1} flexDirection="column">
-                  <Text dimColor bold>Configured:</Text>
-                  {WIZARD_AGENT_GROUPS.flatMap((g) => g.roles).slice(0, completedRoles).map((role) => (
-                    <Text key={role} dimColor>
-                      {'\u2714'} {role}: {agentModels[role as keyof AgentModelConfig]}
-                    </Text>
-                  ))}
+                  <Text dimColor bold>Configurados:</Text>
+                  {WIZARD_AGENT_GROUPS.flatMap((g) => g.roles).slice(0, completedRoles).map((role) => {
+                    const info = AGENT_ROLE_INFO[role];
+                    return (
+                      <Text key={role} dimColor>
+                        {'\u2714'} {info?.displayName ?? role}: {agentModels[role as keyof AgentModelConfig]}
+                      </Text>
+                    );
+                  })}
                 </Box>
               )}
             </Box>
@@ -406,16 +388,14 @@ export function SetupWizard({
 
         <Box marginTop={1}>
           <KeyHint bindings={[
-            { key: '\u2191\u2193', label: 'Navigate' },
-            { key: 'Enter', label: 'Select' },
-            { key: 'D', label: 'Use all defaults' },
+            { key: 'D', label: 'Usar todos os padrões' },
           ]} />
         </Box>
       </Box>
     );
   }
 
-  // ── Initializing step ─────────────────────────────────────────────
+  // ── Etapa Inicialização ───────────────────────────────────────────
   if (step === 'initializing') {
     return (
       <Box flexDirection="column" paddingX={2} paddingY={1}>
@@ -423,7 +403,7 @@ export function SetupWizard({
         <Divider />
 
         <Box marginTop={1}>
-          <Panel title="Initializing Project" titleColor="green" borderColor="green">
+          <Panel title="Inicializando Projeto" titleColor="green" borderColor="green">
             <Box flexDirection="column" gap={1} paddingY={1}>
               {initStatus === 'running' ? (
                 <Box gap={1}>
@@ -437,23 +417,26 @@ export function SetupWizard({
               )}
 
               <Box marginTop={1} flexDirection="column">
-                <Text dimColor>Project directory: .huu/</Text>
-                <Text dimColor>Database: .huu/huu.db (WAL mode)</Text>
-                <Text dimColor>Config: .huu/config.json</Text>
-                <Text dimColor>Provider: OpenRouter (multi-model)</Text>
+                <Text dimColor>Diretório do projeto: .huu/</Text>
+                <Text dimColor>Banco de dados: .huu/huu.db (modo WAL)</Text>
+                <Text dimColor>Configuração: .huu/config.json</Text>
+                <Text dimColor>Provedor: OpenRouter (multi-modelo)</Text>
               </Box>
 
-              {/* Summary of model selections */}
+              {/* Resumo das seleções de modelo */}
               <Box marginTop={1} flexDirection="column">
-                <Text bold>Model Configuration:</Text>
+                <Text bold>Configuração de Modelos:</Text>
                 {WIZARD_AGENT_GROUPS.map((group) => (
                   <Box key={group.tier} flexDirection="column" marginTop={1}>
-                    <Text color={group.tierColor ?? 'white'} bold>{group.tier} Tier:</Text>
-                    {group.roles.map((role) => (
-                      <Text key={role} dimColor>
-                        {'\u2022'} {role}: {agentModels[role as keyof AgentModelConfig]}
-                      </Text>
-                    ))}
+                    <Text color={group.tierColor ?? 'white'} bold>Tier {group.tier}:</Text>
+                    {group.roles.map((role) => {
+                      const info = AGENT_ROLE_INFO[role];
+                      return (
+                        <Text key={role} dimColor>
+                          {'\u2022'} {info?.displayName ?? role}: {agentModels[role as keyof AgentModelConfig]}
+                        </Text>
+                      );
+                    })}
                   </Box>
                 ))}
               </Box>
@@ -464,6 +447,6 @@ export function SetupWizard({
     );
   }
 
-  // Done — shouldn't render
+  // Concluído — não deve renderizar
   return <Box />;
 }

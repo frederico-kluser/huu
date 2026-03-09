@@ -3,9 +3,12 @@ export {
   calculateCostBenefit,
   rankModelsByCostBenefit,
   getModelsForRole,
+  getAllModelsForRole,
   getDefaultModelForRole,
+  isModelRecommendedForRole,
   findModelById,
   formatModelOption,
+  AGENT_ROLE_INFO,
 } from './catalog.js';
 
 export type {
@@ -16,6 +19,7 @@ export type {
   ModelConfidence,
   ToolCallingQuality,
   AgentRole,
+  AgentRoleInfo,
   CostBenefitScore,
 } from './catalog.js';
 
