@@ -188,3 +188,70 @@ export {
   buildContextPack,
   renderContextPack,
 } from './retrieval-jit.js';
+
+// ── State Machine (5.2.5) ────────────────────────────────────────
+export type {
+  RunStatus,
+  RunRecord,
+  TransitionRecord,
+} from './state-machine.js';
+
+export {
+  RUN_STATUSES,
+  RunStateMachine,
+  InvalidTransitionError,
+  isValidTransition,
+  isTerminal,
+  getAllowedTransitions,
+} from './state-machine.js';
+
+// ── Recovery (5.2.1) ─────────────────────────────────────────────
+export type {
+  OrchestratorEvent,
+  TaskAttemptRecord,
+  RecoveryResult,
+  RecoverySnapshot,
+} from './recovery.js';
+
+export {
+  EventLog,
+  TaskAttemptTracker,
+  RecoveryEngine,
+  persistTaskTransition,
+  isProcessAlive,
+} from './recovery.js';
+
+// ── Timeout Policy (5.2.3) ───────────────────────────────────────
+export type {
+  TimeoutConfig,
+  TaskPhase,
+  ErrorClass,
+  ClassifiedError,
+  RetryDecision,
+  TimeoutStatus,
+  TimeoutCheckResult,
+} from './timeout-policy.js';
+
+export {
+  DEFAULT_TIMEOUT_CONFIG,
+  getPhaseTimeouts,
+  classifyError,
+  nextDelayMs,
+  maxDelayMs,
+  shouldRetry,
+  checkTimeout,
+} from './timeout-policy.js';
+
+// ── Shutdown (5.2.4) ─────────────────────────────────────────────
+export type {
+  ShutdownPhase,
+  ShutdownConfig,
+  ShutdownState,
+  ShutdownHook,
+} from './shutdown.js';
+
+export {
+  DEFAULT_SHUTDOWN_CONFIG,
+  ShutdownManager,
+  createShutdownManager,
+} from './shutdown.js';
