@@ -13,7 +13,7 @@ import type {
   InterventionLevel,
   InterventionSignal,
   KanbanColumn,
-  LogLevel,
+  DetailLogLevel,
 } from '../tui/types.js';
 
 const STATUS_TO_COLUMN: Record<string, KanbanColumn> = {
@@ -36,7 +36,7 @@ const LOG_MESSAGE_TYPES = [
   'abort_ack',
 ] as const;
 
-const MESSAGE_TYPE_TO_LEVEL: Record<string, LogLevel> = {
+const MESSAGE_TYPE_TO_LEVEL: Record<string, DetailLogLevel> = {
   task_progress: 'progress',
   task_done: 'info',
   escalation: 'escalation',

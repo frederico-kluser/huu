@@ -86,9 +86,9 @@ describe('chooseTier3Side', () => {
   });
 
   it('should escalate when scores are too close', () => {
+    const { lastTouchSide: _, ...baseWithoutLastTouch } = baseSignals;
     const ambiguous: Tier3Signals = {
-      ...baseSignals,
-      lastTouchSide: undefined,
+      ...baseWithoutLastTouch,
       ownershipScore: { ours: 0.5, theirs: 0.5 },
       historyScore: { ours: 0.5, theirs: 0.5 },
     };
@@ -97,10 +97,10 @@ describe('chooseTier3Side', () => {
   });
 
   it('should escalate medium-risk files with weak signals', () => {
+    const { lastTouchSide: _2, ...baseWithoutLastTouch2 } = baseSignals;
     const mediumWeak: Tier3Signals = {
-      ...baseSignals,
+      ...baseWithoutLastTouch2,
       riskClass: 'medium',
-      lastTouchSide: undefined,
       ownershipScore: { ours: 0.55, theirs: 0.45 },
       historyScore: { ours: 0.5, theirs: 0.5 },
     };
@@ -109,9 +109,9 @@ describe('chooseTier3Side', () => {
   });
 
   it('should handle missing last-touch as neutral', () => {
+    const { lastTouchSide: _3, ...baseWithoutLastTouch3 } = baseSignals;
     const noLastTouch: Tier3Signals = {
-      ...baseSignals,
-      lastTouchSide: undefined,
+      ...baseWithoutLastTouch3,
       ownershipScore: { ours: 0.9, theirs: 0.1 },
       historyScore: { ours: 0.9, theirs: 0.1 },
     };

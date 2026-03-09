@@ -194,7 +194,7 @@ describe('verifyL4FromResult', () => {
       summary: '3 tests failed',
     });
     expect(result.status).toBe('fail');
-    expect(result.findings[0].code).toBe('TEST_FAILURE');
+    expect(result.findings[0]!.code).toBe('TEST_FAILURE');
   });
 });
 
@@ -276,7 +276,7 @@ describe('runVerificationPipeline', () => {
     expect(decision.accepted).toBe(false);
     // Should stop at L1
     expect(decision.results).toHaveLength(1);
-    expect(decision.results[0].layer).toBe('L1');
+    expect(decision.results[0]!.layer).toBe('L1');
   });
 
   it('runs L4 for code tasks', async () => {

@@ -74,7 +74,7 @@ export class MergeQueueRepository {
           last_error = @error,
           finished_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-      WHERE id = @id AND status = 'in_progress'
+      WHERE id = @id AND status IN ('in_progress', 'blocked_human')
     `);
 
     this.conflictStmt = db.prepare(`

@@ -501,7 +501,7 @@ export class MergeManager {
       const decision = chooseTier3Side({
         filePath,
         conflictType,
-        lastTouchSide,
+        ...(lastTouchSide !== undefined ? { lastTouchSide } : {}),
         ownershipScore,
         historyScore: historyScores,
         riskClass,

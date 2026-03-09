@@ -55,7 +55,7 @@ describe('Config', () => {
 
     it('should reject invalid version', () => {
       const config = createDefaultConfig();
-      (config as Record<string, unknown>)['version'] = 0;
+      (config as unknown as Record<string, unknown>)['version'] = 0;
       const result = validateConfig(config);
       expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.includes('version'))).toBe(true);

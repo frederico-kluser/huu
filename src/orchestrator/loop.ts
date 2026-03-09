@@ -495,17 +495,23 @@ export class OrchestratorLoop {
         // ── Context Curator: post-activity hook ──────────────────
         // Runs after every task_done to curate memory (idempotent).
         try {
+          const summaryVal = payload['summary'] as string | undefined;
+          const commitShaVal = payload['commitSha'] as string | undefined;
+          const filesChangedVal = payload['filesChanged'] as string[] | undefined;
+          const fileChangeSummaryVal = payload['changed_files'] as TaskDoneEvent['fileChangeSummary'];
+          const usageVal = payload['usage'] as TaskDoneEvent['usage'];
+          const durationMsVal = payload['durationMs'] as number | undefined;
           const curatorEvt: TaskDoneEvent = {
             taskId,
             agentId: msg.sender_agent,
             runId: agentRunId ?? this.state.runId,
             projectId: this.state.projectId,
-            summary: payload['summary'] as string | undefined,
-            commitSha: payload['commitSha'] as string | undefined,
-            filesChanged: payload['filesChanged'] as string[] | undefined,
-            fileChangeSummary: payload['changed_files'] as TaskDoneEvent['fileChangeSummary'],
-            usage: payload['usage'] as TaskDoneEvent['usage'],
-            durationMs: payload['durationMs'] as number | undefined,
+            ...(summaryVal !== undefined ? { summary: summaryVal } : {}),
+            ...(commitShaVal !== undefined ? { commitSha: commitShaVal } : {}),
+            ...(filesChangedVal !== undefined ? { filesChanged: filesChangedVal } : {}),
+            ...(fileChangeSummaryVal !== undefined ? { fileChangeSummary: fileChangeSummaryVal } : {}),
+            ...(usageVal !== undefined ? { usage: usageVal } : {}),
+            ...(durationMsVal !== undefined ? { durationMs: durationMsVal } : {}),
           };
           await curatorOnTaskDone(this.deps.db, curatorEvt);
         } catch (err) {

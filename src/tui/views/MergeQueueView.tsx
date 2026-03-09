@@ -89,7 +89,7 @@ export function MergeQueueView({
         // Cycle through status filters
         const filters: (string | null)[] = [null, 'queued', 'running', 'blocked', 'merged', 'failed'];
         const idx = filters.indexOf(statusFilter);
-        setStatusFilter(filters[(idx + 1) % filters.length]);
+        setStatusFilter(filters[(idx + 1) % filters.length] ?? null);
       }
     },
     [filteredItems, selectedIndex, statusFilter, setSelectedIndex, setExpandedId, setStatusFilter],

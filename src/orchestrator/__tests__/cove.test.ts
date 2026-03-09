@@ -88,8 +88,9 @@ describe('runCoVe', () => {
     await runCoVe('my draft', 'sources', executor);
 
     const reviseCall = (executor.revise as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(reviseCall[0]).toBe('my draft');
-    expect(Array.isArray(reviseCall[1])).toBe(true);
-    expect(reviseCall[1]).toHaveLength(2);
+    expect(reviseCall).toBeDefined();
+    expect(reviseCall![0]).toBe('my draft');
+    expect(Array.isArray(reviseCall![1])).toBe(true);
+    expect(reviseCall![1]).toHaveLength(2);
   });
 });

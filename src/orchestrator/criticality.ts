@@ -176,6 +176,6 @@ export function classifyCriticality(
   return {
     critical,
     criticalReasons: reasons,
-    riskScore,
+    ...(riskScore !== undefined ? { riskScore } : {}),
   };
 }

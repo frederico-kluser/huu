@@ -1,4 +1,4 @@
--- Migration 0003: Resilience tables for crash recovery, state machine, heartbeats, and task attempts
+-- Migration 0004: Resilience tables for crash recovery, state machine, heartbeats, and task attempts
 -- Supports: 5.2.1 Crash recovery, 5.2.2 Stale detection, 5.2.3 Timeout/retry, 5.2.5 State machine
 
 -- Orchestrator run tracking with state machine
