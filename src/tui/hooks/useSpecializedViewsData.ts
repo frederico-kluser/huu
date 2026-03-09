@@ -18,6 +18,8 @@ import type {
   BeatSheetDataProvider,
   BeatNode,
   LogLevel,
+  CoordinationMetricsSnapshot,
+  CoordinationMetricsProvider,
 } from '../types.js';
 
 const POLL_ACTIVE_MS = 500;
@@ -373,4 +375,60 @@ export function useBeatSheetData(
     expandNode,
     collapseNode,
   };
+}
+
+// ── Coordination Metrics hook ────────────────────────────────────────
+
+const EMPTY_COORDINATION: CoordinationMetricsSnapshot = {
+  coordinationMs: 0,
+  executionMs: 0,
+  ratio: 0,
+  level: 'green',
+  taskCount: 0,
+  p50QueueWaitMs: 0,
+  p95QueueWaitMs: 0,
+  avgMergeWaitMs: 0,
+  tasksPerSecond: 0,
+  schedulerRunning: 0,
+  schedulerPending: 0,
+  schedulerSaturated: false,
+  watermark: '0',
+};
+
+export function useCoordinationMetrics(
+  provider: CoordinationMetricsProvider | undefined,
+  isActive: boolean,
+) {
+  const [snapshot, setSnapshot] = useState<CoordinationMetricsSnapshot>(EMPTY_COORDINATION);
+  const lastWatermarkRef = useRef('');
+
+  useEffect(() => {
+    if (!isActive || !provider) return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let mounted = true;
+
+    function poll(): void {
+      if (!mounted) return;
+      try {
+        const wm = provider!.getWatermark();
+        if (wm !== lastWatermarkRef.current) {
+          const next = provider!.getSnapshot();
+          lastWatermarkRef.current = next.watermark;
+          setSnapshot(next);
+        }
+      } catch {
+        // Skip on transient error
+      }
+      timer = setTimeout(poll, POLL_ACTIVE_MS);
+    }
+
+    timer = setTimeout(poll, POLL_ACTIVE_MS);
+    return () => {
+      mounted = false;
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [isActive, provider]);
+
+  return { metrics: snapshot };
 }

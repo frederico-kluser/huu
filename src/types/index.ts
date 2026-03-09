@@ -331,6 +331,7 @@ export interface AgentSlot {
 export interface OrchestratorConfig {
   projectId: string;
   maxConcurrentAgents: number;
+  maxPendingTasks: number;
   roleCaps: Record<string, number>;
   pollIntervalActiveMs: number;
   pollIntervalIdleMs: number;
