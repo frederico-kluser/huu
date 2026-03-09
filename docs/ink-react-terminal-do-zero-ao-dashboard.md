@@ -763,6 +763,111 @@ O padrão arquitetural aqui é direto: **cada agente é um componente React puro
 
 ---
 
+## Setup Wizard com seleção de modelos por agente
+
+O HUU implementa um wizard de configuração que guia o usuário na escolha de modelos de IA para cada um dos 11 agentes. Para cada agente, o wizard exibe uma **explicação do papel** do agente, a **justificativa** do modelo recomendado, e uma **tabela alinhada** com todos os modelos compatíveis ranqueados por custo-benefício. O usuário pode aceitar o recomendado (★) ou escolher qualquer outro modelo da lista.
+
+```
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Model Config: Orchestrator (1/11)                                            │
+│                                                                              │
+│ Tier: Critical  Strategic decisions, review, debugging                       │
+│                                                                              │
+│ Orchestrator                                                                 │
+│ Showrunner — decomposes tasks, delegates to agents, maintains project        │
+│ coherence.                                                                   │
+│                                                                              │
+│ 💡 Needs extended thinking for complex reasoning. Prompt caching via API     │
+│    saves ~80% on recurring input. Sonnet 4.5 balances quality and cost.      │
+│                                                                              │
+│ ★ = recommended  |  Ranked by cost-benefit (SWE-Bench / cost)                │
+│   Model                  SWE-B    Cost/MTok    Ctx  Rating                   │
+│   ────────────────────── ────── ───────────  ───── ───────────               │
+│   Kimi K2.5              76.8%  $2.28/MTok   262K  Fair                      │
+│   Claude Haiku 4.5       73.3%  $3.80/MTok   200K  Fair                      │
+│   MiniMax M2.5           80.2%  $0.86/MTok   197K  Excellent                 │
+│   GPT-5                  75.0%  $7.38/MTok   400K  Fair                      │
+│   Gemini 3.1 Pro         80.6%  $9.00/MTok  1.0M   Premium                  │
+│   GPT-5.2                80.0% $10.32/MTok   400K  Premium                   │
+│   Claude Sonnet 4.6      79.6% $11.40/MTok  1.0M   Premium                  │
+│ ❯ ★ Claude Sonnet 4.5    77.2% $11.40/MTok  1.0M   Premium                  │
+│   Claude Opus 4.6        80.8% $19.00/MTok  1.0M   Premium                  │
+│                                                                              │
+│ Configured:                                                                  │
+│ (none yet — this is the first agent)                                         │
+│                                                                              │
+│ ↑↓ Navigate  Enter Select  D Use all defaults                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+O segundo exemplo mostra um agente do tier econômico:
+
+```
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Model Config: Refactorer (8/11)                                              │
+│                                                                              │
+│ Tier: Economy  Research, refactoring, docs, context                          │
+│                                                                              │
+│ Refactorer                                                                   │
+│ Cleanup, dead code removal, and mechanical code transformations.             │
+│                                                                              │
+│ 💡 DeepSeek V3.2 at $0.25/$0.40 is ideal for mechanical transformations —   │
+│    73% SWE-Bench at minimal cost with automatic 0.1x cache pricing.          │
+│                                                                              │
+│ ★ = recommended  |  Ranked by cost-benefit (SWE-Bench / cost)                │
+│   Model                  SWE-B    Cost/MTok    Ctx  Rating                   │
+│   ────────────────────── ────── ───────────  ───── ───────────               │
+│ ❯ ★ DeepSeek V3.2         73.0%  $0.36/MTok   164K  Excellent               │
+│   MiniMax M2.5           80.2%  $0.86/MTok   197K  Excellent                 │
+│   Kimi K2.5              76.8%  $2.28/MTok   262K  Fair                      │
+│   Claude Haiku 4.5       73.3%  $3.80/MTok   200K  Fair                      │
+│   GPT-5                  75.0%  $7.38/MTok   400K  Fair                      │
+│   Gemini 3.1 Pro         80.6%  $9.00/MTok  1.0M   Premium                  │
+│                                                                              │
+│ Configured:                                                                  │
+│ ✔ orchestrator: anthropic/claude-sonnet-4.5                                  │
+│ ✔ reviewer: anthropic/claude-opus-4                                          │
+│ ✔ debugger: google/gemini-2.5-pro-preview-03-25                              │
+│ ✔ planner: anthropic/claude-sonnet-4.5                                       │
+│ ✔ builder: anthropic/claude-sonnet-4                                         │
+│ ✔ tester: minimax/minimax-m2.5                                               │
+│ ✔ merger: openai/gpt-4.1                                                     │
+│                                                                              │
+│ ↑↓ Navigate  Enter Select  D Use all defaults                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+### Descrições dos 11 agentes e seus modelos recomendados
+
+A tabela abaixo resume cada agente, seu tier, e a justificativa de modelo conforme a análise de custo-benefício do OpenRouter (março 2026):
+
+| Tier | Agente | Modelo Padrão | Justificativa |
+|------|--------|---------------|---------------|
+| **Critical** | **Orchestrator** — Showrunner, decompõe e delega | Claude Sonnet 4.5 (thinking) | Extended thinking + prompt caching via API Anthropic (~80% savings em input recorrente) |
+| **Critical** | **Reviewer** — Code review + verificação de qualidade | Claude Opus 4.6 | 1M context para revisar codebases inteiras, baixa taxa de alucinação |
+| **Critical** | **Debugger** — Investigação profunda de bugs | Gemini 3.1 Pro | Lidera Terminal-Bench 2.0 (78.4%), 1M context para logs e traces |
+| **Principal** | **Planner** — Decomposição em Beat Sheet hierárquico | Claude Sonnet 4.5 (thinking) | Thinking para decomposição estruturada; fallback: MiniMax M2.5 "Architect Mode" |
+| **Principal** | **Builder** — Implementação de código | Claude Sonnet 4.6 | 79.6% SWE-Bench, 1M context; fallback: MiniMax M2.5 (80.2% SWE-Bench, 13x mais barato) |
+| **Principal** | **Tester** — TDD + validação de testes | MiniMax M2.5 | 76.8% BFCL Multi-Turn (vs 63.3% Opus) — melhor tool calling sequencial do mercado |
+| **Principal** | **Merger** — Resolução de conflitos + merge | GPT-4.1 | 1.05M context para diffs, otimizado para precisão em patches |
+| **Economy** | **Researcher** — Busca + coleta de contexto | Gemini 2.5 Flash | 1M context + caching implícito automático, custo-benefício ideal |
+| **Economy** | **Refactorer** — Cleanup + dead code removal | DeepSeek V3.2 | $0.25/$0.40 — melhor custo-benefício para transformações mecânicas |
+| **Economy** | **Doc Writer** — Sincronização de documentação | Gemini 3.1 Flash Lite | Thinking levels + 1M context, melhor prosa que GPT-5 Mini |
+| **Economy** | **Context Curator** — Curadoria de memória | Gemini 2.5 Flash Lite | $0.10/$0.40 ultra-barato com 1M context, ideal para filtrar e resumir |
+
+### Como o catálogo de modelos funciona
+
+O sistema de seleção usa um **catálogo versionado** (`src/models/catalog.ts`) com dados de benchmarks e preços atualizados. Para cada agente, o catálogo:
+
+1. **Filtra** modelos incompatíveis (tool calling insuficiente, context pequeno, sem reasoning quando necessário)
+2. **Ranqueia** por custo-benefício: `score / blendedCost` onde `blendedCost = 0.30×input + 0.70×output` (ponderação 70/30 output porque agents geram mais tokens que consomem)
+3. **Marca** o modelo recomendado com ★ baseado na análise de tiering
+4. **Exibe** a justificativa textual de por que aquele modelo é ideal para o papel
+
+Isso permite que o usuário tome decisões informadas: aceitar o padrão recomendado para setup rápido (tecla `D` para usar todos os defaults), ou escolher modelos diferentes baseado em prioridades de custo, performance ou preferência de provider.
+
+---
+
 ## Conclusão
 
 Ink v6 atingiu maturidade suficiente para ser a escolha padrão em CLIs interativas sérias — a adoção pelo Claude Code e Gemini CLI confirma isso. A chave para produtividade é tratar o terminal como uma superfície React limitada em pixels: use `<Box>` como `div` flexbox, `<Text>` como o único portador de texto, `<Static>` para output acumulativo, e `useInput` como seu event listener universal. O ecossistema `@inkjs/ui` cobre a maioria dos widgets que você precisaria construir do zero. Para dashboards de agentes, o padrão de **custom hook por domínio + componentes focáveis independentes + `<Static>` para logs** escala bem e mantém a arquitetura familiar a qualquer desenvolvedor React. O rendering incremental (v6.5) e o concurrent mode (v6.7) resolvem os gargalos de performance que existiam em versões anteriores para interfaces complexas.

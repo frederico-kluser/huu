@@ -78,13 +78,19 @@ HUU decomposes complex tasks into a **narrative arc** (Beat Sheet), delegates to
 | `debugger` | Opus | Deep bug investigation |
 | `context-curator` | Haiku | Post-activity memory curation |
 
-### Model Tiering
+### Model Tiering (via OpenRouter)
 
-- **Opus** ($15/MTok) — critical decisions: orchestrator, reviewer, debugger
-- **Sonnet** ($3/MTok) — 90% of the work: planner, builder, tester, merger
-- **Haiku** ($0.80/MTok) — mechanical tasks: researcher, refactorer, doc-writer, context-curator
+HUU routes each agent through [OpenRouter](https://openrouter.ai/), selecting the optimal model per role based on cost-benefit analysis:
 
-Estimated cost per feature: **~$0.60-0.80**
+| Tier | Agents | Default Models | Blended $/MTok |
+|------|--------|----------------|----------------|
+| **Critical** | orchestrator, reviewer, debugger | Sonnet 4.5, Opus 4.6, Gemini 3.1 Pro | $9–$19 |
+| **Principal** | planner, builder, tester, merger | Sonnet 4.5/4.6, MiniMax M2.5, GPT-4.1 | $0.86–$11.40 |
+| **Economy** | researcher, refactorer, doc-writer, context-curator | Gemini Flash, DeepSeek V3.2, Flash Lite | $0.10–$2.50 |
+
+The Setup Wizard lets you choose models per agent with cost-benefit rankings and explanations.
+
+Estimated cost per feature: **~$0.20–$0.55** (depends on caching and model choices)
 
 ### Beat Sheet Decomposition
 
@@ -130,6 +136,7 @@ If all tiers fail → escalation to human via TUI.
 | Database | better-sqlite3 (WAL mode) |
 | TUI | React Ink |
 | AI SDK | @anthropic-ai/sdk |
+| AI Router | OpenRouter (per-agent model selection) |
 | MCP | @modelcontextprotocol/sdk v1.x |
 | Tests | vitest |
 
@@ -182,6 +189,8 @@ huu status
 - [ROADMAP.md](./ROADMAP.md) — implementation phases and milestones
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — setup, conventions, and PR workflow
 - [API Reference](./docs/api.md) — public API overview with examples
+- [Model Catalog](./docs/models-llm-openrouter-deep.md) — OpenRouter model analysis and tiering strategy
+- [Ink TUI Guide](./docs/ink-react-terminal-do-zero-ao-dashboard.md) — React Ink tutorial with setup wizard docs
 - [Examples](./examples/) — common workflows with expected output
 - [Demo](./docs/demo/) — VHS tape for reproducible terminal demo
 
