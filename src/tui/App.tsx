@@ -5,7 +5,9 @@
 //   setas      → navegar cards do Kanban
 //   Enter      → abrir Detail View da tarefa selecionada
 //   ESC        → fechar Detail View (ou sair do app pelo Kanban)
+//   n          → criar nova tarefa
 //   g          → abrir configurações de modelo dos agentes
+//   o          → abrir configurações gerais
 //   q          → sair do app
 
 import React, { useState, useCallback } from 'react';
@@ -24,7 +26,8 @@ import { APP_TABS, TAB_BY_KEY, TAB_LABELS, getDensity } from './types.js';
 import { Header } from './components/Header.js';
 import { KanbanBoard } from './components/KanbanBoard.js';
 import { DetailView } from './components/DetailView.js';
-import { KeyHint } from './components/KeyHint.js';
+import { BottomBar } from './components/BottomBar.js';
+import type { BottomBarBinding } from './components/BottomBar.js';
 import { AgentModelChanger } from './screens/AgentModelChanger.js';
 import { useKanbanData } from './hooks/useKanbanData.js';
 import { useBoardNavigation } from './hooks/useBoardNavigation.js';
@@ -48,6 +51,10 @@ export interface AppProps {
   agentModels?: AgentModelConfig | undefined;
   /** Callback quando modelos de agentes são alterados */
   onAgentModelsChange?: ((models: AgentModelConfig) => void) | undefined;
+  /** Callback para abrir tela de nova tarefa */
+  onNewTask?: (() => void) | undefined;
+  /** Callback para abrir configurações gerais */
+  onOpenConfig?: (() => void) | undefined;
 }
 
 const defaultProvider: KanbanDataProvider = {
@@ -71,6 +78,8 @@ export default function App({
   onOpenTask,
   agentModels,
   onAgentModelsChange,
+  onNewTask,
+  onOpenConfig,
 }: AppProps): React.JSX.Element {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -146,6 +155,11 @@ export default function App({
         setShowModelChanger(true);
         return;
       }
+      if (input === 'n') {
+        handleCloseDetail();
+        onNewTask?.();
+        return;
+      }
       return;
     }
 
@@ -162,9 +176,21 @@ export default function App({
       return;
     }
 
+    // Nova tarefa
+    if (input === 'n') {
+      onNewTask?.();
+      return;
+    }
+
     // Abrir configurações de modelo
     if (input === 'g') {
       setShowModelChanger(true);
+      return;
+    }
+
+    // Abrir configurações gerais
+    if (input === 'o') {
+      onOpenConfig?.();
       return;
     }
 
@@ -190,18 +216,20 @@ export default function App({
   // Painel de troca de modelo de agente (overlay)
   if (showModelChanger) {
     return (
-      <AgentModelChanger
-        currentModels={agentModels}
-        onSave={handleModelChange}
-        onCancel={handleModelChangerClose}
-      />
+      <Box flexDirection="column" flexGrow={1}>
+        <AgentModelChanger
+          currentModels={agentModels}
+          onSave={handleModelChange}
+          onCancel={handleModelChangerClose}
+        />
+      </Box>
     );
   }
 
   // Detail View (overlay — substitui área de conteúdo)
   if (view === 'detail' && detailTaskId) {
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" flexGrow={1}>
         <DetailView
           snapshot={detailSnapshot}
           density={density}
@@ -224,8 +252,27 @@ export default function App({
     );
   }
 
+  // Hotkeys contextuais para a barra inferior
+  const bottomBindings: BottomBarBinding[] = [];
+  if (activeTab === 'kanban') {
+    bottomBindings.push({ key: 'N', label: 'Nova Tarefa' });
+    if (snapshot.tasks.length > 0) {
+      bottomBindings.push({ key: '\u2190\u2191\u2192\u2193', label: 'Navegar' });
+      bottomBindings.push({ key: 'Enter', label: 'Detalhe' });
+    }
+    bottomBindings.push({ key: 'G', label: 'Modelos' });
+    bottomBindings.push({ key: 'O', label: 'Config' });
+    bottomBindings.push({ key: 'K/L/M/C/B', label: 'Abas' });
+    bottomBindings.push({ key: 'Q', label: 'Sair' });
+  } else {
+    bottomBindings.push({ key: 'N', label: 'Nova Tarefa' });
+    bottomBindings.push({ key: 'K/L/M/C/B', label: 'Abas' });
+    bottomBindings.push({ key: 'G', label: 'Modelos' });
+    bottomBindings.push({ key: 'Q', label: 'Sair' });
+  }
+
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" flexGrow={1}>
       {/* Barra superior: branding + abas */}
       <Box borderStyle="round" borderColor="cyan" paddingX={1}>
         <Text bold color="cyan">HUU</Text>
@@ -245,7 +292,9 @@ export default function App({
         ))}
 
         <Spacer />
-        <Text dimColor>[G] Modelos  Q sair</Text>
+        <Text dimColor>
+          ${snapshot.totalCostUsd.toFixed(2)}
+        </Text>
       </Box>
 
       {/* Conteúdo */}
@@ -262,12 +311,6 @@ export default function App({
             selection={nav.selection}
             density={density}
           />
-          <KeyHint bindings={[
-            { key: '\u2190\u2191\u2192\u2193', label: 'Navegar' },
-            { key: 'Enter', label: 'Detalhe' },
-            { key: 'G', label: 'Modelos' },
-            { key: 'K/L/M/C/B', label: 'Trocar aba' },
-          ]} />
         </Box>
       )}
       {activeTab === 'logs' && (
@@ -300,6 +343,9 @@ export default function App({
           terminalRows={terminalRows}
         />
       )}
+
+      {/* Barra inferior com hotkeys contextuais */}
+      <BottomBar bindings={bottomBindings} />
     </Box>
   );
 }

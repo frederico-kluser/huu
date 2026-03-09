@@ -33,12 +33,11 @@ async function runCli(
 
 describe('CLI integration', () => {
   describe('huu --help', () => {
-    it('should show help text with run and status commands', async () => {
+    it('should show help text with TUI description', async () => {
       const { stdout, exitCode } = await runCli(['--help']);
       expect(exitCode).toBe(0);
       expect(stdout).toContain('huu');
-      expect(stdout).toContain('run');
-      expect(stdout).toContain('status');
+      expect(stdout).toContain('TUI full-screen');
     });
   });
 
@@ -50,45 +49,22 @@ describe('CLI integration', () => {
     });
   });
 
-  describe('huu run --help', () => {
-    it('should show run command help', async () => {
-      const { stdout, exitCode } = await runCli(['run', '--help']);
-      expect(exitCode).toBe(0);
-      expect(stdout).toContain('taskDescription');
-      expect(stdout).toContain('Execute one builder agent');
-    });
-  });
-
-  describe('huu status --help', () => {
-    it('should show status command help', async () => {
-      const { stdout, exitCode } = await runCli(['status', '--help']);
-      expect(exitCode).toBe(0);
-      expect(stdout).toContain('Show current');
-    });
-  });
-
-  describe('huu run (validation)', () => {
-    it('should reject empty task description', async () => {
-      const { stderr, exitCode } = await runCli(['run']);
-      expect(exitCode).not.toBe(0);
-      expect(stderr).toContain('taskDescription');
-    });
-
-    it('should reject task description shorter than 5 chars', async () => {
-      const { stderr, exitCode } = await runCli(['run', 'hi']);
-      expect(exitCode).not.toBe(0);
-      expect(stderr).toContain('at least 5 characters');
-    });
-  });
-
-  describe('huu status (no database)', () => {
-    it('should handle missing database gracefully', async () => {
-      // Status now renders via Ink TUI, which may output to stdout or stderr
-      // depending on TTY availability. We just verify it doesn't crash.
-      const { exitCode } = await runCli(['status']);
+  describe('huu (no arguments)', () => {
+    it('should not crash when invoked without TTY', async () => {
+      // Without a TTY, Ink will fail to enter raw mode.
+      // We just verify the process doesn't crash with an unhandled error.
+      const { exitCode } = await runCli([]);
       // Ink may exit with non-zero if raw mode is not supported (non-TTY),
       // so we accept both 0 and non-zero — the key is no unhandled crash
       expect(typeof exitCode).toBe('number');
+    });
+  });
+
+  describe('huu (unknown arguments)', () => {
+    it('should reject unknown arguments', async () => {
+      const { stderr, exitCode } = await runCli(['run', 'some-task']);
+      expect(exitCode).not.toBe(0);
+      expect(stderr).toContain('too many arguments');
     });
   });
 });

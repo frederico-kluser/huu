@@ -148,3 +148,33 @@ export function renderRunScreen(taskDescription: string): RunScreenController {
     },
   };
 }
+
+// ── Full-Screen App ─────────────────────────────────────────────────
+
+export interface FullScreenAppOptions {
+  config: HuuConfig;
+}
+
+export async function renderFullScreenApp(options: FullScreenAppOptions): Promise<void> {
+  const instance = render(
+    <TuiApp
+      initialScreen="dashboard"
+      fullScreen={true}
+      config={options.config}
+      onConfigSave={(cfg) => {
+        // Salvar configuração de forma atômica
+        import('./config.js').then(({ writeConfigAtomic }) => {
+          writeConfigAtomic(process.cwd(), cfg);
+        }).catch(() => {
+          // Ignora erro de salvamento silenciosamente
+        });
+      }}
+      onNewTask={(description) => {
+        // Por agora, loga a tarefa — será integrado com runSingleAgentTask futuramente
+        console.log(`[HUU] Nova tarefa: ${description}`);
+      }}
+    />,
+  );
+
+  await instance.waitUntilExit().catch(() => {});
+}
