@@ -49,6 +49,16 @@ export class WorktreeManager {
     );
   }
 
+  /** Access the root git instance (for operations on the main repo). */
+  getRootGit(): SimpleGit {
+    return this.rootGit;
+  }
+
+  /** Get the repo root path. */
+  getRepoRoot(): string {
+    return this.repoRoot;
+  }
+
   // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------

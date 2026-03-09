@@ -70,11 +70,11 @@ One agent working end-to-end. No orchestration yet — just proving the agent �
 - [x] Merge result logging to SQLite
 - [x] Tests for clean merges and conflict detection
 
-### [ ] 1.4 Basic CLI [depends: (0.1,1.1,1.2,1.3)]
-- [ ] `huu run "task description"` — single agent execution
-- [ ] `huu status` — show current state
-- [ ] Structured console output (not TUI yet, just formatted logs)
-- [ ] CLI entry point + executable bin wiring (`src/cli.ts`, `bin/huu`, `package.json#bin`)
+### [x] 1.4 Basic CLI [depends: (0.1,1.1,1.2,1.3)]
+- [x] `huu run "task description"` — single agent execution
+- [x] `huu status` — show current state
+- [x] Structured console output (not TUI yet, just formatted logs)
+- [x] CLI entry point + executable bin wiring (`src/cli/index.ts`, `bin/huu`, `package.json#bin`)
 
 **Checkpoint: Midpoint (~50%)** — Can one agent receive a task, implement it in a worktree, and merge back?
 
@@ -231,7 +231,7 @@ The system learns and improves with every session.
 | Phase | Name | Checkpoint | Key Deliverable | Progress |
 |-------|------|-----------|-----------------|----------|
 | 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
-| 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 3/4 |
+| 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 4/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 1/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 0/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |
