@@ -54,7 +54,7 @@ export function InterventionReadiness({
       {level !== 'ok' && (
         <Box marginTop={1}>
           <Text dimColor>
-            Actions (3.3): [S]teer [F]ollow-up [A]bort
+            [S]teer [F]ollow-up [A]bort [P]romote
           </Text>
         </Box>
       )}

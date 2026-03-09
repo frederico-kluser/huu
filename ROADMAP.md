@@ -148,11 +148,11 @@ The human interface. Everything that was CLI-only becomes visual and interactive
 - [x] Context usage bar (visual)
 - [x] ESC to return to Kanban
 
-### [ ] 3.3 Human Intervention [depends: (0.2,0.3,1.1,1.3,2.2,3.1,3.2)]
-- [ ] `[S]teer` — send redirect message to running agent
-- [ ] `[F]ollow-up` — queue instruction for after current turn
-- [ ] `[A]bort` — cancel agent, discard worktree, move to Failed
-- [ ] `[P]romote` — save learning from Done task to instincts
+### [x] 3.3 Human Intervention [depends: (0.2,0.3,1.1,1.3,2.2,3.1,3.2)]
+- [x] `[S]teer` — send redirect message to running agent
+- [x] `[F]ollow-up` — queue instruction for after current turn
+- [x] `[A]bort` — cancel agent, discard worktree, move to Failed
+- [x] `[P]romote` — save learning from Done task to instincts
 
 ### [x] 3.4 Specialized Views [depends: (0.2,1.3,2.1,2.2,3.1)]
 - [x] `[L]ogs` tab — aggregated log view from all agents
@@ -234,7 +234,7 @@ The system learns and improves with every session.
 | 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 4/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 5/5 |
-| 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 3/4 |
+| 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 4/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 2/4 |
 | 5 | Polish | Final Image (100%) | Production-ready | 2/4 |
 
