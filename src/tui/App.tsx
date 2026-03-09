@@ -1,22 +1,27 @@
-// TUI shell — tab navigation (K/L/M/C/B) with Kanban as default view
+// TUI shell — tab navigation (K/L/M/C/B) with Kanban + Detail View
 //
 // Keyboard:
 //   k/l/m/c/b  → switch tab
 //   arrows     → navigate Kanban cards
-//   Enter      → open task detail (emits onOpenTask)
-//   q / ESC    → exit
+//   Enter      → open Detail View for selected task
+//   ESC        → close Detail View (or exit app from Kanban)
+//   q          → exit app
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Box, Text, useApp, useInput, useStdout } from 'ink';
-import type { AppTab, KanbanDataProvider } from './types.js';
+import type { AppTab, KanbanDataProvider, DetailDataProvider } from './types.js';
 import { APP_TABS, TAB_BY_KEY, TAB_LABELS, getDensity } from './types.js';
 import { Header } from './components/Header.js';
 import { KanbanBoard } from './components/KanbanBoard.js';
+import { DetailView } from './components/DetailView.js';
 import { useKanbanData } from './hooks/useKanbanData.js';
 import { useBoardNavigation } from './hooks/useBoardNavigation.js';
+import { useDetailViewData } from './hooks/useDetailViewData.js';
+import { useViewTransition } from './hooks/useViewTransition.js';
 
 export interface AppProps {
   provider?: KanbanDataProvider | undefined;
+  detailProvider?: DetailDataProvider | undefined;
   onOpenTask?: ((taskId: string) => void) | undefined;
 }
 
@@ -33,6 +38,7 @@ const defaultProvider: KanbanDataProvider = {
 
 export default function App({
   provider,
+  detailProvider,
   onOpenTask,
 }: AppProps): React.JSX.Element {
   const { exit } = useApp();
@@ -40,14 +46,60 @@ export default function App({
   const [activeTab, setActiveTab] = useState<AppTab>('kanban');
 
   const terminalCols = stdout.columns ?? 80;
+  const terminalRows = stdout.rows ?? 24;
   const density = getDensity(terminalCols);
 
   const dataProvider = provider ?? defaultProvider;
-  const isKanbanActive = activeTab === 'kanban';
-  const snapshot = useKanbanData(dataProvider, isKanbanActive);
+  const { view, detailTaskId, openDetail, closeDetail } =
+    useViewTransition(true);
+
+  const isKanbanActive = activeTab === 'kanban' && view === 'kanban';
+  const snapshot = useKanbanData(dataProvider, activeTab === 'kanban');
   const nav = useBoardNavigation(snapshot.tasks);
 
+  const detailSnapshot = useDetailViewData(
+    detailProvider,
+    view === 'detail' ? detailTaskId : null,
+  );
+
+  const handleOpenDetail = useCallback(
+    (taskId: string) => {
+      if (detailProvider) {
+        openDetail(taskId);
+      }
+      if (onOpenTask) {
+        onOpenTask(taskId);
+      }
+    },
+    [detailProvider, openDetail, onOpenTask],
+  );
+
+  const handleCloseDetail = useCallback(() => {
+    closeDetail();
+  }, [closeDetail]);
+
   useInput((input, key) => {
+    // In Detail View: ESC closes it, tab switching still works
+    if (view === 'detail') {
+      if (key.escape) {
+        handleCloseDetail();
+        return;
+      }
+      // Allow tab switching from detail view
+      const tab = TAB_BY_KEY[input];
+      if (tab !== undefined) {
+        handleCloseDetail();
+        setActiveTab(tab);
+        return;
+      }
+      // q exits app
+      if (input === 'q') {
+        exit();
+        return;
+      }
+      return;
+    }
+
     // Tab switching (highest priority)
     const tab = TAB_BY_KEY[input];
     if (tab !== undefined) {
@@ -74,11 +126,34 @@ export default function App({
       nav.moveDown();
     } else if (key.return) {
       const taskId = nav.getSelectedTaskId();
-      if (taskId && onOpenTask) {
-        onOpenTask(taskId);
+      if (taskId) {
+        handleOpenDetail(taskId);
       }
     }
   });
+
+  // Detail View (overlay — replaces content area)
+  if (view === 'detail' && detailTaskId) {
+    return (
+      <Box flexDirection="column">
+        <DetailView
+          snapshot={detailSnapshot}
+          density={density}
+          onClose={handleCloseDetail}
+          terminalRows={terminalRows}
+        />
+      </Box>
+    );
+  }
+
+  // Transitioning state — brief blank
+  if (view === 'transitioning') {
+    return (
+      <Box flexDirection="column" flexGrow={1} justifyContent="center" alignItems="center">
+        <Text dimColor>Loading...</Text>
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column">

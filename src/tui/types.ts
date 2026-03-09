@@ -79,6 +79,63 @@ export const TAB_LABELS: Record<AppTab, string> = {
   beat: '[B]eat Sheet',
 };
 
+// ── Detail View data ─────────────────────────────────────────────────
+
+export type LogLevel = 'progress' | 'info' | 'warn' | 'error' | 'escalation';
+
+export interface LogLine {
+  id: string;
+  ts: string;
+  level: LogLevel;
+  message: string;
+}
+
+export interface DiffFile {
+  path: string;
+  lines: string[];
+  truncated: boolean;
+  totalLines: number;
+}
+
+export interface TaskMetrics {
+  inputTokens: number;
+  outputTokens: number;
+  contextUsedTokens: number;
+  contextWindowTokens: number;
+  costUsd: number;
+  elapsedMs: number;
+  model: string;
+  startedAt: string | null;
+  updatedAt: string | null;
+}
+
+export type InterventionLevel = 'ok' | 'watch' | 'act-now';
+
+export interface InterventionSignal {
+  label: string;
+  severity: InterventionLevel;
+}
+
+export interface DetailSnapshot {
+  taskId: string;
+  taskName: string;
+  agent: string;
+  column: KanbanColumn;
+  logs: LogLine[];
+  diffs: DiffFile[];
+  metrics: TaskMetrics;
+  interventionLevel: InterventionLevel;
+  interventionSignals: InterventionSignal[];
+  watermark: string;
+}
+
+export interface DetailDataProvider {
+  /** Cheap change detection for a specific task. */
+  getDetailWatermark(taskId: string): string;
+  /** Full detail read — only called when watermark changes. */
+  getDetailSnapshot(taskId: string): DetailSnapshot;
+}
+
 // ── Layout density (responsive breakpoints) ─────────────────────────
 
 export type Density = 'compact' | 'normal' | 'wide';
