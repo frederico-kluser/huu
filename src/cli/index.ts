@@ -14,7 +14,7 @@ import {
 } from './errors.js';
 import { Logger, getLogger, setGlobalLogger, resolveVerbosity } from './logger.js';
 import type { VerbosityLevel } from './errors.js';
-import { huuDirExists, configExists } from './config.js';
+import { huuDirExists, configExists, loadConfig, writeConfigAtomic } from './config.js';
 import { renderSetupWizard } from './render.js';
 
 const program = new Command();
@@ -70,6 +70,14 @@ async function checkFirstRun(): Promise<void> {
     // Run init if project wasn't initialized
     if (!hasInit) {
       await initAction({ yes: true });
+    }
+
+    // Apply wizard model selections to the config (init writes defaults,
+    // so we overwrite with what the user actually chose)
+    if (configExists(cwd)) {
+      const config = loadConfig(cwd);
+      config.orchestrator.agentModels = { ...result.agentModels };
+      writeConfigAtomic(cwd, config);
     }
   }
 }

@@ -70,19 +70,19 @@ export type AgentRoleName = (typeof AGENT_ROLES)[number];
 
 export const DEFAULT_AGENT_MODELS: AgentModelConfig = {
   // Tier Critical
-  orchestrator: 'anthropic/claude-sonnet-4.5',
-  reviewer: 'anthropic/claude-opus-4',
-  debugger: 'google/gemini-2.5-pro-preview-03-25',
+  orchestrator: 'moonshot/kimi-k2.5',
+  reviewer: 'moonshot/kimi-k2.5',
+  debugger: 'moonshot/kimi-k2.5',
   // Tier Principal
-  planner: 'anthropic/claude-sonnet-4.5',
-  builder: 'anthropic/claude-sonnet-4',
-  tester: 'minimax/minimax-m2.5',
-  merger: 'openai/gpt-4.1',
+  planner: 'moonshot/kimi-k2.5',
+  builder: 'moonshot/kimi-k2.5',
+  tester: 'moonshot/kimi-k2.5',
+  merger: 'moonshot/kimi-k2.5',
   // Tier Economy
-  researcher: 'google/gemini-2.5-flash-preview',
+  researcher: 'moonshot/kimi-k2.5',
   refactorer: 'deepseek/deepseek-chat',
-  'doc-writer': 'google/gemini-3.1-flash-lite',
-  'context-curator': 'google/gemini-2.5-flash-lite-preview',
+  'doc-writer': 'deepseek/deepseek-chat',
+  'context-curator': 'deepseek/deepseek-chat',
 };
 
 // ── Defaults ─────────────────────────────────────────────────────────
