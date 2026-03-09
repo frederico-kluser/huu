@@ -61,21 +61,40 @@ export function KanbanBoard({
         const colTasks = grouped[col];
         const isActiveColumn = colIndex === selection.columnIndex;
 
+        const COLUMN_COLORS: Record<KanbanColumn, string> = {
+          backlog: 'gray',
+          running: 'yellow',
+          review: 'blue',
+          done: 'green',
+          failed: 'red',
+        };
+
+        const COLUMN_ICONS: Record<KanbanColumn, string> = {
+          backlog: '\u25CB',
+          running: '\u25B6',
+          review: '\u25CF',
+          done: '\u2714',
+          failed: '\u2716',
+        };
+
         return (
           <Box
             key={col}
             flexDirection="column"
             flexGrow={1}
-            borderStyle="single"
+            borderStyle="round"
+            borderColor={isActiveColumn ? 'cyan' : 'gray'}
           >
-            <Box paddingX={1}>
-              <Text bold={isActiveColumn} underline={isActiveColumn}>
-                {COLUMN_LABELS[col]} ({colTasks.length})
+            <Box paddingX={1} gap={1}>
+              <Text color={COLUMN_COLORS[col]}>{COLUMN_ICONS[col]}</Text>
+              <Text bold={isActiveColumn} color={isActiveColumn ? 'cyan' : 'white'}>
+                {COLUMN_LABELS[col]}
               </Text>
+              <Text dimColor>({colTasks.length})</Text>
             </Box>
             {colTasks.length === 0 ? (
-              <Box paddingX={1}>
-                <Text dimColor>{'\u2014'}</Text>
+              <Box paddingX={2}>
+                <Text dimColor italic>empty</Text>
               </Box>
             ) : (
               colTasks.map((task, rowIdx) => (

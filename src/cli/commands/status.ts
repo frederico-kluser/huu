@@ -5,14 +5,7 @@ import { openDatabase } from '../../db/connection.js';
 import { migrate } from '../../db/migrator.js';
 import type { Message, MessageType } from '../../types/index.js';
 import type { MergeQueueItem } from '../../types/index.js';
-import {
-  printHeader,
-  printKeyValue,
-  printDivider,
-  printInfo,
-  printError,
-  colorizeStatus,
-} from '../output.js';
+import { renderStatusScreen } from '../render.js';
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -183,77 +176,6 @@ export function deriveStatus(db: Database.Database): StatusSnapshot {
   };
 }
 
-// ── Rendering ────────────────────────────────────────────────────────
-
-export function renderStatus(snapshot: StatusSnapshot): void {
-  printHeader('HUU — Status');
-
-  if (snapshot.status === 'idle') {
-    printInfo('No executions recorded. Run `huu run "task"` to start.');
-    return;
-  }
-
-  printKeyValue('Status', colorizeStatus(snapshot.status));
-  printKeyValue('Run ID', snapshot.runId ?? 'unknown');
-  printKeyValue('Agent', snapshot.agentName ?? 'unknown');
-  printKeyValue('Last Event', snapshot.lastEventType ?? 'none');
-  printKeyValue('Last Event Time', snapshot.lastEventTime ?? 'unknown');
-
-  // Show relevant payload info
-  if (snapshot.lastEventPayload) {
-    const p = snapshot.lastEventPayload;
-    if (typeof p['state'] === 'string') {
-      printKeyValue('Agent State', p['state']);
-    }
-    if (typeof p['turn'] === 'number') {
-      printKeyValue('Turn', String(p['turn']));
-    }
-    if (typeof p['summary'] === 'string' && p['summary']) {
-      printKeyValue('Summary', truncate(p['summary'], 120));
-    }
-    if (typeof p['commitSha'] === 'string') {
-      printKeyValue('Commit', p['commitSha']);
-    }
-    if (typeof p['error'] === 'string') {
-      printKeyValue('Error', p['error']);
-    }
-    if (typeof p['durationMs'] === 'number') {
-      printKeyValue('Duration', `${p['durationMs']}ms`);
-    }
-  }
-
-  // Merge summary
-  if (snapshot.mergeSummary) {
-    printDivider();
-    printKeyValue('Merge Status', colorizeStatus(snapshot.mergeSummary.status));
-    if (snapshot.mergeSummary.sourceBranch) {
-      printKeyValue('Source Branch', snapshot.mergeSummary.sourceBranch);
-    }
-    if (snapshot.mergeSummary.targetBranch) {
-      printKeyValue('Target Branch', snapshot.mergeSummary.targetBranch);
-    }
-    if (snapshot.mergeSummary.lastError) {
-      printKeyValue('Merge Error', snapshot.mergeSummary.lastError);
-    }
-  }
-
-  // Message breakdown
-  if (Object.keys(snapshot.messageStats).length > 0) {
-    printDivider();
-    printKeyValue('Messages', '');
-    for (const [type, count] of Object.entries(snapshot.messageStats)) {
-      printKeyValue(`  ${type}`, String(count));
-    }
-  }
-
-  printDivider();
-}
-
-function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength - 3) + '...';
-}
-
 // ── CLI action ───────────────────────────────────────────────────────
 
 export async function statusAction(): Promise<void> {
@@ -261,7 +183,17 @@ export async function statusAction(): Promise<void> {
   const dbPath = path.join(cwd, DB_PATH);
 
   if (!fs.existsSync(dbPath)) {
-    printInfo('No HUU database found. Run `huu run "task"` to start.');
+    const idleSnapshot: StatusSnapshot = {
+      status: 'idle',
+      runId: null,
+      agentName: null,
+      lastEventType: null,
+      lastEventTime: null,
+      lastEventPayload: null,
+      mergeSummary: null,
+      messageStats: {},
+    };
+    await renderStatusScreen(idleSnapshot);
     return;
   }
 
@@ -269,11 +201,10 @@ export async function statusAction(): Promise<void> {
   try {
     migrate(db);
     const snapshot = deriveStatus(db);
-    renderStatus(snapshot);
+    await renderStatusScreen(snapshot);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    printError(`Failed to read status: ${message}`);
-    printInfo(`Database path: ${dbPath}`);
+    console.error(`Failed to read status: ${message}`);
     process.exitCode = 1;
   } finally {
     db.close();

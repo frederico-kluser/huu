@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
+import fs from 'node:fs';
 import { openDatabase } from '../../db/connection.js';
 import { migrate } from '../../db/migrator.js';
 import { MessageQueue } from '../../db/queue.js';
@@ -14,22 +15,28 @@ import { createDefaultRegistry } from '../../agents/tools.js';
 import { builderAgent } from '../../agents/definitions/builder.js';
 import type { AgentRunResult } from '../../agents/types.js';
 import type { MergeExecutionResult } from '../../git/MergeManager.js';
-import {
-  printInfo,
-  printSuccess,
-  printWarn,
-  printError,
-  printEvent,
-  printStep,
-  printHeader,
-  printKeyValue,
-  printDivider,
-} from '../output.js';
+import { renderRunScreen } from '../render.js';
+import type { RunScreenController } from '../render.js';
+import { huuDirExists, getDbPath, getHuuDir, createDefaultConfig, writeConfigAtomic, configExists } from '../config.js';
+import { initAction } from './init.js';
 
 // ── Constants ────────────────────────────────────────────────────────
 
 const DB_PATH = '.huu/huu.db';
 const PROJECT_ID = 'default';
+
+// ── Auto-init ───────────────────────────────────────────────────────
+
+async function ensureInitialized(cwd: string): Promise<void> {
+  if (!huuDirExists(cwd)) {
+    // Auto-initialize silently
+    await initAction({ yes: true });
+  } else if (!configExists(cwd)) {
+    // Directory exists but no config — write defaults
+    const config = createDefaultConfig();
+    writeConfigAtomic(cwd, config);
+  }
+}
 
 // ── Public API ───────────────────────────────────────────────────────
 
@@ -48,11 +55,12 @@ export interface RunSingleAgentResult {
 }
 
 /**
- * Execute the single-agent loop end-to-end:
- * 1. Open DB + migrate
- * 2. Spawn builder agent (worktree → implement → commit)
- * 3. If agent produced a commit, enqueue + execute merge
- * 4. Report result
+ * Execute the single-agent loop end-to-end with Ink UI:
+ * 1. Auto-init if needed
+ * 2. Open DB + migrate
+ * 3. Spawn builder agent (worktree -> implement -> commit)
+ * 4. If agent produced a commit, enqueue + execute merge
+ * 5. Report result via TUI
  */
 export async function runSingleAgentTask(
   options: RunSingleAgentOptions,
@@ -61,168 +69,222 @@ export async function runSingleAgentTask(
   const dbPath = options.dbPath ?? path.join(cwd, DB_PATH);
   const taskId = crypto.randomUUID();
 
-  printHeader('HUU — Single Agent Run');
-
-  // 1. Initialize infrastructure
-  printStep('Initializing database and infrastructure');
-
-  const { mkdirSync } = await import('node:fs');
-  mkdirSync(path.dirname(dbPath), { recursive: true });
-
-  const db = openDatabase(dbPath);
-  let runId = '';
+  // Render the run screen
+  const ui = renderRunScreen(options.taskDescription);
 
   try {
-    migrate(db);
+    // 0. Auto-init
+    ui.setPhase('preparing');
+    ui.addLog({ message: 'Checking project initialization...', level: 'step' });
+    await ensureInitialized(cwd);
+    ui.addLog({ message: 'Project ready', level: 'success' });
 
-    const queue = new MessageQueue(db);
-    const auditLog = new AuditLogRepository(db);
-    const toolRegistry = createDefaultRegistry();
-    const worktreeManager = new WorktreeManager(cwd);
-    const mergeQueueRepo = new MergeQueueRepository(db);
-    const mergeResultsRepo = new MergeResultsRepository(db);
+    // 1. Initialize infrastructure
+    ui.setPhase('initializing');
+    ui.addLog({ message: 'Opening database...', level: 'step' });
 
-    const defaultBranch = await detectDefaultBranch(worktreeManager.getRootGit());
-    printSuccess(`Infrastructure ready (branch: ${defaultBranch})`);
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
-    // 2. Spawn builder agent
-    printEvent('agent', `Spawning builder agent for task`, taskId.slice(0, 8));
-    printStep(`Task: "${options.taskDescription}"`);
+    const db = openDatabase(dbPath);
+    let runId = '';
 
-    const agentResult = await spawnAgent(
-      {
-        agent: builderAgent,
-        taskId,
-        taskPrompt: options.taskDescription,
-        projectId: PROJECT_ID,
-        baseBranch: defaultBranch,
-        keepWorktree: false, // branch is preserved for merge
-      },
-      {
-        worktreeManager,
-        queue,
-        auditLog,
-        toolRegistry,
-      },
-    );
+    try {
+      migrate(db);
 
-    runId = agentResult.runId;
+      const queue = new MessageQueue(db);
+      const auditLog = new AuditLogRepository(db);
+      const toolRegistry = createDefaultRegistry();
+      const worktreeManager = new WorktreeManager(cwd);
+      const mergeQueueRepo = new MergeQueueRepository(db);
+      const mergeResultsRepo = new MergeResultsRepository(db);
 
-    printEvent('agent', `Agent finished: ${agentResult.status}`, runId);
+      const defaultBranch = await detectDefaultBranch(worktreeManager.getRootGit());
+      ui.addLog({
+        message: `Infrastructure ready (branch: ${defaultBranch})`,
+        level: 'success',
+      });
 
-    if (agentResult.status === 'failed' || agentResult.status === 'aborted') {
-      printError(
-        `Agent ${agentResult.status}: ${agentResult.error ?? 'unknown error'}`,
-        runId,
+      // 2. Spawn builder agent
+      ui.setPhase('spawning');
+      ui.addLog({
+        message: `Spawning builder agent for task [${taskId.slice(0, 8)}]`,
+        level: 'info',
+      });
+
+      const agentResult = await spawnAgent(
+        {
+          agent: builderAgent,
+          taskId,
+          taskPrompt: options.taskDescription,
+          projectId: PROJECT_ID,
+          baseBranch: defaultBranch,
+          keepWorktree: false,
+        },
+        {
+          worktreeManager,
+          queue,
+          auditLog,
+          toolRegistry,
+        },
       );
-      return {
-        ok: false,
-        runId,
-        agentResult,
-        mergeResult: null,
-        error: agentResult.error,
-      };
-    }
 
-    // Report agent results
-    printStep(`Files changed: ${agentResult.filesChanged.length}`, runId);
-    if (agentResult.filesChanged.length > 0) {
-      for (const f of agentResult.filesChanged.slice(0, 10)) {
-        printStep(`  ${f}`, runId);
-      }
-      if (agentResult.filesChanged.length > 10) {
-        printStep(
-          `  ... and ${agentResult.filesChanged.length - 10} more`,
+      runId = agentResult.runId;
+      ui.setPhase('running');
+      ui.addLog({
+        message: `Agent finished: ${agentResult.status}`,
+        level: agentResult.status === 'completed' ? 'success' : 'warn',
+      });
+
+      if (agentResult.status === 'failed' || agentResult.status === 'aborted') {
+        ui.setError(`Agent ${agentResult.status}: ${agentResult.error ?? 'unknown error'}`);
+        ui.setMetrics({
           runId,
-        );
+          agentName: agentResult.agentName,
+          filesChanged: agentResult.filesChanged,
+          inputTokens: agentResult.usage.inputTokens,
+          outputTokens: agentResult.usage.outputTokens,
+          turns: agentResult.usage.turns,
+          durationMs: agentResult.durationMs,
+          commitSha: agentResult.commitSha,
+          mergeOutcome: null,
+          mergeTier: null,
+        });
+        await ui.waitUntilExit();
+        return {
+          ok: false,
+          runId,
+          agentResult,
+          mergeResult: null,
+          error: agentResult.error,
+        };
       }
-    }
 
-    printStep(
-      `Usage: ${agentResult.usage.inputTokens} input + ${agentResult.usage.outputTokens} output tokens, ${agentResult.usage.turns} turns`,
-      runId,
-    );
+      ui.addLog({
+        message: `Files changed: ${agentResult.filesChanged.length}`,
+        level: 'step',
+      });
+      ui.addLog({
+        message: `Tokens: ${agentResult.usage.inputTokens} in + ${agentResult.usage.outputTokens} out (${agentResult.usage.turns} turns)`,
+        level: 'step',
+      });
 
-    // 3. Merge if agent produced a commit
-    if (!agentResult.commitSha) {
-      printWarn('Agent completed but produced no commit — skipping merge', runId);
+      // 3. Merge if agent produced a commit
+      if (!agentResult.commitSha) {
+        ui.addLog({
+          message: 'Agent completed but produced no commit — skipping merge',
+          level: 'warn',
+        });
+        ui.setPhase('done');
+        ui.setMetrics({
+          runId,
+          agentName: agentResult.agentName,
+          filesChanged: agentResult.filesChanged,
+          inputTokens: agentResult.usage.inputTokens,
+          outputTokens: agentResult.usage.outputTokens,
+          turns: agentResult.usage.turns,
+          durationMs: agentResult.durationMs,
+          commitSha: null,
+          mergeOutcome: null,
+          mergeTier: null,
+        });
+        await ui.waitUntilExit();
+        return {
+          ok: true,
+          runId,
+          agentResult,
+          mergeResult: null,
+        };
+      }
+
+      ui.setPhase('merging');
+      ui.addLog({ message: 'Enqueueing merge request...', level: 'step' });
+
+      const sourceBranch = `huu-agent/${runId}`;
+      const mergeManager = new MergeManager(
+        worktreeManager.getRootGit(),
+        mergeQueueRepo,
+        mergeResultsRepo,
+        { workerId: 'cli', repoPath: cwd },
+      );
+
+      mergeManager.enqueue({
+        source_branch: sourceBranch,
+        source_head_sha: agentResult.commitSha,
+        target_branch: defaultBranch,
+        request_id: `run-${runId}`,
+      });
+
+      ui.addLog({ message: 'Processing merge...', level: 'step' });
+      const mergeResult = await mergeManager.processNext();
+
+      if (!mergeResult) {
+        ui.setError('Merge queue unexpectedly empty');
+        await ui.waitUntilExit();
+        return {
+          ok: false,
+          runId,
+          agentResult,
+          mergeResult: null,
+          error: 'Merge queue unexpectedly empty after enqueue',
+        };
+      }
+
+      if (mergeResult.outcome === 'merged') {
+        ui.addLog({
+          message: `Merge complete (${mergeResult.tier}, ${mergeResult.mode ?? 'unknown'})`,
+          level: 'success',
+        });
+      } else if (mergeResult.outcome === 'conflict') {
+        ui.addLog({
+          message: `Merge conflict: ${mergeResult.conflicts.join(', ')}`,
+          level: 'warn',
+        });
+      } else {
+        ui.addLog({
+          message: `Merge failed: ${mergeResult.errorMessage ?? 'unknown'}`,
+          level: 'error',
+        });
+      }
+
+      // 4. Done
+      const ok = mergeResult.outcome === 'merged';
+      ui.setPhase(ok ? 'done' : 'failed');
+      ui.setMetrics({
+        runId,
+        agentName: agentResult.agentName,
+        filesChanged: agentResult.filesChanged,
+        inputTokens: agentResult.usage.inputTokens,
+        outputTokens: agentResult.usage.outputTokens,
+        turns: agentResult.usage.turns,
+        durationMs: agentResult.durationMs,
+        commitSha: agentResult.commitSha,
+        mergeOutcome: mergeResult.outcome,
+        mergeTier: mergeResult.tier,
+      });
+
+      await ui.waitUntilExit();
+
       return {
-        ok: true,
+        ok,
         runId,
         agentResult,
-        mergeResult: null,
+        mergeResult,
+        error: ok ? undefined : mergeResult.errorMessage ?? undefined,
       };
+    } finally {
+      db.close();
     }
-
-    printEvent('merge', 'Enqueueing merge request', runId);
-
-    const sourceBranch = `huu-agent/${runId}`;
-    const mergeManager = new MergeManager(
-      worktreeManager.getRootGit(),
-      mergeQueueRepo,
-      mergeResultsRepo,
-      { workerId: 'cli', repoPath: cwd },
-    );
-
-    mergeManager.enqueue({
-      source_branch: sourceBranch,
-      source_head_sha: agentResult.commitSha,
-      target_branch: defaultBranch,
-      request_id: `run-${runId}`,
-    });
-
-    printEvent('merge', 'Processing merge', runId);
-    const mergeResult = await mergeManager.processNext();
-
-    if (!mergeResult) {
-      printError('Merge queue unexpectedly empty', runId);
-      return {
-        ok: false,
-        runId,
-        agentResult,
-        mergeResult: null,
-        error: 'Merge queue unexpectedly empty after enqueue',
-      };
-    }
-
-    if (mergeResult.outcome === 'merged') {
-      printSuccess(
-        `Merge complete (${mergeResult.tier}, ${mergeResult.mode ?? 'unknown'})`,
-        runId,
-      );
-    } else if (mergeResult.outcome === 'conflict') {
-      printWarn(
-        `Merge conflict detected: ${mergeResult.conflicts.join(', ')}`,
-        runId,
-      );
-    } else {
-      printError(
-        `Merge failed: ${mergeResult.errorMessage ?? 'unknown'}`,
-        runId,
-      );
-    }
-
-    // 4. Summary
-    printDivider();
-    printHeader('Run Summary');
-    printKeyValue('Run ID', runId);
-    printKeyValue('Task', options.taskDescription);
-    printKeyValue('Agent', `${agentResult.agentName} (${agentResult.status})`);
-    printKeyValue('Commit', agentResult.commitSha ?? 'none');
-    printKeyValue('Merge', mergeResult.outcome);
-    printKeyValue('Duration', `${agentResult.durationMs}ms`);
-    printDivider();
-
-    const ok = mergeResult.outcome === 'merged';
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    ui.setError(message);
+    await ui.waitUntilExit();
     return {
-      ok,
-      runId,
-      agentResult,
-      mergeResult,
-      error: ok ? undefined : mergeResult.errorMessage ?? undefined,
+      ok: false,
+      runId: '',
+      agentResult: null,
+      mergeResult: null,
+      error: message,
     };
-  } finally {
-    db.close();
   }
 }
 
@@ -232,10 +294,8 @@ export async function runAction(taskDescription: string): Promise<void> {
   const result = await runSingleAgentTask({ taskDescription });
 
   if (result.ok) {
-    printSuccess(`Run ${result.runId.slice(0, 8)} completed successfully`);
     process.exitCode = 0;
   } else {
-    printError(`Run ${result.runId.slice(0, 8) || 'unknown'} failed: ${result.error ?? 'unknown error'}`);
     process.exitCode = 1;
   }
 }

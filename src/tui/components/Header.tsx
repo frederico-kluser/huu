@@ -21,23 +21,32 @@ export function Header({
 
   if (density === 'compact') {
     return (
-      <Box borderStyle="single" paddingX={1}>
-        <Text>A{act}</Text>
+      <Box paddingX={1} gap={2}>
+        <Text color="yellow" bold>Act {act}</Text>
+        <Text dimColor>{'\u2502'}</Text>
+        <Text color="magenta">{beat ?? '-'}</Text>
         <Spacer />
-        <Text>{beat ?? '-'}</Text>
-        <Spacer />
-        <Text>{costStr}</Text>
+        <Text color="green" bold>{costStr}</Text>
       </Box>
     );
   }
 
   return (
-    <Box borderStyle="single" paddingX={1}>
-      <Text bold>Act {act}</Text>
+    <Box paddingX={1} gap={3}>
+      <Box gap={1}>
+        <Text dimColor>Act</Text>
+        <Text color="yellow" bold>{act}/3</Text>
+      </Box>
+      <Text dimColor>{'\u2502'}</Text>
+      <Box gap={1}>
+        <Text dimColor>Beat</Text>
+        <Text color="magenta" bold>{beat ?? 'n/a'}</Text>
+      </Box>
       <Spacer />
-      <Text>Beat {beat ?? 'n/a'}</Text>
-      <Spacer />
-      <Text>Total {costStr}</Text>
+      <Box gap={1}>
+        <Text dimColor>Cost</Text>
+        <Text color="green" bold>{costStr}</Text>
+      </Box>
     </Box>
   );
 }

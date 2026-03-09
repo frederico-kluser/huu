@@ -12,8 +12,7 @@ import {
 import type { HuuConfig } from '../config.js';
 import { errors, EXIT_CODES } from '../errors.js';
 import { getLogger } from '../logger.js';
-import pc from 'picocolors';
-import * as readline from 'node:readline';
+import { renderConfigScreen } from '../render.js';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -101,169 +100,6 @@ function applySetValues(
   return { applied, errors: errs };
 }
 
-// ── Simple readline prompt ───────────────────────────────────────────
-
-function createPromptInterface(): readline.Interface {
-  return readline.createInterface({
-    input: process.stdin,
-    output: process.stderr,
-  });
-}
-
-async function promptSelect(
-  rl: readline.Interface,
-  label: string,
-  options: string[],
-  current: string,
-): Promise<string | null> {
-  return new Promise((resolve) => {
-    console.error('');
-    console.error(pc.bold(`  ${label}`));
-    for (let i = 0; i < options.length; i++) {
-      const marker = options[i] === current ? pc.green('*') : ' ';
-      console.error(`    ${marker} ${i + 1}) ${options[i]}`);
-    }
-    rl.question(
-      `  Choice [1-${options.length}] (enter to keep "${current}"): `,
-      (answer: string) => {
-        if (answer.trim() === '') {
-          resolve(current);
-          return;
-        }
-        const idx = parseInt(answer.trim(), 10) - 1;
-        if (idx >= 0 && idx < options.length) {
-          resolve(options[idx]!);
-        } else {
-          console.error(pc.yellow('    Invalid choice, keeping current value.'));
-          resolve(current);
-        }
-      },
-    );
-
-    rl.on('close', () => resolve(null));
-  });
-}
-
-async function promptNumber(
-  rl: readline.Interface,
-  label: string,
-  current: number,
-  min: number,
-  max: number,
-): Promise<number | null> {
-  return new Promise((resolve) => {
-    console.error('');
-    console.error(pc.bold(`  ${label}`));
-    rl.question(
-      `  Value [${min}-${max}] (enter to keep ${current}): `,
-      (answer: string) => {
-        if (answer.trim() === '') {
-          resolve(current);
-          return;
-        }
-        const num = parseInt(answer.trim(), 10);
-        if (!isNaN(num) && num >= min && num <= max) {
-          resolve(num);
-        } else {
-          console.error(
-            pc.yellow(`    Invalid value (must be ${min}-${max}), keeping ${current}.`),
-          );
-          resolve(current);
-        }
-      },
-    );
-
-    rl.on('close', () => resolve(null));
-  });
-}
-
-async function promptConfirm(
-  rl: readline.Interface,
-  message: string,
-): Promise<boolean | null> {
-  return new Promise((resolve) => {
-    rl.question(`  ${message} [y/N]: `, (answer: string) => {
-      resolve(answer.trim().toLowerCase() === 'y');
-    });
-
-    rl.on('close', () => resolve(null));
-  });
-}
-
-// ── Interactive flow ─────────────────────────────────────────────────
-
-async function interactiveConfig(config: HuuConfig): Promise<HuuConfig | null> {
-  const log = getLogger();
-  const rl = createPromptInterface();
-  const updated = JSON.parse(JSON.stringify(config)) as HuuConfig;
-
-  try {
-    console.error(pc.bold('\n  HUU Configuration\n'));
-
-    for (const keyDef of CONFIGURABLE_KEYS) {
-      const currentValue = getConfigValue(
-        updated,
-        keyDef.key,
-      );
-
-      if (keyDef.type === 'select' && keyDef.options) {
-        const result = await promptSelect(
-          rl,
-          keyDef.label,
-          keyDef.options,
-          String(currentValue),
-        );
-        if (result === null) {
-          // User cancelled
-          return null;
-        }
-        setConfigValue(updated, keyDef.key, result);
-      } else if (keyDef.type === 'number') {
-        const result = await promptNumber(
-          rl,
-          keyDef.label,
-          Number(currentValue),
-          keyDef.min ?? 1,
-          keyDef.max ?? 100,
-        );
-        if (result === null) {
-          return null;
-        }
-        setConfigValue(updated, keyDef.key, result);
-      }
-    }
-
-    // Show diff
-    console.error('');
-    console.error(pc.bold('  Summary of changes:'));
-    let hasChanges = false;
-    for (const keyDef of CONFIGURABLE_KEYS) {
-      const oldVal = getConfigValue(config, keyDef.key);
-      const newVal = getConfigValue(updated, keyDef.key);
-      if (oldVal !== newVal) {
-        console.error(
-          `    ${keyDef.label}: ${pc.red(String(oldVal))} → ${pc.green(String(newVal))}`,
-        );
-        hasChanges = true;
-      }
-    }
-
-    if (!hasChanges) {
-      console.error(pc.dim('    No changes made.'));
-      return config;
-    }
-
-    const confirm = await promptConfirm(rl, 'Save changes?');
-    if (confirm === null || !confirm) {
-      return null;
-    }
-
-    return updated;
-  } finally {
-    rl.close();
-  }
-}
-
 // ── Main action ──────────────────────────────────────────────────────
 
 export async function configAction(flags: ConfigFlags = {}): Promise<void> {
@@ -330,21 +166,14 @@ export async function configAction(flags: ConfigFlags = {}): Promise<void> {
     return;
   }
 
-  // --non-interactive without --set: show current config
+  // --non-interactive without --set: show current config as JSON
   if (flags.nonInteractive) {
-    log.header('HUU — Current Configuration');
-    for (const keyDef of CONFIGURABLE_KEYS) {
-      log.keyValue(
-        keyDef.label,
-        String(getConfigValue(config, keyDef.key)),
-      );
-    }
-    log.divider();
+    console.log(JSON.stringify(config, null, 2));
     return;
   }
 
-  // Interactive flow
-  const result = await interactiveConfig(config);
+  // Interactive flow via Ink
+  const result = await renderConfigScreen(config);
   if (result === null) {
     log.info('Configuration cancelled — no changes saved.');
     process.exitCode = EXIT_CODES.USER_CANCELLED;

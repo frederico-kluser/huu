@@ -8,7 +8,8 @@
 //   q          → exit app
 
 import React, { useState, useCallback } from 'react';
-import { Box, Text, useApp, useInput, useStdout } from 'ink';
+import { Box, Text, Spacer, useApp, useInput, useStdout } from 'ink';
+import Spinner from 'ink-spinner';
 import type {
   AppTab,
   KanbanDataProvider,
@@ -22,6 +23,7 @@ import { APP_TABS, TAB_BY_KEY, TAB_LABELS, getDensity } from './types.js';
 import { Header } from './components/Header.js';
 import { KanbanBoard } from './components/KanbanBoard.js';
 import { DetailView } from './components/DetailView.js';
+import { KeyHint } from './components/KeyHint.js';
 import { useKanbanData } from './hooks/useKanbanData.js';
 import { useBoardNavigation } from './hooks/useBoardNavigation.js';
 import { useDetailViewData } from './hooks/useDetailViewData.js';
@@ -166,26 +168,40 @@ export default function App({
     );
   }
 
-  // Transitioning state — brief blank
+  // Transitioning state — spinner
   if (view === 'transitioning') {
     return (
       <Box flexDirection="column" flexGrow={1} justifyContent="center" alignItems="center">
-        <Text dimColor>Loading...</Text>
+        <Box gap={1}>
+          <Text color="cyan"><Spinner type="dots" /></Text>
+          <Text dimColor>Loading...</Text>
+        </Box>
       </Box>
     );
   }
 
   return (
     <Box flexDirection="column">
-      {/* Tab bar */}
-      <Box>
-        {APP_TABS.map((tab) => (
-          <Box key={tab} paddingX={1}>
-            <Text bold={tab === activeTab} inverse={tab === activeTab}>
-              {TAB_LABELS[tab]}
+      {/* Top bar: branding + tabs */}
+      <Box borderStyle="round" borderColor="cyan" paddingX={1}>
+        <Text bold color="cyan">HUU</Text>
+        <Text dimColor> {'\u2502'} </Text>
+
+        {APP_TABS.map((tab, i) => (
+          <Box key={tab}>
+            {i > 0 && <Text dimColor>  </Text>}
+            <Text
+              bold={tab === activeTab}
+              color={tab === activeTab ? 'cyan' : 'gray'}
+              inverse={tab === activeTab}
+            >
+              {' '}{TAB_LABELS[tab]}{' '}
             </Text>
           </Box>
         ))}
+
+        <Spacer />
+        <Text dimColor>Q quit</Text>
       </Box>
 
       {/* Content */}
@@ -202,6 +218,11 @@ export default function App({
             selection={nav.selection}
             density={density}
           />
+          <KeyHint bindings={[
+            { key: '\u2190\u2191\u2192\u2193', label: 'Navigate' },
+            { key: 'Enter', label: 'Detail' },
+            { key: 'K/L/M/C/B', label: 'Switch tab' },
+          ]} />
         </Box>
       )}
       {activeTab === 'logs' && (
