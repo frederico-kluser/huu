@@ -20,6 +20,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "check": "npm run typecheck && npm run test",
+    "release": "npm run build && npm link",
     "docs:api": "typedoc",
     "docs:api:check": "typedoc --logLevel Verbose"
   },
