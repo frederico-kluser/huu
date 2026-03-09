@@ -166,13 +166,13 @@ The human interface. Everything that was CLI-only becomes visual and interactive
 
 The system learns and improves with every session.
 
-### [ ] 4.1 Anti-Hallucination Pipeline [depends: (1.2,2.1,2.2,2.3)]
-- [ ] L1: Prompt design templates with "I don't know" permission + source restriction
-- [ ] L2: Quote-first implementation for document-heavy tasks
-- [ ] L3: Reviewer agent loop (validate output vs requirements, max 3 iterations)
-- [ ] L4: Automated test gate (run tests before accepting builder output)
-- [ ] CoVe pipeline for critical outputs (4-step verification)
-- [ ] `critical: true` flag in beat sheet for high-risk tasks
+### [x] 4.1 Anti-Hallucination Pipeline [depends: (1.2,2.1,2.2,2.3)]
+- [x] L1: Prompt design templates with "I don't know" permission + source restriction
+- [x] L2: Quote-first implementation for document-heavy tasks
+- [x] L3: Reviewer agent loop (validate output vs requirements, max 3 iterations)
+- [x] L4: Automated test gate (run tests before accepting builder output)
+- [x] CoVe pipeline for critical outputs (4-step verification)
+- [x] `critical: true` flag in beat sheet for high-risk tasks
 
 ### [ ] 4.2 Memory & Learning [depends: (0.2,1.1,2.5)]
 - [ ] Observation logging via tool call hooks (100% coverage)
@@ -234,7 +234,7 @@ The system learns and improves with every session.
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 4/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 3/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 1/4 |
-| 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |
+| 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 1/4 |
 | 5 | Polish | Final Image (100%) | Production-ready | 0/4 |
 
 ---
