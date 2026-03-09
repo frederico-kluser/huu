@@ -154,11 +154,11 @@ The human interface. Everything that was CLI-only becomes visual and interactive
 - [ ] `[A]bort` — cancel agent, discard worktree, move to Failed
 - [ ] `[P]romote` — save learning from Done task to instincts
 
-### [ ] 3.4 Specialized Views [depends: (0.2,1.3,2.1,2.2,3.1)]
-- [ ] `[L]ogs` tab — aggregated log view from all agents
-- [ ] `[M]erge Queue` tab — FIFO queue with tier indicators
-- [ ] `[C]ost` tab — breakdown by agent, model, phase
-- [ ] `[B]eat Sheet` tab — hierarchical progress view with checkpoints
+### [x] 3.4 Specialized Views [depends: (0.2,1.3,2.1,2.2,3.1)]
+- [x] `[L]ogs` tab — aggregated log view from all agents
+- [x] `[M]erge Queue` tab — FIFO queue with tier indicators
+- [x] `[C]ost` tab — breakdown by agent, model, phase
+- [x] `[B]eat Sheet` tab — hierarchical progress view with checkpoints
 
 ---
 
@@ -233,7 +233,7 @@ The system learns and improves with every session.
 | 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 4/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 5/5 |
-| 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 2/4 |
+| 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 3/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |
 | 5 | Polish | Final Image (100%) | Production-ready | 0/4 |
 
