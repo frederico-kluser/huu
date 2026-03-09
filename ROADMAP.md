@@ -183,11 +183,11 @@ The system learns and improves with every session.
 - [x] Session summary generation on completion
 - [x] Context loading: last 7 days of sessions on startup
 
-### [ ] 4.3 Audit System [depends: (0.2,1.1,2.2,2.3,2.4,2.5,3.4,4.1)]
-- [ ] Complete tool call logging (timestamp, agent, tool, params, result)
-- [ ] Post-session audit report generation
-- [ ] Suspicious action flagging (unusual patterns, unexpected file access)
-- [ ] Cost reporting per session, per feature, per agent
+### [x] 4.3 Audit System [depends: (0.2,1.1,2.2,2.3,2.4,2.5,3.4,4.1)]
+- [x] Complete tool call logging (timestamp, agent, tool, params, result)
+- [x] Post-session audit report generation
+- [x] Suspicious action flagging (unusual patterns, unexpected file access)
+- [x] Cost reporting per session, per feature, per agent
 
 ### [x] 4.4 MCP Bridge [depends: (0.1,1.1,2.2)]
 - [x] MCP client programmatic setup (`@modelcontextprotocol/sdk`)
@@ -235,7 +235,7 @@ The system learns and improves with every session.
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 4/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 5/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 4/4 |
-| 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 3/4 |
+| 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 4/4 |
 | 5 | Polish | Final Image (100%) | Production-ready | 2/4 |
 
 ---
