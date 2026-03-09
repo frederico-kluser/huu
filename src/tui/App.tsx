@@ -1,11 +1,12 @@
-// TUI shell — tab navigation (K/L/M/C/B) with Kanban + Detail View + Specialized Views
+// TUI shell — navegação por abas (K/L/M/C/B) com Kanban + Detail View + Views Especializadas
 //
-// Keyboard:
-//   k/l/m/c/b  → switch tab
-//   arrows     → navigate Kanban cards
-//   Enter      → open Detail View for selected task
-//   ESC        → close Detail View (or exit app from Kanban)
-//   q          → exit app
+// Teclado:
+//   k/l/m/c/b  → trocar aba
+//   setas      → navegar cards do Kanban
+//   Enter      → abrir Detail View da tarefa selecionada
+//   ESC        → fechar Detail View (ou sair do app pelo Kanban)
+//   g          → abrir configurações de modelo dos agentes
+//   q          → sair do app
 
 import React, { useState, useCallback } from 'react';
 import { Box, Text, Spacer, useApp, useInput, useStdout } from 'ink';
@@ -24,6 +25,7 @@ import { Header } from './components/Header.js';
 import { KanbanBoard } from './components/KanbanBoard.js';
 import { DetailView } from './components/DetailView.js';
 import { KeyHint } from './components/KeyHint.js';
+import { AgentModelChanger } from './screens/AgentModelChanger.js';
 import { useKanbanData } from './hooks/useKanbanData.js';
 import { useBoardNavigation } from './hooks/useBoardNavigation.js';
 import { useDetailViewData } from './hooks/useDetailViewData.js';
@@ -32,6 +34,7 @@ import { LogsView } from './views/LogsView.js';
 import { MergeQueueView } from './views/MergeQueueView.js';
 import { CostView } from './views/CostView.js';
 import { BeatSheetView } from './views/BeatSheetView.js';
+import type { AgentModelConfig } from '../cli/config.js';
 
 export interface AppProps {
   provider?: KanbanDataProvider | undefined;
@@ -41,6 +44,10 @@ export interface AppProps {
   costProvider?: CostDataProvider | undefined;
   beatSheetProvider?: BeatSheetDataProvider | undefined;
   onOpenTask?: ((taskId: string) => void) | undefined;
+  /** Configuração atual dos modelos dos agentes */
+  agentModels?: AgentModelConfig | undefined;
+  /** Callback quando modelos de agentes são alterados */
+  onAgentModelsChange?: ((models: AgentModelConfig) => void) | undefined;
 }
 
 const defaultProvider: KanbanDataProvider = {
@@ -62,10 +69,13 @@ export default function App({
   costProvider,
   beatSheetProvider,
   onOpenTask,
+  agentModels,
+  onAgentModelsChange,
 }: AppProps): React.JSX.Element {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const [activeTab, setActiveTab] = useState<AppTab>('kanban');
+  const [showModelChanger, setShowModelChanger] = useState(false);
 
   const terminalCols = stdout.columns ?? 80;
   const terminalRows = stdout.rows ?? 24;
@@ -75,7 +85,7 @@ export default function App({
   const { view, detailTaskId, openDetail, closeDetail } =
     useViewTransition(true);
 
-  const isKanbanActive = activeTab === 'kanban' && view === 'kanban';
+  const isKanbanActive = activeTab === 'kanban' && view === 'kanban' && !showModelChanger;
   const snapshot = useKanbanData(dataProvider, activeTab === 'kanban');
   const nav = useBoardNavigation(snapshot.tasks);
 
@@ -100,42 +110,65 @@ export default function App({
     closeDetail();
   }, [closeDetail]);
 
-  useInput((input, key) => {
-    // In Detail View: ESC closes it, tab switching still works
+  const handleModelChangerClose = useCallback(() => {
+    setShowModelChanger(false);
+  }, []);
+
+  const handleModelChange = useCallback((models: AgentModelConfig) => {
+    if (onAgentModelsChange) {
+      onAgentModelsChange(models);
+    }
+    setShowModelChanger(false);
+  }, [onAgentModelsChange]);
+
+  useInput((input: string, key: { escape: boolean; return: boolean; leftArrow: boolean; rightArrow: boolean; upArrow: boolean; downArrow: boolean }) => {
+    // Se o painel de modelos está aberto, não processa input aqui
+    if (showModelChanger) return;
+
+    // No Detail View: ESC fecha, troca de aba ainda funciona
     if (view === 'detail') {
       if (key.escape) {
         handleCloseDetail();
         return;
       }
-      // Allow tab switching from detail view
       const tab = TAB_BY_KEY[input];
       if (tab !== undefined) {
         handleCloseDetail();
         setActiveTab(tab);
         return;
       }
-      // q exits app
       if (input === 'q') {
         exit();
+        return;
+      }
+      if (input === 'g') {
+        handleCloseDetail();
+        setShowModelChanger(true);
         return;
       }
       return;
     }
 
-    // Tab switching (highest priority)
+    // Troca de aba (prioridade máxima)
     const tab = TAB_BY_KEY[input];
     if (tab !== undefined) {
       setActiveTab(tab);
       return;
     }
 
-    // Exit
+    // Sair
     if (input === 'q' || key.escape) {
       exit();
       return;
     }
 
-    // Board navigation (only when Kanban tab is active)
+    // Abrir configurações de modelo
+    if (input === 'g') {
+      setShowModelChanger(true);
+      return;
+    }
+
+    // Navegação no quadro (apenas quando aba Kanban está ativa)
     if (!isKanbanActive) return;
 
     if (key.leftArrow) {
@@ -154,7 +187,18 @@ export default function App({
     }
   });
 
-  // Detail View (overlay — replaces content area)
+  // Painel de troca de modelo de agente (overlay)
+  if (showModelChanger) {
+    return (
+      <AgentModelChanger
+        currentModels={agentModels}
+        onSave={handleModelChange}
+        onCancel={handleModelChangerClose}
+      />
+    );
+  }
+
+  // Detail View (overlay — substitui área de conteúdo)
   if (view === 'detail' && detailTaskId) {
     return (
       <Box flexDirection="column">
@@ -168,13 +212,13 @@ export default function App({
     );
   }
 
-  // Transitioning state — spinner
+  // Estado de transição — spinner
   if (view === 'transitioning') {
     return (
       <Box flexDirection="column" flexGrow={1} justifyContent="center" alignItems="center">
         <Box gap={1}>
           <Text color="cyan"><Spinner type="dots" /></Text>
-          <Text dimColor>Loading...</Text>
+          <Text dimColor>Carregando...</Text>
         </Box>
       </Box>
     );
@@ -182,7 +226,7 @@ export default function App({
 
   return (
     <Box flexDirection="column">
-      {/* Top bar: branding + tabs */}
+      {/* Barra superior: branding + abas */}
       <Box borderStyle="round" borderColor="cyan" paddingX={1}>
         <Text bold color="cyan">HUU</Text>
         <Text dimColor> {'\u2502'} </Text>
@@ -201,10 +245,10 @@ export default function App({
         ))}
 
         <Spacer />
-        <Text dimColor>Q quit</Text>
+        <Text dimColor>[G] Modelos  Q sair</Text>
       </Box>
 
-      {/* Content */}
+      {/* Conteúdo */}
       {activeTab === 'kanban' && (
         <Box flexDirection="column" flexGrow={1}>
           <Header
@@ -219,9 +263,10 @@ export default function App({
             density={density}
           />
           <KeyHint bindings={[
-            { key: '\u2190\u2191\u2192\u2193', label: 'Navigate' },
-            { key: 'Enter', label: 'Detail' },
-            { key: 'K/L/M/C/B', label: 'Switch tab' },
+            { key: '\u2190\u2191\u2192\u2193', label: 'Navegar' },
+            { key: 'Enter', label: 'Detalhe' },
+            { key: 'G', label: 'Modelos' },
+            { key: 'K/L/M/C/B', label: 'Trocar aba' },
           ]} />
         </Box>
       )}

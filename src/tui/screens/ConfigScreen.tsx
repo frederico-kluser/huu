@@ -1,5 +1,5 @@
-// Interactive configuration screen using Ink
-// Replaces readline-based config with proper TUI
+// Tela interativa de configuração usando Ink
+// Substitui config baseada em readline por TUI adequada
 
 import React, { useState, useCallback } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
@@ -10,10 +10,13 @@ import { Divider } from '../components/Divider.js';
 import { Panel } from '../components/Panel.js';
 import { KeyHint } from '../components/KeyHint.js';
 import { StatusBadge } from '../components/StatusBadge.js';
+import { ModelSelector } from '../components/ModelSelector.js';
+import { AGENT_ROLE_INFO } from '../../models/catalog.js';
+import type { AgentRole } from '../../models/catalog.js';
 import type { HuuConfig } from '../../cli/config.js';
-import { CONFIGURABLE_KEYS, getConfigValue, setConfigValue } from '../../cli/config.js';
+import { CONFIGURABLE_KEYS, getConfigValue, setConfigValue, AGENT_ROLES } from '../../cli/config.js';
 
-type ConfigStep = 'overview' | 'editing' | 'confirm' | 'saved';
+type ConfigStep = 'overview' | 'editing' | 'editing-model' | 'confirm' | 'saved';
 
 interface ConfigScreenProps {
   config: HuuConfig;
@@ -43,6 +46,15 @@ function getFields(config: HuuConfig): ConfigField[] {
   }));
 }
 
+/** Extrai o papel do agente de uma chave de configuração como 'orchestrator.agentModels.builder' */
+function extractAgentRole(configKey: string): AgentRole | null {
+  const prefix = 'orchestrator.agentModels.';
+  if (!configKey.startsWith(prefix)) return null;
+  const role = configKey.slice(prefix.length);
+  if (AGENT_ROLES.includes(role as AgentRole)) return role as AgentRole;
+  return null;
+}
+
 export function ConfigScreen({
   config,
   onSave,
@@ -63,23 +75,30 @@ export function ConfigScreen({
   const handleFieldSelect = useCallback(() => {
     const field = fields[selectedIndex];
     if (!field) return;
+
+    // Se o campo é um modelo de agente, abre o ModelSelector
+    if (field.type === 'model') {
+      setStep('editing-model');
+      return;
+    }
+
     setEditValue(String(field.value));
     setEditError('');
     setStep('editing');
   }, [fields, selectedIndex]);
 
-  useInput((input, key) => {
+  useInput((input: string, key: { escape: boolean; return: boolean; upArrow: boolean; downArrow: boolean }) => {
     if (step === 'overview') {
       if (key.escape || input === 'q') {
         onCancel();
         return;
       }
       if (key.upArrow) {
-        setSelectedIndex((i) => Math.max(0, i - 1));
+        setSelectedIndex((i: number) => Math.max(0, i - 1));
         return;
       }
       if (key.downArrow) {
-        setSelectedIndex((i) => Math.min(fields.length - 1, i + 1));
+        setSelectedIndex((i: number) => Math.min(fields.length - 1, i + 1));
         return;
       }
       if (key.return) {
@@ -87,7 +106,6 @@ export function ConfigScreen({
         return;
       }
       if (input === 's') {
-        // Check if there are changes
         const hasChanges = fields.some(
           (f, i) => String(f.value) !== String(originalFields[i]?.value),
         );
@@ -99,7 +117,7 @@ export function ConfigScreen({
     }
 
     if (step === 'confirm') {
-      if (input === 'y') {
+      if (input === 'y' || input === 's') {
         onSave(editingConfig);
         setStep('saved');
         return;
@@ -111,7 +129,7 @@ export function ConfigScreen({
     }
   }, { isActive: step === 'overview' || step === 'confirm' });
 
-  // ── Overview ──────────────────────────────────────────────────────
+  // ── Visão geral ────────────────────────────────────────────────────
   if (step === 'overview') {
     const hasChanges = fields.some(
       (f, i) => String(f.value) !== String(originalFields[i]?.value),
@@ -120,14 +138,14 @@ export function ConfigScreen({
     return (
       <Box flexDirection="column" paddingX={2} paddingY={1}>
         <Logo compact />
-        <Divider title="Configuration" />
+        <Divider title="Configuração" />
 
         <Box marginTop={1}>
           <Panel
-            title="Settings"
+            title="Configurações"
             titleColor="cyan"
             borderColor="cyan"
-            rightLabel={hasChanges ? 'unsaved changes' : undefined}
+            rightLabel={hasChanges ? 'alterações não salvas' : undefined}
           >
             <Box flexDirection="column" paddingY={1}>
               {fields.map((field, i) => {
@@ -148,7 +166,7 @@ export function ConfigScreen({
                       {String(field.value)}
                     </Text>
                     {isChanged && (
-                      <Text dimColor> (was: {String(originalFields[i]?.value)})</Text>
+                      <Text dimColor> (antes: {String(originalFields[i]?.value)})</Text>
                     )}
                   </Box>
                 );
@@ -159,17 +177,80 @@ export function ConfigScreen({
 
         <Box marginTop={1}>
           <KeyHint bindings={[
-            { key: '\u2191\u2193', label: 'Navigate' },
-            { key: 'Enter', label: 'Edit' },
-            ...(hasChanges ? [{ key: 'S', label: 'Save' }] : []),
-            { key: 'Esc', label: 'Cancel' },
+            { key: '\u2191\u2193', label: 'Navegar' },
+            { key: 'Enter', label: 'Editar' },
+            ...(hasChanges ? [{ key: 'S', label: 'Salvar' }] : []),
+            { key: 'Esc', label: 'Cancelar' },
           ]} />
         </Box>
       </Box>
     );
   }
 
-  // ── Editing a field ───────────────────────────────────────────────
+  // ── Editando modelo de agente (com ModelSelector) ─────────────────
+  if (step === 'editing-model') {
+    const field = fields[selectedIndex];
+    if (!field) {
+      setStep('overview');
+      return <Box />;
+    }
+
+    const agentRole = extractAgentRole(field.key);
+    if (!agentRole) {
+      setStep('overview');
+      return <Box />;
+    }
+
+    const roleInfo = AGENT_ROLE_INFO[agentRole];
+
+    const handleModelSelected = (modelId: string) => {
+      const updated = JSON.parse(JSON.stringify(editingConfig)) as HuuConfig;
+      setConfigValue(
+        updated,
+        field.key as Parameters<typeof setConfigValue>[1],
+        modelId,
+      );
+      setEditingConfig(updated);
+      setStep('overview');
+    };
+
+    return (
+      <Box flexDirection="column" paddingX={2} paddingY={1}>
+        <Logo compact />
+        <Divider title={`Editar: ${roleInfo.displayName}`} />
+
+        <Box marginTop={1}>
+          <Panel title={roleInfo.displayName} titleColor="yellow" borderColor="yellow">
+            <Box flexDirection="column" gap={1} paddingY={1}>
+              <Text>{roleInfo.description}</Text>
+              <Text dimColor italic>
+                {'\u{1F4A1}'} {roleInfo.modelRationale}
+              </Text>
+              <Text dimColor>
+                Modelo atual: {String(field.value)}
+              </Text>
+
+              <Box marginTop={1}>
+                <ModelSelector
+                  role={agentRole}
+                  onSelect={handleModelSelected}
+                  isActive={step === 'editing-model'}
+                />
+              </Box>
+            </Box>
+          </Panel>
+        </Box>
+
+        <Box marginTop={1}>
+          <KeyHint bindings={[
+            { key: 'Esc', label: 'Voltar' },
+          ]} />
+        </Box>
+      </Box>
+    );
+  }
+
+  // ── Editando um campo ─────────────────────────────────────────────
   if (step === 'editing') {
     const field = fields[selectedIndex];
     if (!field) {
@@ -179,14 +260,14 @@ export function ConfigScreen({
 
     if (field.type === 'select' && field.options) {
       const items = field.options.map((opt) => ({
-        label: opt + (opt === String(field.value) ? ' (current)' : ''),
+        label: opt + (opt === String(field.value) ? ' (atual)' : ''),
         value: opt,
       }));
 
       return (
         <Box flexDirection="column" paddingX={2} paddingY={1}>
           <Logo compact />
-          <Divider title={`Edit: ${field.label}`} />
+          <Divider title={`Editar: ${field.label}`} />
 
           <Box marginTop={1}>
             <Panel title={field.label} titleColor="yellow" borderColor="yellow">
@@ -194,7 +275,7 @@ export function ConfigScreen({
                 <SelectInput
                   items={items}
                   initialIndex={field.options.indexOf(String(field.value))}
-                  onSelect={(item) => {
+                  onSelect={(item: { value: string }) => {
                     const updated = JSON.parse(JSON.stringify(editingConfig)) as HuuConfig;
                     setConfigValue(
                       updated,
@@ -211,27 +292,27 @@ export function ConfigScreen({
 
           <Box marginTop={1}>
             <KeyHint bindings={[
-              { key: '\u2191\u2193', label: 'Navigate' },
-              { key: 'Enter', label: 'Select' },
+              { key: '\u2191\u2193', label: 'Navegar' },
+              { key: 'Enter', label: 'Selecionar' },
             ]} />
           </Box>
         </Box>
       );
     }
 
-    // Number input
+    // Input numérico
     const handleNumberSubmit = (value: string) => {
       const num = Number(value);
       if (isNaN(num)) {
-        setEditError('Must be a number');
+        setEditError('Deve ser um número');
         return;
       }
       if (field.min !== undefined && num < field.min) {
-        setEditError(`Must be >= ${field.min}`);
+        setEditError(`Deve ser >= ${field.min}`);
         return;
       }
       if (field.max !== undefined && num > field.max) {
-        setEditError(`Must be <= ${field.max}`);
+        setEditError(`Deve ser <= ${field.max}`);
         return;
       }
 
@@ -248,20 +329,20 @@ export function ConfigScreen({
     return (
       <Box flexDirection="column" paddingX={2} paddingY={1}>
         <Logo compact />
-        <Divider title={`Edit: ${field.label}`} />
+        <Divider title={`Editar: ${field.label}`} />
 
         <Box marginTop={1}>
           <Panel title={field.label} titleColor="yellow" borderColor="yellow">
             <Box flexDirection="column" gap={1} paddingY={1}>
               <Text dimColor>
-                Range: {field.min ?? 0} - {field.max ?? 100} (current: {String(field.value)})
+                Intervalo: {field.min ?? 0} - {field.max ?? 100} (atual: {String(field.value)})
               </Text>
 
               <Box>
                 <Text bold color="cyan">{'\u276F'} </Text>
                 <TextInput
                   value={editValue}
-                  onChange={(v) => { setEditValue(v); setEditError(''); }}
+                  onChange={(v: string) => { setEditValue(v); setEditError(''); }}
                   onSubmit={handleNumberSubmit}
                   placeholder={String(field.value)}
                 />
@@ -276,15 +357,15 @@ export function ConfigScreen({
 
         <Box marginTop={1}>
           <KeyHint bindings={[
-            { key: 'Enter', label: 'Confirm' },
-            { key: 'Esc', label: 'Cancel' },
+            { key: 'Enter', label: 'Confirmar' },
+            { key: 'Esc', label: 'Cancelar' },
           ]} />
         </Box>
       </Box>
     );
   }
 
-  // ── Confirm ───────────────────────────────────────────────────────
+  // ── Confirmar ──────────────────────────────────────────────────────
   if (step === 'confirm') {
     const changes = fields
       .map((f, i) => ({ field: f, original: originalFields[i] }))
@@ -293,10 +374,10 @@ export function ConfigScreen({
     return (
       <Box flexDirection="column" paddingX={2} paddingY={1}>
         <Logo compact />
-        <Divider title="Save Configuration" />
+        <Divider title="Salvar Configuração" />
 
         <Box marginTop={1}>
-          <Panel title="Confirm Changes" titleColor="green" borderColor="green">
+          <Panel title="Confirmar Alterações" titleColor="green" borderColor="green">
             <Box flexDirection="column" gap={1} paddingY={1}>
               {changes.map(({ field, original }) => (
                 <Box key={field.key} gap={1}>
@@ -308,10 +389,10 @@ export function ConfigScreen({
               ))}
 
               <Box marginTop={1}>
-                <Text bold>Save changes? </Text>
-                <Text color="green">[Y]es</Text>
+                <Text bold>Salvar alterações? </Text>
+                <Text color="green">[S/Y] Sim</Text>
                 <Text dimColor> / </Text>
-                <Text color="red">[N]o</Text>
+                <Text color="red">[N] Não</Text>
               </Box>
             </Box>
           </Panel>
@@ -320,13 +401,13 @@ export function ConfigScreen({
     );
   }
 
-  // ── Saved ─────────────────────────────────────────────────────────
+  // ── Salvo ──────────────────────────────────────────────────────────
   return (
     <Box flexDirection="column" paddingX={2} paddingY={1}>
       <Logo compact />
       <Divider />
       <Box marginTop={1}>
-        <StatusBadge variant="success" label="Configuration saved successfully!" bold />
+        <StatusBadge variant="success" label="Configuração salva com sucesso!" bold />
       </Box>
     </Box>
   );
