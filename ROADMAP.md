@@ -174,14 +174,14 @@ The system learns and improves with every session.
 - [x] CoVe pipeline for critical outputs (4-step verification)
 - [x] `critical: true` flag in beat sheet for high-risk tasks
 
-### [ ] 4.2 Memory & Learning [depends: (0.2,1.1,2.5)]
-- [ ] Observation logging via tool call hooks (100% coverage)
-- [ ] Pattern detection (threshold: 20+ observations → Haiku analysis)
-- [ ] Instinct generation with confidence scores (0.3-0.85)
-- [ ] Instinct decay when contradicted by evidence
-- [ ] Instinct promotion to project-level knowledge
-- [ ] Session summary generation on completion
-- [ ] Context loading: last 7 days of sessions on startup
+### [x] 4.2 Memory & Learning [depends: (0.2,1.1,2.5)]
+- [x] Observation logging via tool call hooks (100% coverage)
+- [x] Pattern detection (threshold: 20+ observations → Haiku analysis)
+- [x] Instinct generation with confidence scores (0.3-0.85)
+- [x] Instinct decay when contradicted by evidence
+- [x] Instinct promotion to project-level knowledge
+- [x] Session summary generation on completion
+- [x] Context loading: last 7 days of sessions on startup
 
 ### [ ] 4.3 Audit System [depends: (0.2,1.1,2.2,2.3,2.4,2.5,3.4,4.1)]
 - [ ] Complete tool call logging (timestamp, agent, tool, params, result)
@@ -235,7 +235,7 @@ The system learns and improves with every session.
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 4/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 5/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 3/4 |
-| 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 2/4 |
+| 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 3/4 |
 | 5 | Polish | Final Image (100%) | Production-ready | 2/4 |
 
 ---
