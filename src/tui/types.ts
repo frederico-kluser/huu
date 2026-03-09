@@ -79,6 +79,124 @@ export const TAB_LABELS: Record<AppTab, string> = {
   beat: '[B]eat Sheet',
 };
 
+// ── Specialized view types ───────────────────────────────────────────
+
+// Logs view
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface AggregatedLogEntry {
+  id: string;
+  ts: number;
+  agentId: string;
+  phase?: string | undefined;
+  level: LogLevel;
+  taskId?: string | undefined;
+  message: string;
+  source: 'messages' | 'audit_log';
+}
+
+export interface LogsSnapshot {
+  entries: AggregatedLogEntry[];
+  watermark: string;
+}
+
+export interface LogsDataProvider {
+  getWatermark(): string;
+  getSnapshot(limit?: number | undefined): LogsSnapshot;
+}
+
+// Merge Queue view
+export type MergeViewStatus = 'queued' | 'running' | 'blocked' | 'merged' | 'failed';
+export type MergeViewTier = 1 | 2 | 3 | 4;
+
+export interface MergeQueueItemView {
+  id: string;
+  position: number;
+  taskId: string;
+  branch: string;
+  enqueuedAt: number;
+  waitMs: number;
+  currentTier?: MergeViewTier | undefined;
+  status: MergeViewStatus;
+  retries: number;
+  lastError?: string | undefined;
+}
+
+export interface MergeQueueSnapshot {
+  items: MergeQueueItemView[];
+  queueLength: number;
+  runningCount: number;
+  blockedCount: number;
+  avgWaitMs: number;
+  watermark: string;
+}
+
+export interface MergeQueueDataProvider {
+  getWatermark(): string;
+  getSnapshot(): MergeQueueSnapshot;
+}
+
+// Cost view
+export type CostGroupBy = 'agent' | 'model' | 'phase';
+
+export interface CostBreakdownRow {
+  key: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  pct: number;
+}
+
+export interface CostSnapshot {
+  totalCostUsd: number;
+  totalTokens: number;
+  avgCostPerTask: number;
+  rows: CostBreakdownRow[];
+  trend: number[];
+  watermark: string;
+}
+
+export interface CostDataProvider {
+  getWatermark(): string;
+  getSnapshot(groupBy: CostGroupBy): CostSnapshot;
+}
+
+// Beat Sheet view
+export type BeatNodeType = 'objective' | 'act' | 'sequence' | 'task';
+export type BeatViewStatus = 'pending' | 'running' | 'done' | 'blocked';
+export type CheckpointName = 'catalyst' | 'midpoint' | 'all_is_lost' | 'break_into_three' | 'final_image';
+
+export interface BeatNode {
+  id: string;
+  parentId?: string | undefined;
+  type: BeatNodeType;
+  title: string;
+  status: BeatViewStatus;
+  progressPct: number;
+  checkpoint?: CheckpointName | undefined;
+  depth: number;
+}
+
+export interface CheckpointView {
+  name: CheckpointName;
+  label: string;
+  status: BeatViewStatus;
+  nodeId?: string | undefined;
+}
+
+export interface BeatSheetSnapshot {
+  nodes: BeatNode[];
+  checkpoints: CheckpointView[];
+  overallProgressPct: number;
+  watermark: string;
+}
+
+export interface BeatSheetDataProvider {
+  getWatermark(): string;
+  getSnapshot(): BeatSheetSnapshot;
+}
+
 // ── Layout density (responsive breakpoints) ─────────────────────────
 
 export type Density = 'compact' | 'normal' | 'wide';

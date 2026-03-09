@@ -1,22 +1,36 @@
-// TUI shell — tab navigation (K/L/M/C/B) with Kanban as default view
+// TUI shell — tab navigation (K/L/M/C/B) with specialized views
 //
 // Keyboard:
 //   k/l/m/c/b  → switch tab
-//   arrows     → navigate Kanban cards
-//   Enter      → open task detail (emits onOpenTask)
+//   arrows     → navigate within active view
 //   q / ESC    → exit
 
 import React, { useState } from 'react';
 import { Box, Text, useApp, useInput, useStdout } from 'ink';
-import type { AppTab, KanbanDataProvider } from './types.js';
+import type {
+  AppTab,
+  KanbanDataProvider,
+  LogsDataProvider,
+  MergeQueueDataProvider,
+  CostDataProvider,
+  BeatSheetDataProvider,
+} from './types.js';
 import { APP_TABS, TAB_BY_KEY, TAB_LABELS, getDensity } from './types.js';
 import { Header } from './components/Header.js';
 import { KanbanBoard } from './components/KanbanBoard.js';
 import { useKanbanData } from './hooks/useKanbanData.js';
 import { useBoardNavigation } from './hooks/useBoardNavigation.js';
+import { LogsView } from './views/LogsView.js';
+import { MergeQueueView } from './views/MergeQueueView.js';
+import { CostView } from './views/CostView.js';
+import { BeatSheetView } from './views/BeatSheetView.js';
 
 export interface AppProps {
   provider?: KanbanDataProvider | undefined;
+  logsProvider?: LogsDataProvider | undefined;
+  mergeQueueProvider?: MergeQueueDataProvider | undefined;
+  costProvider?: CostDataProvider | undefined;
+  beatSheetProvider?: BeatSheetDataProvider | undefined;
   onOpenTask?: ((taskId: string) => void) | undefined;
 }
 
@@ -33,6 +47,10 @@ const defaultProvider: KanbanDataProvider = {
 
 export default function App({
   provider,
+  logsProvider,
+  mergeQueueProvider,
+  costProvider,
+  beatSheetProvider,
   onOpenTask,
 }: AppProps): React.JSX.Element {
   const { exit } = useApp();
@@ -40,6 +58,7 @@ export default function App({
   const [activeTab, setActiveTab] = useState<AppTab>('kanban');
 
   const terminalCols = stdout.columns ?? 80;
+  const terminalRows = stdout.rows ?? 24;
   const density = getDensity(terminalCols);
 
   const dataProvider = provider ?? defaultProvider;
@@ -94,7 +113,7 @@ export default function App({
       </Box>
 
       {/* Content */}
-      {activeTab === 'kanban' ? (
+      {activeTab === 'kanban' && (
         <Box flexDirection="column" flexGrow={1}>
           <Header
             act={snapshot.act}
@@ -108,12 +127,36 @@ export default function App({
             density={density}
           />
         </Box>
-      ) : (
-        <Box flexGrow={1} justifyContent="center" alignItems="center">
-          <Text dimColor>
-            {TAB_LABELS[activeTab]} {'\u2014'} coming soon
-          </Text>
-        </Box>
+      )}
+      {activeTab === 'logs' && (
+        <LogsView
+          provider={logsProvider}
+          isActive={activeTab === 'logs'}
+          density={density}
+          terminalRows={terminalRows}
+        />
+      )}
+      {activeTab === 'merge' && (
+        <MergeQueueView
+          provider={mergeQueueProvider}
+          isActive={activeTab === 'merge'}
+          density={density}
+        />
+      )}
+      {activeTab === 'cost' && (
+        <CostView
+          provider={costProvider}
+          isActive={activeTab === 'cost'}
+          density={density}
+        />
+      )}
+      {activeTab === 'beat' && (
+        <BeatSheetView
+          provider={beatSheetProvider}
+          isActive={activeTab === 'beat'}
+          density={density}
+          terminalRows={terminalRows}
+        />
       )}
     </Box>
   );
