@@ -18,6 +18,8 @@ export class MergeQueueRepository {
   private readonly conflictStmt: Database.Statement;
   private readonly requeueStmt: Database.Statement;
   private readonly recoverStmt: Database.Statement;
+  private readonly blockHumanStmt: Database.Statement;
+  private readonly resumeFromBlockStmt: Database.Statement;
   private readonly getByIdStmt: Database.Statement;
   private readonly getByRequestIdStmt: Database.Statement;
 
@@ -110,6 +112,24 @@ export class MergeQueueRepository {
         AND lease_expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now')
     `);
 
+    this.blockHumanStmt = db.prepare(`
+      UPDATE merge_queue
+      SET status = 'blocked_human',
+          last_error = @error,
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+      WHERE id = @id AND status = 'in_progress'
+    `);
+
+    this.resumeFromBlockStmt = db.prepare(`
+      UPDATE merge_queue
+      SET status = 'in_progress',
+          lease_owner = @worker_id,
+          lease_expires_at = strftime('%Y-%m-%dT%H:%M:%fZ','now', '+' || @lease_seconds || ' seconds'),
+          last_error = NULL,
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+      WHERE id = @id AND status = 'blocked_human'
+    `);
+
     this.getByIdStmt = db.prepare('SELECT * FROM merge_queue WHERE id = ?');
     this.getByRequestIdStmt = db.prepare('SELECT * FROM merge_queue WHERE request_id = ?');
   }
@@ -188,6 +208,30 @@ export class MergeQueueRepository {
         `SELECT * FROM merge_queue
          WHERE status IN ('queued','retry_wait')
          ORDER BY created_at ASC, id ASC`,
+      )
+      .all() as MergeQueueItem[];
+  }
+
+  blockHuman(id: number, error: string): boolean {
+    const result = this.blockHumanStmt.run({ id, error });
+    return result.changes > 0;
+  }
+
+  resumeFromBlock(id: number, workerId: string, leaseSeconds: number = 120): boolean {
+    const result = this.resumeFromBlockStmt.run({
+      id,
+      worker_id: workerId,
+      lease_seconds: leaseSeconds,
+    });
+    return result.changes > 0;
+  }
+
+  listBlockedHuman(): MergeQueueItem[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM merge_queue
+         WHERE status = 'blocked_human'
+         ORDER BY updated_at ASC`,
       )
       .all() as MergeQueueItem[];
   }

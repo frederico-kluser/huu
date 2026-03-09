@@ -212,6 +212,7 @@ export const MERGE_QUEUE_STATUSES = [
   'conflict',
   'failed',
   'retry_wait',
+  'blocked_human',
 ] as const;
 
 export type MergeQueueStatus = (typeof MERGE_QUEUE_STATUSES)[number];
@@ -238,13 +239,13 @@ export interface MergeQueueItem {
 export const PREMERGE_STATUSES = ['clean', 'conflict', 'fatal', 'skipped'] as const;
 export type PremergeStatus = (typeof PREMERGE_STATUSES)[number];
 
-export const MERGE_TIERS = ['tier1', 'tier2', 'none'] as const;
+export const MERGE_TIERS = ['tier1', 'tier2', 'tier3', 'tier4', 'none'] as const;
 export type MergeTier = (typeof MERGE_TIERS)[number];
 
-export const MERGE_MODES = ['ff-only', 'no-ff-ort', 'noop_already_merged'] as const;
+export const MERGE_MODES = ['ff-only', 'no-ff-ort', 'noop_already_merged', 'ort-x-ours', 'ort-x-theirs', 'ai-patch'] as const;
 export type MergeMode = (typeof MERGE_MODES)[number];
 
-export const MERGE_OUTCOMES = ['merged', 'conflict', 'failed'] as const;
+export const MERGE_OUTCOMES = ['merged', 'conflict', 'failed', 'escalated'] as const;
 export type MergeOutcome = (typeof MERGE_OUTCOMES)[number];
 
 export interface MergeResult {
@@ -340,6 +341,88 @@ export interface OrchestratorConfig {
     maxDelayMs: number;
     loadFactor: number;
   };
+}
+
+// ── Conflict history types ─────────────────────────────────────────────
+
+export interface MergeConflict {
+  id: string;
+  queue_item_id: string;
+  file_path: string;
+  conflict_fingerprint: string;
+  conflict_type: string;
+  merge_base_sha: string;
+  ours_sha: string;
+  theirs_sha: string;
+  detected_at: string;
+}
+
+export interface MergeResolutionAttempt {
+  id: string;
+  conflict_id: string;
+  tier: 3 | 4;
+  strategy: string;
+  selected_side: string | null;
+  confidence: number | null;
+  outcome: 'success' | 'failed' | 'escalated';
+  model_id: string | null;
+  prompt_hash: string | null;
+  applied_commit_sha: string | null;
+  created_at: string;
+}
+
+export type Side = 'ours' | 'theirs';
+
+export type FileRiskClass = 'low' | 'medium' | 'high';
+
+export interface Tier3Signals {
+  filePath: string;
+  conflictType: string;
+  lastTouchSide?: Side;
+  ownershipScore: { ours: number; theirs: number };
+  historyScore: { ours: number; theirs: number };
+  riskClass: FileRiskClass;
+}
+
+export interface Tier3Decision {
+  side: Side | 'escalate';
+  confidence: number;
+}
+
+export interface ConflictContextBundle {
+  queueItemId: string;
+  mergeBaseSha: string;
+  oursSha: string;
+  theirsSha: string;
+  files: Array<{
+    path: string;
+    language: string;
+    riskClass: FileRiskClass;
+    conflictHunks: Array<{ base: string; ours: string; theirs: string; surrounding: string }>;
+    history: Array<{ strategy: string; outcome: 'success' | 'failed'; resolvedSide?: Side }>;
+  }>;
+  constraints: string[];
+  failingChecks: string[];
+}
+
+export type EscalationReason =
+  | 'tier3_low_confidence'
+  | 'tier4_validation_failed'
+  | 'high_risk_conflict'
+  | 'retry_budget_exhausted';
+
+export type OperatorAction =
+  | 'retry_tier4'
+  | 'accept_tier3_candidate'
+  | 'manual_resolution_committed'
+  | 'abort_merge_item';
+
+export interface MergeEscalationPayload {
+  queueItemId: string;
+  reason: EscalationReason;
+  conflictedFiles: string[];
+  attempted: Array<{ tier: 3 | 4; strategy: string; confidence?: number; outcome: string }>;
+  recommendedActions: OperatorAction[];
 }
 
 // ── Schema migration types ─────────────────────────────────────────────

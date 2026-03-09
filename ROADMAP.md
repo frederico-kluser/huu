@@ -113,11 +113,11 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [x] `debugger` — deep investigation (Opus, read + bash)
 - [x] `context-curator` — post-activity memory curation (Haiku, read-only)
 
-### [ ] 2.4 Merge Workflow (Tier 3-4) [depends: (0.2,0.3,1.3,2.2,2.3)]
-- [ ] Tier 3: `ours`/`theirs` heuristic (last-touch-wins + file ownership tracking)
-- [ ] Tier 4: AI Resolver (send conflict to Claude with per-file conflict history)
-- [ ] Conflict history tracking in SQLite (which files conflict frequently)
-- [ ] Human escalation path (pause queue, notify TUI)
+### [x] 2.4 Merge Workflow (Tier 3-4) [depends: (0.2,0.3,1.3,2.2,2.3)]
+- [x] Tier 3: `ours`/`theirs` heuristic (multi-signal scoring: last-touch, ownership, history, risk)
+- [x] Tier 4: AI Resolver (send conflict to Claude with full context bundle + validation gates)
+- [x] Conflict history tracking in SQLite (frequency, strategies, outcomes, confidence)
+- [x] Human escalation path (pause queue item, blocked_human state, operator actions)
 
 ### [ ] 2.5 Context-Curator Integration [depends: (0.2,1.1,2.1,2.2,2.3)]
 - [ ] Post-activity hook: curator runs after every agent completes
@@ -232,7 +232,7 @@ The system learns and improves with every session.
 |-------|------|-----------|-----------------|----------|
 | 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 4/4 |
-| 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 3/5 |
+| 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 4/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 1/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |
 | 5 | Polish | Final Image (100%) | Production-ready | 0/4 |
