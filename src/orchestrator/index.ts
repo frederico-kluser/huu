@@ -1,4 +1,4 @@
-// Showrunner orchestrator — Beat Sheet Engine
+// Showrunner orchestrator — Beat Sheet Engine + Orchestrator Loop
 
 // ── Beat Sheet Model & DAG ──────────────────────────────────────────
 export type {
@@ -63,3 +63,70 @@ export {
   renderBeatSheet,
   renderBeatSheetSummary,
 } from './beatsheet-render.js';
+
+// ── Scheduler ──────────────────────────────────────────────────────
+export type { TaskAssignment, SchedulerContext } from './scheduler.js';
+
+export {
+  schedule,
+  scoreAssignment,
+  inferTaskRole,
+  hasCapacity,
+  hasRoleCapacity,
+  updateReadySince,
+} from './scheduler.js';
+
+// ── Monitor ────────────────────────────────────────────────────────
+export type {
+  PollResult,
+  MonitorOptions,
+  ClassifiedMessages,
+} from './monitor.js';
+
+export {
+  OrchestratorMonitor,
+  classifyMessages,
+  parsePayload,
+} from './monitor.js';
+
+// ── Health ─────────────────────────────────────────────────────────
+export type {
+  HealthStatus,
+  AgentHealthReport,
+  HealthCheckResult,
+  HealthConfig,
+  BackpressureConfig,
+} from './health.js';
+
+export {
+  HealthChecker,
+  computeBackoffMs,
+  updateHeartbeat,
+  computeLoopDelay,
+} from './health.js';
+
+// ── Escalations ────────────────────────────────────────────────────
+export type {
+  EscalationInput,
+  EscalationAction,
+} from './escalations.js';
+
+export {
+  classifyEscalation,
+  determineAction,
+  EscalationManager,
+} from './escalations.js';
+
+// ── Orchestrator Loop ──────────────────────────────────────────────
+export type {
+  LoopDeps,
+  LoopState,
+  LoopEventType,
+  LoopEvent,
+  LoopEventHandler,
+} from './loop.js';
+
+export {
+  DEFAULT_CONFIG,
+  OrchestratorLoop,
+} from './loop.js';

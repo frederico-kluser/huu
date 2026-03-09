@@ -92,15 +92,15 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [x] Beat state persistence in SQLite
 - [x] Visualization of beat sheet as structured text
 
-### [ ] 2.2 Orchestrator Loop [depends: (1.1,1.3,1.4,2.1)]
-- [ ] Main orchestrator loop: decompose → assign → monitor → collect → merge
-- [ ] Task assignment: match subtasks to agents by role
-- [ ] Parallel execution: spawn multiple agents concurrently
-- [ ] Progress monitoring: poll SQLite for task_progress messages
-- [ ] Completion handling: trigger merge when task_done received
-- [ ] Escalation handling: respond to agent escalations
-- [ ] Health check: periodic pings to detect stuck agents
-- [ ] Beat sheet advancement: move to next beat/sequence/act
+### [x] 2.2 Orchestrator Loop [depends: (1.1,1.3,1.4,2.1)]
+- [x] Main orchestrator loop: decompose → assign → monitor → collect → merge
+- [x] Task assignment: match subtasks to agents by role
+- [x] Parallel execution: spawn multiple agents concurrently
+- [x] Progress monitoring: poll SQLite for task_progress messages
+- [x] Completion handling: trigger merge when task_done received
+- [x] Escalation handling: respond to agent escalations
+- [x] Health check: periodic pings to detect stuck agents
+- [x] Beat sheet advancement: move to next beat/sequence/act
 
 ### [ ] 2.3 Remaining Agents [depends: (0.2,1.1,1.2,2.1,2.2)]
 - [ ] `planner` — Beat Sheet decomposition
@@ -232,7 +232,7 @@ The system learns and improves with every session.
 |-------|------|-----------|-----------------|----------|
 | 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 4/4 |
-| 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 1/5 |
+| 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 2/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 0/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |
 | 5 | Polish | Final Image (100%) | Production-ready | 0/4 |

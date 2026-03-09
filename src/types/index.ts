@@ -270,6 +270,78 @@ export interface MergeResult {
   created_at: string;
 }
 
+// ── Orchestrator types ──────────────────────────────────────────────────
+
+export const ORCHESTRATOR_STATES = [
+  'DECOMPOSE',
+  'ASSIGN',
+  'MONITOR',
+  'COLLECT',
+  'MERGE',
+  'ADVANCE_BEAT',
+  'ESCALATED',
+  'FAILED',
+  'COMPLETED',
+] as const;
+
+export type OrchestratorState = (typeof ORCHESTRATOR_STATES)[number];
+
+export const ESCALATION_SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
+export type EscalationSeverity = (typeof ESCALATION_SEVERITIES)[number];
+
+export const ESCALATION_CATEGORIES = [
+  'missing_context',
+  'tool_failure',
+  'merge_conflict',
+  'dependency_deadlock',
+  'agent_crash_loop',
+  'timeout',
+  'unknown',
+] as const;
+export type EscalationCategory = (typeof ESCALATION_CATEGORIES)[number];
+
+export const ESCALATION_STATUSES = ['open', 'acked', 'resolved', 'failed'] as const;
+export type EscalationStatus = (typeof ESCALATION_STATUSES)[number];
+
+export interface EscalationRecord {
+  id: string;
+  taskId: string | null;
+  agentName: string | null;
+  runId: string;
+  severity: EscalationSeverity;
+  category: EscalationCategory;
+  status: EscalationStatus;
+  message: string;
+  context: Record<string, unknown>;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+export interface AgentSlot {
+  runId: string;
+  taskId: string;
+  agentName: string;
+  startedAt: number;
+  lastHeartbeat: number;
+  abortController: AbortController;
+  retryCount: number;
+}
+
+export interface OrchestratorConfig {
+  projectId: string;
+  maxConcurrentAgents: number;
+  roleCaps: Record<string, number>;
+  pollIntervalActiveMs: number;
+  pollIntervalIdleMs: number;
+  stuckTimeoutMs: number;
+  maxRetries: number;
+  backpressure: {
+    minDelayMs: number;
+    maxDelayMs: number;
+    loadFactor: number;
+  };
+}
+
 // ── Schema migration types ─────────────────────────────────────────────
 
 export interface SchemaMigration {
