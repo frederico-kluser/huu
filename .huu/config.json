@@ -1,0 +1,32 @@
+{
+  "version": 2,
+  "projectRoot": ".",
+  "database": {
+    "path": ".huu/huu.db",
+    "journalMode": "WAL"
+  },
+  "orchestrator": {
+    "maxConcurrency": 5,
+    "defaultAgentModel": {
+      "orchestrator": "opus",
+      "worker": "sonnet",
+      "support": "haiku"
+    },
+    "agentModels": {
+      "orchestrator": "moonshot/kimi-k2.5",
+      "reviewer": "moonshot/kimi-k2.5",
+      "debugger": "moonshot/kimi-k2.5",
+      "planner": "moonshot/kimi-k2.5",
+      "builder": "moonshot/kimi-k2.5",
+      "tester": "moonshot/kimi-k2.5",
+      "merger": "moonshot/kimi-k2.5",
+      "researcher": "moonshot/kimi-k2.5",
+      "refactorer": "deepseek/deepseek-chat",
+      "doc-writer": "deepseek/deepseek-chat",
+      "context-curator": "deepseek/deepseek-chat"
+    }
+  },
+  "logging": {
+    "level": "notice"
+  }
+}
