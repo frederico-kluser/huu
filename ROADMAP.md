@@ -189,11 +189,11 @@ The system learns and improves with every session.
 - [ ] Suspicious action flagging (unusual patterns, unexpected file access)
 - [ ] Cost reporting per session, per feature, per agent
 
-### [ ] 4.4 MCP Bridge [depends: (0.1,1.1,2.2)]
-- [ ] MCP client programmatic setup (`@modelcontextprotocol/sdk`)
-- [ ] Bridge: MCP tools → agent custom tools
-- [ ] Lazy-start servers (connect on first use, disconnect after idle)
-- [ ] Token-efficient proxy pattern (single proxy tool, on-demand discovery)
+### [x] 4.4 MCP Bridge [depends: (0.1,1.1,2.2)]
+- [x] MCP client programmatic setup (`@modelcontextprotocol/sdk`)
+- [x] Bridge: MCP tools → agent custom tools
+- [x] Lazy-start servers (connect on first use, disconnect after idle)
+- [x] Token-efficient proxy pattern (single proxy tool, on-demand discovery)
 
 ---
 
@@ -234,7 +234,7 @@ The system learns and improves with every session.
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 4/4 |
 | 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 3/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 1/4 |
-| 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |
+| 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 1/4 |
 | 5 | Polish | Final Image (100%) | Production-ready | 0/4 |
 
 ---
