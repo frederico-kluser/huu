@@ -102,16 +102,16 @@ The showrunner comes alive. Multiple agents working in parallel with coordinatio
 - [x] Health check: periodic pings to detect stuck agents
 - [x] Beat sheet advancement: move to next beat/sequence/act
 
-### [ ] 2.3 Remaining Agents [depends: (0.2,1.1,1.2,2.1,2.2)]
-- [ ] `planner` — Beat Sheet decomposition
-- [ ] `tester` — TDD + test execution
-- [ ] `reviewer` — code review (read-only tools)
-- [ ] `researcher` — web search + context gathering
-- [ ] `merger` — conflict resolution agent
-- [ ] `refactorer` — cleanup agent
-- [ ] `doc-writer` — documentation sync
-- [ ] `debugger` — deep investigation
-- [ ] `context-curator` — post-activity memory curation
+### [x] 2.3 Remaining Agents [depends: (0.2,1.1,1.2,2.1,2.2)]
+- [x] `planner` — Beat Sheet decomposition (Sonnet, read-only tools)
+- [x] `tester` — TDD + test execution (Sonnet, read + bash)
+- [x] `reviewer` — code review (Opus, strictly read-only)
+- [x] `researcher` — web search + context gathering (Haiku, read-only)
+- [x] `merger` — conflict resolution agent (Sonnet, read + git bash)
+- [x] `refactorer` — cleanup agent (Haiku, read + write, no bash)
+- [x] `doc-writer` — documentation sync (Haiku, read + write docs)
+- [x] `debugger` — deep investigation (Opus, read + bash)
+- [x] `context-curator` — post-activity memory curation (Haiku, read-only)
 
 ### [ ] 2.4 Merge Workflow (Tier 3-4) [depends: (0.2,0.3,1.3,2.2,2.3)]
 - [ ] Tier 3: `ours`/`theirs` heuristic (last-touch-wins + file ownership tracking)
@@ -232,7 +232,7 @@ The system learns and improves with every session.
 |-------|------|-----------|-----------------|----------|
 | 0 | Foundation | Catalyst (10%) | SQLite + WorktreeManager + tests | 3/3 |
 | 1 | Single Agent | Midpoint (50%) | One agent end-to-end with merge | 4/4 |
-| 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 2/5 |
+| 2 | Orchestration | All Is Lost (75%) | Multi-agent parallel execution | 3/5 |
 | 3 | TUI | Break Into Three (77%) | Interactive Kanban interface | 0/4 |
 | 4 | Intelligence | Final approach (90%) | Learning + anti-hallucination | 0/4 |
 | 5 | Polish | Final Image (100%) | Production-ready | 0/4 |
