@@ -54,6 +54,20 @@ export function KanbanBoard({
       ? getVisibleColumnsCompact(selection.columnIndex)
       : KANBAN_COLUMNS;
 
+  // Estado vazio — nenhuma tarefa
+  if (tasks.length === 0) {
+    return (
+      <Box flexDirection="column" flexGrow={1} justifyContent="center" alignItems="center">
+        <Box flexDirection="column" alignItems="center" gap={1}>
+          <Text dimColor>Nenhuma tarefa em andamento.</Text>
+          <Text color="cyan" bold>
+            Pressione  N  para criar uma nova tarefa.
+          </Text>
+        </Box>
+      </Box>
+    );
+  }
+
   return (
     <Box flexDirection="row" flexGrow={1}>
       {columns.map((col) => {

@@ -279,6 +279,23 @@ export interface CoordinationMetricsProvider {
   getSnapshot(): CoordinationMetricsSnapshot;
 }
 
+// ── TUI screen routing ──────────────────────────────────────────────
+
+export type TuiScreenId = 'setup' | 'dashboard' | 'new-task' | 'config' | 'model-changer';
+
+// ── New task creation ───────────────────────────────────────────────
+
+export interface NewTaskSubmission {
+  description: string;
+}
+
+export interface RecentTask {
+  id: string;
+  description: string;
+  status: 'running' | 'done' | 'failed';
+  costUsd: number;
+}
+
 // ── Layout density (responsive breakpoints) ─────────────────────────
 
 export type Density = 'compact' | 'normal' | 'wide';
