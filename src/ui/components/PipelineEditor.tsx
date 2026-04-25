@@ -69,8 +69,6 @@ export function PipelineEditor({
     } else if ((input === 'd' || input === 'D') && pipeline.steps.length > 1) {
       setPipeline((p) => ({ ...p, steps: p.steps.filter((_, i) => i !== cursor) }));
       setCursor((c) => Math.max(0, c - 1));
-    } else if (input === 'e' || input === 'E') {
-      setMode({ kind: 'editing', index: cursor });
     } else if (input === 'r' || input === 'R') {
       setMode({ kind: 'naming-pipeline' });
     } else if (input === 'i' || input === 'I') {
@@ -78,10 +76,7 @@ export function PipelineEditor({
     } else if (input === 's' || input === 'S') {
       onExport(pipeline);
     } else if (key.return) {
-      // Enter on a step also opens the editor; runs the pipeline only if all
-      // steps are valid AND the user is on the last step (a clear "run" gesture).
-      // To make this less ambiguous: Enter always edits the focused step.
-      // The pipeline run is bound to a separate "G" (go) shortcut below.
+      // ENTER is the only way to open the step editor.
       setMode({ kind: 'editing', index: cursor });
     } else if (input === 'g' || input === 'G') {
       if (pipeline.steps.every((s) => s.name && s.prompt)) onComplete(pipeline);
@@ -133,9 +128,14 @@ export function PipelineEditor({
     <Box flexDirection="column" width="100%">
       <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
         <Box>
-          <Text bold color="cyan">Pipeline:</Text>
-          <Text>  {pipeline.name}</Text>
-          <Text dimColor>   ({pipeline.steps.length} step{pipeline.steps.length === 1 ? '' : 's'})</Text>
+          <Text bold color="cyan">{pipeline.name}</Text>
+          <Text dimColor>  ·  {pipeline.steps.length} step{pipeline.steps.length === 1 ? '' : 's'}</Text>
+          <Text dimColor>  ·  </Text>
+          {allValid ? (
+            <Text color="green">ready</Text>
+          ) : (
+            <Text color="red">incomplete</Text>
+          )}
         </Box>
 
         <Box flexDirection="column" marginTop={1}>
@@ -144,39 +144,30 @@ export function PipelineEditor({
             const valid = Boolean(step.name && step.prompt);
             const fileBadge =
               step.files.length === 0 ? (
-                <Text color="yellow">[whole project]</Text>
+                <Text color="yellow">whole project</Text>
               ) : (
-                <Text color="green">[{step.files.length} file(s)]</Text>
+                <Text color="green">{step.files.length} file{step.files.length === 1 ? '' : 's'}</Text>
               );
             return (
               <Box key={i}>
                 <Text color={isCursor ? 'cyan' : undefined} bold={isCursor}>
-                  {isCursor ? '> ' : '  '}
-                  #{i + 1}
-                </Text>
-                <Text color={isCursor ? 'cyan' : undefined}>
-                  {'  '}
+                  {isCursor ? '› ' : '  '}#{i + 1}{'  '}
                   {step.name || <Text dimColor italic>(unnamed)</Text>}
                 </Text>
-                <Text>   </Text>
+                <Text dimColor>  —  </Text>
                 {fileBadge}
-                {!valid && <Text color="red">   ⚠ incomplete</Text>}
+                {!valid && <Text color="red">  ⚠</Text>}
               </Box>
             );
           })}
         </Box>
 
-        <Box marginTop={2} flexDirection="column">
+        <Box marginTop={1} flexDirection="column">
           <Text dimColor>
-            <Text bold>↑↓</Text> navigate · <Text bold>ENTER</Text>/<Text bold>E</Text> edit step · <Text bold>N</Text> new step · <Text bold>D</Text> delete · <Text bold>SHIFT+↑↓</Text> reorder
+            <Text bold>↑↓</Text> select · <Text bold>SHIFT+↑↓</Text> reorder · <Text bold>ENTER</Text> edit · <Text bold>N</Text> new · <Text bold>D</Text> delete
           </Text>
           <Text dimColor>
-            <Text bold>R</Text> rename pipeline · <Text bold>I</Text> import JSON · <Text bold>S</Text> save JSON · <Text bold>ESC</Text> back
-          </Text>
-          <Text>
-            <Text dimColor>Run: </Text>
-            <Text bold>G</Text>{' '}
-            {allValid ? <Text color="green" bold>(ready)</Text> : <Text color="red">requires every step to have a name + prompt</Text>}
+            <Text bold>R</Text> rename · <Text bold>I</Text> import · <Text bold>S</Text> save · <Text bold>G</Text> run · <Text bold>ESC</Text> back
           </Text>
         </Box>
       </Box>

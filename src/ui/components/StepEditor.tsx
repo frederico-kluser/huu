@@ -18,7 +18,12 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
   const [step, setStep] = useState<PromptStep>(initialStep);
   const [field, setField] = useState<Field>('name');
   const [pickingFiles, setPickingFiles] = useState(false);
-  const canSave = Boolean(step.name && step.prompt);
+  // Files choice must be explicit. Treat existing steps (already-edited prompt
+  // or files already selected) as previously chosen.
+  const [filesChosen, setFilesChosen] = useState<boolean>(
+    initialStep.files.length > 0 || initialStep.prompt.length > 0,
+  );
+  const canSave = Boolean(step.name && step.prompt && filesChosen);
 
   useInput((input, key) => {
     if (pickingFiles) return;
@@ -33,11 +38,13 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
     if (key.tab) {
       setField((f) => (f === 'name' ? 'prompt' : f === 'prompt' ? 'files' : 'name'));
     } else if (field === 'files') {
-      if (input === 'f' || input === 'F' || key.return) {
+      if (input === 'f' || input === 'F') {
         setPickingFiles(true);
       } else if (input === 'w' || input === 'W') {
         setStep({ ...step, files: [] });
+        setFilesChosen(true);
       }
+      // ENTER intentionally does nothing here — choice must be explicit (F or W).
     }
   });
 
@@ -48,6 +55,7 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
         initialSelection={step.files}
         onCommit={(files) => {
           setStep({ ...step, files });
+          setFilesChosen(true);
           setPickingFiles(false);
         }}
         onCancel={() => setPickingFiles(false)}
@@ -90,23 +98,31 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
 
         <Box marginTop={1}>
           <Box width={10}><Text color={field === 'files' ? 'cyan' : undefined}>Files:</Text></Box>
-          {step.files.length === 0 ? (
+          {!filesChosen ? (
+            <Text color="red">(no choice — press <Text bold>F</Text> for files or <Text bold>W</Text> for whole project)</Text>
+          ) : step.files.length === 0 ? (
             <Text color="yellow">[whole project — runs once with no file scope]</Text>
           ) : (
             <Text color="green">{step.files.length} file(s) selected</Text>
           )}
-          {field === 'files' && (
-            <Text dimColor>   <Text bold>F</Text>/ENTER pick files · <Text bold>W</Text> whole project</Text>
+          {field === 'files' && filesChosen && (
+            <Text dimColor>   <Text bold>F</Text> pick files · <Text bold>W</Text> whole project</Text>
           )}
         </Box>
 
         <Box marginTop={2} flexDirection="column">
           <Text dimColor>
-            <Text bold>TAB</Text> cycle fields · <Text bold>ENTER</Text> in a text field moves to the next
+            <Text bold>TAB</Text> cycle fields · <Text bold>ENTER</Text> in name/prompt moves to the next field
           </Text>
           <Text>
             <Text bold>ESC</Text>{' '}
-            {canSave ? <Text color="green">save and close</Text> : <Text color="red">cancel and discard</Text>}
+            {canSave ? (
+              <Text color="green">save and close</Text>
+            ) : !filesChosen ? (
+              <Text color="red">cancel — choose Files (F or W) before saving</Text>
+            ) : (
+              <Text color="red">cancel and discard</Text>
+            )}
           </Text>
         </Box>
       </Box>
