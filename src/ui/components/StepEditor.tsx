@@ -18,27 +18,26 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
   const [step, setStep] = useState<PromptStep>(initialStep);
   const [field, setField] = useState<Field>('name');
   const [pickingFiles, setPickingFiles] = useState(false);
+  const canSave = Boolean(step.name && step.prompt);
 
   useInput((input, key) => {
     if (pickingFiles) return;
     if (key.escape) {
-      onCancel();
+      if (canSave) {
+        onSave(step);
+      } else {
+        onCancel();
+      }
       return;
     }
-    if (key.tab && !key.shift) {
+    if (key.tab) {
       setField((f) => (f === 'name' ? 'prompt' : f === 'prompt' ? 'files' : 'name'));
-    } else if (key.tab && key.shift) {
-      setField((f) => (f === 'name' ? 'files' : f === 'prompt' ? 'name' : 'prompt'));
     } else if (field === 'files') {
       if (input === 'f' || input === 'F' || key.return) {
         setPickingFiles(true);
       } else if (input === 'w' || input === 'W') {
         setStep({ ...step, files: [] });
-      } else if (input === 's' || input === 'S') {
-        if (step.name && step.prompt) onSave(step);
       }
-    } else if ((input === 's' || input === 'S') && key.ctrl) {
-      if (step.name && step.prompt) onSave(step);
     }
   });
 
@@ -55,8 +54,6 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
       />
     );
   }
-
-  const canSave = Boolean(step.name && step.prompt);
 
   return (
     <Box flexDirection="column" width="100%">
@@ -105,17 +102,11 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
 
         <Box marginTop={2} flexDirection="column">
           <Text dimColor>
-            <Text bold>TAB</Text>/<Text bold>SHIFT+TAB</Text> cycle fields · <Text bold>ENTER</Text> in a text field moves to the next
-          </Text>
-          <Text dimColor>
-            On <Text bold>Files</Text>: <Text bold>F</Text> open picker · <Text bold>W</Text> whole project · <Text bold>S</Text> save step
+            <Text bold>TAB</Text> cycle fields · <Text bold>ENTER</Text> in a text field moves to the next
           </Text>
           <Text>
-            <Text dimColor>Save: </Text>
-            <Text bold>CTRL+S</Text>{' '}
-            {canSave ? <Text color="green">ready</Text> : <Text color="red">requires name + prompt</Text>}
-            <Text dimColor>  ·  </Text>
-            <Text bold>ESC</Text> <Text dimColor>cancel and discard</Text>
+            <Text bold>ESC</Text>{' '}
+            {canSave ? <Text color="green">save and close</Text> : <Text color="red">cancel and discard</Text>}
           </Text>
         </Box>
       </Box>
