@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput, useStdout } from 'ink';
 import { ModelSelectorOverlay } from './ui/components/ModelSelectorOverlay.js';
 import { PipelineEditor } from './ui/components/PipelineEditor.js';
@@ -50,26 +50,28 @@ export function App({
   const repoRoot = process.cwd();
   const factory = agentFactory ?? stubAgentFactory;
 
-  // Clear the terminal whenever the top-level screen changes. Without this,
-  // tall components (file picker, model table) leave ghost rows on screen
-  // when the user goes back. Fires on transition only, not on every render.
-  const prevScreenKind = useRef<Screen['kind']>(screen.kind);
-  useEffect(() => {
-    if (prevScreenKind.current !== screen.kind && stdout.isTTY) {
-      stdout.write(FULL_CLEAR);
-    }
-    prevScreenKind.current = screen.kind;
-  }, [screen.kind, stdout]);
+  const screenRef = useRef<Screen>(screen);
+  screenRef.current = screen;
+
+  const navigate = useCallback(
+    (next: Screen) => {
+      if (screenRef.current.kind !== next.kind && stdout.isTTY) {
+        stdout.write(FULL_CLEAR);
+      }
+      setScreen(next);
+    },
+    [stdout],
+  );
 
   useInput(
     (input, key) => {
       if (screen.kind === 'welcome') {
         if (input === 'q' || input === 'Q') exit();
-        if (input === 'n' || input === 'N') setScreen({ kind: 'pipeline-editor' });
-        if (input === 'i' || input === 'I') setScreen({ kind: 'pipeline-import' });
+        if (input === 'n' || input === 'N') navigate({ kind: 'pipeline-editor' });
+        if (input === 'i' || input === 'I') navigate({ kind: 'pipeline-import' });
       } else if (screen.kind === 'summary') {
         if (input === 'q' || input === 'Q') exit();
-        if (key.return) setScreen({ kind: 'pipeline-editor' });
+        if (key.return) navigate({ kind: 'pipeline-editor' });
       }
     },
     { isActive: screen.kind === 'welcome' || screen.kind === 'summary' },
@@ -103,14 +105,14 @@ export function App({
         repoRoot={repoRoot}
         onComplete={(p) => {
           setPipeline(p);
-          setScreen({ kind: 'model-selector' });
+          navigate({ kind: 'model-selector' });
         }}
-        onImport={() => setScreen({ kind: 'pipeline-import' })}
+        onImport={() => navigate({ kind: 'pipeline-import' })}
         onExport={(p) => {
           setPipeline(p);
-          setScreen({ kind: 'pipeline-export' });
+          navigate({ kind: 'pipeline-export' });
         }}
-        onCancel={() => setScreen({ kind: 'welcome' })}
+        onCancel={() => navigate({ kind: 'welcome' })}
       />
     );
   }
@@ -122,10 +124,10 @@ export function App({
         onComplete={(loaded) => {
           if (loaded) {
             setPipeline(loaded);
-            setScreen({ kind: 'pipeline-editor' });
+            navigate({ kind: 'pipeline-editor' });
           }
         }}
-        onCancel={() => setScreen({ kind: pipeline ? 'pipeline-editor' : 'welcome' })}
+        onCancel={() => navigate({ kind: pipeline ? 'pipeline-editor' : 'welcome' })}
       />
     );
   }
@@ -135,8 +137,8 @@ export function App({
       <PipelineIOScreen
         mode="export"
         pipeline={pipeline ?? undefined}
-        onComplete={() => setScreen({ kind: 'pipeline-editor' })}
-        onCancel={() => setScreen({ kind: 'pipeline-editor' })}
+        onComplete={() => navigate({ kind: 'pipeline-editor' })}
+        onCancel={() => navigate({ kind: 'pipeline-editor' })}
       />
     );
   }
@@ -147,12 +149,12 @@ export function App({
         onSelect={(id) => {
           setModelId(id);
           if (requiresApiKey && !apiKey) {
-            setScreen({ kind: 'api-key' });
+            navigate({ kind: 'api-key' });
           } else {
-            setScreen({ kind: 'run', modelId: id, apiKey });
+            navigate({ kind: 'run', modelId: id, apiKey });
           }
         }}
-        onCancel={() => setScreen({ kind: 'pipeline-editor' })}
+        onCancel={() => navigate({ kind: 'pipeline-editor' })}
       />
     );
   }
@@ -162,9 +164,9 @@ export function App({
       <ApiKeyPrompt
         onSubmit={(key) => {
           setApiKey(key);
-          setScreen({ kind: 'run', modelId, apiKey: key });
+          navigate({ kind: 'run', modelId, apiKey: key });
         }}
-        onCancel={() => setScreen({ kind: 'model-selector' })}
+        onCancel={() => navigate({ kind: 'model-selector' })}
       />
     );
   }
@@ -177,8 +179,8 @@ export function App({
         cwd={repoRoot}
         agentFactory={factory}
         conflictResolverFactory={conflictResolverFactory}
-        onComplete={(result) => setScreen({ kind: 'summary', result })}
-        onAbort={() => setScreen({ kind: 'pipeline-editor' })}
+        onComplete={(result) => navigate({ kind: 'summary', result })}
+        onAbort={() => navigate({ kind: 'pipeline-editor' })}
       />
     );
   }

@@ -3,7 +3,6 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { Pipeline, PromptStep } from '../../lib/types.js';
 import { StepEditor } from './StepEditor.js';
-import { useTerminalClear } from '../hooks/useTerminalClear.js';
 
 interface Props {
   initialPipeline?: Pipeline;
@@ -29,7 +28,6 @@ export function PipelineEditor({
   onExport,
   onCancel,
 }: Props): React.JSX.Element {
-  useTerminalClear();
   const [pipeline, setPipeline] = useState<Pipeline>(
     initialPipeline ?? { name: 'my-pipeline', steps: [{ ...EMPTY_STEP }] },
   );

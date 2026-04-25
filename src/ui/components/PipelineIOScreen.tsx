@@ -3,7 +3,6 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { Pipeline } from '../../lib/types.js';
 import { exportPipeline, importPipeline } from '../../lib/pipeline-io.js';
-import { useTerminalClear } from '../hooks/useTerminalClear.js';
 
 export type PipelineIOMode = 'import' | 'export';
 
@@ -22,7 +21,6 @@ export function PipelineIOScreen({
   onComplete,
   onCancel,
 }: Props): React.JSX.Element {
-  useTerminalClear();
   const [path, setPath] = useState(initialPath);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);

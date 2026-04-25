@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import { useTerminalClear } from '../hooks/useTerminalClear.js';
 import {
   loadRecommendedModels,
   formatPrice,
@@ -79,8 +78,6 @@ export function ModelSelectorOverlay({
   onCancel,
 }: ModelSelectorOverlayProps): React.JSX.Element {
   const [mode, setMode] = useState<OverlayMode>('quick');
-
-  useTerminalClear();
 
   const prevModeRef = useRef<OverlayMode>(mode);
   useEffect(() => {

@@ -3,7 +3,6 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { PromptStep } from '../../lib/types.js';
 import { FileMultiSelect } from './FileMultiSelect.js';
-import { useTerminalClear } from '../hooks/useTerminalClear.js';
 
 type Field = 'name' | 'prompt' | 'files';
 
@@ -16,7 +15,6 @@ interface Props {
 }
 
 export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel }: Props): React.JSX.Element {
-  useTerminalClear();
   const [step, setStep] = useState<PromptStep>(initialStep);
   const [field, setField] = useState<Field>('name');
   const [pickingFiles, setPickingFiles] = useState(false);

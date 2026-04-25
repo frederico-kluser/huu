@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
-import { useTerminalClear } from '../hooks/useTerminalClear.js';
 
 interface Props {
   onSubmit: (apiKey: string) => void;
@@ -9,7 +8,6 @@ interface Props {
 }
 
 export function ApiKeyPrompt({ onSubmit, onCancel }: Props): React.JSX.Element {
-  useTerminalClear();
   const [value, setValue] = useState('');
 
   useInput((_input, key) => {

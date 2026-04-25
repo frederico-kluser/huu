@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { listRepoFiles } from '../../lib/file-scanner.js';
-import { useTerminalClear } from '../hooks/useTerminalClear.js';
 
 interface Props {
   repoRoot: string;
@@ -19,8 +18,6 @@ export function FileMultiSelect({
   onCommit,
   onCancel,
 }: Props): React.JSX.Element {
-  useTerminalClear();
-
   const [allFiles, setAllFiles] = useState<string[]>([]);
   const [filter, setFilter] = useState('');
   const [filterMode, setFilterMode] = useState(false);
