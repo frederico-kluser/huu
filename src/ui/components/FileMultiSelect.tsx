@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { listRepoFiles } from '../../lib/file-scanner.js';
+import { useTerminalClear } from '../hooks/useTerminalClear.js';
 
 interface Props {
   repoRoot: string;
@@ -18,6 +19,8 @@ export function FileMultiSelect({
   onCommit,
   onCancel,
 }: Props): React.JSX.Element {
+  useTerminalClear();
+
   const [allFiles, setAllFiles] = useState<string[]>([]);
   const [filter, setFilter] = useState('');
   const [filterMode, setFilterMode] = useState(false);
@@ -58,17 +61,14 @@ export function FileMultiSelect({
         else next.add(path);
         return next;
       });
-    } else if (input === 'a') {
+    } else if (input === 'a' || input === 'A') {
       setSelected((prev) => {
         const next = new Set(prev);
-        const allSelected = filtered.every((p) => next.has(p));
-        if (allSelected) {
-          for (const p of filtered) next.delete(p);
-        } else {
-          for (const p of filtered) next.add(p);
-        }
+        for (const p of filtered) next.add(p);
         return next;
       });
+    } else if (input === 'c' || input === 'C') {
+      setSelected(new Set());
     } else if (input === '/') {
       setFilterMode(true);
     } else if (key.return) {
@@ -78,39 +78,60 @@ export function FileMultiSelect({
 
   const start = Math.max(0, Math.min(cursor - Math.floor(PAGE_SIZE / 2), filtered.length - PAGE_SIZE));
   const visible = filtered.slice(start, start + PAGE_SIZE);
+  const totalSelected = selected.size;
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
-      <Text bold color="cyan">
-        Selecionar arquivos {selected.size > 0 && <Text color="yellow">({selected.size})</Text>}
-      </Text>
-      <Box>
-        <Text>Filtro: </Text>
-        {filterMode ? (
-          <TextInput value={filter} onChange={setFilter} onSubmit={() => setFilterMode(false)} />
-        ) : (
-          <Text dimColor>{filter || '(nenhum)'} <Text color="gray">— pressione / para editar</Text></Text>
-        )}
-      </Box>
-      <Box flexDirection="column" marginTop={1}>
-        {visible.length === 0 && <Text dimColor>(sem resultados)</Text>}
-        {visible.map((path, i) => {
-          const idx = start + i;
-          const isCursor = idx === cursor;
-          const isSelected = selected.has(path);
-          return (
-            <Text key={path} color={isCursor ? 'cyan' : isSelected ? 'green' : undefined}>
-              {isCursor ? '> ' : '  '}
-              {isSelected ? '[x] ' : '[ ] '}
-              {path}
-            </Text>
-          );
-        })}
-      </Box>
-      <Box marginTop={1}>
-        <Text dimColor>
-          ↑↓/jk navega · Space toggle · a toggle-all · / filtro · Enter confirma · Esc cancela
-        </Text>
+    <Box flexDirection="column" width="100%">
+      <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
+        <Box>
+          <Text bold color="cyan">Select files</Text>
+          <Text dimColor>  ·  </Text>
+          {totalSelected === 0 ? (
+            <Text color="yellow">no files selected → step will run on the whole project</Text>
+          ) : (
+            <Text color="green">{totalSelected} selected</Text>
+          )}
+        </Box>
+
+        <Box marginTop={1}>
+          <Text>Filter: </Text>
+          {filterMode ? (
+            <TextInput value={filter} onChange={setFilter} onSubmit={() => setFilterMode(false)} />
+          ) : (
+            <>
+              <Text>{filter || <Text dimColor>(none)</Text>}</Text>
+              <Text dimColor>   press / to edit</Text>
+            </>
+          )}
+        </Box>
+
+        <Box flexDirection="column" marginTop={1}>
+          {visible.length === 0 && <Text dimColor>(no matching files)</Text>}
+          {visible.map((path, i) => {
+            const idx = start + i;
+            const isCursor = idx === cursor;
+            const isSelected = selected.has(path);
+            return (
+              <Text key={path} color={isCursor ? 'cyan' : isSelected ? 'green' : undefined}>
+                {isCursor ? '> ' : '  '}
+                {isSelected ? '[x] ' : '[ ] '}
+                {path}
+              </Text>
+            );
+          })}
+          {filtered.length > PAGE_SIZE && (
+            <Text dimColor>  · showing {start + 1}-{Math.min(start + PAGE_SIZE, filtered.length)} of {filtered.length}</Text>
+          )}
+        </Box>
+
+        <Box marginTop={1} flexDirection="column">
+          <Text dimColor>
+            <Text bold>↑↓</Text> navigate · <Text bold>SPACE</Text> toggle · <Text bold>A</Text> select all · <Text bold>C</Text> clear all · <Text bold>/</Text> filter
+          </Text>
+          <Text dimColor>
+            <Text bold>ENTER</Text> confirm (empty = whole project) · <Text bold>ESC</Text> cancel
+          </Text>
+        </Box>
       </Box>
     </Box>
   );

@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { Pipeline } from '../../lib/types.js';
 import { exportPipeline, importPipeline } from '../../lib/pipeline-io.js';
+import { useTerminalClear } from '../hooks/useTerminalClear.js';
 
 export type PipelineIOMode = 'import' | 'export';
 
@@ -21,6 +22,7 @@ export function PipelineIOScreen({
   onComplete,
   onCancel,
 }: Props): React.JSX.Element {
+  useTerminalClear();
   const [path, setPath] = useState(initialPath);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -32,7 +34,7 @@ export function PipelineIOScreen({
   const handleSubmit = (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) {
-      setError('Caminho nao pode ser vazio');
+      setError('Path cannot be empty');
       return;
     }
     try {
@@ -41,11 +43,11 @@ export function PipelineIOScreen({
         onComplete(loaded);
       } else {
         if (!pipeline) {
-          setError('Pipeline ausente para exportacao');
+          setError('No pipeline to export');
           return;
         }
         exportPipeline(pipeline, trimmed);
-        setDone(`Exportado para ${trimmed}`);
+        setDone(`Exported to ${trimmed}`);
         setTimeout(() => onComplete(pipeline), 800);
       }
     } catch (err) {
@@ -54,26 +56,38 @@ export function PipelineIOScreen({
   };
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
-      <Text bold color="cyan">
-        {mode === 'import' ? 'Importar pipeline' : 'Exportar pipeline'}
-      </Text>
-      <Box marginTop={1}>
-        <Text>Caminho: </Text>
-        <TextInput value={path} onChange={setPath} onSubmit={handleSubmit} />
-      </Box>
-      {error && (
+    <Box flexDirection="column" width="100%">
+      <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
+        <Text bold color="cyan">
+          {mode === 'import' ? 'Import pipeline from JSON' : 'Export pipeline to JSON'}
+        </Text>
+
         <Box marginTop={1}>
-          <Text color="red">{error}</Text>
+          <Text>Path: </Text>
+          <TextInput
+            value={path}
+            onChange={setPath}
+            onSubmit={handleSubmit}
+            placeholder="e.g. ./my-pipeline.json"
+          />
         </Box>
-      )}
-      {done && (
+
+        {error && (
+          <Box marginTop={1}>
+            <Text color="red">{error}</Text>
+          </Box>
+        )}
+        {done && (
+          <Box marginTop={1}>
+            <Text color="green">{done}</Text>
+          </Box>
+        )}
+
         <Box marginTop={1}>
-          <Text color="green">{done}</Text>
+          <Text dimColor>
+            <Text bold>ENTER</Text> confirm · <Text bold>ESC</Text> cancel
+          </Text>
         </Box>
-      )}
-      <Box marginTop={1}>
-        <Text dimColor>Enter confirma · Esc cancela</Text>
       </Box>
     </Box>
   );

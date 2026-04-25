@@ -58,7 +58,7 @@ export function buildQuickItems(): SelectItem[] {
     }
   }
 
-  items.push({ label: '── Recomendados ──', value: '__separator_1__' });
+  items.push({ label: '── Recommended ──', value: '__separator_1__' });
 
   for (const entry of loadRecommendedModels(projectRoot)) {
     if (seen.has(entry.id)) continue;
@@ -69,7 +69,7 @@ export function buildQuickItems(): SelectItem[] {
   }
 
   items.push({ label: '──────────────────', value: '__separator_2__' });
-  items.push({ label: '🔍 Mais modelos...', value: MORE_MODELS_VALUE });
+  items.push({ label: '🔍 More models...', value: MORE_MODELS_VALUE });
 
   return items;
 }
@@ -121,15 +121,18 @@ export function ModelSelectorOverlay({
   if (mode === 'quick') {
     const items = buildQuickItems();
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
-        <Text bold color="cyan">
-          Selecione um modelo:
-        </Text>
-        <Box marginTop={1}>
-          <SelectInput items={items} onSelect={handleQuickSelect} />
-        </Box>
-        <Box marginTop={1}>
-          <Text dimColor>Esc cancela</Text>
+      <Box flexDirection="column" width="100%">
+        <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
+          <Text bold color="cyan">Select a model</Text>
+          <Text dimColor>Recents · favorites · recommended catalog</Text>
+          <Box marginTop={1}>
+            <SelectInput items={items} onSelect={handleQuickSelect} />
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>
+              <Text bold>↑↓</Text> navigate · <Text bold>ENTER</Text> select · <Text bold>ESC</Text> cancel
+            </Text>
+          </Box>
         </Box>
       </Box>
     );
@@ -152,20 +155,22 @@ function TableView({ onSelect }: TableViewProps): React.JSX.Element {
       setLoaded({ Selector: m.ModelSelector });
     });
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
-        <Text color="yellow">Carregando tabela de modelos...</Text>
+      <Box flexDirection="column" width="100%">
+        <Box borderStyle="round" borderColor="cyan" paddingX={1} width="100%">
+          <Text color="yellow">Loading model table...</Text>
+        </Box>
       </Box>
     );
   }
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width="100%">
       <Text bold color="cyan" dimColor>
-        Esc para voltar à lista rápida
+        ESC to return to the quick list
       </Text>
       <Loaded.Selector
         onSelect={(model) => onSelect(model.id)}
-        title="Selecione um modelo"
+        title="Select a model"
       />
     </Box>
   );

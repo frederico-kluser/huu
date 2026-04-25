@@ -110,15 +110,17 @@ export function RunDashboard({
   });
 
   if (!state) {
-    return <Text>Inicializando orchestrator...</Text>;
+    return <Text>Initializing orchestrator...</Text>;
   }
 
   if (error) {
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor="red" paddingX={1}>
-        <Text bold color="red">Erro</Text>
-        <Box marginTop={1}><Text>{error}</Text></Box>
-        <Box marginTop={1}><Text dimColor>q sair</Text></Box>
+      <Box flexDirection="column" width="100%">
+        <Box borderStyle="round" borderColor="red" paddingX={1} flexDirection="column" width="100%">
+          <Text bold color="red">Error</Text>
+          <Box marginTop={1}><Text>{error}</Text></Box>
+          <Box marginTop={1}><Text dimColor><Text bold>Q</Text> quit</Text></Box>
+        </Box>
       </Box>
     );
   }
@@ -146,15 +148,15 @@ export function RunDashboard({
   const ss = String(elapsed % 60).padStart(2, '0');
 
   return (
-    <Box flexDirection="column">
-      <Box paddingX={1}>
+    <Box flexDirection="column" width="100%">
+      <Box paddingX={1} width="100%">
         <Text bold color="cyan">programatic-agent</Text>
         <Text dimColor>  ·  </Text>
-        <Text>Stage <Text bold>{state.currentStage}/{state.totalStages}</Text></Text>
+        <Text>stage <Text bold>{state.currentStage}/{state.totalStages}</Text></Text>
         <Text dimColor>  ·  </Text>
-        <Text>conc <Text bold color="yellow">{state.concurrency}</Text></Text>
+        <Text>concurrency <Text bold color="yellow">{state.concurrency}</Text></Text>
         <Text dimColor>  ·  </Text>
-        <Text>{mm}:{ss}</Text>
+        <Text>elapsed {mm}:{ss}</Text>
         <Text dimColor>  ·  </Text>
         <Text>{state.completedTasks}/{state.totalTasks} done</Text>
         <Text dimColor>  ·  status: </Text>
@@ -170,8 +172,10 @@ export function RunDashboard({
           setModalOpen(true);
         }}
       />
-      <Box paddingX={1}>
-        <Text dimColor>+/- conc · ↑↓←→ navega · Enter detalhes · q sair</Text>
+      <Box paddingX={1} width="100%">
+        <Text dimColor>
+          <Text bold>+</Text>/<Text bold>-</Text> concurrency · <Text bold>↑↓←→</Text> navigate · <Text bold>ENTER</Text> open card details · <Text bold>Q</Text> abort run
+        </Text>
       </Box>
     </Box>
   );

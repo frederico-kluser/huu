@@ -28,23 +28,30 @@ programatic-agent run example.pipeline.json --stub
 
 - `OPENROUTER_API_KEY` — sua chave OpenRouter. Sem isso, a TUI pede ao iniciar a run.
 
-### Atalhos
+### Atalhos (toda a UI é em inglês)
 
-**No editor de pipeline:**
-- `a` adicionar etapa, `d` remover, `J/K` reordenar, `e`/`Enter` editar
-- `n` renomear pipeline · `i` importar JSON · `x` exportar JSON
-- `r` executar (quando todas as etapas estão válidas) · `Esc` voltar
+**Welcome:** `[N]` new pipeline · `[I]` import JSON · `[Q]` quit
 
-**No editor de etapa:**
-- `Tab`/`Shift+Tab` entre campos · `Enter` no campo arquivos abre o seletor
+**Pipeline editor:**
+- `↑↓` navigate steps · `ENTER`/`E` edit step · `N` new step · `D` delete step
+- `SHIFT+↑↓` reorder · `R` rename pipeline · `I` import · `S` save (export)
+- `G` go (run pipeline) when all steps are valid · `ESC` back
 
-**No seletor de arquivos:**
-- `↑↓`/`jk` navega · `Space` toggle · `a` toggle-all · `/` filtro · `Enter` confirma
+**Step editor:**
+- `TAB`/`SHIFT+TAB` cycle fields (Name → Prompt → Files)
+- `ENTER` inside a text field moves to the next
+- On the Files row: `F`/`ENTER` open picker · `W` use whole project · `S` save step
+- `CTRL+S` save step · `ESC` cancel and discard
 
-**No dashboard:**
-- `+`/`-` aumentar/diminuir concorrência (afeta o pool em tempo real)
-- `↑↓←→` navega cards · `Enter` abre modal de detalhes
-- `q` aborta run
+**File picker:**
+- `↑↓` navigate · `SPACE` toggle · `A` select all · `C` clear all
+- `/` filter · `ENTER` confirm (empty selection = whole project) · `ESC` cancel
+
+**Run dashboard:**
+- `+`/`-` adjust concurrency (live)
+- `↑↓←→` navigate cards · `ENTER` open card details · `Q` abort run
+
+**Summary:** `ENTER` back to editor · `Q` quit
 
 ## Como funciona
 

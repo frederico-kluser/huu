@@ -9,16 +9,16 @@ import type { AgentFactory } from './orchestrator/types.js';
 import type { Pipeline } from './lib/types.js';
 
 function printUsage(): void {
-  console.log(`programatic-agent — TUI de execucao guiada com kanban
+  console.log(`programatic-agent — Guided pipeline execution TUI with kanban
 
-Uso:
-  programatic-agent                       Abre a TUI no estado inicial
-  programatic-agent run <pipeline.json>   Carrega pipeline e vai direto pro seletor de modelo
-  programatic-agent --stub                Forca o agent stub (sem LLM real)
-  programatic-agent --help                Mostra esta ajuda
+Usage:
+  programatic-agent                       Open the TUI at the welcome screen
+  programatic-agent run <pipeline.json>   Load pipeline and jump to the model picker
+  programatic-agent --stub                Force the stub agent (no real LLM)
+  programatic-agent --help                Show this help
 
-Variaveis de ambiente:
-  OPENROUTER_API_KEY    Sua chave OpenRouter. Sem isso, sera pedida na TUI.
+Environment:
+  OPENROUTER_API_KEY    Your OpenRouter key. Asked in the TUI when missing.
 `);
 }
 
@@ -38,14 +38,14 @@ async function main(): Promise<void> {
   if (filtered[0] === 'run') {
     const path = filtered[1];
     if (!path) {
-      console.error('Uso: programatic-agent run <pipeline.json>');
+      console.error('Usage: programatic-agent run <pipeline.json>');
       process.exit(1);
     }
     try {
       initialPipeline = importPipeline(path);
       autoStart = true;
     } catch (err) {
-      console.error(`Falha ao importar pipeline: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`Failed to import pipeline: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
     }
   }

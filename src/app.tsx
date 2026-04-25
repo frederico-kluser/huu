@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Box, Text, useApp, useInput } from 'ink';
+import React, { useEffect, useRef, useState } from 'react';
+import { Box, Text, useApp, useInput, useStdout } from 'ink';
 import { ModelSelectorOverlay } from './ui/components/ModelSelectorOverlay.js';
 import { PipelineEditor } from './ui/components/PipelineEditor.js';
 import { PipelineIOScreen } from './ui/components/PipelineIOScreen.js';
@@ -30,6 +30,8 @@ type Screen =
   | { kind: 'run'; modelId: string; apiKey: string }
   | { kind: 'summary'; result: OrchestratorResult };
 
+const FULL_CLEAR = '\x1b[2J\x1b[3J\x1b[H';
+
 export function App({
   initialPipeline,
   agentFactory,
@@ -38,6 +40,7 @@ export function App({
   autoStart,
 }: AppProps): React.JSX.Element {
   const { exit } = useApp();
+  const { stdout } = useStdout();
   const [screen, setScreen] = useState<Screen>(
     autoStart && initialPipeline ? { kind: 'pipeline-editor' } : { kind: 'welcome' },
   );
@@ -47,14 +50,25 @@ export function App({
   const repoRoot = process.cwd();
   const factory = agentFactory ?? stubAgentFactory;
 
+  // Clear the terminal whenever the top-level screen changes. Without this,
+  // tall components (file picker, model table) leave ghost rows on screen
+  // when the user goes back. Fires on transition only, not on every render.
+  const prevScreenKind = useRef<Screen['kind']>(screen.kind);
+  useEffect(() => {
+    if (prevScreenKind.current !== screen.kind && stdout.isTTY) {
+      stdout.write(FULL_CLEAR);
+    }
+    prevScreenKind.current = screen.kind;
+  }, [screen.kind, stdout]);
+
   useInput(
     (input, key) => {
       if (screen.kind === 'welcome') {
-        if (input === 'q') exit();
-        if (input === 'n') setScreen({ kind: 'pipeline-editor' });
-        if (input === 'i') setScreen({ kind: 'pipeline-import' });
+        if (input === 'q' || input === 'Q') exit();
+        if (input === 'n' || input === 'N') setScreen({ kind: 'pipeline-editor' });
+        if (input === 'i' || input === 'I') setScreen({ kind: 'pipeline-import' });
       } else if (screen.kind === 'summary') {
-        if (input === 'q') exit();
+        if (input === 'q' || input === 'Q') exit();
         if (key.return) setScreen({ kind: 'pipeline-editor' });
       }
     },
@@ -63,13 +77,20 @@ export function App({
 
   if (screen.kind === 'welcome') {
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
-        <Text bold color="cyan">programatic-agent</Text>
-        <Text dimColor>TUI de execucao guiada com kanban</Text>
-        <Box marginTop={1} flexDirection="column">
-          <Text><Text bold color="cyan">n</Text>  Nova pipeline</Text>
-          <Text><Text bold color="cyan">i</Text>  Importar pipeline (JSON)</Text>
-          <Text><Text bold color="cyan">q</Text>  Sair</Text>
+      <Box flexDirection="column" width="100%">
+        <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
+          <Text bold color="cyan">programatic-agent</Text>
+          <Text dimColor>Guided pipeline execution — multi-agent kanban with git worktrees</Text>
+
+          <Box marginTop={1} flexDirection="column">
+            <Text>  <Text bold color="cyan">[N]</Text>  New pipeline</Text>
+            <Text>  <Text bold color="cyan">[I]</Text>  Import pipeline from JSON</Text>
+            <Text>  <Text bold color="cyan">[Q]</Text>  Quit</Text>
+          </Box>
+
+          <Box marginTop={1}>
+            <Text dimColor>cwd: {repoRoot}</Text>
+          </Box>
         </Box>
       </Box>
     );
@@ -165,21 +186,48 @@ export function App({
   if (screen.kind === 'summary') {
     const r = screen.result;
     const seconds = Math.floor(r.duration / 1000);
+    const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const ss = String(seconds % 60).padStart(2, '0');
+    const committed = r.agents.filter((a) => a.commitSha).length;
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor="green" paddingX={1}>
-        <Text bold color="green">Run concluida</Text>
-        <Box marginTop={1} flexDirection="column">
-          <Text>runId: <Text bold>{r.runId}</Text></Text>
-          <Text>integrationBranch: <Text bold>{r.manifest.integrationBranch}</Text></Text>
-          <Text>duracao: {seconds}s</Text>
-          <Text>agents com commit: {r.agents.filter((a) => a.commitSha).length}/{r.agents.length}</Text>
-          <Text>arquivos modificados: {r.filesModified.length}</Text>
-          {r.integration.conflicts.length > 0 && (
-            <Text color="red">conflitos: {r.integration.conflicts.length}</Text>
-          )}
-        </Box>
-        <Box marginTop={1}>
-          <Text dimColor>Enter volta ao editor · q sair</Text>
+      <Box flexDirection="column" width="100%">
+        <Box borderStyle="round" borderColor="green" paddingX={1} flexDirection="column" width="100%">
+          <Text bold color="green">Run finished</Text>
+
+          <Box marginTop={1} flexDirection="column">
+            <Box>
+              <Box width={24}><Text dimColor>runId:</Text></Box>
+              <Text bold>{r.runId}</Text>
+            </Box>
+            <Box>
+              <Box width={24}><Text dimColor>integration branch:</Text></Box>
+              <Text bold>{r.manifest.integrationBranch}</Text>
+            </Box>
+            <Box>
+              <Box width={24}><Text dimColor>duration:</Text></Box>
+              <Text>{mm}:{ss}</Text>
+            </Box>
+            <Box>
+              <Box width={24}><Text dimColor>agents committed:</Text></Box>
+              <Text>{committed} / {r.agents.length}</Text>
+            </Box>
+            <Box>
+              <Box width={24}><Text dimColor>files modified:</Text></Box>
+              <Text>{r.filesModified.length}</Text>
+            </Box>
+            {r.integration.conflicts.length > 0 && (
+              <Box>
+                <Box width={24}><Text color="red">conflicts:</Text></Box>
+                <Text color="red">{r.integration.conflicts.length}</Text>
+              </Box>
+            )}
+          </Box>
+
+          <Box marginTop={1}>
+            <Text dimColor>
+              <Text bold>ENTER</Text> back to pipeline editor · <Text bold>Q</Text> quit
+            </Text>
+          </Box>
         </Box>
       </Box>
     );
