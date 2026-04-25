@@ -32,7 +32,9 @@ export function PipelineEditor({
     initialPipeline ?? { name: 'my-pipeline', steps: [{ ...EMPTY_STEP }] },
   );
   const [cursor, setCursor] = useState(0);
-  const [mode, setMode] = useState<Mode>({ kind: 'list' });
+  const [mode, setMode] = useState<Mode>(
+    initialPipeline ? { kind: 'list' } : { kind: 'editing', index: 0 },
+  );
 
   useInput((input, key) => {
     if (mode.kind !== 'list') return;
