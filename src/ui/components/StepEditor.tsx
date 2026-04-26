@@ -5,6 +5,7 @@ import type { PromptStep } from '../../lib/types.js';
 import { FileMultiSelect } from './FileMultiSelect.js';
 
 type Field = 'name' | 'prompt' | 'files';
+type EditorMode = 'selecting' | 'editing';
 
 interface Props {
   initialStep: PromptStep;
@@ -17,6 +18,7 @@ interface Props {
 export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel }: Props): React.JSX.Element {
   const [step, setStep] = useState<PromptStep>(initialStep);
   const [field, setField] = useState<Field>('name');
+  const [editorMode, setEditorMode] = useState<EditorMode>('selecting');
   const [pickingFiles, setPickingFiles] = useState(false);
   // Files choice must be explicit. Treat existing steps (already-edited prompt
   // or files already selected) as previously chosen.
@@ -27,6 +29,14 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
 
   useInput((input, key) => {
     if (pickingFiles) return;
+
+    if (editorMode === 'editing') {
+      if (key.escape) {
+        setEditorMode('selecting');
+      }
+      return;
+    }
+
     if (key.escape) {
       if (canSave) {
         onSave(step);
@@ -35,8 +45,17 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
       }
       return;
     }
-    if (key.tab) {
+
+    if (key.upArrow) {
+      setField((f) => (f === 'files' ? 'prompt' : f === 'prompt' ? 'name' : 'name'));
+    } else if (key.downArrow) {
+      setField((f) => (f === 'name' ? 'prompt' : f === 'prompt' ? 'files' : 'files'));
+    } else if (key.tab) {
       setField((f) => (f === 'name' ? 'prompt' : f === 'prompt' ? 'files' : 'name'));
+    } else if (key.return) {
+      if (field !== 'files') {
+        setEditorMode('editing');
+      }
     } else if (field === 'files') {
       if (input === 'f' || input === 'F') {
         setPickingFiles(true);
@@ -44,7 +63,6 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
         setStep({ ...step, files: [] });
         setFilesChosen(true);
       }
-      // ENTER intentionally does nothing here — choice must be explicit (F or W).
     }
   });
 
@@ -63,6 +81,12 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
     );
   }
 
+  const promptDisplay = step.prompt
+    ? step.prompt.length > 60
+      ? step.prompt.slice(0, 60) + '...'
+      : step.prompt
+    : null;
+
   return (
     <Box flexDirection="column" width="100%">
       <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
@@ -70,7 +94,7 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
 
         <Box marginTop={1}>
           <Box width={10}><Text color={field === 'name' ? 'cyan' : undefined}>Name:</Text></Box>
-          {field === 'name' ? (
+          {field === 'name' && editorMode === 'editing' ? (
             <TextInput
               value={step.name}
               onChange={(v) => setStep({ ...step, name: v })}
@@ -78,21 +102,24 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
               placeholder="e.g. Refactor headers"
             />
           ) : (
-            <Text>{step.name || <Text dimColor>(empty — focus this field with Tab)</Text>}</Text>
+            <Text>{step.name || <Text dimColor>(empty)</Text>}</Text>
           )}
         </Box>
 
         <Box marginTop={1} flexDirection="column">
           <Text color={field === 'prompt' ? 'cyan' : undefined}>Prompt:</Text>
-          {field === 'prompt' ? (
+          {field === 'prompt' && editorMode === 'editing' ? (
             <TextInput
               value={step.prompt}
               onChange={(v) => setStep({ ...step, prompt: v })}
-              onSubmit={() => setField('files')}
+              onSubmit={() => {
+                setField('files');
+                setEditorMode('selecting');
+              }}
               placeholder="Use $file when files are selected"
             />
           ) : (
-            <Text>{step.prompt || <Text dimColor>(empty)</Text>}</Text>
+            <Text>{promptDisplay || <Text dimColor>(empty)</Text>}</Text>
           )}
         </Box>
 
@@ -111,19 +138,30 @@ export function StepEditor({ initialStep, stepIndex, repoRoot, onSave, onCancel 
         </Box>
 
         <Box marginTop={2} flexDirection="column">
-          <Text dimColor>
-            <Text bold>TAB</Text> cycle fields · <Text bold>ENTER</Text> in name/prompt moves to the next field
-          </Text>
-          <Text>
-            <Text bold>ESC</Text>{' '}
-            {canSave ? (
-              <Text color="green">save and close</Text>
-            ) : !filesChosen ? (
-              <Text color="red">cancel — choose Files (F or W) before saving</Text>
-            ) : (
-              <Text color="red">cancel and discard</Text>
-            )}
-          </Text>
+          {editorMode === 'selecting' ? (
+            <>
+              <Text dimColor>
+                <Text bold>↑↓</Text> select · <Text bold>TAB</Text> cycle · <Text bold>ENTER</Text> edit
+                {field === 'files' && (
+                  <> · <Text bold>F</Text> pick files · <Text bold>W</Text> whole project</>
+                )}
+              </Text>
+              <Text>
+                <Text bold>ESC</Text>{' '}
+                {canSave ? (
+                  <Text color="green">save and close</Text>
+                ) : !filesChosen ? (
+                  <Text color="red">cancel — choose Files (F or W) before saving</Text>
+                ) : (
+                  <Text color="red">cancel and discard</Text>
+                )}
+              </Text>
+            </>
+          ) : (
+            <Text dimColor>
+              <Text bold>ESC</Text> exit editing · <Text bold>ENTER</Text> next field
+            </Text>
+          )}
         </Box>
       </Box>
     </Box>
