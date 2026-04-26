@@ -24,17 +24,22 @@ npm test
 npm run typecheck
 ```
 
-## Convenções
+## Agent Skills
 
-- **ESM only**: `"type": "module"` — todos os imports usam extensão `.js` explícita
-- **Naming**: `kebab-case.ts` para arquivos, `PascalCase` para classes e componentes React, `camelCase` para funções e variáveis
-- **Imports**: externos primeiro, depois internos (por profundidade), depois `node:` built-ins
-- **Exports**: nomeados apenas — nunca usar `export default`
-- **Types**: discriminated unions com `kind` ou `type` como discriminante
-- **Error handling**: best-effort catch + ignore para operações transientes; `err instanceof Error ? err.message : String(err)` para mensagens seguras
-- **Git**: operações síncronas via `execSync`; retry com backoff exponencial para push
+Detailed domain-specific guidance lives in `.agents/skills/`:
 
-## Arquitetura
+| Skill | Domain |
+|---|---|
+| `architecture-conventions` | Layered architecture, naming, imports, dependency rules |
+| `git-workflow-orchestration` | Worktree lifecycle, branch naming, merge, conflict resolution |
+| `pipeline-agents` | Pipeline creation, task decomposition, AgentFactory usage |
+| `ui-tui-ink` | Ink (React for terminals) component patterns, screen routing |
+| `build-dev-tools` | Build, dev, test commands and tooling config |
+| `llm-integration` | OpenRouter model selection, Pi SDK, thinking detection |
+
+Consult the relevant skill before starting any task.
+
+## Arquitetura (Resumo)
 
 ```
 cli.tsx / app.tsx (entry + screen router)
@@ -48,20 +53,11 @@ git/ (worktree manager, branch ops, preflight, merge)
 lib/ (types, pipeline-io, file-scanner, openrouter, run-id)
 ```
 
-Dependências fluem **sempre para baixo** — camadas inferiores nunca importam camadas superiores.
+Dependencies flow **downward only** — lower layers never import upper layers.
+See `architecture-conventions` skill for full conventions and rules.
 
-## Regras Invioláveis
+## Commit Rules
 
-- Nunca usar `export default`
-- Sempre usar `.js` em imports locais (mesmo para arquivos `.ts`/`.tsx`)
-- Nunca importar `ui/` ou `orchestrator/` a partir de `git/` ou `lib/`
-- `AgentFactory` é a única porta de saída para LLM — orchestrator não conhece SDK
-- Todos os tipos compartilhados vivem em `lib/types.ts`
-- Commits de agentes usam `--no-verify` (preflight já validou)
-- Worktrees temporárias vivem em `.programatic-agent-worktrees/<runId>/` (auto-gitignored)
-
-## Regras de Commit
-
-- Não há CI/CD configurado — commits são manuais
-- O projeto atualmente não usa Conventional Commits de forma estrita, mas prefira-o
-- Nunca force-push na branch principal
+- No CI/CD configured — commits are manual
+- Prefer Conventional Commits
+- Never force-push to main

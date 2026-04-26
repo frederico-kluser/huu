@@ -55,33 +55,33 @@ programatic-agent run example.pipeline.json --stub
 
 ## Como funciona
 
-1. **Preflight** — verifica que estamos num git repo, branch resolvido, sem conflitos.
-2. **Worktree central** — cria `.programatic-agent-worktrees/<runId>/integration` na branch `programatic-agent/<runId>/integration` (a partir do HEAD atual). O diretório é auto-anexado ao `.gitignore` na primeira run.
-3. **Para cada etapa da pipeline:**
-   - Decompõe em tasks (1 por arquivo, ou 1 task whole-project se `files: []`).
-   - Spawna agents respeitando a concorrência atual. Cada agent vive em `.programatic-agent-worktrees/<runId>/agent-N/` e branch a partir do HEAD da integração mais recente.
-   - Quando o agent termina: validate → stage → commit (`--no-verify`) → remove worktree.
-   - Quando todos terminam: `git merge --no-ff` cada branch na worktree central, em ordem de `agentId`.
-   - Se houver conflitos: um **integration agent LLM** (mesmo modelo da run) é spawnado na worktree central, recebe o sistema prompt com permissão para rodar git, e tem como missão resolver os conflitos. Se ele falhar, a run é abortada com as branches preservadas para resolução manual. Com `--stub`, o resolver é desligado (stubs não resolvem conflitos), e qualquer conflito aborta direto.
-4. **Stage N+1** branca a partir do HEAD da integração atualizado.
-5. **Cleanup** — worktree central removida ao fim. As branches ficam preservadas como artefatos.
+> Veja `.agents/skills/git-workflow-orchestration/SKILL.md` para o ciclo de vida completo de worktrees, branches, merge e resolução de conflitos.
+
+Em resumo:
+1. **Preflight** — valida o estado do repo git.
+2. **Worktree central** — cria integration worktree na branch `programatic-agent/<runId>/integration`.
+3. **Por estágio** — decompõe em tasks, spawna agents em worktrees isoladas, mergea na central.
+4. **Próximo estágio** brancha a partir do HEAD da integration atualizada.
+5. **Cleanup** — worktree central removida; branches preservadas como artefatos.
 
 ## Esquema da pipeline (JSON)
+
+> Veja `.agents/skills/pipeline-agents/SKILL.md` para detalhes completos de criação de pipelines, decomposição de tasks e uso do `AgentFactory`.
 
 ```json
 {
   "_format": "programatic-agent-pipeline-v1",
   "pipeline": {
-    "name": "minha-pipeline",
+    "name": "my-pipeline",
     "steps": [
       {
-        "name": "Etapa 1",
-        "prompt": "Refatore $file usando padrao X",
+        "name": "Step 1",
+        "prompt": "Refactor $file using pattern X",
         "files": ["src/foo.ts", "src/bar.ts"]
       },
       {
-        "name": "Etapa 2 (rodada livre)",
-        "prompt": "Atualize o README com base nas mudancas anteriores",
+        "name": "Step 2 (free run)",
+        "prompt": "Update README based on changes above",
         "files": []
       }
     ]
@@ -89,8 +89,8 @@ programatic-agent run example.pipeline.json --stub
 }
 ```
 
-- `prompt` aceita `$file` quando `files` não está vazio (substituído pelo arquivo da task).
-- `files: []` faz a etapa rodar uma única vez sem restrição de arquivo.
+- `prompt` accepts `$file` when `files` is non-empty.
+- `files: []` runs a single whole-project task.
 
 ## Decisões arquiteturais
 

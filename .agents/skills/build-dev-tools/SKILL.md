@@ -10,28 +10,28 @@ paths: "package.json, tsconfig.json, scripts/*"
 
 ## Goal
 
-Documenta os comandos e ferramentas de build, desenvolvimento e teste do
-projeto programatic-agent.
+Documents the build, development, and test commands and tools of the
+programatic-agent project.
 
 ## Boundaries
 
-**Fazer:**
-- Usar `npm run dev` para desenvolvimento com hot-reload (tsx --watch)
-- Usar `npm start` para rodar sem compilar
-- Usar `npm run build` para compilar TypeScript → `dist/` e tornar `dist/cli.js` executável
-- Usar `npm test` para rodar Vitest (único arquivo de teste: `lib/pipeline-io.test.ts`)
-- Usar `npm run typecheck` para validação rápida sem emitir arquivos
-- Usar `tsx scripts/smoke-*.tsx` para smoke tests manuais
+**Do:**
+- Use `npm run dev` for development with hot-reload (tsx --watch)
+- Use `npm start` to run without compiling
+- Use `npm run build` to compile TypeScript → `dist/` and make `dist/cli.js` executable
+- Use `npm test` to run Vitest (single test file: `lib/pipeline-io.test.ts`)
+- Use `npm run typecheck` for fast validation without emitting files
+- Use `tsx scripts/smoke-*.tsx` for manual smoke tests
 
-**Nao fazer:**
-- Esperar que `npm test` cubra o orchestrator ou git — só existe 1 test file
-- Adicionar linters/formatters sem discutir com o time (nenhum está configurado)
-- Usar `tsc` diretamente sem `--noEmit` ou sem o script apropriado
-- Modificar `tsconfig.json` sem validar impacto em `vitest` e `tsx`
+**Do not:**
+- Expect `npm test` to cover the orchestrator or git — there's only 1 test file
+- Add linters/formatters without discussing with the team (none are configured)
+- Use `tsc` directly without `--noEmit` or the appropriate script
+- Modify `tsconfig.json` without validating impact on `vitest` and `tsx`
 
 ## Workflow
 
-### Desenvolvimento
+### Development
 ```bash
 npm install
 npm run dev           # hot reload
@@ -39,36 +39,36 @@ npm run dev           # hot reload
 npm start             # run once
 ```
 
-### Build e Distribuição
+### Build and Distribution
 ```bash
 npm run build         # tsc + chmod +x dist/cli.js
-npm run build:link    # build + npm link (expõe binário global `programatic-agent`)
+npm run build:link    # build + npm link (exposes global binary `programatic-agent`)
 ```
 
-### Testes
+### Tests
 ```bash
-npm test              # vitest run (uma vez)
+npm test              # vitest run (once)
 npm run test:watch    # vitest (watch mode)
 ```
 
 ### Smoke Tests
 ```bash
-tsx scripts/smoke-dashboard.tsx    # testa visualmente o RunDashboard
-tsx scripts/smoke-conflict.tsx     # testa resolução de conflitos
+tsx scripts/smoke-dashboard.tsx    # visually tests the RunDashboard
+tsx scripts/smoke-conflict.tsx     # tests conflict resolution
 ```
 
-## Configurações
+## Configurations
 
 ### TypeScript (`tsconfig.json`)
 - Target: ES2022, Module: ESNext, ModuleResolution: Bundler
 - JSX: react-jsx, Strict: true
 - OutDir: `dist/`, RootDir: `src/`
-- Declarations + sourcemaps habilitados
-- Exclui: `node_modules`, `dist`, `scripts`
+- Declarations + sourcemaps enabled
+- Excludes: `node_modules`, `dist`, `scripts`
 
 ### Vitest
-- Sem arquivo de configuração — usa defaults
-- Auto-descobre path aliases via `tsconfig.json`
+- No configuration file — uses defaults
+- Auto-discovers path aliases via `tsconfig.json`
 
 ### npm (`package.json`)
 - `"type": "module"` — ESM-only
@@ -76,8 +76,8 @@ tsx scripts/smoke-conflict.tsx     # testa resolução de conflitos
 
 ## Gotchas
 
-- Não há ESLint, Prettier, Husky, lint-staged, commitlint, nem `.editorconfig`.
-- `@mariozechner/pi-ai` e `@mariozechner/pi-coding-agent` usam `latest` (não semver).
-- O build produz `dist/cli.js` com shebang — `chmod +x` é parte do build script.
-- `scripts/` são smoke tests manuais, não parte do build ou test suite.
-- Não há CI/CD (GitHub Actions, Docker, etc.).
+- No ESLint, Prettier, Husky, lint-staged, commitlint, or `.editorconfig`.
+- `@mariozechner/pi-ai` and `@mariozechner/pi-coding-agent` use `latest` (not semver).
+- The build produces `dist/cli.js` with a shebang — `chmod +x` is part of the build script.
+- `scripts/` are manual smoke tests, not part of the build or test suite.
+- No CI/CD (GitHub Actions, Docker, etc.).

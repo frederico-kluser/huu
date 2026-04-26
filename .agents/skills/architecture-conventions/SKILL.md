@@ -11,38 +11,37 @@ paths: "src/**/*.ts, src/**/*.tsx"
 
 ## Goal
 
-Estabelece as regras arquiteturais e convenções de código do projeto
-programatic-agent, garantindo que novos módulos sigam a mesma estrutura
-layered e os mesmos padrões de naming/import.
+Establishes the architectural rules and code conventions of the
+programatic-agent project, ensuring new modules follow the same layered
+structure and naming/import patterns.
 
 ## Boundaries
 
-**Fazer:**
-- Seguir o fluxo de dependências: `ui/` → `orchestrator/` → `git/` → `lib/`
-- Usar discriminated unions (`kind` / `type`) para estados e eventos
-- Colocar todos os tipos compartilhados em `lib/types.ts`
-- Usar `.js` explícita em imports locais (ESM requirement)
-- Usar `export default`? **NUNCA.** Somente named exports.
+**Do:**
+- Follow the dependency flow: `ui/` → `orchestrator/` → `git/` → `lib/`
+- Use discriminated unions (`kind` / `type`) for states and events
+- Put all shared types in `lib/types.ts`
+- Use explicit `.js` in local imports (ESM requirement)
+- Use `export default`? **NEVER.** Only named exports.
 
-**Nao fazer:**
-- Importar `ui/` ou `orchestrator/` a partir de `git/` ou `lib/`
-- Criar tipos dispersos em múltiplos arquivos
-- Usar `export default` em qualquer arquivo
-- Importar camadas superiores a partir de camadas inferiores
+**Don't:**
+- Import `ui/` or `orchestrator/` from `git/` or `lib/`
+- Create scattered types across multiple files
+- Use `export default` in any file
+- Import upper layers from lower layers
 
 ## Workflow
 
-1. **Novo módulo** — decida a camada (`ui/`, `orchestrator/`, `git/`, `lib/`)
-2. **Naming** — `kebab-case.ts` (ou `.tsx` se JSX), `PascalCase` classes/componentes, `camelCase` funções
-3. **Tipos** — se for compartilhado, vá para `lib/types.ts`; se for local, defina no próprio arquivo
-4. **Imports** — ordem: externos → internos (por profundidade) → `node:` built-ins
-5. **Exports** — sempre nomeados
+1. **New module** — decide the layer (`ui/`, `orchestrator/`, `git/`, `lib/`)
+2. **Naming** — `kebab-case.ts` (or `.tsx` if JSX), `PascalCase` classes/components, `camelCase` functions
+3. **Types** — if shared, go to `lib/types.ts`; if local, define in the file itself
+4. **Imports** — order: external → internal (by depth) → `node:` built-ins
+5. **Exports** — always named
 
 ## Gotchas
 
-- O projeto é ESM-only (`"type": "module"`). TypeScript com `moduleResolution: Bundler` requer `.js` nos imports mesmo para `.ts`/`.tsx`.
-- `lib/types.ts` é a fonte única de verdade (~25 interfaces). Não duplique tipos.
-- A arquitetura foi derivada de `pi-orq` mas foi reduzida a pipeline linear apenas (sem DAG/parallel).
-- O `Orchestrator` é uma classe mutável por design (mantém estado de pool, subscribers, lifecycle).
-- Não há framework de injeção de dependências — factories são passadas como parâmetros (`AgentFactory`).
-```
+- The project is ESM-only (`"type": "module"`). TypeScript with `moduleResolution: Bundler` requires `.js` in imports even for `.ts`/`.tsx`.
+- `lib/types.ts` is the single source of truth (~25 interfaces). Do not duplicate types.
+- The architecture was derived from `pi-orq` but was reduced to a linear pipeline only (no DAG/parallel).
+- The `Orchestrator` is a mutable class by design (maintains pool state, subscribers, lifecycle).
+- There is no dependency injection framework — factories are passed as parameters (`AgentFactory`).

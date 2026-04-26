@@ -12,52 +12,52 @@ disable-model-invocation: true
 
 ## Goal
 
-Documenta o ciclo de vida completo de worktrees e branches usado pelo
-orchestrator para isolar agentes LLM e integrar seus resultados.
+Documents the complete lifecycle of worktrees and branches used by the
+orchestrator to isolate LLM agents and integrate their results.
 
 ## Boundaries
 
-**Fazer:**
-- Usar `GitClient` (wrapper síncrono sobre `execSync`) para todas as operações git
-- Seguir convenções de naming de `branch-namer.ts`: `programatic-agent/<runId>/agent-N` e `.../integration`
-- Worktrees temporárias em `.programatic-agent-worktrees/<runId>/` (auto-gitignored)
-- Merge deterministicamente por `agentId` ascendente via `git merge --no-ff`
-- Resolver conflitos via integration agent LLM (quando factory real disponível)
+**Do:**
+- Use `GitClient` (synchronous wrapper over `execSync`) for all git operations
+- Follow `branch-namer.ts` naming conventions: `programatic-agent/<runId>/agent-N` and `.../integration`
+- Temporary worktrees in `.programatic-agent-worktrees/<runId>/` (auto-gitignored)
+- Merge deterministically by ascending `agentId` via `git merge --no-ff`
+- Resolve conflicts via integration agent LLM (when real factory is available)
 
-**Nao fazer:**
-- Usar operações git assíncronas (`exec`/`spawn`) — o projeto usa `execSync` intencionalmente
-- Criar branches fora do padrão `programatic-agent/<runId>/...`
-- Deixar worktrees órfãs — sempre cleanup via `WorktreeManager`
-- Permitir que stubs resolvam conflitos — apenas real agents têm permissão
+**Do not:**
+- Use async git operations (`exec`/`spawn`) — the project intentionally uses `execSync`
+- Create branches outside the `programatic-agent/<runId>/...` pattern
+- Leave orphaned worktrees — always cleanup via `WorktreeManager`
+- Allow stubs to resolve conflicts — only real agents have permission
 
 ## Workflow
 
 ### Preflight
-1. `runPreflight()` valida: git repo, branch resolvida, HEAD commit, dirty state, remote, push dry-run
-2. Retorna `PreflightResult` com `valid`, `errors[]`, `warnings[]`
+1. `runPreflight()` validates: git repo, resolved branch, HEAD commit, dirty state, remote, push dry-run
+2. Returns `PreflightResult` with `valid`, `errors[]`, `warnings[]`
 
-### Worktree Central (Integration)
-1. Criada em `.programatic-agent-worktrees/<runId>/integration`
-2. Branch: `programatic-agent/<runId>/integration` a partir do HEAD atual
-3. Auto-anexada ao `.gitignore` na primeira run
+### Central Worktree (Integration)
+1. Created at `.programatic-agent-worktrees/<runId>/integration`
+2. Branch: `programatic-agent/<runId>/integration` from current HEAD
+3. Auto-appended to `.gitignore` on first run
 
-### Por Estágio
-1. Decompor tasks → 1 por arquivo (ou 1 whole-project se `files: []`)
-2. Criar worktree por agente: `.programatic-agent-worktrees/<runId>/agent-N/`
-3. Branch por agente: `programatic-agent/<runId>/agent-N`
-4. Quando agente termina: validate → stage → commit (`--no-verify`) → remove worktree
-5. Merge deterministicamente todos os branches na integration worktree (ordem `agentId`)
-6. Se conflitos: spawn integration agent LLM para resolver
-7. Próximo estágio brancha a partir do HEAD da integration atualizado
+### Per Stage
+1. Decompose tasks → 1 per file (or 1 whole-project if `files: []`)
+2. Create worktree per agent: `.programatic-agent-worktrees/<runId>/agent-N/`
+3. Branch per agent: `programatic-agent/<runId>/agent-N`
+4. When agent finishes: validate → stage → commit (`--no-verify`) → remove worktree
+5. Merge all branches deterministically in the integration worktree (`agentId` order)
+6. If conflicts: spawn integration agent LLM to resolve
+7. Next stage branches from the updated integration HEAD
 
 ### Cleanup
-- Worktree central removida ao fim da run
-- Branches preservadas como artefatos
+- Central worktree removed at end of run
+- Branches preserved as artifacts
 
 ## Gotchas
 
-- Commits de agentes usam `--no-verify` porque o preflight já validou o estado.
-- Push usa retry com backoff exponencial (até 3 tentativas).
-- O integration agent é sempre `agentId: 9999`.
-- Stub agents (`--stub`) não resolvem conflitos — qualquer conflito aborta direto.
-- `git-client.ts` é thin wrapper — não há libgit2 ou isomorphic-git.
+- Agent commits use `--no-verify` because preflight already validated the state.
+- Push uses retry with exponential backoff (up to 3 attempts).
+- The integration agent is always `agentId: 9999`.
+- Stub agents (`--stub`) do not resolve conflicts — any conflict aborts immediately.
+- `git-client.ts` is a thin wrapper — there is no libgit2 or isomorphic-git.

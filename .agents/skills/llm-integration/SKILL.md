@@ -11,46 +11,46 @@ paths: "src/models/**/*.ts, src/orchestrator/real-agent.ts, src/lib/openrouter.t
 
 ## Goal
 
-Documenta a integração com LLMs via OpenRouter e Pi SDK, incluindo seleção de
-modelos, detecção de thinking/reasoning, e gestão de API keys.
+Document LLM integration via OpenRouter and Pi SDK, including model selection,
+thinking/reasoning detection, and API key management.
 
 ## Boundaries
 
-**Fazer:**
-- Usar `AgentFactory` como porta abstrata — orchestrator não conhece Pi SDK
-- Configurar OpenRouter via `OPENROUTER_API_KEY` (env var) ou input na TUI
-- Selecionar modelo via `ModelSelectorOverlay` (quick-pick + tabela lazy-loaded)
-- Detectar thinking/reasoning via `supportsThinking(modelId)` em `model-factory.ts`
-- Usar `recommended-models.json` como catálogo padrão (fallback se arquivo ausente)
+**Do:**
+- Use `AgentFactory` as an abstract port — orchestrator does not know Pi SDK
+- Configure OpenRouter via `OPENROUTER_API_KEY` (env var) or TUI input
+- Select model via `ModelSelectorOverlay` (quick-pick + lazy-loaded table)
+- Detect thinking/reasoning via `supportsThinking(modelId)` in `model-factory.ts`
+- Use `recommended-models.json` as default catalog (fallback if file is missing)
 
-**Nao fazer:**
-- Hardcodar model IDs fora de `recommended-models.json` ou `model-factory.ts`
-- Acessar Pi SDK fora de `real-agent.ts`
-- Armazenar API key em disco — deve viver apenas em memória de processo
-- Assumir que todo modelo suporta thinking — verificar via heurística
+**Do not:**
+- Hardcode model IDs outside of `recommended-models.json` or `model-factory.ts`
+- Access Pi SDK outside of `real-agent.ts`
+- Store API key on disk — it must live only in process memory
+- Assume every model supports thinking — verify via heuristic
 
 ## Workflow
 
-### Seleção de Modelo
-1. `models/catalog.ts` carrega `recommended-models.json` (ou fallback hardcoded)
-2. `models/recents.ts` persiste recents/favorites em `~/.programatic-agent/recents.json`
-3. `ModelSelectorOverlay` oferece quick-pick (recents + favorites + recommended)
-4. Tabela completa lazy-loaded via `model-selector-ink` ("More models...")
+### Model Selection
+1. `models/catalog.ts` loads `recommended-models.json` (or hardcoded fallback)
+2. `models/recents.ts` persists recents/favorites in `~/.programatic-agent/recents.json`
+3. `ModelSelectorOverlay` offers quick-pick (recents + favorites + recommended)
+4. Full table lazy-loaded via `model-selector-ink` ("More models...")
 
 ### Real Agent Factory (`real-agent.ts`)
-1. Valida `apiKey` e `modelId`
-2. Resolve thinking level via `supportsThinking()`
-3. Cria sessão Pi SDK: `createAgentSession({ auth, model, thinking })`
-4. Traduz eventos Pi → `AgentEvent` (log, state_change, file_write, done, error)
-5. Chama `session.prompt(message)` e aguarda terminal state
+1. Validates `apiKey` and `modelId`
+2. Resolves thinking level via `supportsThinking()`
+3. Creates Pi SDK session: `createAgentSession({ auth, model, thinking })`
+4. Translates Pi events → `AgentEvent` (log, state_change, file_write, done, error)
+5. Calls `session.prompt(message)` and waits for terminal state
 
 ### Stub Agent Factory (`stub-agent.ts`)
-- Para testes sem LLM real (`--stub`)
-- Dorme 2-5s, escreve `STUB_*.md`, emite eventos de log
-- Útil para validar fluxo visualmente
+- For testing without a real LLM (`--stub`)
+- Sleeps 2-5s, writes `STUB_*.md`, emits log events
+- Useful for visually validating the flow
 
-### Detecção de Thinking (`model-factory.ts`)
-Heurística baseada em prefixos de modelId:
+### Thinking Detection (`model-factory.ts`)
+Heuristic based on modelId prefixes:
 - Claude: `anthropic/claude`
 - DeepSeek: `deepseek/deepseek-r1`, `deepseek-v3`
 - OpenAI: `openai/o1`, `openai/o3`, `openai/o4`
@@ -59,9 +59,9 @@ Heurística baseada em prefixos de modelId:
 
 ## Gotchas
 
-- `@mariozechner/pi-coding-agent` e `@mariozechner/pi-ai` usam versão `latest`.
-- O seletor de modelos é global (recents em `~/.programatic-agent/recents.json`).
-- A API key pode ser omitida se usar `--stub`; caso contrário, a TUI solicita.
-- Não há override de modelo por etapa — um único modelo por run inteira.
-- O integration agent (resolução de conflitos) usa o MESMO modelo da run.
-- `openrouter.ts` faz cache de capabilities de modelo e validação de API key.
+- `@mariozechner/pi-coding-agent` and `@mariozechner/pi-ai` use `latest` version.
+- The model selector is global (recents in `~/.programatic-agent/recents.json`).
+- The API key can be omitted when using `--stub`; otherwise, the TUI prompts for it.
+- There is no per-step model override — a single model for the entire run.
+- The integration agent (conflict resolution) uses the SAME model as the run.
+- `openrouter.ts` caches model capabilities and API key validation.
