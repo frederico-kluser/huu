@@ -19,6 +19,15 @@ export interface Pipeline {
   steps: PromptStep[];
 }
 
+export interface FileNode {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  children?: FileNode[];
+  selected?: boolean;
+  expanded?: boolean;
+}
+
 // --- Run & Git ---
 
 export interface RunManifest {
