@@ -1,8 +1,8 @@
 import { describe, it, expect, afterAll } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { exportPipeline, importPipeline } from './pipeline-io.js';
+import { exportPipeline, importPipeline, listPipelines } from './pipeline-io.js';
 import type { Pipeline } from './types.js';
 
 describe('pipeline-io', () => {
@@ -51,6 +51,27 @@ describe('pipeline-io', () => {
     const file = join(tmp, 'bad.json');
     writeFileSync(file, JSON.stringify({ name: 'x' }));
     expect(() => importPipeline(file)).toThrow();
+  });
+
+  it('lists pipelines from a directory', () => {
+    const subDir = join(tmp, 'pipelines');
+    mkdirSync(subDir);
+    const p1: Pipeline = { name: 'Pipeline A', steps: [{ name: 's1', prompt: 'p1', files: [] }] };
+    const p2: Pipeline = { name: 'Pipeline B', steps: [{ name: 's2', prompt: 'p2', files: [] }] };
+    exportPipeline(p1, join(subDir, 'a.pipeline.json'));
+    exportPipeline(p2, join(subDir, 'b.pipeline.json'));
+    writeFileSync(join(subDir, 'ignore.txt'), 'not a pipeline');
+
+    const entries = listPipelines(subDir);
+    expect(entries).toHaveLength(2);
+    expect(entries[0].fileName).toBe('a.pipeline.json');
+    expect(entries[0].pipeline.name).toBe('Pipeline A');
+    expect(entries[1].fileName).toBe('b.pipeline.json');
+    expect(entries[1].pipeline.name).toBe('Pipeline B');
+  });
+
+  it('returns empty array for non-existent directory', () => {
+    expect(listPipelines(join(tmp, 'nonexistent'))).toEqual([]);
   });
 
   afterAll(() => {

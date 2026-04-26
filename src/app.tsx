@@ -1,11 +1,14 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput, useStdout } from 'ink';
+import { join } from 'node:path';
 import { ModelSelectorOverlay } from './ui/components/ModelSelectorOverlay.js';
 import { PipelineEditor } from './ui/components/PipelineEditor.js';
 import { PipelineIOScreen } from './ui/components/PipelineIOScreen.js';
 import { RunDashboard } from './ui/components/RunDashboard.js';
 import { ApiKeyPrompt } from './ui/components/ApiKeyPrompt.js';
 import { stubAgentFactory } from './orchestrator/stub-agent.js';
+import { listPipelines } from './lib/pipeline-io.js';
+import type { PipelineEntry } from './lib/pipeline-io.js';
 import type { AgentFactory } from './orchestrator/types.js';
 import type { OrchestratorResult, Pipeline } from './lib/types.js';
 
@@ -47,11 +50,21 @@ export function App({
   const [pipeline, setPipeline] = useState<Pipeline | null>(initialPipeline ?? null);
   const [modelId, setModelId] = useState<string>('');
   const [apiKey, setApiKey] = useState<string>(process.env.OPENROUTER_API_KEY ?? '');
+  const [availablePipelines, setAvailablePipelines] = useState<PipelineEntry[]>([]);
+  const [selectedPipelineIndex, setSelectedPipelineIndex] = useState<number>(0);
   const repoRoot = process.cwd();
   const factory = agentFactory ?? stubAgentFactory;
 
   const screenRef = useRef<Screen>(screen);
   screenRef.current = screen;
+
+  useEffect(() => {
+    if (screen.kind === 'welcome') {
+      const entries = listPipelines(join(repoRoot, 'pipelines'));
+      setAvailablePipelines(entries);
+      setSelectedPipelineIndex(0);
+    }
+  }, [screen.kind, repoRoot]);
 
   const navigate = useCallback(
     (next: Screen) => {
@@ -69,6 +82,29 @@ export function App({
         if (input === 'q' || input === 'Q') exit();
         if (input === 'n' || input === 'N') navigate({ kind: 'pipeline-editor' });
         if (input === 'i' || input === 'I') navigate({ kind: 'pipeline-import' });
+        if (key.upArrow) {
+          setSelectedPipelineIndex((prev) => Math.max(0, prev - 1));
+          return;
+        }
+        if (key.downArrow) {
+          setSelectedPipelineIndex((prev) =>
+            Math.min(availablePipelines.length - 1, prev + 1),
+          );
+          return;
+        }
+        if (key.return && availablePipelines.length > 0) {
+          const selected = availablePipelines[selectedPipelineIndex];
+          if (selected) {
+            setPipeline(selected.pipeline);
+            navigate({ kind: 'pipeline-editor' });
+          }
+          return;
+        }
+        const num = parseInt(input, 10);
+        if (!Number.isNaN(num) && num >= 1 && num <= availablePipelines.length) {
+          setPipeline(availablePipelines[num - 1].pipeline);
+          navigate({ kind: 'pipeline-editor' });
+        }
       } else if (screen.kind === 'summary') {
         if (input === 'q' || input === 'Q') exit();
         if (key.return) navigate({ kind: 'pipeline-editor' });
@@ -89,6 +125,28 @@ export function App({
             <Text>  <Text bold color="cyan">[I]</Text>  Import pipeline from JSON</Text>
             <Text>  <Text bold color="cyan">[Q]</Text>  Quit</Text>
           </Box>
+
+          {availablePipelines.length > 0 && (
+            <Box marginTop={1} flexDirection="column">
+              <Text bold>Pipelines available in ./pipelines:</Text>
+              {availablePipelines.map((entry, idx) => (
+                <Box key={entry.filePath}>
+                  <Text>
+                    {'  '}
+                    <Text bold color={idx === selectedPipelineIndex ? 'green' : 'cyan'}>
+                      [{idx + 1}]
+                    </Text>{' '}
+                    {entry.pipeline.name}
+                  </Text>
+                </Box>
+              ))}
+              <Box marginTop={1}>
+                <Text dimColor>
+                  <Text bold>ENTER</Text> load selected · <Text bold>↑↓</Text> navigate · <Text bold>1-9</Text> jump
+                </Text>
+              </Box>
+            </Box>
+          )}
 
           <Box marginTop={1}>
             <Text dimColor>cwd: {repoRoot}</Text>
