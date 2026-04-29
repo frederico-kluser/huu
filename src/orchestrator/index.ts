@@ -35,6 +35,8 @@ import {
   writeAgentEnvFile,
 } from './agent-env.js';
 import { ensureNativeShim, type NativeShim } from './native-shim.js';
+import { AutoScaler } from './auto-scaler.js';
+import { getSystemMetrics } from '../lib/resource-monitor.js';
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { log as dlog } from '../lib/debug-logger.js';
@@ -56,6 +58,7 @@ export type OrchestratorSubscriber = (state: OrchestratorState) => void;
 
 const DEFAULT_CONCURRENCY = 10;
 const MAX_INSTANCES = 20;
+const AUTO_SCALE_MAX_INSTANCES = 200;
 const MIN_INSTANCES = 1;
 const POLL_INTERVAL_MS = 500;
 
@@ -110,6 +113,12 @@ export interface OrchestratorOptions {
    * Reject (or throw) to cancel the stage.
    */
   onInteractiveStep?: (step: PromptStep, stageIndex: number) => Promise<string>;
+  /**
+   * If true, enables auto-scaling of agent concurrency based on system
+   * resource metrics. When active, the orchestrator dynamically adjusts
+   * the worker pool size instead of using a fixed concurrency value.
+   */
+  autoScale?: boolean;
 }
 
 /**
@@ -152,6 +161,8 @@ export class Orchestrator {
   private poolWakeup: (() => void) | null = null;
   private portAllocator: PortAllocator;
   private nativeShim: NativeShim | null = null;
+  private autoScaler: AutoScaler | null = null;
+  private autoScaleDisabledByUser = false;
 
   constructor(
     private config: AppConfig,
@@ -171,6 +182,11 @@ export class Orchestrator {
       enabled: pipeline.portAllocation?.enabled ?? true,
       maxAgents: MAX_INSTANCES,
     });
+    if (options.autoScale === true) {
+      this.autoScaler = new AutoScaler({
+        resourceMonitor: getSystemMetrics,
+      });
+    }
   }
 
   subscribe(handler: OrchestratorSubscriber): () => void {
@@ -194,6 +210,9 @@ export class Orchestrator {
       concurrency: this.instanceCount,
       currentStage: this.currentStage,
       totalStages: this.totalStages,
+      pendingTaskCount: this.pendingTasks.length,
+      activeAgentCount: this.activeAgents.size,
+      autoScale: this.autoScaler?.getStatus(),
     };
   }
 
@@ -205,12 +224,35 @@ export class Orchestrator {
     this.setConcurrency(this.instanceCount - 1);
   }
 
-  setConcurrency(value: number): void {
-    const clamped = Math.max(MIN_INSTANCES, Math.min(MAX_INSTANCES, value));
+  setConcurrency(value: number, options?: { bypassCap?: boolean }): void {
+    const cap = options?.bypassCap ? AUTO_SCALE_MAX_INSTANCES : MAX_INSTANCES;
+    const clamped = Math.max(MIN_INSTANCES, Math.min(cap, value));
     if (clamped === this.instanceCount) return;
     this.instanceCount = clamped;
     this.log({ level: 'info', message: `concurrency set to ${clamped}` });
     this.poolWakeup?.();
+    this.emit();
+  }
+
+  enableAutoScale(): void {
+    if (this.autoScaler) return;
+    this.autoScaler = new AutoScaler({
+      resourceMonitor: getSystemMetrics,
+    });
+    this.autoScaleDisabledByUser = false;
+    this.autoScaler.start();
+    this.portAllocator.setMaxAgents(AUTO_SCALE_MAX_INSTANCES);
+    this.log({ level: 'info', message: 'auto-scale enabled' });
+    this.poolWakeup?.();
+    this.emit();
+  }
+
+  disableAutoScale(): void {
+    if (!this.autoScaler) return;
+    this.autoScaler.stop();
+    this.autoScaler = null;
+    this.autoScaleDisabledByUser = true;
+    this.log({ level: 'info', message: 'auto-scale disabled' });
     this.emit();
   }
 
@@ -234,6 +276,57 @@ export class Orchestrator {
     // Hard reset the allocator so a stuck reservation from a queued/finalizing
     // task doesn't survive into a subsequent run with the same agent ids.
     this.portAllocator.releaseAll();
+    this.poolWakeup?.();
+  }
+
+  async destroyAgent(agentId: number): Promise<void> {
+    const agent = this.activeAgents.get(agentId);
+    if (!agent) return;
+
+    // Flag so spawnAndRun's catch block skips retry logic.
+    this.updateAgentStatus(agentId, { killedByAutoScaler: true });
+
+    // Dispose causes agent.prompt() to reject in spawnAndRun.
+    try {
+      await agent.dispose();
+    } catch {
+      /* best-effort */
+    }
+
+    this.activeAgents.delete(agentId);
+    this.spawningIds.delete(agentId);
+
+    const status = this.agents.get(agentId);
+    const worktreePath = status?.worktreePath;
+    const branchName = status?.branchName;
+
+    if (worktreePath) {
+      try {
+        await this.worktreeManager!.removeAgentWorktree(agentId);
+      } catch {
+        /* best-effort */
+      }
+    }
+
+    if (branchName) {
+      try {
+        const git = this.worktreeManager!.getGitClient();
+        await git.deleteBranch(branchName);
+      } catch {
+        /* best-effort */
+      }
+    }
+
+    this.portAllocator.release(agentId);
+
+    this.updateAgentStatus(agentId, {
+      state: 'error',
+      phase: 'killed_by_autoscaler',
+      error: 'Auto-scaler: resources exceeded 95%',
+    });
+
+    const task = agent.task;
+    this.pendingTasks.unshift(task);
     this.poolWakeup?.();
   }
 
@@ -334,6 +427,11 @@ export class Orchestrator {
         this.totalTasksAcrossStages += stageTasks.length;
       }
       this.emit();
+
+      if (this.autoScaler) {
+        this.autoScaler.start();
+        this.portAllocator.setMaxAgents(AUTO_SCALE_MAX_INSTANCES);
+      }
 
       for (let stageIdx = 0; stageIdx < this.totalStages; stageIdx++) {
         if (this.aborted) break;
@@ -462,6 +560,9 @@ export class Orchestrator {
       this.emit();
       throw err;
     } finally {
+      if (this.autoScaler) {
+        this.autoScaler.stop();
+      }
       // Persist run logs to <repoRoot>/.huu/. Runs without a manifest (failed
       // before reaching that point — e.g. preflight invalid) are not flushed.
       if (this.runLogger && this.manifest) {
@@ -492,10 +593,37 @@ export class Orchestrator {
       !this.aborted &&
       (this.pendingTasks.length > 0 || this.activeAgents.size > 0 || this.spawningIds.size > 0 || this.finalizingIds.size > 0)
     ) {
+      if (this.autoScaler) {
+        this.instanceCount = this.autoScaler.targetConcurrency();
+        this.autoScaler.notifyTaskQueued(this.pendingTasks.length);
+
+        // Check if resources exceed 95% — destroy newest agent
+        if (this.autoScaler.shouldDestroy() && this.activeAgents.size > 0) {
+          // Find the newest agent (highest createdAt)
+          let newestId = -1;
+          let newestTime = 0;
+          for (const [id, _agent] of this.activeAgents) {
+            const status = this.agents.get(id);
+            if (status?.createdAt && status.createdAt > newestTime) {
+              newestTime = status.createdAt;
+              newestId = id;
+            }
+          }
+          if (newestId >= 0) {
+            await this.destroyAgent(newestId);
+            this.autoScaler.notifyAgentDestroyed();
+            // Re-evaluation: next poll cycle will check shouldDestroy() again
+          }
+        }
+      }
+
       // Spawn replacements up to instanceCount
       const busyCount = this.activeAgents.size + this.spawningIds.size;
       const slotsAvailable = Math.max(0, this.instanceCount - busyCount);
       for (let i = 0; i < slotsAvailable && this.pendingTasks.length > 0; i++) {
+        if (this.autoScaler && !this.autoScaler.shouldSpawn()) {
+          break;
+        }
         const task = this.pendingTasks.shift()!;
         // spawnAndRun owns its own try/catches; this outer .catch() is the
         // safety net for an error that escapes ALL of them — typically a
@@ -627,6 +755,7 @@ export class Orchestrator {
         );
         this.activeAgents.set(task.agentId, agent);
         this.spawningIds.delete(task.agentId);
+        this.autoScaler?.notifyAgentSpawned();
 
         const renderedPrompt = this.renderPrompt(step, task);
         this.updateAgentStatus(task.agentId, { state: 'streaming', phase: 'streaming' });
@@ -644,6 +773,12 @@ export class Orchestrator {
           // back to spawningIds BEFORE the awaits below so the pool's poll
           // loop doesn't observe all queues empty and exit while we're still
           // in flight (would silently drop the retry).
+          const status = this.agents.get(task.agentId);
+          if (status?.killedByAutoScaler) {
+            this.spawningIds.delete(task.agentId);
+            return; // do NOT retry, do NOT mark as error
+          }
+
           const isTimeout = err instanceof TimeoutError;
           dlog('orch', 'attempt_failed', {
             agentId: task.agentId,
@@ -818,6 +953,7 @@ export class Orchestrator {
       this.portAllocator.release(agentId);
       this.completedTasks++;
       this.appendManifestEntry(agentId);
+      this.autoScaler?.notifyAgentCompleted();
       this.emit();
     }
   }
@@ -985,6 +1121,7 @@ export class Orchestrator {
       pushStatus: 'pending',
       stageIndex: task.stageIndex,
       stageName: task.stageName,
+      createdAt: Date.now(),
     };
   }
 

@@ -27,6 +27,8 @@ interface AppProps {
   requiresApiKey?: boolean;
   /** When true and initialPipeline is set, jumps straight from welcome → editor. */
   autoStart?: boolean;
+  /** When true, enables resource-bound auto-scaling of concurrency. */
+  autoScale?: boolean;
 }
 
 type Screen =
@@ -48,6 +50,7 @@ export function App({
   conflictResolverFactory,
   requiresApiKey,
   autoStart,
+  autoScale,
 }: AppProps): React.JSX.Element {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -294,6 +297,7 @@ export function App({
         cwd={repoRoot}
         agentFactory={factory}
         conflictResolverFactory={conflictResolverFactory}
+        autoScale={autoScale}
         onComplete={(result) => navigate({ kind: 'summary', result })}
         onAbort={() => navigate({ kind: 'pipeline-editor' })}
       />

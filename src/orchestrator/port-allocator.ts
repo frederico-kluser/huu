@@ -34,7 +34,7 @@ const SLOTS_PER_BUNDLE = 10;
 export class PortAllocator {
   private readonly basePort: number;
   private readonly windowSize: number;
-  private readonly maxAgents: number;
+  private maxAgents: number;
   private readonly enabled: boolean;
   private readonly reserved = new Map<number, AgentPortBundle>();
   private readonly reservedPorts = new Set<number>();
@@ -48,6 +48,11 @@ export class PortAllocator {
 
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  setMaxAgents(n: number): void {
+    if (n < 1) throw new Error(`PortAllocator.setMaxAgents: n must be >= 1, got ${n}`);
+    this.maxAgents = n;
   }
 
   async allocate(agentId: number): Promise<AgentPortBundle> {

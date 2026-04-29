@@ -36,12 +36,12 @@ export function SystemMetricsBar(): React.JSX.Element | null {
         {pad2(m.cpuPercent)}%
       </Text>
       <Text dimColor>  ·  RAM </Text>
-      <Text bold color={colorFor(m.memPercent)}>
-        {pad2(m.memPercent)}%
+      <Text bold color={colorFor(m.ramPercent)}>
+        {pad2(m.ramPercent)}%
       </Text>
       <Text dimColor>
         {' '}
-        ({fmtGb(m.memUsedBytes)}/{fmtGb(m.memTotalBytes)} GB)
+        ({fmtGb(m.ramUsedBytes)}/{fmtGb(m.ramTotalBytes)} GB)
       </Text>
       <Text dimColor>  ·  proc </Text>
       <Text bold>{fmtMb(m.processRssBytes)} MB</Text>

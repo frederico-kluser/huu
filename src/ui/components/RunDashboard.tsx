@@ -42,6 +42,8 @@ interface Props {
   agentFactory: AgentFactory;
   /** Optional LLM resolver for merge conflicts. When omitted, conflicts abort the run. */
   conflictResolverFactory?: AgentFactory;
+  /** When true, enables resource-bound auto-scaling of concurrency. */
+  autoScale?: boolean;
   onComplete: (result: OrchestratorResult) => void;
   onAbort: () => void;
 }
@@ -52,6 +54,7 @@ export function RunDashboard({
   cwd,
   agentFactory,
   conflictResolverFactory,
+  autoScale,
   onComplete,
   onAbort,
 }: Props): React.JSX.Element {
@@ -70,6 +73,7 @@ export function RunDashboard({
     () =>
       new Orchestrator(config, pipeline, cwd, agentFactory, {
         conflictResolverFactory,
+        autoScale,
         onInteractiveStep: (step, stageIndex) =>
           new Promise<string>((resolve, reject) => {
             setPendingInteractive({ step, stageIndex, resolve, reject });
@@ -301,10 +305,16 @@ export function RunDashboard({
         return;
       }
       if (input === '+' || input === '=') {
+        if (stateRef.current?.autoScale?.enabled) {
+          orch.disableAutoScale();
+        }
         orch.increaseConcurrency();
         return;
       }
       if (input === '-' || input === '_') {
+        if (stateRef.current?.autoScale?.enabled) {
+          orch.disableAutoScale();
+        }
         orch.decreaseConcurrency();
         return;
       }
@@ -326,6 +336,15 @@ export function RunDashboard({
           if (focusedAgentId === null || Number.isNaN(focusedAgentId)) return null;
           return prev === focusedAgentId ? null : focusedAgentId;
         });
+        return;
+      }
+      if (input === 'a' || input === 'A') {
+        const s = stateRef.current;
+        if (s?.autoScale?.enabled) {
+          orch.disableAutoScale();
+        } else {
+          orch.enableAutoScale();
+        }
         return;
       }
       if (key.return) {
@@ -437,6 +456,20 @@ export function RunDashboard({
             <Text bold color="yellow">conflicts unresolved</Text>
           </>
         )}
+        {state.autoScale?.enabled && (
+          <>
+            <Text dimColor>  ·  </Text>
+            <Text bold color={
+              state.autoScale.state === 'NORMAL' ? 'green' :
+              state.autoScale.state === 'BACKING_OFF' ? 'yellow' :
+              'red'
+            }>
+              AUTO {state.autoScale.state}
+            </Text>
+            <Text dimColor>  ·  </Text>
+            <Text>CPU {state.autoScale.cpuPercent}% RAM {state.autoScale.ramPercent}%</Text>
+          </>
+        )}
       </Box>
       {/*
         Fixed-height row, not flexGrow, so the kanban can never push the
@@ -466,7 +499,7 @@ export function RunDashboard({
       </Box>
       <Box paddingX={1} width="100%">
         <Text dimColor>
-          <Text bold>+</Text>/<Text bold>-</Text> concurrency · <Text bold>↑↓←→</Text> navigate · <Text bold>ENTER</Text> details · <Text bold>F</Text> filter logs ({logFilter !== null ? `A${logFilter}` : 'all'}) · <Text bold>Q</Text> abort (press twice to force-exit)
+          <Text bold>+</Text>/<Text bold>-</Text> concurrency · <Text bold>↑↓←→</Text> navigate · <Text bold>ENTER</Text> details · <Text bold>F</Text> filter logs ({logFilter !== null ? `A${logFilter}` : 'all'}) · <Text bold>A</Text> toggle auto-scale · <Text bold>Q</Text> abort (press twice to force-exit)
         </Text>
       </Box>
     </Box>
