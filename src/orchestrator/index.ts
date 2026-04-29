@@ -327,7 +327,6 @@ export class Orchestrator {
 
     const task = agent.task;
     this.pendingTasks.unshift(task);
-    this.autoScaler?.notifyAgentDestroyed();
     this.poolWakeup?.();
   }
 
@@ -596,6 +595,26 @@ export class Orchestrator {
     ) {
       if (this.autoScaler) {
         this.instanceCount = this.autoScaler.targetConcurrency();
+        this.autoScaler.notifyTaskQueued(this.pendingTasks.length);
+
+        // Check if resources exceed 95% — destroy newest agent
+        if (this.autoScaler.shouldDestroy() && this.activeAgents.size > 0) {
+          // Find the newest agent (highest createdAt)
+          let newestId = -1;
+          let newestTime = 0;
+          for (const [id, _agent] of this.activeAgents) {
+            const status = this.agents.get(id);
+            if (status?.createdAt && status.createdAt > newestTime) {
+              newestTime = status.createdAt;
+              newestId = id;
+            }
+          }
+          if (newestId >= 0) {
+            await this.destroyAgent(newestId);
+            this.autoScaler.notifyAgentDestroyed();
+            // Re-evaluation: next poll cycle will check shouldDestroy() again
+          }
+        }
       }
 
       // Spawn replacements up to instanceCount
@@ -736,6 +755,7 @@ export class Orchestrator {
         );
         this.activeAgents.set(task.agentId, agent);
         this.spawningIds.delete(task.agentId);
+        this.autoScaler?.notifyAgentSpawned();
 
         const renderedPrompt = this.renderPrompt(step, task);
         this.updateAgentStatus(task.agentId, { state: 'streaming', phase: 'streaming' });
