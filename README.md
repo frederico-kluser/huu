@@ -331,12 +331,14 @@ Pipelines are persisted as `huu-pipeline-v1` JSON. The full shape:
         "name": "Add JSDoc headers",
         "prompt": "Add a JSDoc header on top of $file with @author huu.",
         "files": ["src/cli.tsx", "src/app.tsx"],
+        "scope": "per-file",
         "modelId": "anthropic/claude-sonnet-4-5"
       },
       {
         "name": "Refresh the CHANGELOG",
         "prompt": "Update CHANGELOG.md with a new entry summarizing the work above.",
-        "files": []
+        "files": [],
+        "scope": "project"
       }
     ]
   }
@@ -349,6 +351,7 @@ Pipelines are persisted as `huu-pipeline-v1` JSON. The full shape:
 | `steps[].name` | string | Step display name. |
 | `steps[].prompt` | string | Accepts the `$file` placeholder when `files` is non-empty. |
 | `steps[].files` | string[] | Repo-relative paths. Empty array runs a single whole-project task. |
+| `steps[].scope` | `"project" \| "per-file" \| "flexible"`? | How the step decomposes into agents. `project` = one whole-project task (Files locked). `per-file` = one task per selected file (Files mandatory). `flexible` = user picks at edit time (legacy behavior). Omitted = `flexible`. |
 | `steps[].modelId` | string? | Per-step model override; defaults to the run-level pick. Mix a strong reasoning model for planning with a cheaper one for mechanical edits. |
 | `cardTimeoutMs` | number? | Per-card timeout for whole-project / multi-file cards. Default `600000` (10 min). |
 | `singleFileCardTimeoutMs` | number? | Per-card timeout for single-file cards. Default `300000` (5 min). |

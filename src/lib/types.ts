@@ -7,6 +7,18 @@ export interface AppConfig {
   budgetUsd?: number;
 }
 
+/**
+ * How a step decomposes into agent tasks.
+ *
+ * - `project`  — exactly one whole-project task. The Files selection is locked
+ *                to "whole project" and the editor cannot change it.
+ * - `per-file` — one task per selected file. Files MUST be picked; the editor
+ *                disallows the whole-project shortcut.
+ * - `flexible` — user picks at edit time (whole-project or N files). This is
+ *                the legacy behavior. `undefined` is treated as `flexible`.
+ */
+export type StepScope = 'project' | 'per-file' | 'flexible';
+
 export interface PromptStep {
   name: string;
   prompt: string;
@@ -14,6 +26,8 @@ export interface PromptStep {
   files: string[];
   /** Optional per-step model override. Falls back to AppConfig.modelId when undefined. */
   modelId?: string;
+  /** See StepScope. Undefined = `flexible` (back-compat with v0.3.x pipelines). */
+  scope?: StepScope;
 }
 
 export interface Pipeline {

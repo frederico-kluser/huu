@@ -331,12 +331,14 @@ Pipelines são persistidos como JSON `huu-pipeline-v1`. O formato completo:
         "name": "Add JSDoc headers",
         "prompt": "Add a JSDoc header on top of $file with @author huu.",
         "files": ["src/cli.tsx", "src/app.tsx"],
+        "scope": "per-file",
         "modelId": "anthropic/claude-sonnet-4-5"
       },
       {
         "name": "Refresh the CHANGELOG",
         "prompt": "Update CHANGELOG.md with a new entry summarizing the work above.",
-        "files": []
+        "files": [],
+        "scope": "project"
       }
     ]
   }
@@ -349,6 +351,7 @@ Pipelines são persistidos como JSON `huu-pipeline-v1`. O formato completo:
 | `steps[].name` | string | Nome de exibição da etapa. |
 | `steps[].prompt` | string | Aceita o placeholder `$file` quando `files` não está vazio. |
 | `steps[].files` | string[] | Caminhos relativos ao repo. Array vazio roda uma única tarefa que vê o projeto inteiro. |
+| `steps[].scope` | `"project" \| "per-file" \| "flexible"`? | Como a etapa decompõe em agentes. `project` = uma única tarefa no projeto inteiro (Files travado). `per-file` = uma tarefa por arquivo selecionado (Files obrigatório). `flexible` = usuário escolhe na hora de editar (comportamento legado). Omisso = `flexible`. |
 | `steps[].modelId` | string? | Override de modelo por etapa; padrão é o escolhido no nível da run. Combine um modelo forte de raciocínio pra planejamento com um mais barato pras edições mecânicas. |
 | `cardTimeoutMs` | number? | Timeout por cartão pra cartões de projeto inteiro / multi-arquivo. Padrão `600000` (10 min). |
 | `singleFileCardTimeoutMs` | number? | Timeout por cartão pra cartões de arquivo único. Padrão `300000` (5 min). |

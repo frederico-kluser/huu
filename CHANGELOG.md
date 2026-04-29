@@ -7,6 +7,22 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
+### Added
+
+- **Step `scope` field.** Each pipeline step now declares whether it runs
+  on the **whole project** (`scope: "project"`), **once per file**
+  (`scope: "per-file"`), or is left **flexible** (`scope: "flexible"`,
+  also the default when `scope` is omitted). The Step Editor shows a
+  Scope row above Files; cycle with `ENTER` or jump with `P`/`F`/`X`.
+  - `project` locks the Files row to "whole project" — `F`/`W` are
+    disabled and pressing `ENTER` is a no-op.
+  - `per-file` makes file selection mandatory, and pressing `ENTER` on
+    the Files row opens the picker (in addition to `F`).
+  - `flexible` keeps the previous behavior (`F` to pick, `W` for whole
+    project).
+  - Loading older `huu-pipeline-v1` JSON without the `scope` field is
+    fully back-compatible — those steps behave as `flexible`.
+
 ## [0.3.0] - 2026-04-29
 
 Initial public release. Available on npm as `huu-pipe`

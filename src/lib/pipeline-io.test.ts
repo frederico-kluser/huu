@@ -32,6 +32,21 @@ describe('pipeline-io', () => {
     expect(restored).toEqual(original);
   });
 
+  it('round-trips the scope field on each step', () => {
+    const original: Pipeline = {
+      name: 'with-scopes',
+      steps: [
+        { name: 'P', prompt: 'project-wide', files: [], scope: 'project' },
+        { name: 'F', prompt: 'each $file', files: ['a.ts'], scope: 'per-file' },
+        { name: 'X', prompt: 'open', files: [], scope: 'flexible' },
+        { name: 'L', prompt: 'legacy', files: [] }, // no scope = back-compat
+      ],
+    };
+    const file = join(tmp, 'scopes.pipeline.json');
+    exportPipeline(original, file);
+    expect(importPipeline(file)).toEqual(original);
+  });
+
   it('accepts a raw pipeline JSON without the format wrapper', () => {
     const file = join(tmp, 'raw.json');
     writeFileSync(
