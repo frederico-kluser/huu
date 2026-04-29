@@ -38,12 +38,16 @@ terminal interface.
 4. Implement navigation via `useInput` or callbacks
 
 ### Main Components
-- **PipelineEditor** — step list, add/delete/reorder (Shift+↑↓), rename, import/export
-- **StepEditor** — edit a step (name, prompt, files); TAB cycle fields
+- **PipelineEditor** — step list, add/delete/reorder (Shift+↑↓), rename, import/export. Each step row shows a scope-aware Files badge (`project` / `per-file · N` / `flex · N files` / `flex · whole project`).
+- **StepEditor** — edit a step (name, prompt, **scope**, files, model); TAB cycle fields. The Scope row sits above Files and gates its behavior:
+  - `scope=project` locks Files to whole-project (`F`/`W`/`ENTER` no-ops on Files).
+  - `scope=per-file` makes file picking mandatory; `ENTER` on Files opens the picker (alongside `F`); `W` is disabled.
+  - `scope=flexible` keeps the legacy `F`/`W` flow.
 - **FileMultiSelect** — interactive file tree; Space toggle, A select all, C clear, / filter
 - **ModelSelectorOverlay** — quick-pick (recents + favorites + recommended) + lazy table view
 - **ApiKeyPrompt** — API key input with mask (`*`)
-- **RunDashboard** — KanbanBoard with agent cards; concurrency adjustment (`+`/`-`)
+- **RunDashboard** — KanbanBoard with agent cards; concurrency adjustment (`+`/`-`). When the orchestrator hits a step with `interactive: true`, RunDashboard yields the screen to `InteractiveStep` and resumes once the chat is finished/skipped.
+- **InteractiveStep** — multi-turn refinement chat for `interactive: true` steps (LangChain.js + OpenRouter, default `moonshotai/kimi-k2.6`). Header surfaces the active **scope** (`project` / `per-file` / `flexible`) and the runtime mode so the user can see what kind of prompt the synthesizer must produce. Synthesized output replaces `step.prompt` for the run only — never mutates the saved Pipeline. Pure UI: spawns no worktrees, agents, or git ops.
 - **AgentDetailModal** — timeline, logs, agent modified files
 
 ### Keyboard Handling

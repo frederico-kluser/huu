@@ -32,6 +32,21 @@ describe('pipeline-io', () => {
     expect(restored).toEqual(original);
   });
 
+  it('round-trips the scope field on each step', () => {
+    const original: Pipeline = {
+      name: 'with-scopes',
+      steps: [
+        { name: 'P', prompt: 'project-wide', files: [], scope: 'project' },
+        { name: 'F', prompt: 'each $file', files: ['a.ts'], scope: 'per-file' },
+        { name: 'X', prompt: 'open', files: [], scope: 'flexible' },
+        { name: 'L', prompt: 'legacy', files: [] }, // no scope = back-compat
+      ],
+    };
+    const file = join(tmp, 'scopes.pipeline.json');
+    exportPipeline(original, file);
+    expect(importPipeline(file)).toEqual(original);
+  });
+
   it('accepts a raw pipeline JSON without the format wrapper', () => {
     const file = join(tmp, 'raw.json');
     writeFileSync(
@@ -72,6 +87,39 @@ describe('pipeline-io', () => {
 
   it('returns empty array for non-existent directory', () => {
     expect(listPipelines(join(tmp, 'nonexistent'))).toEqual([]);
+  });
+
+  it('round-trips an interactive step with refinementModel', () => {
+    const original: Pipeline = {
+      name: 'interactive-demo',
+      steps: [
+        {
+          name: 'Refine',
+          prompt: 'desejo X',
+          files: ['src/a.ts'],
+          interactive: true,
+          refinementModel: 'moonshotai/kimi-k2.6',
+        },
+      ],
+    };
+    const file = join(tmp, 'interactive.json');
+    exportPipeline(original, file);
+    const restored = importPipeline(file);
+    expect(restored.steps[0].interactive).toBe(true);
+    expect(restored.steps[0].refinementModel).toBe('moonshotai/kimi-k2.6');
+  });
+
+  it('accepts a step without the interactive flag (backwards-compat)', () => {
+    const file = join(tmp, 'legacy.json');
+    writeFileSync(
+      file,
+      JSON.stringify({
+        name: 'legacy',
+        steps: [{ name: 's', prompt: 'p', files: [] }],
+      }),
+    );
+    const loaded = importPipeline(file);
+    expect(loaded.steps[0].interactive).toBeUndefined();
   });
 
   afterAll(() => {

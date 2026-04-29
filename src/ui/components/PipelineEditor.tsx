@@ -132,7 +132,9 @@ export function PipelineEditor({
       // ENTER is the only way to open the step editor.
       setMode({ kind: 'editing', index: cursor });
     } else if (input === 'g' || input === 'G') {
-      const allValid = pipeline.steps.every((s) => s.name && s.prompt);
+      const allValid = pipeline.steps.every(
+        (s) => s.name && s.prompt && (s.scope !== 'per-file' || s.files.length > 0),
+      );
       dlog('action', 'PipelineEditor.G_pressed', {
         allValid,
         stepCount: pipeline.steps.length,
@@ -201,7 +203,9 @@ export function PipelineEditor({
     );
   }
 
-  const allValid = pipeline.steps.every((s) => s.name && s.prompt);
+  const allValid = pipeline.steps.every(
+    (s) => s.name && s.prompt && (s.scope !== 'per-file' || s.files.length > 0),
+  );
 
   return (
     <Box flexDirection="column" width="100%">
@@ -220,12 +224,25 @@ export function PipelineEditor({
         <Box flexDirection="column" marginTop={1}>
           {pipeline.steps.map((step, i) => {
             const isCursor = i === cursor;
-            const valid = Boolean(step.name && step.prompt);
+            const scope = step.scope ?? 'flexible';
+            const valid = Boolean(
+              step.name &&
+                step.prompt &&
+                (scope !== 'per-file' || step.files.length > 0),
+            );
             const fileBadge =
-              step.files.length === 0 ? (
-                <Text color="yellow">whole project</Text>
+              scope === 'project' ? (
+                <Text color="magenta">project</Text>
+              ) : scope === 'per-file' ? (
+                step.files.length === 0 ? (
+                  <Text color="red">per-file (no files)</Text>
+                ) : (
+                  <Text color="blue">per-file · {step.files.length}</Text>
+                )
+              ) : step.files.length === 0 ? (
+                <Text color="yellow">flex · whole project</Text>
               ) : (
-                <Text color="green">{step.files.length} file{step.files.length === 1 ? '' : 's'}</Text>
+                <Text color="green">flex · {step.files.length} file{step.files.length === 1 ? '' : 's'}</Text>
               );
             const modelBadge = step.modelId ? (
               <Text color="magenta">🧠 {step.modelId}</Text>

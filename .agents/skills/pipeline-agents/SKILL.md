@@ -15,11 +15,12 @@ Documents how pipelines are defined, decomposed into tasks, and how agents
 ## Boundaries
 
 **Do:**
-- Follow the pipeline's Zod schema: `{ _format, exportedAt, pipeline: { name, steps: [{ name, prompt, files }] } }`
+- Follow the pipeline's Zod schema: `{ _format, exportedAt, pipeline: { name, steps: [{ name, prompt, files, scope?, modelId? }] } }`
 - Use `decomposeTasks()` to convert steps into `AgentTask[]` — 1 task per file, or 1 whole-project
 - Implement new agents as `AgentFactory` following the interface in `orchestrator/types.ts`
 - Pass `$file` in the prompt when `files` is not empty
 - Use `files: []` for free-form round (whole-project, single task)
+- Treat `scope` as **editor-side intent** that constrains how the user can shape `files`. The orchestrator still decomposes purely from `files.length` (0 → one whole-project task; N → N per-file tasks). Don't add scope-based branching to `task-decomposer.ts` — keep the runtime contract single-source.
 
 **Don't:**
 - Access Pi SDK directly from the orchestrator — always via `AgentFactory`
@@ -31,8 +32,20 @@ Documents how pipelines are defined, decomposed into tasks, and how agents
 
 ### Create Pipeline
 1. Define `Pipeline { name, steps: PromptStep[] }`
-2. Each `PromptStep`: `name`, `prompt` (accepts `$file`), `files` (array of relative paths)
+2. Each `PromptStep`: `name`, `prompt` (accepts `$file`), `files` (array of relative paths), optional `scope` and `modelId`
 3. `files: []` → single free run; `files: ["a.ts"]` → one task per file
+4. `scope` (optional, defaults to `flexible`):
+   - `project` — pin the step to whole-project. Editor locks Files to `[]`.
+   - `per-file` — require explicit file selection. Editor disallows the
+     whole-project shortcut and enables `ENTER` on Files to open the picker.
+   - `flexible` — legacy free-form (`F` to pick, `W` for whole-project).
+5. Optional `interactive: true` → orchestrator pauses at this stage and opens a
+   refinement chat (LangChain.js + OpenRouter, default `moonshotai/kimi-k2.6`).
+   The chat's synthesized output replaces `prompt` for the run; agents then
+   execute that refined prompt as usual. `$file` substitution still happens
+   at agent-spawn time, never in the chat UI. Override the refinement model
+   per step with `refinementModel`. `interactive` and `scope` are orthogonal —
+   the refined prompt still respects the step's scope at decompose time.
 
 ### Decomposition
 - `task-decomposer.ts`: assigns sequential `agentId`

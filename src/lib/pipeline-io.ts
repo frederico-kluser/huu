@@ -4,11 +4,16 @@ import { basename, join } from 'node:path';
 import { z } from 'zod';
 import type { Pipeline } from './types.js';
 
+const StepScopeSchema = z.enum(['project', 'per-file', 'flexible']);
+
 const PromptStepSchema = z.object({
   name: z.string().min(1),
   prompt: z.string(),
   files: z.array(z.string()).default([]),
   modelId: z.string().min(1).optional(),
+  scope: StepScopeSchema.optional(),
+  interactive: z.boolean().optional(),
+  refinementModel: z.string().min(1).optional(),
 });
 
 const PipelineSchema = z.object({

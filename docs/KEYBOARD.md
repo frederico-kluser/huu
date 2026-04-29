@@ -19,9 +19,19 @@ The entire TUI is in English. Below is the complete map.
 
 ## Step editor
 
-- `↑↓` select field · `TAB` cycle (Name / Prompt / Files / Model)
+- `↑↓` select field · `TAB` cycle (Name / Prompt / Scope / Files / Model)
 - `ENTER` start editing the active field · `ENTER` again to confirm and move on
-- On the **Files** row: `F` open the picker · `W` use whole project
+- On the **Scope** row: `ENTER` cycles `flexible` → `project` → `per-file`,
+  or jump directly with `P` (project), `F` (per-file), `X` (flexible).
+  - `project` — runs once on the whole project. The Files row is locked.
+  - `per-file` — runs once per selected file. The Files row demands a
+    selection; `ENTER` (and `F`) on Files opens the picker.
+  - `flexible` — pick at edit time (legacy behavior).
+- On the **Files** row:
+  - `scope=flexible`: `F` open the picker · `W` use whole project · `ENTER`
+    re-opens the picker once a choice has been made.
+  - `scope=per-file`: `F` or `ENTER` open the picker. `W` is disabled.
+  - `scope=project`: `F`/`W`/`ENTER` are no-ops — the selection is locked.
 - On the **Model** row: `M` pick a model for this step · `C` clear and use the global default
 - `ESC` exit editing
 - Pressing `ESC` outside editing discards the in-progress step

@@ -97,6 +97,8 @@ type PromptStep = {
   name: string;     // ex: "2. Testes unitarios para $file"
   prompt: string;   // texto do prompt; "$file" é interpolado
   files: string[];  // [] = projeto inteiro; ["a.ts","b.ts"] = uma task por arquivo
+  modelId?: string; // override de modelo por etapa
+  scope?: 'project' | 'per-file' | 'flexible'; // intent do editor (default flexible)
 };
 ```
 
@@ -154,7 +156,7 @@ Hierarquia em `src/ui/components/`:
 
 - **App** (`src/app.tsx`) — screen router: welcome → pipeline-editor → pipeline-import → model-selector → api-key → run → summary.
 - **PipelineEditor** — lista de steps com `↑↓` navegar, `Shift+↑↓` reordenar, `N` novo, `D` deletar, `R` renomear pipeline, `I` importar, `S` exportar, `G` rodar, `Enter` editar step.
-- **StepEditor** — edita name/prompt/files de um step. `FileMultiSelect` permite escolher arquivos do repo respeitando `.gitignore`.
+- **StepEditor** — edita name/prompt/scope/files/model de um step. A row Scope (acima de Files) trava o comportamento de `F`/`W`/`ENTER` na row de Files: `project` = whole-project travado, `per-file` = exige seleção e habilita `ENTER` pra abrir o picker, `flexible` = comportamento legado. `FileMultiSelect` permite escolher arquivos do repo respeitando `.gitignore`.
 - **ModelSelectorOverlay** — modo "quick" (recents/favorites/recommended) ou tabela completa via `model-selector-ink`.
 - **ApiKeyPrompt** — input mascarado da OPENROUTER_API_KEY.
 - **RunDashboard** — componente principal durante a execução:

@@ -68,6 +68,25 @@ describe('decideReexec', () => {
     // Real-world: huu --stub run pipeline.json
     expect(decideReexec(['--stub', 'run', 'p.json'], env()).shouldReexec).toBe(true);
   });
+
+  it('skips re-exec for --yolo (CLI alias for HUU_NO_DOCKER)', () => {
+    const r = decideReexec(['--yolo'], env());
+    expect(r.shouldReexec).toBe(false);
+    expect(r.reason).toMatch(/--yolo/);
+  });
+
+  it('skips re-exec for --yolo regardless of position', () => {
+    expect(decideReexec(['--yolo', 'run', 'p.json'], env()).shouldReexec).toBe(false);
+    expect(decideReexec(['run', 'p.json', '--yolo'], env()).shouldReexec).toBe(false);
+    expect(decideReexec(['--stub', '--yolo', 'run', 'p.json'], env()).shouldReexec).toBe(false);
+  });
+
+  it('--yolo wins over HUU_NO_DOCKER=0 in env', () => {
+    // Explicit user intent on the CLI overrides shell state. The value
+    // happens to be falsy here but the principle holds: CLI > env.
+    const r = decideReexec(['--yolo'], env({ HUU_NO_DOCKER: '0' }));
+    expect(r.shouldReexec).toBe(false);
+  });
 });
 
 describe('buildDockerArgv', () => {
