@@ -61,6 +61,12 @@ export function decideReexec(args: string[], env: NodeJS.ProcessEnv): ReexecDeci
   if (env.HUU_IN_CONTAINER === '1') {
     return { shouldReexec: false, reason: 'already inside the huu container' };
   }
+  // CLI alias for HUU_NO_DOCKER=1. Listed before the env check so the flag
+  // wins regardless of env: a user typing `--yolo` is making an explicit,
+  // visible choice that should not be overridden by stale shell state.
+  if (args.includes('--yolo')) {
+    return { shouldReexec: false, reason: '--yolo flag — running native (no Docker isolation)' };
+  }
   if (env.HUU_NO_DOCKER === '1' || env.HUU_NO_DOCKER === 'true') {
     return { shouldReexec: false, reason: 'HUU_NO_DOCKER set — running native' };
   }
