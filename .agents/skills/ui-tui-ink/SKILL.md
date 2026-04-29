@@ -46,7 +46,8 @@ terminal interface.
 - **FileMultiSelect** — interactive file tree; Space toggle, A select all, C clear, / filter
 - **ModelSelectorOverlay** — quick-pick (recents + favorites + recommended) + lazy table view
 - **ApiKeyPrompt** — API key input with mask (`*`)
-- **RunDashboard** — KanbanBoard with agent cards; concurrency adjustment (`+`/`-`)
+- **RunDashboard** — KanbanBoard with agent cards; concurrency adjustment (`+`/`-`). When the orchestrator hits a step with `interactive: true`, RunDashboard yields the screen to `InteractiveStep` and resumes once the chat is finished/skipped.
+- **InteractiveStep** — multi-turn refinement chat for `interactive: true` steps (LangChain.js + OpenRouter, default `moonshotai/kimi-k2.6`). Header surfaces the active **scope** (`project` / `per-file` / `flexible`) and the runtime mode so the user can see what kind of prompt the synthesizer must produce. Synthesized output replaces `step.prompt` for the run only — never mutates the saved Pipeline. Pure UI: spawns no worktrees, agents, or git ops.
 - **AgentDetailModal** — timeline, logs, agent modified files
 
 ### Keyboard Handling
