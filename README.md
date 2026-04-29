@@ -145,7 +145,7 @@ docker run --rm -it \
 
 If the wrapper itself is killed hard (`kill -9`, OOM), the next `huu` invocation prunes any orphan containers whose recorded parent PID is no longer alive — no manual `docker ps | xargs kill` needed. Use `huu prune --list` to inspect lingering huu containers, `huu prune --dry-run` to preview what cleanup would do, and `huu prune` to force kill them.
 
-**Don't want Docker for a particular run?** `HUU_NO_DOCKER=1 huu run x.json` runs natively (requires the local `npm install` of huu's deps). The non-TUI subcommands (`huu --help`, `huu init-docker`, `huu status`) always run native — they operate on host filesystem state and a docker pull would be wasted work.
+**Don't want Docker for a particular run?** `huu --yolo` (or `HUU_NO_DOCKER=1 huu …`) bypasses Docker and runs natively on the host. The flag composes with everything: `huu --yolo` opens the TUI, `huu --yolo run x.json` executes a pipeline, `huu --yolo --stub` runs the stub agent — all without isolation. Native runs require the local `npm install` of huu's deps, and the LLM agent will see your shell credentials (`~/.ssh`, `~/.aws`, etc.) — a one-line warning is printed to stderr each time. The non-TUI subcommands (`huu --help`, `huu init-docker`, `huu status`) always run native regardless — they operate on host filesystem state and a docker pull would be wasted work.
 
 The container runs the entire pipeline (worktrees, agents, merge) and the resulting `huu/<runId>/integration` branch shows up in your repo's `git log` when it finishes — exactly as if you had run `huu` natively.
 

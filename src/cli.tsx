@@ -73,6 +73,7 @@ Usage:
   huu status [...]          Inspect the latest run via .huu/debug-*.log
   huu prune [...]           List/kill orphan huu containers + stale cidfiles
   huu --stub                Force the stub agent (no real LLM)
+  huu --yolo                Skip Docker, run native on the host (agent sees your shell creds)
   huu --help                Show this help
 
 init-docker flags:
@@ -162,11 +163,24 @@ process.on('unhandledRejection', (reason) => {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const useStub = args.includes('--stub');
-  const filtered = args.filter((a) => a !== '--stub');
+  const useYolo = args.includes('--yolo');
+  // Both flags are CLI-only; the rest of the pipeline (subcommand dispatch,
+  // pipeline import) must not see them.
+  const filtered = args.filter((a) => a !== '--stub' && a !== '--yolo');
 
   if (filtered.includes('--help') || filtered.includes('-h')) {
     printUsage();
     return;
+  }
+
+  // The Docker bypass already happened in decideReexec at the top of this
+  // file. The warning surfaces the security trade-off the user just opted
+  // into, mirroring the message in reexecInDocker for the inverse case.
+  // Suppressed inside the container because --yolo would be a no-op there.
+  if (useYolo && process.env.HUU_IN_CONTAINER !== '1') {
+    process.stderr.write(
+      'huu: --yolo: skipping Docker. The agent has access to your shell credentials (~/.ssh, ~/.aws, etc.).\n',
+    );
   }
 
   // Non-TUI subcommands are handled BEFORE the Ink render path so they
