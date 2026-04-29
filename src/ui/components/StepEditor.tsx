@@ -233,12 +233,13 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
     scope === 'per-file' ? 'blue' :
     'yellow';
 
-  return (
+    return (
     <Box flexDirection="column" width="100%">
       <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
         <Text bold color="cyan">Edit step #{stepIndex + 1}</Text>
 
-        <Box marginTop={1} marginLeft={field === 'name' ? 2 : 0}>
+        <Box marginTop={1}>
+          <Text color="cyan">{field === 'name' ? '› ' : '  '}</Text>
           <Box width={10}><Text color={field === 'name' ? 'cyan' : undefined}>Name:</Text></Box>
           {field === 'name' && editorMode === 'editing' ? (
             <TextInput
@@ -252,7 +253,8 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
           )}
         </Box>
 
-        <Box marginTop={1} marginLeft={field === 'prompt' ? 2 : 0} flexDirection="column">
+        <Box marginTop={1} flexDirection="column">
+          <Text color="cyan">{field === 'prompt' ? '› ' : '  '}</Text>
           <Text color={field === 'prompt' ? 'cyan' : undefined}>Prompt:</Text>
           {field === 'prompt' && editorMode === 'editing' ? (
             <TextInput
@@ -272,7 +274,8 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
           )}
         </Box>
 
-        <Box marginTop={1} marginLeft={field === 'scope' ? 2 : 0}>
+        <Box marginTop={1}>
+          <Text color="cyan">{field === 'scope' ? '› ' : '  '}</Text>
           <Box width={10}><Text color={field === 'scope' ? 'cyan' : undefined}>Scope:</Text></Box>
           <Text color={scopeColor}>{scopeLabel(scope)}</Text>
           {field === 'scope' && (
@@ -280,7 +283,8 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
           )}
         </Box>
 
-        <Box marginTop={1} marginLeft={field === 'files' ? 2 : 0}>
+        <Box marginTop={1}>
+          <Text color="cyan">{field === 'files' ? '› ' : '  '}</Text>
           <Box width={10}><Text color={field === 'files' ? 'cyan' : undefined}>Files:</Text></Box>
           {scope === 'project' ? (
             <Text color="yellow">[whole project — locked by scope]</Text>
@@ -305,7 +309,8 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
           )}
         </Box>
 
-        <Box marginTop={1} marginLeft={field === 'model' ? 2 : 0}>
+        <Box marginTop={1}>
+          <Text color="cyan">{field === 'model' ? '› ' : '  '}</Text>
           <Box width={10}><Text color={field === 'model' ? 'cyan' : undefined}>Model:</Text></Box>
           {step.modelId ? (
             <Text color="green">🧠 {step.modelId}</Text>
@@ -317,7 +322,8 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
           )}
         </Box>
 
-        <Box marginTop={1} marginLeft={field === 'interactive' ? 2 : 0}>
+        <Box marginTop={1}>
+          <Text color="cyan">{field === 'interactive' ? '› ' : '  '}</Text>
           <Box width={12}><Text color={field === 'interactive' ? 'cyan' : undefined}>Interactive:</Text></Box>
           {step.interactive ? (
             <Text color="magenta">⌬ ON — refinement chat opens before this stage runs</Text>
