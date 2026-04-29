@@ -56,6 +56,7 @@ export type OrchestratorSubscriber = (state: OrchestratorState) => void;
 
 const DEFAULT_CONCURRENCY = 10;
 const MAX_INSTANCES = 20;
+const AUTO_SCALE_MAX_INSTANCES = 200;
 const MIN_INSTANCES = 1;
 const POLL_INTERVAL_MS = 500;
 
@@ -207,8 +208,9 @@ export class Orchestrator {
     this.setConcurrency(this.instanceCount - 1);
   }
 
-  setConcurrency(value: number): void {
-    const clamped = Math.max(MIN_INSTANCES, Math.min(MAX_INSTANCES, value));
+  setConcurrency(value: number, options?: { bypassCap?: boolean }): void {
+    const cap = options?.bypassCap ? AUTO_SCALE_MAX_INSTANCES : MAX_INSTANCES;
+    const clamped = Math.max(MIN_INSTANCES, Math.min(cap, value));
     if (clamped === this.instanceCount) return;
     this.instanceCount = clamped;
     this.log({ level: 'info', message: `concurrency set to ${clamped}` });
@@ -236,6 +238,57 @@ export class Orchestrator {
     // Hard reset the allocator so a stuck reservation from a queued/finalizing
     // task doesn't survive into a subsequent run with the same agent ids.
     this.portAllocator.releaseAll();
+    this.poolWakeup?.();
+  }
+
+  async destroyAgent(agentId: number): Promise<void> {
+    const agent = this.activeAgents.get(agentId);
+    if (!agent) return;
+
+    // Flag so spawnAndRun's catch block skips retry logic.
+    this.updateAgentStatus(agentId, { killedByAutoScaler: true });
+
+    // Dispose causes agent.prompt() to reject in spawnAndRun.
+    try {
+      await agent.dispose();
+    } catch {
+      /* best-effort */
+    }
+
+    this.activeAgents.delete(agentId);
+    this.spawningIds.delete(agentId);
+
+    const status = this.agents.get(agentId);
+    const worktreePath = status?.worktreePath;
+    const branchName = status?.branchName;
+
+    if (worktreePath) {
+      try {
+        await this.worktreeManager!.removeAgentWorktree(agentId);
+      } catch {
+        /* best-effort */
+      }
+    }
+
+    if (branchName) {
+      try {
+        const git = this.worktreeManager!.getGitClient();
+        await git.deleteBranch(branchName);
+      } catch {
+        /* best-effort */
+      }
+    }
+
+    this.portAllocator.release(agentId);
+
+    this.updateAgentStatus(agentId, {
+      state: 'error',
+      phase: 'killed_by_autoscaler',
+      error: 'Auto-scaler: resources exceeded 95%',
+    });
+
+    const task = agent.task;
+    this.pendingTasks.unshift(task);
     this.poolWakeup?.();
   }
 
@@ -646,6 +699,12 @@ export class Orchestrator {
           // back to spawningIds BEFORE the awaits below so the pool's poll
           // loop doesn't observe all queues empty and exit while we're still
           // in flight (would silently drop the retry).
+          const status = this.agents.get(task.agentId);
+          if (status?.killedByAutoScaler) {
+            this.spawningIds.delete(task.agentId);
+            return; // do NOT retry, do NOT mark as error
+          }
+
           const isTimeout = err instanceof TimeoutError;
           dlog('orch', 'attempt_failed', {
             agentId: task.agentId,
