@@ -3,7 +3,7 @@ import { Box, Text, useInput, useStdout } from 'ink';
 import TextInput from 'ink-text-input';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 import type { BaseMessage } from '@langchain/core/messages';
-import type { PromptStep } from '../../lib/types.js';
+import type { PromptStep, StepScope } from '../../lib/types.js';
 import {
   createRefinementChat,
   DEFAULT_REFINEMENT_MODEL,
@@ -74,6 +74,7 @@ export function InteractiveStep({
       stageName: step.name,
       initialPrompt: step.prompt,
       files: step.files,
+      scope: step.scope,
     });
     const seed = step.prompt
       ? `Esta é minha intenção inicial para a etapa "${step.name}":\n\n${step.prompt}\n\nMe ajude a refinar.`
@@ -137,6 +138,7 @@ export function InteractiveStep({
       stageName: step.name,
       initialPrompt: step.prompt,
       files: step.files,
+      scope: step.scope,
     });
     historyRef.current.push(new HumanMessage(synthesisMsg));
     try {
@@ -167,6 +169,15 @@ export function InteractiveStep({
   });
 
   const promptDisplay = step.prompt || '(sem prompt inicial — descreva sua intenção)';
+  const scope: StepScope = step.scope ?? 'flexible';
+  const runtimeMode: 'whole-project' | 'per-file' =
+    scope === 'project'
+      ? 'whole-project'
+      : scope === 'per-file'
+        ? 'per-file'
+        : step.files.length === 0
+          ? 'whole-project'
+          : 'per-file';
   const filesLine =
     step.files.length === 0
       ? 'whole project'
@@ -185,6 +196,21 @@ export function InteractiveStep({
           <Text>{promptDisplay}</Text>
         </Box>
         <Box marginTop={1}>
+          <Text dimColor>scope: </Text>
+          <Text color={scope === 'project' ? 'magenta' : scope === 'per-file' ? 'blue' : 'yellow'}>
+            {scope}
+          </Text>
+          <Text dimColor>  ·  runtime: </Text>
+          <Text>{runtimeMode}</Text>
+          {runtimeMode === 'per-file' && (
+            <>
+              <Text dimColor>  · use </Text>
+              <Text bold color="green">$file</Text>
+              <Text dimColor> in template</Text>
+            </>
+          )}
+        </Box>
+        <Box>
           <Text dimColor>files: </Text>
           <Text>{filesLine}</Text>
           <Text dimColor>  ·  model: </Text>

@@ -74,6 +74,11 @@ run only — the saved Pipeline is unchanged.
   Toggle via `createRefinementChat({ reasoning: true })`.
 - The refinement chat does NOT spawn worktrees, agents, or git operations —
   it only converses with the user.
+- Scope-aware synthesis: the refiner reads `step.scope` (or falls back to
+  `files.length` for legacy flexible) to decide whether to emit a
+  whole-project prompt (no `$file`) or a per-file template (must use `$file`).
+  See `src/lib/refinement-prompts.ts` — both `buildRefinerSystemPrompt` and
+  `buildSynthesisRequest` branch on the runtime mode.
 
 ## Gotchas
 
