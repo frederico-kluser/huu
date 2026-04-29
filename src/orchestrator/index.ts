@@ -194,6 +194,8 @@ export class Orchestrator {
       concurrency: this.instanceCount,
       currentStage: this.currentStage,
       totalStages: this.totalStages,
+      pendingTaskCount: this.pendingTasks.length,
+      activeAgentCount: this.activeAgents.size,
     };
   }
 
@@ -985,6 +987,7 @@ export class Orchestrator {
       pushStatus: 'pending',
       stageIndex: task.stageIndex,
       stageName: task.stageName,
+      createdAt: Date.now(),
     };
   }
 

@@ -139,7 +139,8 @@ export type AgentLifecyclePhase =
   | 'cleaning_up'
   | 'done'
   | 'no_changes'
-  | 'error';
+  | 'error'
+  | 'killed_by_autoscaler';
 
 export type PushStatus = 'pending' | 'pushing' | 'pushed' | 'skipped' | 'failed';
 
@@ -177,9 +178,19 @@ export interface AgentStatus {
   stageName: string;
   startedAt?: number;
   finishedAt?: number;
+  createdAt?: number;
+  killedByAutoScaler?: boolean;
 }
 
 // --- Orchestrator state ---
+
+export interface AutoScaleStatus {
+  enabled: boolean;
+  state: 'NORMAL' | 'SCALING_UP' | 'BACKING_OFF' | 'COOLDOWN';
+  cooldownRemainingMs: number;
+  cpuPercent: number;
+  ramPercent: number;
+}
 
 export interface OrchestratorState {
   status: 'idle' | 'starting' | 'running' | 'integrating' | 'done' | 'error';
@@ -195,6 +206,9 @@ export interface OrchestratorState {
   concurrency: number;
   currentStage: number;
   totalStages: number;
+  pendingTaskCount: number;
+  activeAgentCount: number;
+  autoScale?: AutoScaleStatus;
 }
 
 export interface IntegrationStatus {
