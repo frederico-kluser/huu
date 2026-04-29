@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import pkg from '../../package.json' with { type: 'json' };
 import { Box, Text, useApp, useInput, useStdout } from 'ink';
 import { join } from 'node:path';
 import { ModelSelectorOverlay } from './ui/components/ModelSelectorOverlay.js';
@@ -173,7 +174,7 @@ export function App({
     body = (
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
-          <Text bold color="cyan">huu</Text>
+          <Text bold color="cyan">{pkg.name} v{pkg.version}</Text>
           <Text dimColor>Guided pipeline execution — multi-agent kanban with git worktrees</Text>
 
           <Box marginTop={1} flexDirection="column">

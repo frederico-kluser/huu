@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import pkg from '../../../package.json' with { type: 'json' };
 import { Box, Text, useInput, useStdout } from 'ink';
 import type { AppConfig, OrchestratorResult, OrchestratorState, Pipeline, PromptStep } from '../../lib/types.js';
 import { Orchestrator } from '../../orchestrator/index.js';
@@ -417,7 +418,7 @@ export function RunDashboard({
   return (
     <Box flexDirection="column" width="100%">
       <Box paddingX={1} width="100%">
-        <Text bold color="cyan">huu</Text>
+        <Text bold color="cyan">{pkg.name} v{pkg.version}</Text>
         <Text dimColor>  ·  </Text>
         <Text>stage <Text bold>{state.currentStage}/{state.totalStages}</Text></Text>
         <Text dimColor>  ·  </Text>
