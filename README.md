@@ -563,9 +563,14 @@ You're on a host where your primary user isn't UID 1000 (rare on Linux desktops,
 
 ## Roadmap
 
-- `huu estimate <pipeline.json>` — dry-run cost and wallclock forecast.
+The full roadmap with dependency DAG, design sketches per feature, and explicit non-goals is in [`roadmap/ROADMAP.md`](roadmap/ROADMAP.md). Each feature has a self-contained executable task spec under [`roadmap/tasks/`](roadmap/tasks/). Highlights from the next 3 months:
+
+- `huu run --dry-run` — cost and wallclock forecast before the run starts.
+- Deterministic janitor (lint + types + tests + PII gate) — replaces the LLM-based integration agent for ~80% of cases.
+- MCP **server** mode (not client) — expose `huu` as tools to Claude Desktop, Cursor, Zed.
+- HMAC-chained audit log — tamper-evident replay for regulated environments.
 - `huu lint <pipeline.json>` — detect overlapping `files` across stages, missing `$file` placeholders, undefined model IDs.
-- `huu/cookbook` — community pipeline registry, with each entry tagged by domain (testing, audits, refactors, docs).
+- `huu/cookbook` — community pipeline registry, with each entry tagged by domain.
 - GitHub Action wrapper — run a `huu` pipeline as part of CI on a labeled PR.
 - JSON Schema + LSP for `huu-pipeline-v1.json` — autocomplete and validation in editors.
 
