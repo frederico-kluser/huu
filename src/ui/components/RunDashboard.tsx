@@ -2,11 +2,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink';
 import type { AppConfig, OrchestratorResult, OrchestratorState, Pipeline, PromptStep } from '../../lib/types.js';
 import { Orchestrator } from '../../orchestrator/index.js';
+import { Autoscaler } from '../../orchestrator/autoscaler.js';
 import type { AgentFactory } from '../../orchestrator/types.js';
 import { RunKanban } from './RunKanban.js';
 import { RunModal } from './RunModal.js';
 import { LogArea } from './LogArea.js';
 import { InteractiveStep } from './InteractiveStep.js';
+import { resetAutoscaleSnapshot, setAutoscaleSnapshot } from '../autoscale-store.js';
 import { log as dlog, bump as dbump } from '../../lib/debug-logger.js';
 
 interface PendingInteractive {
@@ -75,6 +77,18 @@ export function RunDashboard({
           }),
       }),
   );
+  // The Autoscaler is constructed lazily on first toggle and kept across
+  // re-renders. Keeping it here (vs. inside Orchestrator) decouples the
+  // resource policy from the worker pool — the orchestrator only exposes the
+  // primitives (setConcurrency, killNewestAgent, getPendingCount).
+  const autoscalerRef = useRef<Autoscaler | null>(null);
+  if (!autoscalerRef.current) {
+    autoscalerRef.current = new Autoscaler(
+      orch,
+      { log: (entry) => orch.publicLog(entry) },
+      { diskPath: cwd },
+    );
+  }
   const [state, setState] = useState<OrchestratorState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
@@ -121,6 +135,11 @@ export function RunDashboard({
     const unsub = orch.subscribe((s) => {
       dbump('orch.subscribe');
       pendingStateRef.current = s;
+      // The autoscale snapshot drives a global UI store (SystemMetricsBar
+      // lives in App, not under this component) — pushing it on every
+      // emission keeps the pulsing AUTO label and killed-count in sync
+      // without lifting the orchestrator up to App.
+      setAutoscaleSnapshot(s.autoscale);
       const isTerminal = s.status === 'done' || s.status === 'error';
       if (firstEmit || isTerminal) {
         firstEmit = false;
@@ -151,6 +170,10 @@ export function RunDashboard({
       dlog('mount', 'RunDashboard.unmount');
       unsub();
       clearInterval(interval);
+      // Stop the resource sampler/decision timers and clear the UI store so
+      // the next run doesn't inherit a stale "AUTO" label or killed count.
+      autoscalerRef.current?.stop();
+      resetAutoscaleSnapshot();
       // If the dashboard unmounts for any reason while the orchestrator is
       // still working, ask it to wind down. Without this, a leaked run keeps
       // creating worktrees and finalize() callbacks fire into a dead tree.
@@ -299,12 +322,27 @@ export function RunDashboard({
         // The modal owns its own input while open. Nothing to do here.
         return;
       }
+      // In autoscale mode the Autoscaler owns concurrency; +/- become no-ops
+      // (and the numeric concurrency display in the header is hidden) so the
+      // user can't accidentally fight the controller. The pulsing AUTO label
+      // in the metrics bar communicates the mode.
+      const autoOn = stateRef.current?.autoscale.enabled ?? false;
       if (input === '+' || input === '=') {
-        orch.increaseConcurrency();
+        if (!autoOn) orch.increaseConcurrency();
         return;
       }
       if (input === '-' || input === '_') {
-        orch.decreaseConcurrency();
+        if (!autoOn) orch.decreaseConcurrency();
+        return;
+      }
+      if (input === 'a' || input === 'A') {
+        const next = !autoOn;
+        orch.setAutoscaleEnabled(next);
+        if (next) {
+          autoscalerRef.current?.start();
+        } else {
+          autoscalerRef.current?.stop();
+        }
         return;
       }
       if (input === 'q' || input === 'Q') {
@@ -421,8 +459,12 @@ export function RunDashboard({
         <Text dimColor>  ·  </Text>
         <Text>stage <Text bold>{state.currentStage}/{state.totalStages}</Text></Text>
         <Text dimColor>  ·  </Text>
-        <Text>concurrency <Text bold color="yellow">{state.concurrency}</Text></Text>
-        <Text dimColor>  ·  </Text>
+        {!state.autoscale.enabled && (
+          <>
+            <Text>concurrency <Text bold color="yellow">{state.concurrency}</Text></Text>
+            <Text dimColor>  ·  </Text>
+          </>
+        )}
         <Text>elapsed {mm}:{ss}</Text>
         <Text dimColor>  ·  </Text>
         <Text>{state.completedTasks}/{state.totalTasks} done</Text>
@@ -465,7 +507,15 @@ export function RunDashboard({
       </Box>
       <Box paddingX={1} width="100%">
         <Text dimColor>
-          <Text bold>+</Text>/<Text bold>-</Text> concurrency · <Text bold>↑↓←→</Text> navigate · <Text bold>ENTER</Text> details · <Text bold>F</Text> filter logs ({logFilter !== null ? `A${logFilter}` : 'all'}) · <Text bold>Q</Text> abort (press twice to force-exit)
+          {state.autoscale.enabled ? (
+            <>
+              <Text bold>A</Text> auto-scale ON · <Text bold>↑↓←→</Text> navigate · <Text bold>ENTER</Text> details · <Text bold>F</Text> filter logs ({logFilter !== null ? `A${logFilter}` : 'all'}) · <Text bold>Q</Text> abort
+            </>
+          ) : (
+            <>
+              <Text bold>+</Text>/<Text bold>-</Text> concurrency · <Text bold>A</Text> auto-scale · <Text bold>↑↓←→</Text> navigate · <Text bold>ENTER</Text> details · <Text bold>F</Text> filter logs ({logFilter !== null ? `A${logFilter}` : 'all'}) · <Text bold>Q</Text> abort
+            </>
+          )}
         </Text>
       </Box>
     </Box>

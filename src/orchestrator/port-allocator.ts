@@ -14,12 +14,19 @@ export interface PortAllocatorOptions {
   windowSize?: number;
   maxAgents?: number;
   enabled?: boolean;
+  /**
+   * When true, scan the entire usable port space (up to MAX_PORT - windowSize)
+   * instead of capping at `maxAgents * 4`. Used by the autoscaler since the
+   * agent count is not known up-front.
+   */
+  unlimited?: boolean;
 }
 
 const DEFAULT_BASE_PORT = 55100;
 const DEFAULT_WINDOW_SIZE = 10;
 const DEFAULT_MAX_AGENTS = 20;
 const SLOTS_PER_BUNDLE = 10;
+const MAX_PORT = 65535;
 
 /**
  * Allocates a contiguous, host-validated port window per agentId so parallel
@@ -36,6 +43,7 @@ export class PortAllocator {
   private readonly windowSize: number;
   private readonly maxAgents: number;
   private readonly enabled: boolean;
+  private unlimited: boolean;
   private readonly reserved = new Map<number, AgentPortBundle>();
   private readonly reservedPorts = new Set<number>();
 
@@ -44,6 +52,15 @@ export class PortAllocator {
     this.windowSize = Math.max(SLOTS_PER_BUNDLE, options.windowSize ?? DEFAULT_WINDOW_SIZE);
     this.maxAgents = options.maxAgents ?? DEFAULT_MAX_AGENTS;
     this.enabled = options.enabled ?? true;
+    this.unlimited = options.unlimited ?? false;
+  }
+
+  /**
+   * Toggle unlimited mode at runtime — invoked by the orchestrator when the
+   * autoscaler is enabled so port allocation tracks dynamic agent counts.
+   */
+  setUnlimited(value: boolean): void {
+    this.unlimited = value;
   }
 
   isEnabled(): boolean {
@@ -58,13 +75,20 @@ export class PortAllocator {
     if (existing) return existing;
 
     // Start at the agent's natural slot but slide forward on collision.
-    // The cap (`maxAgents`) is the *expected* concurrency, not a hard limit
-    // — we keep scanning past it because external processes could occupy any
-    // window in the range and we still need to find one.
+    // In bounded mode (default) the cap is `maxAgents * 4` slots, with a wrap
+    // so a high-id agent doesn't run out of range. In unlimited mode (auto-
+    // scale) we scan sequentially up to MAX_PORT, no wrap — agentIds can grow
+    // past the bounded range and there is no useful modulus.
     const startSlot = Math.max(0, agentId - 1);
-    for (let attempt = 0; attempt < this.maxAgents * 4; attempt++) {
-      const slot = (startSlot + attempt) % (this.maxAgents * 4);
+    const slotCount = this.unlimited
+      ? Math.max(0, Math.floor((MAX_PORT - this.basePort) / this.windowSize) - 1)
+      : this.maxAgents * 4;
+    for (let attempt = 0; attempt < slotCount; attempt++) {
+      const slot = this.unlimited
+        ? startSlot + attempt
+        : (startSlot + attempt) % slotCount;
       const base = this.basePort + slot * this.windowSize;
+      if (base + this.windowSize > MAX_PORT) break;
       const bundle = await this.tryReserveWindow(agentId, base);
       if (bundle) {
         this.reserved.set(agentId, bundle);
@@ -72,7 +96,7 @@ export class PortAllocator {
       }
     }
     throw new Error(
-      `PortAllocator: no free window found in [${this.basePort}, ${this.basePort + this.maxAgents * 4 * this.windowSize}) for agent ${agentId}`,
+      `PortAllocator: no free window found in [${this.basePort}, ${this.basePort + slotCount * this.windowSize}) for agent ${agentId}`,
     );
   }
 

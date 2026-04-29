@@ -2,6 +2,7 @@ import type {
   AgentStatus,
   AgentTask,
   AppConfig,
+  AutoscaleSnapshot,
   IntegrationStatus,
   LogEntry,
   OrchestratorResult,
@@ -55,9 +56,22 @@ function ensureGitignored(repoRoot: string, line: string): void {
 export type OrchestratorSubscriber = (state: OrchestratorState) => void;
 
 const DEFAULT_CONCURRENCY = 10;
-const MAX_INSTANCES = 20;
+const MAX_INSTANCES_BOUNDED = 20;
 const MIN_INSTANCES = 1;
 const POLL_INTERVAL_MS = 500;
+/**
+ * After this many preemptions, the task is marked failed instead of
+ * re-enqueued. Prevents an eternally-loaded host from looping the same
+ * task forever.
+ */
+const MAX_PREEMPTIONS = 3;
+/**
+ * Hard ceiling in autoscale mode. Not because the orchestrator can't go
+ * higher, but because the autoscaler's `room` calculation can momentarily
+ * over-shoot into the trip-wire band and we want a guard rail. 1000 is well
+ * past any plausible per-stage agent count.
+ */
+const MAX_INSTANCES_AUTO = 1000;
 
 class TimeoutError extends Error {
   readonly isTimeout = true;
@@ -152,6 +166,13 @@ export class Orchestrator {
   private poolWakeup: (() => void) | null = null;
   private portAllocator: PortAllocator;
   private nativeShim: NativeShim | null = null;
+  private taskOriginals: Map<number, AgentTask> = new Map();
+  private preemptionCounts: Map<number, number> = new Map();
+  private autoscaleEnabled = false;
+  private autoscaleKilled = 0;
+  private autoscalePreemptedAborted = 0;
+  private autoscaleLastAction?: string;
+  private autoscaleLastActionAt?: number;
 
   constructor(
     private config: AppConfig,
@@ -169,7 +190,7 @@ export class Orchestrator {
       basePort: pipeline.portAllocation?.basePort,
       windowSize: pipeline.portAllocation?.windowSize,
       enabled: pipeline.portAllocation?.enabled ?? true,
-      maxAgents: MAX_INSTANCES,
+      maxAgents: MAX_INSTANCES_BOUNDED,
     });
   }
 
@@ -194,7 +215,28 @@ export class Orchestrator {
       concurrency: this.instanceCount,
       currentStage: this.currentStage,
       totalStages: this.totalStages,
+      autoscale: this.getAutoscaleSnapshot(),
     };
+  }
+
+  getAutoscaleSnapshot(): AutoscaleSnapshot {
+    return {
+      enabled: this.autoscaleEnabled,
+      killedCount: this.autoscaleKilled,
+      preemptedAbortedCount: this.autoscalePreemptedAborted,
+      lastAction: this.autoscaleLastAction,
+      lastActionAt: this.autoscaleLastActionAt,
+    };
+  }
+
+  /** Number of tasks waiting in the pending queue (used by Autoscaler). */
+  getPendingCount(): number {
+    return this.pendingTasks.length;
+  }
+
+  /** Active agents currently consuming a slot — excludes finalizing. */
+  getActiveCount(): number {
+    return this.activeAgents.size + this.spawningIds.size;
   }
 
   increaseConcurrency(): void {
@@ -206,12 +248,132 @@ export class Orchestrator {
   }
 
   setConcurrency(value: number): void {
-    const clamped = Math.max(MIN_INSTANCES, Math.min(MAX_INSTANCES, value));
+    const ceiling = this.autoscaleEnabled ? MAX_INSTANCES_AUTO : MAX_INSTANCES_BOUNDED;
+    const clamped = Math.max(MIN_INSTANCES, Math.min(ceiling, value));
     if (clamped === this.instanceCount) return;
     this.instanceCount = clamped;
     this.log({ level: 'info', message: `concurrency set to ${clamped}` });
     this.poolWakeup?.();
     this.emit();
+  }
+
+  /**
+   * Toggle autoscale. When ON, the port allocator scans the full port range
+   * (not just maxAgents*4 slots) and the concurrency clamp ceiling is raised.
+   * Existing in-flight agents are NOT touched — the Autoscaler takes over
+   * from the current state.
+   */
+  setAutoscaleEnabled(value: boolean): void {
+    if (this.autoscaleEnabled === value) return;
+    this.autoscaleEnabled = value;
+    this.portAllocator.setUnlimited(value);
+    this.autoscaleLastAction = value ? 'enabled' : 'disabled';
+    this.autoscaleLastActionAt = Date.now();
+    this.log({ level: 'info', message: `autoscale ${value ? 'enabled' : 'disabled'}` });
+    this.emit();
+  }
+
+  /**
+   * Pre-emption: kill the most-recently-added active agent and re-enqueue its
+   * task at the front of `pendingTasks`. Called by the Autoscaler when memory
+   * or CPU crosses the trip-wire (>=95%).
+   *
+   * Skip rules (defensive — sequence is otherwise intentionally blunt):
+   *  - no active agents      → no-op (nothing to kill).
+   *  - newest is finalizing  → committing work, do not interrupt.
+   *  - task hit MAX_PREEMPTIONS → mark failed instead of re-enqueueing, to
+   *    avoid an infinite ping-pong on a permanently-loaded host.
+   *
+   * Returns true iff a kill was performed.
+   */
+  killNewestAgent(reason = 'trip_wire'): boolean {
+    if (this.activeAgents.size === 0 && this.spawningIds.size === 0) return false;
+    // Prefer killing a fully-spawned agent (we have the SpawnedAgent handle to
+    // dispose). spawningIds entries don't have a handle; if the newest id is
+    // in spawningIds the spawnAndRun loop's own catch will clean up — so we
+    // skip past spawning-only ids and look for the newest in activeAgents.
+    let victimId = -1;
+    for (const id of this.activeAgents.keys()) {
+      if (id > victimId) victimId = id;
+    }
+    if (victimId < 0) return false;
+    if (this.finalizingIds.has(victimId)) return false;
+
+    const agent = this.activeAgents.get(victimId);
+    const status = this.agents.get(victimId);
+    const original = this.taskOriginals.get(victimId);
+    if (!agent || !status || !original) return false;
+
+    const preemptions = (this.preemptionCounts.get(victimId) ?? 0) + 1;
+    this.preemptionCounts.set(victimId, preemptions);
+
+    // Move out of active BEFORE awaiting cleanup so the pool's slot count
+    // sees the slot freed and any other tick reasoning is consistent.
+    this.activeAgents.delete(victimId);
+
+    void agent.dispose().catch(() => undefined);
+    const attempt = status.attempt ?? 1;
+    void this.worktreeManager
+      ?.removeAgentWorktree(victimId, attempt)
+      .catch(() => undefined);
+    this.portAllocator.release(victimId);
+
+    this.autoscaleKilled++;
+    this.autoscaleLastAction = reason;
+    this.autoscaleLastActionAt = Date.now();
+
+    if (preemptions > MAX_PREEMPTIONS) {
+      this.updateAgentStatus(victimId, {
+        state: 'error',
+        phase: 'error',
+        error: `preempted ${preemptions - 1}× (autoscale)`,
+        errorKind: 'failed',
+      });
+      this.completedTasks++;
+      this.appendManifestEntry(victimId);
+      this.autoscalePreemptedAborted++;
+      this.log({
+        level: 'warn',
+        message: `agent ${victimId} aborted after ${preemptions - 1} preemptions (autoscale: ${reason})`,
+        agentId: victimId,
+      });
+    } else {
+      // Reset to pending and re-enqueue the original task. The pool will pick
+      // it up again on the next tick (subject to slot availability + cooldown
+      // already enforced by the autoscaler).
+      this.updateAgentStatus(victimId, {
+        state: 'idle',
+        phase: 'pending',
+        error: undefined,
+        errorKind: undefined,
+        startedAt: undefined,
+        finishedAt: undefined,
+      });
+      // Push to the FRONT so the preempted task is the first to take a slot
+      // when memory recovers. Otherwise long queues let the same task sit
+      // behind all the freshly-arrived siblings.
+      this.pendingTasks.unshift({
+        ...original,
+        branchName: '',
+        worktreePath: '',
+      });
+      this.log({
+        level: 'warn',
+        message: `agent ${victimId} preempted (${reason}, ${preemptions}/${MAX_PREEMPTIONS})`,
+        agentId: victimId,
+      });
+    }
+
+    // Decrement concurrency to prevent the freed slot from being filled
+    // immediately by a non-preempted task — pressure is high right now and
+    // the Autoscaler will raise the limit again when conditions allow.
+    if (this.instanceCount > MIN_INSTANCES) {
+      this.instanceCount = this.instanceCount - 1;
+    }
+
+    this.poolWakeup?.();
+    this.emit();
+    return true;
   }
 
   abort(): void {
@@ -329,6 +491,17 @@ export class Orchestrator {
           task.branchName = agentBranchName(runId, task.agentId);
           task.worktreePath = agentWorktreePath(this.preflight.repoRoot, runId, task.agentId);
           this.agents.set(task.agentId, this.initialAgentStatus(task));
+          // Snapshot the canonical task so killNewestAgent can re-enqueue
+          // a clean copy after preemption. spawnAndRun mutates branch/path
+          // per attempt; we want the pre-mutation form here.
+          this.taskOriginals.set(task.agentId, {
+            agentId: task.agentId,
+            files: task.files,
+            branchName: '',
+            worktreePath: '',
+            stageIndex: task.stageIndex,
+            stageName: task.stageName,
+          });
         }
         tasksByStage.push(stageTasks);
         this.totalTasksAcrossStages += stageTasks.length;
@@ -1051,6 +1224,15 @@ export class Orchestrator {
       for (const f of agent.filesModified) all.add(f);
     }
     return Array.from(all);
+  }
+
+  /**
+   * Public proxy used by the Autoscaler (separate class) so it can write to the
+   * same log stream the dashboard subscribes to. Internal callers should keep
+   * using `log()` directly.
+   */
+  publicLog(entry: { level: 'info' | 'warn' | 'error'; message: string }): void {
+    this.log(entry);
   }
 
   private log(entry: { level: 'info' | 'warn' | 'error' | 'debug'; message: string; agentId?: number }): void {

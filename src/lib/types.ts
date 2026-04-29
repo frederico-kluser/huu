@@ -195,6 +195,24 @@ export interface OrchestratorState {
   concurrency: number;
   currentStage: number;
   totalStages: number;
+  /**
+   * Auto-scale state. When `enabled`, the +/- keys and the numeric
+   * concurrency display are suppressed in the UI in favor of a pulsing
+   * "AUTO" label; `setConcurrency` calls come from the Autoscaler instead
+   * of user input.
+   */
+  autoscale: AutoscaleSnapshot;
+}
+
+export interface AutoscaleSnapshot {
+  enabled: boolean;
+  /** Total number of agents preempted (killed + re-enqueued) since enable. */
+  killedCount: number;
+  /** Number of tasks that exhausted their preemption budget and were aborted. */
+  preemptedAbortedCount: number;
+  /** Most recent reason logged by the autoscaler ('hard_stop', 'trip_wire', 'scale_up', 'cooldown'). */
+  lastAction?: string;
+  lastActionAt?: number;
 }
 
 export interface IntegrationStatus {
