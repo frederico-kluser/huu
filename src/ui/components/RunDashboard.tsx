@@ -304,10 +304,16 @@ export function RunDashboard({
         return;
       }
       if (input === '+' || input === '=') {
+        if (stateRef.current?.autoScale?.enabled) {
+          orch.disableAutoScale();
+        }
         orch.increaseConcurrency();
         return;
       }
       if (input === '-' || input === '_') {
+        if (stateRef.current?.autoScale?.enabled) {
+          orch.disableAutoScale();
+        }
         orch.decreaseConcurrency();
         return;
       }
