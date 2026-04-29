@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# huu-try — fluxo completo de teste num único comando, de qualquer pasta.
+#
+# Default = nativo (rápido, sem Docker; executa src/ direto via tsx).
+# Use --docker para testar o caminho completo: build da imagem local
+# (huu:local) + execução via `huu` instalado (já apontado para o repo
+# por npm link).
+#
+# Para usar de qualquer projeto, adicione ao ~/.zshrc ou ~/.bashrc:
+#   alias huu-try='/home/ondokai/Projects/huu/scripts/huu-try'
+#
+# Exemplos:
+#   huu-try --stub                          # nativo, agente fake
+#   huu-try run pipeline.json               # nativo, pipeline real
+#   huu-try --docker --stub                 # builda huu:local + roda no container
+#   huu-try --docker --no-build status      # reusa huu:local sem rebuild
+#
+# Flags consumidas pelo wrapper (não passam para o huu):
+#   --docker      Builda a imagem local e executa via Docker (HUU_IMAGE=huu:local).
+#   --no-docker   Força modo nativo (default; redundante mas explícito).
+#   --no-build    Em modo --docker, pula o `docker build` e reusa huu:local.
+
+set -euo pipefail
+
+HUU_PROJECT="/home/ondokai/Projects/huu"
+MODE="native"
+SKIP_BUILD=0
+ARGS=()
+
+for arg in "$@"; do
+    case "$arg" in
+        --docker)    MODE="docker" ;;
+        --no-docker) MODE="native" ;;
+        --no-build)  SKIP_BUILD=1 ;;
+        *)           ARGS+=("$arg") ;;
+    esac
+done
+
+TARGET="$PWD"
+
+if [[ "$MODE" == "native" && ! -x "$HUU_PROJECT/node_modules/.bin/tsx" ]]; then
+    echo "==> instalando dependências em $HUU_PROJECT (primeira vez)" >&2
+    (cd "$HUU_PROJECT" && npm install)
+fi
+
+if [[ "$MODE" == "docker" && $SKIP_BUILD -eq 0 ]]; then
+    echo "==> docker build -t huu:local . ($HUU_PROJECT)" >&2
+    (cd "$HUU_PROJECT" && docker build -t huu:local .)
+fi
+
+cd "$TARGET"
+
+if [[ "$MODE" == "docker" ]]; then
+    echo "==> rodando via Docker (HUU_IMAGE=huu:local) em $TARGET" >&2
+    exec env HUU_IMAGE=huu:local huu "${ARGS[@]}"
+else
+    echo "==> rodando nativo (HUU_NO_DOCKER=1) em $TARGET" >&2
+    exec env HUU_NO_DOCKER=1 "$HUU_PROJECT/node_modules/.bin/tsx" \
+        "$HUU_PROJECT/src/cli.tsx" "${ARGS[@]}"
+fi
