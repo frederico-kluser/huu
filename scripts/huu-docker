@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# huu-docker — convenience wrapper around `docker run` for huu.
+#
+# Hides the boilerplate (--user mapping, $PWD bind mount, env passthrough)
+# behind a single command. Place this on your PATH:
+#
+#   sudo install -m 0755 scripts/huu-docker /usr/local/bin/huu-docker
+#
+# Then invoke huu from any repo:
+#
+#   huu-docker                            # welcome TUI
+#   huu-docker run pipeline.json          # run a pipeline
+#   huu-docker --stub                     # stub agent, no LLM
+#
+# Override the image with HUU_IMAGE=ghcr.io/owner/huu:0.1.0 huu-docker ...
+
+set -euo pipefail
+
+IMAGE="${HUU_IMAGE:-ghcr.io/fredericokluser/huu:latest}"
+
+# Map host UID/GID into the container so files written under
+# .huu-worktrees/ and .huu/ stay owned by the host user. The image's
+# entrypoint synthesizes a HOME for unknown UIDs, so this works even when
+# id -u doesn't match a /etc/passwd entry.
+USER_FLAG=("--user" "$(id -u):$(id -g)")
+
+# Apple Silicon hint — buildx publishes both amd64 and arm64; this picks
+# the native arch on macOS arm64 / Linux aarch64 hosts and avoids QEMU.
+PLATFORM_FLAG=()
+case "$(uname -m)" in
+    arm64|aarch64) PLATFORM_FLAG=("--platform=linux/arm64") ;;
+esac
+
+exec docker run --rm -it \
+    "${PLATFORM_FLAG[@]}" \
+    "${USER_FLAG[@]}" \
+    -v "$PWD:$PWD" \
+    -w "$PWD" \
+    -e OPENROUTER_API_KEY \
+    -e HUU_CHECK_PUSH \
+    -e TERM=xterm-256color \
+    "$IMAGE" \
+    huu "$@"

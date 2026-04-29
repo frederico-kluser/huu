@@ -1,0 +1,54 @@
+# Build artifacts that the Dockerfile regenerates inside the builder stage.
+node_modules
+dist
+
+# huu runtime state — must never be baked into an image.
+.huu
+.huu-worktrees
+
+# VCS metadata. The image doesn't need .git/, and copying it would also
+# leak commit history into every layer.
+.git
+.gitignore
+.gitattributes
+
+# Editor / IDE
+.vscode
+.idea
+*.swp
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Tests aren't shipped in the runtime image.
+src/**/*.test.ts
+src/**/*.test.tsx
+src/**/*.spec.ts
+src/**/*.spec.tsx
+
+# Local helper scripts referenced by package.json's build:link aren't
+# needed at runtime, and tsconfig already excludes them from compilation.
+scripts
+
+# Logs
+*.log
+
+# Docker/compose top-level files. Note: do NOT exclude the `docker/`
+# directory — it ships `entrypoint.sh`, which the Dockerfile COPYs into
+# the runtime stage.
+Dockerfile
+.dockerignore
+compose.yaml
+compose.yml
+docker-compose.yml
+docker-compose.yaml
+
+# Markdown/docs that don't belong in the image.
+docs
+*.md
+!README.md
+!recommended-models.json
+
+# CI configuration
+.github

@@ -1,0 +1,183 @@
+# syntax=docker/dockerfile:1.7
+#
+# huu — Humans Underwrite Undertakings
+# Multi-stage build: tsc compiles src/ in the builder, runtime ships only
+# dist/ + pruned node_modules + git + tini.
+#
+# See docker-roadmap.md §9.1 for design rationale.
+
+# ─────────── Stage 1: builder ───────────
+FROM node:20-slim AS builder
+
+WORKDIR /build
+
+# Install full dev dependencies. BuildKit cache mount keeps the npm cache
+# warm between builds without inflating the layer.
+# .npmrc is required: the lockfile resolved with legacy-peer-deps=true
+# (model-selector-ink declares a peer of ink@^6 while the rest of the
+# tree pins ink@^4 — npm 7+ refuses to install otherwise).
+COPY package.json package-lock.json .npmrc ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --include=dev
+
+# Compile TypeScript. tsconfig excludes node_modules/dist/scripts so tsc
+# only walks src/.
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build
+
+# Pre-compile the bind() interceptor so the runtime image doesn't need a
+# C toolchain. Without this, ensureNativeShim() would silently degrade to
+# env-only mode in the official container — and parallel agents that
+# hardcode `bind(3000)` would collide on the same kernel inside the
+# shared network namespace. See PORT-SHIM.md §6.4.
+#
+# gcc/libc6-dev live ONLY in the builder stage; the runtime never sees
+# them. The resulting .so (~16KB) is what gets copied forward.
+COPY native /build/native
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc libc6-dev \
+    && cc -O2 -fPIC -Wall -shared \
+        -o /build/native/port-shim/huu-port-shim.so \
+        /build/native/port-shim/port-shim.c \
+        -ldl -lpthread \
+    && rm -rf /var/lib/apt/lists/*
+
+# Drop devDependencies so the runtime stage can copy a lean node_modules.
+RUN --mount=type=cache,target=/root/.npm \
+    npm prune --omit=dev
+
+# Strip artifacts node won't load at runtime: source maps (~35MB across
+# the LLM provider SDKs we bundle) and per-package READMEs (~5MB). We
+# preserve LICENSE/COPYING files for redistribution compliance.
+# .d.ts files are intentionally kept — some packages chain require()
+# resolution through them in production.
+RUN find node_modules -type f \( \
+        -name "*.map" \
+        -o -name "*.md" \
+        -o -name "*.markdown" \
+        -o -name "CHANGELOG*" \
+        -o -name "HISTORY*" \
+    \) ! -iname "LICENSE*" ! -iname "COPYING*" -delete \
+    && find node_modules -type d -empty -delete
+
+
+# ─────────── Stage 2: runtime ───────────
+FROM node:20-slim AS runtime
+
+# Build arg controls whether openssh-client ships in the image.
+# - INCLUDE_SSH=true (default): allows pipelines whose git remotes use
+#   `git@github.com:` URLs and SSH-based credential helpers to push.
+# - INCLUDE_SSH=false: ~50MB smaller image (`huu:slim`). Pick this when
+#   the repo only uses HTTPS remotes or when the agent never pushes.
+ARG INCLUDE_SSH=true
+
+# - tini: PID 1 init that forwards SIGINT/SIGTERM to the Node process.
+#   Without it, Ctrl+C from `docker run -it` does not reach the TUI's signal
+#   handlers and can leave the host terminal in raw mode.
+# - git: huu's whole point — `git worktree`, branch ops, merges.
+# - ca-certificates: HTTPS to OpenRouter.
+# - openssh-client: optional via INCLUDE_SSH build arg (see above).
+#
+# Layer-cleanup pass:
+# - Drop yarn (~7MB): the node:20-slim base ships yarn v1 as a tarball
+#   under /opt; huu uses npm exclusively, so it's pure overhead.
+# - Strip locale/doc/man (~30MB): no shell user inside this container
+#   needs man pages or POSIX locales beyond C/UTF-8.
+# All in a single RUN to avoid baking the deletions into a separate
+# layer that still inflates the image.
+RUN set -eux; \
+    extra_pkgs=""; \
+    if [ "$INCLUDE_SSH" = "true" ]; then extra_pkgs="openssh-client"; fi; \
+    apt-get update && apt-get install -y --no-install-recommends \
+        tini \
+        git \
+        ca-certificates \
+        $extra_pkgs \
+    && rm -rf /opt/yarn-* /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* \
+              /usr/share/doc/* /usr/share/man/* /usr/share/locale/*
+
+# safe.directory '*' at the system level lets git operate against bind-mounted
+# host repos owned by a UID different from the container's process UID. This
+# is the pragmatic choice for a dev tool image — users running `--user` to
+# match host UID/GID get correct ownership; users running as the default
+# (root) still get a working git. See docker-roadmap.md §4.2.
+#
+# Wildcard support in safe.directory was added in git 2.36 (released May
+# 2022); Debian Bookworm ships git ≥2.39, so this is portable.
+RUN git config --system --add safe.directory '*' \
+    && git config --system init.defaultBranch main
+
+# Mirror the non-interactive git env that huu sets at runtime via
+# nonInteractiveGitEnv() in src/git/git-client.ts. Anything the user runs
+# directly inside the container (e.g., `docker compose run huu sh`) also
+# inherits these — no surprise hangs on credential prompts.
+ENV GIT_TERMINAL_PROMPT=0 \
+    GCM_INTERACTIVE=Never \
+    NODE_ENV=production \
+    TERM=xterm-256color \
+    HUU_IN_CONTAINER=1
+
+WORKDIR /opt/huu
+
+# Pull only what the runtime needs from the builder.
+COPY --from=builder /build/package.json /build/package-lock.json ./
+COPY --from=builder /build/node_modules ./node_modules
+COPY --from=builder /build/dist ./dist
+COPY recommended-models.json ./
+
+# Reference pipelines bundled at a known path. Tiny in absolute size
+# (~10KB) but high in onboarding value: a user with the image on disk
+# can copy a curated pipeline out without cloning the repo:
+#   docker run --rm ghcr.io/.../huu:latest \
+#     cat /opt/huu/cookbook/demo-rapida.pipeline.json \
+#     > demo-rapida.pipeline.json
+# Path also surfaces via HUU_COOKBOOK_DIR for future programmatic use.
+COPY pipelines/ /opt/huu/cookbook/
+ENV HUU_COOKBOOK_DIR=/opt/huu/cookbook
+
+# Pre-built bind() interceptor from the builder stage. Pointing
+# HUU_NATIVE_SHIM_PATH at this absolute path lets ensureNativeShim()
+# skip the on-demand `cc` invocation entirely — the runtime image
+# intentionally has no compiler. The .so is ~16KB.
+COPY --from=builder /build/native/port-shim/huu-port-shim.so /opt/huu/native/huu-port-shim.so
+ENV HUU_NATIVE_SHIM_PATH=/opt/huu/native/huu-port-shim.so
+
+# Symlink so `huu ...` resolves anywhere on PATH inside the container.
+RUN ln -s /opt/huu/dist/cli.js /usr/local/bin/huu
+
+# Entrypoint script applies last-mile fixups (HOME synthesis when the
+# user passes --user with a UID not in /etc/passwd, fallback safe.directory
+# at the user level).
+COPY docker/entrypoint.sh /usr/local/bin/huu-entrypoint
+RUN chmod +x /usr/local/bin/huu-entrypoint
+
+# tini handles signals and reaps zombies. Anything supplied as CMD or as
+# `docker run <image> ...` arguments is forwarded by the entrypoint.
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/huu-entrypoint"]
+CMD ["huu", "--help"]
+
+# Container health: the TUI launcher writes /tmp/huu/active with the
+# repo path of the running pipeline. The probe sources that path,
+# cd's into it, and asks `huu status --liveness` whether the run is
+# stalled or crashed (both emit exit 1). If the sentinel is absent
+# (idle container, fresh start, scaffolding-only invocation), exit 0
+# — an idle container isn't unhealthy.
+#
+# --start-period gives the run a generous window to write the sentinel
+# before failures count. --interval / --timeout / --retries are tuned
+# for overnight pipelines where hours of progress are normal between
+# stage transitions.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD sh -c 'if [ -f /tmp/huu/active ]; then \
+        cd "$(cat /tmp/huu/active)" && exec huu status --liveness; \
+    else \
+        exit 0; \
+    fi'
+
+# OCI labels for discoverability on registries / `docker inspect`.
+LABEL org.opencontainers.image.title="huu" \
+      org.opencontainers.image.description="Humans Underwrite Undertakings — guided pipeline TUI" \
+      org.opencontainers.image.source="https://github.com/frederico-kluser/huu" \
+      org.opencontainers.image.licenses="Apache-2.0"

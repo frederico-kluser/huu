@@ -1,0 +1,74 @@
+{
+  "name": "huu-pipe",
+  "version": "0.3.0",
+  "description": "huu (Humans Underwrite Undertakings) — guided-execution TUI that runs LLM agent pipelines in parallel git worktrees, with serial reproducible merges stage-by-stage.",
+  "author": "Frederico Guilherme Kluser de Oliveira <kluserhuu@gmail.com>",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "huu": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "recommended-models.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/frederico-kluser/huu.git"
+  },
+  "homepage": "https://github.com/frederico-kluser/huu#readme",
+  "bugs": {
+    "url": "https://github.com/frederico-kluser/huu/issues"
+  },
+  "keywords": [
+    "cli",
+    "llm",
+    "ai",
+    "pipeline",
+    "git",
+    "worktree",
+    "agent",
+    "parallel",
+    "tui",
+    "orchestrator",
+    "automation"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "tsx --watch src/cli.tsx",
+    "start": "tsx src/cli.tsx",
+    "build": "tsc && chmod +x dist/cli.js",
+    "build:link": "npm run build && npm link && tsx scripts/link-pipelines.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "release-notes": "git log --pretty=format:'- %s' \"v$(node -p \"require('./package.json').version\")..HEAD\" 2>/dev/null || git log --pretty=format:'- %s'",
+    "prepack": "find dist -type f \\( -name '*.test.*' -o -name '*.spec.*' \\) -delete"
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "^0.70.6",
+    "@mariozechner/pi-coding-agent": "^0.70.6",
+    "ink": "^4.4.1",
+    "ink-select-input": "^5.0.0",
+    "ink-text-input": "^5.0.1",
+    "model-selector-ink": "^3.1.0",
+    "nanoid": "^5.0.0",
+    "react": "^18.3.1",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.5"
+  }
+}

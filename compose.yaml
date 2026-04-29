@@ -1,0 +1,60 @@
+# huu — Docker Compose definition for local dev runs.
+#
+# Use:
+#   docker compose run --rm huu                       # opens the TUI welcome
+#   docker compose run --rm huu run pipeline.json     # runs a pipeline
+#   docker compose run --rm huu --stub                # stub agent, no LLM
+#
+# `run` (not `up`) is required because huu is an interactive TUI: `up` does
+# not allocate a TTY by default, and `up --attach` does not wire stdin to
+# the container.
+
+services:
+  huu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: huu:dev
+
+    # Ink (React for terminals) needs both a TTY and stdin; without these,
+    # process.stdin.isTTY is false, setRawMode is a no-op, and the keyboard
+    # silently stops working while the screen still renders.
+    tty: true
+    stdin_open: true
+
+    # Mount the host repo at the SAME absolute path inside the container.
+    # git stores absolute paths in .git/worktrees/<name>/gitdir; mounting
+    # under a different prefix would leave host-visible worktree pointers
+    # that resolve nowhere when the container exits.
+    # See docker-roadmap.md §4.1.
+    working_dir: ${PWD}
+    volumes:
+      - ${PWD}:${PWD}
+
+    environment:
+      # Pass-through from the host shell. Never bake secrets into the image.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      HUU_CHECK_PUSH: ${HUU_CHECK_PUSH:-}
+      # Ink reads TERM to decide colors. Compose is more conservative than
+      # `docker run -t` about propagating the host TERM, so set it here.
+      TERM: xterm-256color
+
+    # Belt-and-suspenders alongside tini in the image: `init: true` swaps
+    # in Docker's built-in init if for any reason the entrypoint chain is
+    # rewritten.
+    init: true
+
+    # Match host UID/GID by default. HUU_UID / HUU_GID are read FIRST so
+    # the user can override on platforms where id(1) is the wrong source
+    # (rare). Falls back to 1000:1000 — the standard non-root UID on
+    # Debian-family hosts and what the node:20-slim base ships with.
+    #
+    # Why not ${UID:-1000}: $UID is bash-specific and not exported in
+    # zsh/fish, so it arrives empty here. Requiring HUU_UID makes the
+    # contract shell-agnostic; defaulting to 1000 keeps the canonical
+    # `docker compose run` path working without env exports on hosts
+    # whose primary user is UID 1000.
+    #
+    # Use `scripts/huu-compose` as a wrapper to inject the host's UID/GID
+    # via id(1) automatically — required for hosts whose user is not 1000.
+    user: "${HUU_UID:-1000}:${HUU_GID:-1000}"
