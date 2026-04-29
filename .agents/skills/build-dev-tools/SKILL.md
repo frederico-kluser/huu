@@ -18,7 +18,7 @@ huu project.
 - Use `npm run dev` for development with hot-reload (tsx --watch)
 - Use `npm start` to run without compiling
 - Use `npm run build` to compile TypeScript → `dist/` and make `dist/cli.js` executable
-- Use `npm test` to run the full Vitest suite (covers `lib/` — including `langchain-client` and `refinement-prompts` for interactive refinement —, `git/branch-namer`, and orchestrator/pipeline-integration paths)
+- Use `npm test` to run the full Vitest suite (12 test files covering lib, git/branch-namer, and orchestrator/pipeline-integration paths)
 - Use `npm run typecheck` for fast validation without emitting files
 - Use `npm run release-notes` to print commits since the current `package.json` version (helps draft `CHANGELOG.md` entries — see release procedure in `AGENTS.md`)
 - Set `HUU_NO_DOCKER=1` while developing huu itself — without it, the global `huu` binary auto-execs into the published Docker image and ignores your local source

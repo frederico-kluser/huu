@@ -21,7 +21,6 @@ export function supportsThinking(modelId: string): boolean {
     'xiaomi/mimo',
     'deepseek/deepseek-v3',
     'moonshot/kimi-k2',
-    'moonshotai/kimi-k2',
     'qwen/qwen3',
   ];
   return thinkingPrefixes.some((p) => modelId.startsWith(p));

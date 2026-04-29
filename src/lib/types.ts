@@ -28,18 +28,6 @@ export interface PromptStep {
   modelId?: string;
   /** See StepScope. Undefined = `flexible` (back-compat with v0.3.x pipelines). */
   scope?: StepScope;
-  /**
-   * When true, the orchestrator pauses before spawning agents and asks the UI
-   * to run a refinement chat (LangChain.js + OpenRouter). The chat's synthesized
-   * output replaces `prompt` for this run only — the saved Pipeline is unchanged.
-   */
-  interactive?: boolean;
-  /**
-   * Model used by the refinement chat. Defaults to `moonshotai/kimi-k2.6` when
-   * `interactive` is true and this is unset. Has no effect when `interactive` is
-   * false.
-   */
-  refinementModel?: string;
 }
 
 export interface Pipeline {

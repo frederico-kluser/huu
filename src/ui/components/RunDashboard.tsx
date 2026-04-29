@@ -1,21 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { pkg } from '../../lib/package-info.js';
 import { Box, Text, useInput, useStdout } from 'ink';
-import type { AppConfig, OrchestratorResult, OrchestratorState, Pipeline, PromptStep } from '../../lib/types.js';
+import type { AppConfig, OrchestratorResult, OrchestratorState, Pipeline } from '../../lib/types.js';
 import { Orchestrator } from '../../orchestrator/index.js';
 import type { AgentFactory } from '../../orchestrator/types.js';
 import { RunKanban } from './RunKanban.js';
 import { RunModal } from './RunModal.js';
 import { LogArea } from './LogArea.js';
-import { InteractiveStep } from './InteractiveStep.js';
 import { log as dlog, bump as dbump } from '../../lib/debug-logger.js';
-
-interface PendingInteractive {
-  step: PromptStep;
-  stageIndex: number;
-  resolve: (refined: string) => void;
-  reject: (reason: Error) => void;
-}
 
 // Width of the right-side log column. Below this threshold of total terminal
 // columns the sidebar is hidden so the kanban still has room to breathe;
@@ -58,13 +50,6 @@ export function RunDashboard({
   onComplete,
   onAbort,
 }: Props): React.JSX.Element {
-  // Pending interactive-step prompt, surfaced when the orchestrator pauses
-  // for an interactive stage. The promise stored here is resolved by
-  // <InteractiveStep>'s onComplete (refined prompt) or rejected by onCancel.
-  const [pendingInteractive, setPendingInteractive] = useState<PendingInteractive | null>(null);
-  const pendingInteractiveRef = useRef<PendingInteractive | null>(null);
-  pendingInteractiveRef.current = pendingInteractive;
-
   // Create the Orchestrator exactly once per mount. Parent re-renders pass new
   // identities for `config`/callbacks; depending on those would rebuild the
   // orchestrator on every state emission and reset `instanceCount` to its
@@ -74,10 +59,6 @@ export function RunDashboard({
       new Orchestrator(config, pipeline, cwd, agentFactory, {
         conflictResolverFactory,
         autoScale,
-        onInteractiveStep: (step, stageIndex) =>
-          new Promise<string>((resolve, reject) => {
-            setPendingInteractive({ step, stageIndex, resolve, reject });
-          }),
       }),
   );
   const [state, setState] = useState<OrchestratorState | null>(null);
@@ -162,14 +143,6 @@ export function RunDashboard({
       if (!abortedRef.current) {
         abortedRef.current = true;
         orch.abort();
-      }
-      // A pending interactive step holds a Promise the orchestrator is
-      // awaiting. Without rejecting it here, the awaited stage never returns
-      // and `orch.start()` hangs forever after unmount.
-      const p = pendingInteractiveRef.current;
-      if (p) {
-        pendingInteractiveRef.current = null;
-        p.reject(new Error('run dashboard unmounted'));
       }
     };
   }, [orch]);
@@ -360,7 +333,7 @@ export function RunDashboard({
     [orch],
   );
 
-  useInput(handleInput, { isActive: !pendingInteractive });
+  useInput(handleInput);
 
   const handleModalClose = useCallback(() => setModalOpen(false), []);
 
@@ -397,31 +370,6 @@ export function RunDashboard({
           <Box marginTop={1}><Text dimColor><Text bold>Q</Text> quit</Text></Box>
         </Box>
       </Box>
-    );
-  }
-
-  if (pendingInteractive) {
-    const handleComplete = (refined: string): void => {
-      const p = pendingInteractiveRef.current;
-      pendingInteractiveRef.current = null;
-      setPendingInteractive(null);
-      p?.resolve(refined);
-    };
-    const handleCancelInteractive = (): void => {
-      const p = pendingInteractiveRef.current;
-      pendingInteractiveRef.current = null;
-      setPendingInteractive(null);
-      p?.reject(new Error('refinement cancelled by user'));
-    };
-    return (
-      <InteractiveStep
-        step={pendingInteractive.step}
-        stageIndex={pendingInteractive.stageIndex}
-        totalStages={pipeline.steps.length}
-        apiKey={config.apiKey}
-        onComplete={handleComplete}
-        onCancel={handleCancelInteractive}
-      />
     );
   }
 

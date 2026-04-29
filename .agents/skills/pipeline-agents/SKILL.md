@@ -39,13 +39,6 @@ Documents how pipelines are defined, decomposed into tasks, and how agents
    - `per-file` — require explicit file selection. Editor disallows the
      whole-project shortcut and enables `ENTER` on Files to open the picker.
    - `flexible` — legacy free-form (`F` to pick, `W` for whole-project).
-5. Optional `interactive: true` → orchestrator pauses at this stage and opens a
-   refinement chat (LangChain.js + OpenRouter, default `moonshotai/kimi-k2.6`).
-   The chat's synthesized output replaces `prompt` for the run; agents then
-   execute that refined prompt as usual. `$file` substitution still happens
-   at agent-spawn time, never in the chat UI. Override the refinement model
-   per step with `refinementModel`. `interactive` and `scope` are orthogonal —
-   the refined prompt still respects the step's scope at decompose time.
 
 ### Decomposition
 - `task-decomposer.ts`: assigns sequential `agentId`

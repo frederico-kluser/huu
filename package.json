@@ -55,8 +55,6 @@
     "deploy": "tsx scripts/deploy.ts"
   },
   "dependencies": {
-    "@langchain/core": "^1.1.42",
-    "@langchain/openai": "^1.4.5",
     "@mariozechner/pi-ai": "^0.70.6",
     "@mariozechner/pi-coding-agent": "^0.70.6",
     "ink": "^4.4.1",
