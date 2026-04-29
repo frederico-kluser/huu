@@ -7,6 +7,8 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-29
+
 ### Added
 
 - **Interactive refinement stages.** Steps marked `interactive: true` pause the
@@ -64,5 +66,7 @@ Initial public release. Available on npm as `huu-pipe`
   `--user "$(id -u):$(id -g)"`.
 - `safe.directory '*'` set system-wide in the image.
 
-[Unreleased]: https://github.com/frederico-kluser/huu/compare/v0.3.0...HEAD
+
+[Unreleased]: https://github.com/frederico-kluser/huu/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/frederico-kluser/huu/releases/tag/v0.3.1
 [0.3.0]: https://github.com/frederico-kluser/huu/releases/tag/v0.3.0
