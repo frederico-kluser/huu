@@ -337,7 +337,7 @@ function SettingsEditor({ initial, onSave, onCancel }: SettingsEditorProps): Rea
     }
   });
 
-  const fieldRow = (
+  const     fieldRow = (
     label: string,
     suffix: string,
     f: SettingsField,
@@ -345,7 +345,8 @@ function SettingsEditor({ initial, onSave, onCancel }: SettingsEditorProps): Rea
     setValue: (v: string) => void,
     isValid: boolean,
   ) => (
-    <Box marginTop={1} marginLeft={field === f ? 2 : 0}>
+    <Box marginTop={1}>
+      <Text color="cyan">{field === f ? '› ' : '  '}</Text>
       <Box width={30}>
         <Text color={field === f ? 'cyan' : undefined}>{label}</Text>
       </Box>
