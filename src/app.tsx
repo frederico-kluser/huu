@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import pkg from '../package.json' with { type: 'json' };
+import { pkg } from './lib/package-info.js';
 import { Box, Text, useApp, useInput, useStdout } from 'ink';
 import { join } from 'node:path';
 import { ModelSelectorOverlay } from './ui/components/ModelSelectorOverlay.js';

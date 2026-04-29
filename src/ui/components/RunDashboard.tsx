@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import pkg from '../../../package.json' with { type: 'json' };
+import { pkg } from '../../lib/package-info.js';
 import { Box, Text, useInput, useStdout } from 'ink';
 import type { AppConfig, OrchestratorResult, OrchestratorState, Pipeline, PromptStep } from '../../lib/types.js';
 import { Orchestrator } from '../../orchestrator/index.js';
