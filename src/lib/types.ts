@@ -186,7 +186,7 @@ export interface AgentStatus {
 
 export interface AutoScaleStatus {
   enabled: boolean;
-  state: 'NORMAL' | 'SCALING_UP' | 'BACKING_OFF' | 'COOLDOWN';
+  state: 'NORMAL' | 'SCALING_UP' | 'BACKING_OFF' | 'COOLDOWN' | 'DESTROYING';
   cooldownRemainingMs: number;
   cpuPercent: number;
   ramPercent: number;
