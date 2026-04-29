@@ -35,6 +35,8 @@ import {
   writeAgentEnvFile,
 } from './agent-env.js';
 import { ensureNativeShim, type NativeShim } from './native-shim.js';
+import { AutoScaler } from './auto-scaler.js';
+import { getSystemMetrics } from '../lib/resource-monitor.js';
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { log as dlog } from '../lib/debug-logger.js';
@@ -111,6 +113,12 @@ export interface OrchestratorOptions {
    * Reject (or throw) to cancel the stage.
    */
   onInteractiveStep?: (step: PromptStep, stageIndex: number) => Promise<string>;
+  /**
+   * If true, enables auto-scaling of agent concurrency based on system
+   * resource metrics. When active, the orchestrator dynamically adjusts
+   * the worker pool size instead of using a fixed concurrency value.
+   */
+  autoScale?: boolean;
 }
 
 /**
@@ -153,6 +161,8 @@ export class Orchestrator {
   private poolWakeup: (() => void) | null = null;
   private portAllocator: PortAllocator;
   private nativeShim: NativeShim | null = null;
+  private autoScaler: AutoScaler | null = null;
+  private autoScaleDisabledByUser = false;
 
   constructor(
     private config: AppConfig,
@@ -172,6 +182,11 @@ export class Orchestrator {
       enabled: pipeline.portAllocation?.enabled ?? true,
       maxAgents: MAX_INSTANCES,
     });
+    if (options.autoScale === true) {
+      this.autoScaler = new AutoScaler({
+        resourceMonitor: getSystemMetrics,
+      });
+    }
   }
 
   subscribe(handler: OrchestratorSubscriber): () => void {
@@ -197,6 +212,7 @@ export class Orchestrator {
       totalStages: this.totalStages,
       pendingTaskCount: this.pendingTasks.length,
       activeAgentCount: this.activeAgents.size,
+      autoScale: this.autoScaler?.getStatus(),
     };
   }
 
@@ -215,6 +231,28 @@ export class Orchestrator {
     this.instanceCount = clamped;
     this.log({ level: 'info', message: `concurrency set to ${clamped}` });
     this.poolWakeup?.();
+    this.emit();
+  }
+
+  enableAutoScale(): void {
+    if (this.autoScaler) return;
+    this.autoScaler = new AutoScaler({
+      resourceMonitor: getSystemMetrics,
+    });
+    this.autoScaleDisabledByUser = false;
+    this.autoScaler.start();
+    this.portAllocator.setMaxAgents(AUTO_SCALE_MAX_INSTANCES);
+    this.log({ level: 'info', message: 'auto-scale enabled' });
+    this.poolWakeup?.();
+    this.emit();
+  }
+
+  disableAutoScale(): void {
+    if (!this.autoScaler) return;
+    this.autoScaler.stop();
+    this.autoScaler = null;
+    this.autoScaleDisabledByUser = true;
+    this.log({ level: 'info', message: 'auto-scale disabled' });
     this.emit();
   }
 
@@ -289,6 +327,7 @@ export class Orchestrator {
 
     const task = agent.task;
     this.pendingTasks.unshift(task);
+    this.autoScaler?.notifyAgentDestroyed();
     this.poolWakeup?.();
   }
 
@@ -389,6 +428,11 @@ export class Orchestrator {
         this.totalTasksAcrossStages += stageTasks.length;
       }
       this.emit();
+
+      if (this.autoScaler) {
+        this.autoScaler.start();
+        this.portAllocator.setMaxAgents(AUTO_SCALE_MAX_INSTANCES);
+      }
 
       for (let stageIdx = 0; stageIdx < this.totalStages; stageIdx++) {
         if (this.aborted) break;
@@ -517,6 +561,9 @@ export class Orchestrator {
       this.emit();
       throw err;
     } finally {
+      if (this.autoScaler) {
+        this.autoScaler.stop();
+      }
       // Persist run logs to <repoRoot>/.huu/. Runs without a manifest (failed
       // before reaching that point — e.g. preflight invalid) are not flushed.
       if (this.runLogger && this.manifest) {
@@ -547,10 +594,17 @@ export class Orchestrator {
       !this.aborted &&
       (this.pendingTasks.length > 0 || this.activeAgents.size > 0 || this.spawningIds.size > 0 || this.finalizingIds.size > 0)
     ) {
+      if (this.autoScaler) {
+        this.instanceCount = this.autoScaler.targetConcurrency();
+      }
+
       // Spawn replacements up to instanceCount
       const busyCount = this.activeAgents.size + this.spawningIds.size;
       const slotsAvailable = Math.max(0, this.instanceCount - busyCount);
       for (let i = 0; i < slotsAvailable && this.pendingTasks.length > 0; i++) {
+        if (this.autoScaler && !this.autoScaler.shouldSpawn()) {
+          break;
+        }
         const task = this.pendingTasks.shift()!;
         // spawnAndRun owns its own try/catches; this outer .catch() is the
         // safety net for an error that escapes ALL of them — typically a
@@ -879,6 +933,7 @@ export class Orchestrator {
       this.portAllocator.release(agentId);
       this.completedTasks++;
       this.appendManifestEntry(agentId);
+      this.autoScaler?.notifyAgentCompleted();
       this.emit();
     }
   }
