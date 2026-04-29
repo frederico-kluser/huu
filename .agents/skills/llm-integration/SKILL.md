@@ -57,29 +57,6 @@ Heuristic based on modelId prefixes:
 - Gemini: `google/gemini-2.5`, `google/gemini-3`
 - GLM: `z-ai/glm-z1`
 
-### Interactive refinement (LangChain.js)
-
-Steps with `interactive: true` open a multi-turn chat BEFORE the stage runs.
-The chat is driven by `lib/langchain-client.ts` (LangChain.js `ChatOpenAI`
-configured for OpenRouter via `baseURL: https://openrouter.ai/api/v1`). The
-default model is `moonshotai/kimi-k2.6` and can be overridden per step via
-`refinementModel`. The synthesized output replaces `step.prompt` for that
-run only — the saved Pipeline is unchanged.
-
-- API key: same `resolveOpenRouterApiKey()` path as the agent factory.
-- Stub mode: `HUU_LANGCHAIN_STUB=1` OR `apiKey === 'stub'` returns a deterministic
-  fake chat — no network. Auto-applied by `--stub` runs since the TUI passes
-  `'stub'` as the apiKey.
-- Reasoning: `kimi-k2.6` reasoning is OFF by default (extra tokens billed).
-  Toggle via `createRefinementChat({ reasoning: true })`.
-- The refinement chat does NOT spawn worktrees, agents, or git operations —
-  it only converses with the user.
-- Scope-aware synthesis: the refiner reads `step.scope` (or falls back to
-  `files.length` for legacy flexible) to decide whether to emit a
-  whole-project prompt (no `$file`) or a per-file template (must use `$file`).
-  See `src/lib/refinement-prompts.ts` — both `buildRefinerSystemPrompt` and
-  `buildSynthesisRequest` branch on the runtime mode.
-
 ## Gotchas
 
 - `@mariozechner/pi-coding-agent` and `@mariozechner/pi-ai` use `latest` version.
@@ -88,6 +65,3 @@ run only — the saved Pipeline is unchanged.
 - There is no per-step model override — a single model for the entire run.
 - The integration agent (conflict resolution) uses the SAME model as the run.
 - `openrouter.ts` caches model capabilities and API key validation.
-- LangChain.js (`@langchain/openai`, `@langchain/core`) is used ONLY by the
-  interactive-refinement path. Pi SDK still drives the coding agents — the two
-  coexist without sharing any HTTP client.

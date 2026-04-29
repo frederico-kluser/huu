@@ -89,39 +89,6 @@ describe('pipeline-io', () => {
     expect(listPipelines(join(tmp, 'nonexistent'))).toEqual([]);
   });
 
-  it('round-trips an interactive step with refinementModel', () => {
-    const original: Pipeline = {
-      name: 'interactive-demo',
-      steps: [
-        {
-          name: 'Refine',
-          prompt: 'desejo X',
-          files: ['src/a.ts'],
-          interactive: true,
-          refinementModel: 'moonshotai/kimi-k2.6',
-        },
-      ],
-    };
-    const file = join(tmp, 'interactive.json');
-    exportPipeline(original, file);
-    const restored = importPipeline(file);
-    expect(restored.steps[0].interactive).toBe(true);
-    expect(restored.steps[0].refinementModel).toBe('moonshotai/kimi-k2.6');
-  });
-
-  it('accepts a step without the interactive flag (backwards-compat)', () => {
-    const file = join(tmp, 'legacy.json');
-    writeFileSync(
-      file,
-      JSON.stringify({
-        name: 'legacy',
-        steps: [{ name: 's', prompt: 'p', files: [] }],
-      }),
-    );
-    const loaded = importPipeline(file);
-    expect(loaded.steps[0].interactive).toBeUndefined();
-  });
-
   afterAll(() => {
     rmSync(tmp, { recursive: true, force: true });
   });

@@ -5,7 +5,7 @@ import type { PromptStep, StepScope } from '../../lib/types.js';
 import { FileMultiSelect } from './FileMultiSelect.js';
 import { ModelSelectorOverlay } from './ModelSelectorOverlay.js';
 
-type Field = 'name' | 'prompt' | 'scope' | 'files' | 'model' | 'interactive';
+type Field = 'name' | 'prompt' | 'scope' | 'files' | 'model';
 type EditorMode = 'selecting' | 'editing';
 
 interface Props {
@@ -97,7 +97,6 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
 
     if (key.upArrow) {
       setField((f) =>
-        f === 'interactive' ? 'model' :
         f === 'model' ? 'files' :
         f === 'files' ? 'scope' :
         f === 'scope' ? 'prompt' :
@@ -110,8 +109,7 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
         f === 'prompt' ? 'scope' :
         f === 'scope' ? 'files' :
         f === 'files' ? 'model' :
-        f === 'model' ? 'interactive' :
-        'interactive',
+        'model',
       );
     } else if (key.tab) {
       setField((f) =>
@@ -119,7 +117,6 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
         f === 'prompt' ? 'scope' :
         f === 'scope' ? 'files' :
         f === 'files' ? 'model' :
-        f === 'model' ? 'interactive' :
         'name',
       );
     } else if (key.return) {
@@ -138,8 +135,6 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
         }
       } else if (field === 'model') {
         setPickingModel(true);
-      } else if (field === 'interactive') {
-        setStep({ ...step, interactive: !step.interactive });
       }
     } else if (field === 'scope') {
       if (input === 'p' || input === 'P') applyScope('project');
@@ -167,10 +162,6 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
       } else if (input === 'c' || input === 'C') {
         const { modelId: _omit, ...rest } = step;
         setStep(rest);
-      }
-    } else if (field === 'interactive') {
-      if (input === 't' || input === 'T' || input === ' ') {
-        setStep({ ...step, interactive: !step.interactive });
       }
     }
   });
@@ -207,26 +198,11 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
     );
   }
 
-  const promptText = step.prompt
+  const promptDisplay = step.prompt
     ? step.prompt.length > 60
       ? step.prompt.slice(0, 60) + '...'
       : step.prompt
     : null;
-  // Highlight the literal $file token in green so the user sees where the
-  // orchestrator will substitute the agent's file. Stays literal in the text;
-  // we only color it for visibility.
-  const promptDisplayParts: React.JSX.Element[] | null = promptText
-    ? promptText.split(/(\$file)/g).map((seg, i) =>
-        seg === '$file' ? (
-          <Text key={i} bold color="green">
-            $file
-          </Text>
-        ) : (
-          <Text key={i}>{seg}</Text>
-        ),
-      )
-    : null;
-  const fileToken = step.files.length > 0 && !step.prompt.includes('$file');
 
   const scopeColor =
     scope === 'project' ? 'magenta' :
@@ -267,10 +243,7 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
               placeholder="Use $file when files are selected"
             />
           ) : (
-            <Text>
-              {promptDisplayParts ?? <Text dimColor>(empty)</Text>}
-              {fileToken && <Text dimColor>  ⚠ files set but $file not in prompt</Text>}
-            </Text>
+            <Text>{promptDisplay || <Text dimColor>(empty)</Text>}</Text>
           )}
         </Box>
 
@@ -322,19 +295,6 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
           )}
         </Box>
 
-        <Box marginTop={1}>
-          <Text color="cyan">{field === 'interactive' ? '› ' : '  '}</Text>
-          <Box width={12}><Text color={field === 'interactive' ? 'cyan' : undefined}>Interactive:</Text></Box>
-          {step.interactive ? (
-            <Text color="magenta">⌬ ON — refinement chat opens before this stage runs</Text>
-          ) : (
-            <Text dimColor>off — stage runs the prompt as-is</Text>
-          )}
-          {field === 'interactive' && (
-            <Text dimColor>   <Text bold>T</Text>/<Text bold>SPACE</Text>/<Text bold>ENTER</Text> toggle</Text>
-          )}
-        </Box>
-
         <Box marginTop={2} flexDirection="column">
           {editorMode === 'selecting' ? (
             <>
@@ -351,9 +311,6 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
                 )}
                 {field === 'model' && (
                   <> · <Text bold>M</Text> pick model · <Text bold>C</Text> use global default</>
-                )}
-                {field === 'interactive' && (
-                  <> · <Text bold>T</Text> toggle refinement chat</>
                 )}
               </Text>
               <Text>

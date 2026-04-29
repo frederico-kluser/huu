@@ -310,7 +310,6 @@ Bundled pipelines:
 | `example.pipeline.json` (pt-BR) | Adds JSDoc headers and writes a CHANGELOG entry. |
 | `pipelines/demo-rapida.pipeline.json` (pt-BR) | Sets up tests, writes one test per file, runs three audits (security, quality, performance). |
 | `pipelines/testes-seguranca.pipeline.json` (pt-BR) | Security-focused regression suite. |
-| `pipelines/refinamento-interativo.pipeline.json` (pt-BR) | Demo of `interactive: true`: a refinement chat (Kimi K2.6) shapes the first stage's prompt, then a second per-file stage applies the result. |
 
 ---
 
@@ -354,8 +353,6 @@ Pipelines are persisted as `huu-pipeline-v1` JSON. The full shape:
 | `steps[].files` | string[] | Repo-relative paths. Empty array runs a single whole-project task. |
 | `steps[].scope` | `"project" \| "per-file" \| "flexible"`? | How the step decomposes into agents. `project` = one whole-project task (Files locked). `per-file` = one task per selected file (Files mandatory). `flexible` = user picks at edit time (legacy behavior). Omitted = `flexible`. |
 | `steps[].modelId` | string? | Per-step model override; defaults to the run-level pick. Mix a strong reasoning model for planning with a cheaper one for mechanical edits. |
-| `steps[].interactive` | boolean? | When `true`, the orchestrator pauses before this stage and opens a multi-turn refinement chat (LangChain.js + OpenRouter). The chat's synthesized output replaces `prompt` for this run only — the saved JSON is never mutated. Use it for steps where you want to iterate on the prompt with the model before fanning out into agents. |
-| `steps[].refinementModel` | string? | Model used by the refinement chat. Defaults to `moonshotai/kimi-k2.6` when `interactive` is `true`. Ignored when `interactive` is unset/false. |
 | `cardTimeoutMs` | number? | Per-card timeout for whole-project / multi-file cards. Default `600000` (10 min). |
 | `singleFileCardTimeoutMs` | number? | Per-card timeout for single-file cards. Default `300000` (5 min). |
 | `maxRetries` | number? | Retries per card on timeout/failure, in fresh worktrees off the current integration HEAD. Default `1`. |

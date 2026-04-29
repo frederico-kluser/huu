@@ -12,8 +12,6 @@ const PromptStepSchema = z.object({
   files: z.array(z.string()).default([]),
   modelId: z.string().min(1).optional(),
   scope: StepScopeSchema.optional(),
-  interactive: z.boolean().optional(),
-  refinementModel: z.string().min(1).optional(),
 });
 
 const PipelineSchema = z.object({

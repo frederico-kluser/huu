@@ -37,7 +37,6 @@
 19. [Worktree, branch naming e isolamento](#19-worktree-branch-naming-e-isolamento)
 20. [Port allocator + `.env.huu` + native shim (`bind()` interceptor)](#20-port-allocator--envhuu--native-shim-bind-interceptor)
 21. [Caso especial: integration agent (resolução de conflitos)](#21-caso-especial-integration-agent-resolução-de-conflitos)
-22. [Refinement chat (LangChain.js — não é Pi)](#22-refinement-chat-langchainjs--não-é-pi)
 23. [Sinais externos: SIGINT/SIGTERM, abort, dispose](#23-sinais-externos-sigintsigterm-abort-dispose)
 24. [Token tracking & cost — caveat importante](#24-token-tracking--cost--caveat-importante)
 25. [Inspeção pós-mortem: `huu status`, `.huu/`, sentinel](#25-inspeção-pós-mortem-huu-status-huu-sentinel)
@@ -183,8 +182,6 @@ Versões pinadas em `package.json:42-50`:
 | ----------------------------------- | ---------- | ------------------------------------------------------ |
 | `@mariozechner/pi-coding-agent`     | `^0.70.6`  | Sessão de agente: tools (read/edit/write/bash), loop  |
 | `@mariozechner/pi-ai`               | `^0.70.6`  | Registry de modelos + provider OpenRouter             |
-| `@langchain/core`                   | `^1.1.42`  | Mensagens (Human/AI/System) — usado **só** no refiner |
-| `@langchain/openai`                 | `^1.4.5`   | `ChatOpenAI` apontado pra OpenRouter                  |
 | `ink` + `react`                     | `^4.4.1`   | TUI                                                    |
 | `model-selector-ink`                | `^3.1.0`   | UI overlay de seleção de modelo                       |
 | `nanoid`                            | `^5.0.0`   | runId de 8 chars                                       |
@@ -285,7 +282,6 @@ Resolução em ordem (primeiro não-vazio vence):
 | `HUU_IMAGE`          | `ghcr.io/frederico-kluser/huu:latest` | Imagem usada no re-exec |
 | `HUU_CHECK_PUSH`     | unset                | Quando `=1`, preflight faz `git push --dry-run`     |
 | `HUU_WORKTREE_BASE`  | `<repoRoot>/.huu-worktrees` | Path base alternativo pra worktrees           |
-| `HUU_LANGCHAIN_STUB` | unset                | Quando `=1`, refiner usa stub determinístico        |
 
 ### 5.3 Geradas dentro do worktree do agente
 
@@ -344,8 +340,6 @@ const PromptStepSchema = z.object({
   files: z.array(z.string()).default([]),      // [] = whole-project
   modelId: z.string().min(1).optional(),       // override por step
   scope: StepScopeSchema.optional(),           // restrição na UI editor
-  interactive: z.boolean().optional(),         // pause + refinement chat
-  refinementModel: z.string().min(1).optional(),
 });
 
 const PipelineSchema = z.object({
@@ -399,35 +393,6 @@ const PipelineFileSchema = z.union([
         "prompt": "Atualize README.md refletindo as mudanças do stage anterior.",
         "files": [],
         "scope": "project"
-      }
-    ]
-  }
-}
-```
-
-### 6.3 Pipeline com refinement chat e model override
-
-```json
-{
-  "_format": "huu-pipeline-v1",
-  "pipeline": {
-    "name": "interactive-refactor",
-    "cardTimeoutMs": 1200000,
-    "singleFileCardTimeoutMs": 600000,
-    "maxRetries": 2,
-    "steps": [
-      {
-        "name": "Refinar intenção",
-        "prompt": "Quero modernizar o lib/auth",
-        "files": ["src/lib/auth.ts"],
-        "interactive": true,
-        "refinementModel": "moonshotai/kimi-k2.6"
-      },
-      {
-        "name": "Aplicar no código",
-        "prompt": "(este texto será substituído pelo prompt sintetizado)",
-        "files": ["src/lib/auth.ts"],
-        "modelId": "anthropic/claude-sonnet-4.6"
       }
     ]
   }
@@ -507,7 +472,7 @@ const thinkingPrefixes = [
   'openai/o4',          'openai/gpt-5',          'google/gemini-2.5',
   'google/gemini-3',    'minimax/minimax-m2',    'z-ai/glm-4.6',
   'z-ai/glm-4.5',       'x-ai/grok-4',           'xiaomi/mimo',
-  'deepseek/deepseek-v3','moonshot/kimi-k2',     'moonshotai/kimi-k2',
+  'deepseek/deepseek-v3','moonshot/kimi-k2',
   'qwen/qwen3',
 ];
 // Também casa qualquer ID terminando em ":thinking".
@@ -2180,83 +2145,6 @@ como falha (a menos que `continueOnConflict: true`).
 
 ---
 
-## 22. Refinement chat (LangChain.js — não é Pi)
-
-**Importante:** o refinement chat é uma feature opcional de stages com
-`interactive: true`, e ele **NÃO usa o Pi**. Usa LangChain.js +
-`ChatOpenAI` apontando pra OpenRouter (`lib/langchain-client.ts:86-95`).
-
-Por que separar:
-
-- O Pi é otimizado pra **execução** com tools — caro pra um chat de
-  intenção.
-- O refiner é puramente conversacional, não precisa de tools, pode usar
-  modelo barato (default `moonshotai/kimi-k2.6`).
-
-### 22.1 Implementação do client
-
-```ts
-export function createRefinementChat(opts: CreateRefinementChatOptions): RefinementChat {
-  if (process.env.HUU_LANGCHAIN_STUB === '1' || opts.apiKey.trim() === 'stub') {
-    return new StubRefinementChat();
-  }
-  const apiKey = opts.apiKey.trim();
-  if (!apiKey) throw new Error('OpenRouter API key ausente.');
-  const modelId = (opts.modelId ?? DEFAULT_REFINEMENT_MODEL).trim();
-
-  const modelKwargs: Record<string, unknown> = {};
-  if (opts.reasoning) modelKwargs.reasoning = { effort: 'medium' };
-
-  const chat = new ChatOpenAI({
-    model: modelId,
-    temperature: opts.temperature ?? 0.7,
-    modelKwargs,
-    configuration: {
-      baseURL: OPENROUTER_BASE_URL,
-      apiKey,
-      defaultHeaders: OPENROUTER_HEADERS,
-    },
-  });
-
-  return {
-    modelId,
-    async invoke(messages: BaseMessage[]): Promise<AIMessage> {
-      const result = await chat.invoke(messages);
-      return result as AIMessage;
-    },
-  };
-}
-```
-
-### 22.2 Ciclo
-
-1. Step com `interactive: true` chega no orchestrator.
-2. `executeTaskPool` percebe e chama `onInteractiveStep(step, stageIdx)`
-   — handler injetado pelo `RunDashboard`.
-3. Dashboard renderiza `<InteractiveStep>` que cria a chat e dialoga com
-   o usuário (perguntas curtas, sem código).
-4. Usuário aperta `Ctrl+D` → `synthesizeAndFinish` envia uma última
-   mensagem pedindo síntese, recebe o prompt final, resolve a Promise.
-5. Orchestrator recebe `refinedPrompt`, faz `step = { ...step, prompt:
-   refinedPrompt }` e segue normalmente — agora com Pi rodando o prompt
-   refinado.
-
-### 22.3 System prompts do refiner
-
-Em `src/lib/refinement-prompts.ts`. Resumo:
-
-- **Modo whole-project** (scope=project ou flexible+files=[]): refiner é
-  instruído que o agente vai rodar UMA vez no repo. Prompt final NÃO
-  pode usar `$file`.
-- **Modo per-file**: refiner é instruído que o agente vai rodar N vezes
-  em paralelo. Prompt final DEVE ser template com `$file` literal — não
-  citar arquivos específicos da lista.
-
-Ambas as instruções aparecem dinamicamente no `buildRefinerSystemPrompt`
-e no `buildSynthesisRequest`.
-
----
-
 ## 23. Sinais externos: SIGINT/SIGTERM, abort, dispose
 
 ### 23.1 Botão `Q` no dashboard
@@ -2783,33 +2671,6 @@ it('fails the run when a merge fails for a non-conflict reason', async () => {
 });
 ```
 
-### 28.5 Test do interactive step
-
-```ts
-it('calls onInteractiveStep for interactive stages and uses the refined prompt', async () => {
-  const promptsReceived: string[] = [];
-  const recordingFactory: AgentFactory = async (task, ...) => ({
-    // …
-    async prompt(message: string): Promise<void> {
-      promptsReceived.push(message);
-      // …
-    },
-  });
-
-  const orch = new Orchestrator(/* ... */, {
-    initialConcurrency: 2,
-    onInteractiveStep: async (step, stageIdx) => {
-      return 'PROMPT-REFINADO';   // stub do refiner
-    },
-  });
-
-  const result = await orch.start();
-  expect(promptsReceived.some((p) => p.includes('PROMPT-REFINADO'))).toBe(true);
-  // Original pipeline NÃO é mutado:
-  expect(pipeline.steps[0].prompt).toBe('intent original');
-});
-```
-
 ### 28.6 Smoke pipeline — `scripts/smoke-pipeline.sh`
 
 End-to-end **real** (mas com `--stub`) que valida:
@@ -3184,15 +3045,12 @@ tem `name`+`steps`, pode passar.
 | `src/lib/api-key.ts`                             | Resolução secret → file → env                            |
 | `src/lib/openrouter.ts`                          | Fetch capabilities + key validation                      |
 | `src/lib/model-factory.ts`                       | Heurística de thinking-supports                          |
-| `src/lib/langchain-client.ts`                    | Refiner (LangChain.js, **não Pi**)                       |
-| `src/lib/refinement-prompts.ts`                  | System prompt + sintese do refiner                       |
 | `src/lib/prune.ts`                               | `huu prune` (cleanup orphan containers/cidfiles)         |
 | `src/lib/run-id.ts`                              | nanoid 8-char alphanumeric                                |
 | `src/ui/components/RunDashboard.tsx`             | Subscriber/render do OrchestratorState                   |
 | `src/ui/components/RunKanban.tsx`                | Renderer dos cards (TODO/DOING/DONE)                     |
 | `src/ui/components/RunModal.tsx`                 | Detalhe do agente focado (timeline, git, logs)           |
 | `src/ui/components/LogArea.tsx`                  | Sidebar de logs (filtrável por agentId)                  |
-| `src/ui/components/InteractiveStep.tsx`          | UI do refinement chat                                    |
 | `src/ui/components/PipelineEditor.tsx`           | Editor de pipeline (steps, files, scope)                  |
 | `src/git/git-client.ts`                          | Wrapper async sobre git (execFile)                        |
 | `src/git/worktree-manager.ts`                    | create/remove worktree per-agent + integration           |
@@ -3211,5 +3069,4 @@ tem `name`+`steps`, pode passar.
 no commit `50553d9`.
 
 **Versões:** `@mariozechner/pi-coding-agent ^0.70.6` ·
-`@mariozechner/pi-ai ^0.70.6` · `@langchain/openai ^1.4.5` ·
-`huu-pipe 0.3.0`.
+`@mariozechner/pi-ai ^0.70.6` · `huu-pipe 0.3.0`.
