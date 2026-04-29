@@ -103,6 +103,13 @@ export interface OrchestratorOptions {
    * Stub agents cannot resolve conflicts — pass `undefined` to disable.
    */
   conflictResolverFactory?: AgentFactory;
+  /**
+   * Called when a step has `interactive: true`. The consumer (RunDashboard)
+   * is expected to render a chat UI, return the synthesized prompt, and
+   * the orchestrator uses it as the step's prompt for the rest of the stage.
+   * Reject (or throw) to cancel the stage.
+   */
+  onInteractiveStep?: (step: PromptStep, stageIndex: number) => Promise<string>;
 }
 
 /**
@@ -126,6 +133,7 @@ export class Orchestrator {
   private instanceCount: number;
   private continueOnConflict: boolean;
   private conflictResolverFactory?: AgentFactory;
+  private onInteractiveStep?: (step: PromptStep, stageIndex: number) => Promise<string>;
   private startedAt = 0;
   private subscribers: Set<OrchestratorSubscriber> = new Set();
   private worktreeManager: WorktreeManager | null = null;
@@ -156,6 +164,7 @@ export class Orchestrator {
     this.instanceCount = options.initialConcurrency ?? DEFAULT_CONCURRENCY;
     this.continueOnConflict = options.continueOnConflict ?? false;
     this.conflictResolverFactory = options.conflictResolverFactory;
+    this.onInteractiveStep = options.onInteractiveStep;
     this.portAllocator = new PortAllocator({
       basePort: pipeline.portAllocation?.basePort,
       windowSize: pipeline.portAllocation?.windowSize,
@@ -329,11 +338,41 @@ export class Orchestrator {
       for (let stageIdx = 0; stageIdx < this.totalStages; stageIdx++) {
         if (this.aborted) break;
 
-        const step = this.pipeline.steps[stageIdx]!;
+        let step = this.pipeline.steps[stageIdx]!;
         const stageTasks = tasksByStage[stageIdx]!;
         this.currentStage = stageIdx + 1;
         this.log({ level: 'info', message: `=== stage ${this.currentStage}/${this.totalStages}: ${step.name}` });
         this.emit();
+
+        if (step.interactive) {
+          if (!this.onInteractiveStep) {
+            this.status = 'error';
+            this.log({
+              level: 'error',
+              message: `stage ${this.currentStage} is interactive but no onInteractiveStep handler is wired; aborting`,
+            });
+            this.emit();
+            break;
+          }
+          this.log({ level: 'info', message: `stage ${this.currentStage} is interactive — waiting for refinement chat` });
+          this.emit();
+          try {
+            const refinedPrompt = await this.onInteractiveStep(step, stageIdx);
+            if (this.aborted) break;
+            step = { ...step, prompt: refinedPrompt };
+            this.log({
+              level: 'info',
+              message: `stage ${this.currentStage} refined prompt accepted (${refinedPrompt.length} chars)`,
+            });
+            this.emit();
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.log({ level: 'warn', message: `stage ${this.currentStage} refinement cancelled: ${msg}` });
+            this.aborted = true;
+            this.emit();
+            break;
+          }
+        }
 
         await this.executeTaskPool(stageTasks, step);
 

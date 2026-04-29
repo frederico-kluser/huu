@@ -1,0 +1,21 @@
+{
+  "_format": "huu-pipeline-v1",
+  "exportedAt": "2026-04-29T00:00:00.000Z",
+  "pipeline": {
+    "name": "refinamento-interativo",
+    "steps": [
+      {
+        "name": "Refinar intenção",
+        "prompt": "Quero adicionar validação de input no formulário principal. Não tenho 100% certeza de quais regras aplicar.",
+        "files": [],
+        "interactive": true,
+        "refinementModel": "moonshotai/kimi-k2.6"
+      },
+      {
+        "name": "Aplicar nas telas",
+        "prompt": "Implemente as validações discutidas na etapa anterior em $file.",
+        "files": ["src/app.tsx"]
+      }
+    ]
+  }
+}
