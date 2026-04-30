@@ -1,12 +1,25 @@
 # Keyboard reference
 
-The entire TUI is in English. Below is the complete map.
+The entire TUI is in English (the pipeline assistant is currently in
+Portuguese, matching the recon prompts). Below is the complete map.
 
 ## Welcome
 
-- `N` new pipeline
-- `I` import from list
+- `A` open the **pipeline assistant** (guided conversational authoring; runs a four-agent project recon first)
+- `N` new pipeline (empty editor)
+- `I` import from list (`./pipelines/*.pipeline.json`)
+- `↑↓` highlight a pipeline from the discovered list · `ENTER` load it
+- `1`–`9` jump straight to the Nth discovered pipeline
 - `Q` quit
+
+## Pipeline assistant
+
+- Model picker is open first — same key map as the global model selector.
+- On the intent screen: `ENTER` start the interview · `ESC` go back.
+- During recon: `ESC` cancel and return to the intent screen.
+- During an interview question: `1`–`9` select an option; the last option is always a free-text escape hatch.
+- Free-text answer screen: `ENTER` submit · `ESC` cancel.
+- Anywhere except `pick-model`: `ESC` opens a `Y/N` confirm-cancel prompt — `Y` exits to welcome, `N` (or `ESC`) returns.
 
 ## Pipeline editor
 
@@ -20,6 +33,7 @@ The entire TUI is in English. Below is the complete map.
 ## Step editor
 
 - `↑↓` select field · `TAB` cycle (Name / Prompt / Scope / Files / Model)
+- The active field is marked by a `›` indicator on the left.
 - `ENTER` start editing the active field · `ENTER` again to confirm and move on
 - On the **Scope** row: `ENTER` cycles `flexible` → `project` → `per-file`,
   or jump directly with `P` (project), `F` (per-file), `X` (flexible).
@@ -47,7 +61,11 @@ The entire TUI is in English. Below is the complete map.
 
 ## Run dashboard
 
-- `+` / `-` adjust concurrency live (default `10`)
+- `+` / `-` adjust concurrency live (default `10`); manual changes
+  automatically disable auto-scale until you re-enable with `A`
+- `A` toggle resource-bound auto-scaling. When enabled, the header shows
+  `AUTO <NORMAL|SCALING_UP|BACKING_OFF|COOLDOWN|DESTROYING>` plus live
+  `CPU%`/`RAM%`. Also enabled at startup via `huu --auto-scale`.
 - `↑↓←→` navigate cards · `ENTER` open card details
 - `F` filter logs to a single agent (cycles through agents and back to "all")
 - `Q` abort the run · press `Q` twice to force-exit the dashboard immediately

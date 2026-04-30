@@ -37,7 +37,7 @@
 19. [Worktree, branch naming e isolamento](#19-worktree-branch-naming-e-isolamento)
 20. [Port allocator + `.env.huu` + native shim (`bind()` interceptor)](#20-port-allocator--envhuu--native-shim-bind-interceptor)
 21. [Caso especial: integration agent (resolução de conflitos)](#21-caso-especial-integration-agent-resolução-de-conflitos)
-22. [Refinement chat (LangChain.js — não é Pi)](#22-refinement-chat-langchainjs--não-é-pi)
+22. [Pipeline assistant + project recon (LangChain.js — não é Pi)](#22-pipeline-assistant--project-recon-langchainjs--não-é-pi)
 23. [Sinais externos: SIGINT/SIGTERM, abort, dispose](#23-sinais-externos-sigintsigterm-abort-dispose)
 24. [Token tracking & cost — caveat importante](#24-token-tracking--cost--caveat-importante)
 25. [Inspeção pós-mortem: `huu status`, `.huu/`, sentinel](#25-inspeção-pós-mortem-huu-status-huu-sentinel)
@@ -215,9 +215,12 @@ Definidos em `src/cli.tsx:67-96`. Quatro subcomandos + flags globais.
 
 ### 4.2 Flags globais
 
-| Flag       | Efeito                                                              |
-| ---------- | ------------------------------------------------------------------- |
-| `--stub`   | Usa `stubAgentFactory` (não chama LLM). Conflict resolver é desligado. |
+| Flag             | Efeito                                                              |
+| ---------------- | ------------------------------------------------------------------- |
+| `--stub`         | Usa `stubAgentFactory` (não chama LLM). Conflict resolver é desligado. |
+| `--yolo`         | Pula a re-exec em Docker e roda nativo (== `HUU_NO_DOCKER=1`). Imprime warning de segurança no stderr. Compõe com tudo: `huu --yolo run x.json`, `huu --yolo --stub`. |
+| `--auto-scale`   | Liga, no startup, o `AutoScaler` de concorrência. Mesmo efeito da tecla `A` no dashboard. |
+| `--help` / `-h`  | Imprime uso + variáveis de ambiente do registry. |
 
 ### 4.3 `huu init-docker` flags
 
@@ -265,27 +268,47 @@ Levantamento exaustivo de **todas** as env vars que o `huu` lê.
 
 ### 5.1 Configuração de credencial
 
-| Var                            | Lida em                                | Efeito                                         |
-| ------------------------------ | -------------------------------------- | ---------------------------------------------- |
-| `OPENROUTER_API_KEY`           | `lib/api-key.ts:31`                    | API key OpenRouter (fallback final)            |
-| `OPENROUTER_API_KEY_FILE`      | `lib/api-key.ts:26`                    | Path para arquivo com a key                    |
-| `/run/secrets/openrouter_api_key` | `lib/api-key.ts:23` (filesystem)    | Docker secret tmpfs (preferido)                |
+A partir do commit `c7de3af`, todas as keys são declaradas em
+`src/lib/api-key-registry.ts`. O resolver genérico
+(`src/lib/api-key.ts:resolveApiKey`) aplica a mesma precedência pra
+todas, e o `ApiKeyPrompt` lê o array pra descobrir o que perguntar.
+Adicionar uma key nova é um append na lista, sem outros call-sites.
 
-Resolução em ordem (primeiro não-vazio vence):
-1. Mount `/run/secrets/openrouter_api_key`
-2. Arquivo apontado por `OPENROUTER_API_KEY_FILE`
-3. Var `OPENROUTER_API_KEY`
+Registry atual:
+
+| Spec (`name`)         | env var primária              | `_FILE` companion                  | mount no container                                | required |
+| --------------------- | ----------------------------- | ---------------------------------- | -------------------------------------------------- | -------- |
+| `openrouter`          | `OPENROUTER_API_KEY`          | `OPENROUTER_API_KEY_FILE`          | `/run/secrets/openrouter_api_key`                  | `true`   |
+| `artificialAnalysis`  | `ARTIFICIAL_ANALYSIS_API_KEY` | `ARTIFICIAL_ANALYSIS_API_KEY_FILE` | `/run/secrets/artificial_analysis_api_key`         | `true`   |
+
+`openrouter` é usado pelo Pi SDK durante o run, pelo LangChain do
+pipeline assistant e pelos 4 agentes de project recon.
+`artificialAnalysis` alimenta lookups de capability/preço no model
+picker.
+
+Resolução em ordem (primeiro não-vazio vence) — aplica para qualquer
+spec do registry:
+
+1. Mount `secretMountPath` (ex.: `/run/secrets/openrouter_api_key`)
+2. Arquivo apontado por `<NAME>_FILE` (ex.: `OPENROUTER_API_KEY_FILE`)
+3. Var `<NAME>` (ex.: `OPENROUTER_API_KEY`)
+4. Store global em `~/.config/huu/config.json` (mode `0600` em diretório
+   `0700`), populado quando o usuário aceita "Save globally" no
+   `ApiKeyPrompt`. Path muda quando `XDG_CONFIG_HOME` está setado
+   (`$XDG_CONFIG_HOME/huu/config.json`).
 
 ### 5.2 Modo de execução
 
-| Var                  | Default              | Efeito                                              |
-| -------------------- | -------------------- | --------------------------------------------------- |
-| `HUU_IN_CONTAINER`   | unset                | Quando `=1`, gateway de re-exec Docker é skippado    |
-| `HUU_NO_DOCKER`      | unset                | Quando `=1`, nunca re-executa em Docker (modo nativo) |
-| `HUU_IMAGE`          | `ghcr.io/frederico-kluser/huu:latest` | Imagem usada no re-exec |
-| `HUU_CHECK_PUSH`     | unset                | Quando `=1`, preflight faz `git push --dry-run`     |
-| `HUU_WORKTREE_BASE`  | `<repoRoot>/.huu-worktrees` | Path base alternativo pra worktrees           |
-| `HUU_LANGCHAIN_STUB` | unset                | Quando `=1`, refiner usa stub determinístico        |
+| Var                       | Default              | Efeito                                              |
+| ------------------------- | -------------------- | --------------------------------------------------- |
+| `HUU_IN_CONTAINER`        | unset                | Quando `=1`, gateway de re-exec Docker é skippado    |
+| `HUU_NO_DOCKER`           | unset                | Quando `=1`, nunca re-executa em Docker (modo nativo). Equivalente a `--yolo` na CLI. |
+| `HUU_IMAGE`               | `ghcr.io/frederico-kluser/huu:latest` | Imagem usada no re-exec |
+| `HUU_CHECK_PUSH`          | unset                | Quando `=1`, preflight faz `git push --dry-run`     |
+| `HUU_WORKTREE_BASE`       | `<repoRoot>/.huu-worktrees` | Path base alternativo pra worktrees           |
+| `HUU_DOCKER_PASS_ENV`     | unset                | Lista de env vars (whitespace-separated) extras pra forwardar pro container |
+| `HUU_UID` / `HUU_GID`     | `1000`               | UID/GID usado em `docker compose run` (override em hosts onde o user não é 1000) |
+| `XDG_CONFIG_HOME`         | unset                | Quando setado, redireciona o store de keys persistidas pra `$XDG_CONFIG_HOME/huu/config.json` |
 
 ### 5.3 Geradas dentro do worktree do agente
 
@@ -344,8 +367,6 @@ const PromptStepSchema = z.object({
   files: z.array(z.string()).default([]),      // [] = whole-project
   modelId: z.string().min(1).optional(),       // override por step
   scope: StepScopeSchema.optional(),           // restrição na UI editor
-  interactive: z.boolean().optional(),         // pause + refinement chat
-  refinementModel: z.string().min(1).optional(),
 });
 
 const PipelineSchema = z.object({
@@ -405,29 +426,38 @@ const PipelineFileSchema = z.union([
 }
 ```
 
-### 6.3 Pipeline com refinement chat e model override
+### 6.3 Pipeline com timeouts customizados e model override por step
+
+> **Nota histórica:** este lugar antes documentava um campo
+> `interactive: true` + `refinementModel`. Esse fluxo (refinement chat
+> stage-a-stage) foi revertido em `9647ef6`. A entrada conversacional
+> hoje é o pipeline assistant (tecla `A` no welcome — vide §22), que
+> opera no nível da pipeline inteira em vez de step a step. O schema
+> v1 atual **não aceita** `interactive` nem `refinementModel`; a Zod
+> rejeita.
 
 ```json
 {
   "_format": "huu-pipeline-v1",
   "pipeline": {
-    "name": "interactive-refactor",
+    "name": "refactor-com-tuning",
     "cardTimeoutMs": 1200000,
     "singleFileCardTimeoutMs": 600000,
     "maxRetries": 2,
     "steps": [
       {
-        "name": "Refinar intenção",
-        "prompt": "Quero modernizar o lib/auth",
-        "files": ["src/lib/auth.ts"],
-        "interactive": true,
-        "refinementModel": "moonshotai/kimi-k2.6"
+        "name": "Plan",
+        "prompt": "Audite src/lib/auth.ts e escreva PLAN.md com a lista de mudanças.",
+        "files": [],
+        "scope": "project",
+        "modelId": "anthropic/claude-sonnet-4.6"
       },
       {
-        "name": "Aplicar no código",
-        "prompt": "(este texto será substituído pelo prompt sintetizado)",
+        "name": "Apply",
+        "prompt": "Siga o PLAN.md e aplique as mudanças em $file.",
         "files": ["src/lib/auth.ts"],
-        "modelId": "anthropic/claude-sonnet-4.6"
+        "scope": "per-file",
+        "modelId": "anthropic/claude-haiku-4.5"
       }
     ]
   }
@@ -1589,6 +1619,12 @@ atribuídas em lugar algum** no fluxo atual. Herança de `pi-orq`. Se você
 adicionar etapa de validação ou push automático, use os labels
 existentes em vez de criar novos.
 
+`killed_by_autoscaler` (também declarada em `AgentLifecyclePhase`) é
+**atribuída**, mas só pelo `Orchestrator.destroyAgent()` quando o
+`AutoScaler` cruza o threshold de destroy (default RAM/CPU ≥ 95%) — a
+task é re-enfileirada e o flag `killedByAutoScaler: true` fica no
+`AgentStatus` correspondente até a próxima tentativa.
+
 ### 15.2 Tempo de cada fase (rastreável via debug-logger)
 
 Os eventos NDJSON `orch.spawn_start`, `orch.worktree_ready`,
@@ -2180,77 +2216,94 @@ como falha (a menos que `continueOnConflict: true`).
 
 ---
 
-## 22. Refinement chat (LangChain.js — não é Pi)
+## 22. Pipeline assistant + project recon (LangChain.js — não é Pi)
 
-**Importante:** o refinement chat é uma feature opcional de stages com
-`interactive: true`, e ele **NÃO usa o Pi**. Usa LangChain.js +
-`ChatOpenAI` apontando pra OpenRouter (`lib/langchain-client.ts:86-95`).
+> **Histórico:** uma versão anterior dessa seção descrevia um *refinement
+> chat* baseado em `interactive: true` por step. Esse fluxo foi
+> revertido em `9647ef6` (commit "Revert feat(pipeline): add interactive
+> refinement stages…"). O huu não suporta mais `interactive: true` no
+> schema; a porta de entrada conversacional virou o **pipeline
+> assistant**, que opera no nível de pipeline inteira em vez de step a
+> step. Isto também é a razão pela qual `HUU_LANGCHAIN_STUB` foi
+> removido das vars de ambiente — não tem mais um stub langchain.
 
-Por que separar:
+**Importante:** o pipeline assistant **NÃO usa Pi**. Usa LangChain.js +
+`ChatOpenAI` apontando pra OpenRouter (`src/lib/assistant-client.ts`).
+Os 4 agentes de project recon usam o mesmo client com schema diferente
+(`src/lib/project-recon.ts`).
 
-- O Pi é otimizado pra **execução** com tools — caro pra um chat de
-  intenção.
-- O refiner é puramente conversacional, não precisa de tools, pode usar
-  modelo barato (default `moonshotai/kimi-k2.6`).
+Por que separar do Pi:
 
-### 22.1 Implementação do client
+- O Pi é otimizado pra **execução** com tools (read/bash/edit/write) —
+  caro e overkill pra um fluxo conversacional.
+- O assistant é puramente Q&A com saída structured (Zod schema), pode
+  usar modelo barato (default `DEFAULT_ASSISTANT_MODEL`, e recon
+  defaulta pra `minimax/minimax-m2.7`).
+- LangChain tem suporte testado pra structured output / tool calling
+  via `withStructuredOutput(schema)`, e é mais barato de manter aqui
+  do que recriar isso na Pi SDK.
+
+### 22.1 Project recon (4 agentes paralelos, single-pass, digest-only)
+
+Disparado quando o usuário entra no estágio `recon` do
+`PipelineAssistant`. O fluxo:
+
+1. `lib/project-digest.ts:buildProjectDigest()` monta um snapshot
+   estático: file tree truncado + `package.json` + `README.md` +
+   `CLAUDE.md` + `AGENTS.md` + `tsconfig.json`. **Sem ferramentas.**
+2. `lib/project-recon.ts:runProjectRecon()` cria 4 `ChatOpenAI` em
+   paralelo, um por mission do `RECON_AGENTS`:
+
+   - `stack` — só lê `package.json`/`tsconfig.json`, lista linguagem,
+     runtime, package manager, scripts.
+   - `structure` — só lê o file tree, lista diretórios top-level de
+     `src/`.
+   - `libraries` — só lê `dependencies` (ignora dev), 4-6 deps com
+     papel curto.
+   - `conventions` — só lê `README.md`/`CLAUDE.md`/`AGENTS.md`, extrai
+     regras explícitas (commit, testes, lint).
+
+3. Cada agente retorna um `ReconBullets` (Zod: 1-5 strings ≤180
+   chars). Modo de operação: **PASSO ÚNICO**, sem chain-of-thought,
+   sem auto-revisão. Foi endurecido em `c041dd3` justamente porque os
+   agentes estavam fazendo loops desnecessários.
+4. `aggregateReconBullets()` consolida tudo em um bloco markdown que
+   é injetado no system prompt do assistant.
+
+### 22.2 Assistant chat (≤8 turnos)
+
+`lib/assistant-client.ts:createAssistantChat()` retorna um chat
+LangChain com `withStructuredOutput(AssistantTurnSchema)`:
 
 ```ts
-export function createRefinementChat(opts: CreateRefinementChatOptions): RefinementChat {
-  if (process.env.HUU_LANGCHAIN_STUB === '1' || opts.apiKey.trim() === 'stub') {
-    return new StubRefinementChat();
-  }
-  const apiKey = opts.apiKey.trim();
-  if (!apiKey) throw new Error('OpenRouter API key ausente.');
-  const modelId = (opts.modelId ?? DEFAULT_REFINEMENT_MODEL).trim();
-
-  const modelKwargs: Record<string, unknown> = {};
-  if (opts.reasoning) modelKwargs.reasoning = { effort: 'medium' };
-
-  const chat = new ChatOpenAI({
-    model: modelId,
-    temperature: opts.temperature ?? 0.7,
-    modelKwargs,
-    configuration: {
-      baseURL: OPENROUTER_BASE_URL,
-      apiKey,
-      defaultHeaders: OPENROUTER_HEADERS,
-    },
-  });
-
-  return {
-    modelId,
-    async invoke(messages: BaseMessage[]): Promise<AIMessage> {
-      const result = await chat.invoke(messages);
-      return result as AIMessage;
-    },
-  };
-}
+type AssistantTurn =
+  | { kind: 'question'; question: string; options: AssistantOption[] }
+  | { kind: 'done'; draft: PipelineDraft };
 ```
 
-### 22.2 Ciclo
+Cada turn é uma multiple choice (com a última opção sempre
+`isFreeText: true`) ou um `done` com a draft. O ciclo:
 
-1. Step com `interactive: true` chega no orchestrator.
-2. `executeTaskPool` percebe e chama `onInteractiveStep(step, stageIdx)`
-   — handler injetado pelo `RunDashboard`.
-3. Dashboard renderiza `<InteractiveStep>` que cria a chat e dialoga com
-   o usuário (perguntas curtas, sem código).
-4. Usuário aperta `Ctrl+D` → `synthesizeAndFinish` envia uma última
-   mensagem pedindo síntese, recebe o prompt final, resolve a Promise.
-5. Orchestrator recebe `refinedPrompt`, faz `step = { ...step, prompt:
-   refinedPrompt }` e segue normalmente — agora com Pi rodando o prompt
-   refinado.
+1. System prompt = `buildAssistantSystemPrompt({ reconReport, … })`.
+2. Initial human message = `buildInitialHumanMessage(intent)` — frase
+   única descrita pelo user no estágio `intent`.
+3. Para cada resposta, o assistant emite um novo turn. Após
+   `MAX_TURNS = 8` perguntas, um `FORCE_DONE_NUDGE` é appendado pra
+   forçar `kind: 'done'`.
+4. `PipelineDraft` é convertido pra `Pipeline` (cada step ganha
+   `files: []` no draft inicial — o usuário escolhe os arquivos no
+   editor depois) e o assistant fecha.
 
-### 22.3 System prompts do refiner
+### 22.3 O que isso NÃO faz
 
-Em `src/lib/refinement-prompts.ts`. Resumo:
-
-- **Modo whole-project** (scope=project ou flexible+files=[]): refiner é
-  instruído que o agente vai rodar UMA vez no repo. Prompt final NÃO
-  pode usar `$file`.
-- **Modo per-file**: refiner é instruído que o agente vai rodar N vezes
-  em paralelo. Prompt final DEVE ser template com `$file` literal — não
-  citar arquivos específicos da lista.
+- Não roda agentes Pi.
+- Não toca em arquivos do repo (recon é digest-only; assistant é só
+  texto).
+- Não persiste nada — a draft viaja em memória até o
+  `PipelineEditor`.
+- Não fica no caminho de runs existentes: pipelines importadas via
+  `huu run x.json` ou via `I` no welcome pulam o assistant
+  inteiramente.
 
 Ambas as instruções aparecem dinamicamente no `buildRefinerSystemPrompt`
 e no `buildSynthesisRequest`.
@@ -2783,34 +2836,7 @@ it('fails the run when a merge fails for a non-conflict reason', async () => {
 });
 ```
 
-### 28.5 Test do interactive step
-
-```ts
-it('calls onInteractiveStep for interactive stages and uses the refined prompt', async () => {
-  const promptsReceived: string[] = [];
-  const recordingFactory: AgentFactory = async (task, ...) => ({
-    // …
-    async prompt(message: string): Promise<void> {
-      promptsReceived.push(message);
-      // …
-    },
-  });
-
-  const orch = new Orchestrator(/* ... */, {
-    initialConcurrency: 2,
-    onInteractiveStep: async (step, stageIdx) => {
-      return 'PROMPT-REFINADO';   // stub do refiner
-    },
-  });
-
-  const result = await orch.start();
-  expect(promptsReceived.some((p) => p.includes('PROMPT-REFINADO'))).toBe(true);
-  // Original pipeline NÃO é mutado:
-  expect(pipeline.steps[0].prompt).toBe('intent original');
-});
-```
-
-### 28.6 Smoke pipeline — `scripts/smoke-pipeline.sh`
+### 28.5 Smoke pipeline — `scripts/smoke-pipeline.sh`
 
 End-to-end **real** (mas com `--stub`) que valida:
 

@@ -41,9 +41,11 @@
 - [Run with Docker](#run-with-docker)
 - [Quick start (native install)](#quick-start-native-install)
 - [Pipeline schema](#pipeline-schema)
+- [Pipeline assistant (guided authoring)](#pipeline-assistant-guided-authoring)
 - [Pipelines as a shared artifact](#pipelines-as-a-shared-artifact)
 - [Philosophy](#philosophy)
 - [Parallel safety: per-agent port isolation](#parallel-safety-per-agent-port-isolation)
+- [Auto-scaling concurrency](#auto-scaling-concurrency)
 - [Cost predictability](#cost-predictability)
 - [Configuration](#configuration)
 - [FAQ](#faq)
@@ -299,9 +301,14 @@ huu run example.pipeline.json
 What you'll see on a real run:
 
 1. The model picker (catalog from OpenRouter, with your recents pinned to the top).
-2. A live kanban with one card per agent — phase, tokens, cost, current file.
+2. A live kanban with one card per agent — phase, tokens, cost, current file. Press `A` to toggle resource-bound auto-scaling at any time.
 3. After all stages finish: a summary screen, plus per-agent transcripts under `.huu/<runId>-execution-...log`.
 4. On disk: a new branch `huu/<runId>/integration` with the merged work, plus per-agent branches preserved for `git log` audits.
+
+If you don't have a pipeline yet, press `A` from the welcome screen instead
+of `N` — the [pipeline assistant](#pipeline-assistant-guided-authoring)
+will run a four-agent project recon and walk you through ≤8 questions to
+draft one for you.
 
 Bundled pipelines:
 
@@ -360,6 +367,37 @@ Pipelines are persisted as `huu-pipeline-v1` JSON. The full shape:
 > Timeouts apply **per card**, not to the run as a whole. Single-file work has very different latency from whole-project work, hence the two knobs.
 
 The pipeline editor (`N` to create a step, `T` for timeouts, `M` for model picker) handles all of the above without leaving the TUI. Full keyboard reference: [`docs/KEYBOARD.md`](docs/KEYBOARD.md).
+
+---
+
+## Pipeline assistant (guided authoring)
+
+If you'd rather describe what you want in plain language than wire the JSON
+by hand, press `A` on the welcome screen to open the **pipeline assistant**.
+It is a short conversational flow that ends with a fully-formed pipeline
+loaded into the editor — review, tweak, run.
+
+What happens, in order:
+
+1. **Pre-flight project recon.** Four parallel LLM agents (`stack`,
+   `structure`, `libraries`, `conventions`) each receive the same compact
+   project digest (file tree, `package.json`, `README.md`, `CLAUDE.md`,
+   `AGENTS.md`, `tsconfig.json`) and produce up to five terse bullets per
+   focus area. They run **single-pass, digest-only** — no filesystem tools,
+   no exploration loop — so the recon stage is bounded in cost and latency.
+   Their findings get aggregated and injected into the assistant's system
+   prompt so the interview is project-specific rather than generic.
+2. **Interview.** You describe your intent (`"add JSDoc to every helper
+   under src/utils"`); the assistant asks at most **8 follow-up questions**,
+   one at a time, each a multiple-choice with an escape hatch to free-text.
+3. **Draft → editor.** The assistant emits a `PipelineDraft` (validated by
+   Zod) which is converted to a normal `huu-pipeline-v1` pipeline and
+   handed to the standard editor. From there it's the same flow as a
+   hand-written pipeline.
+
+The assistant uses a separate, cheap default model (recon uses
+`minimax/minimax-m2.7`) so authoring cost is bounded — the heavy models
+are reserved for the actual run.
 
 ---
 
@@ -448,6 +486,39 @@ Add `"portAllocation": { "enabled": false }` to the pipeline. Without it, agents
 
 ---
 
+## Auto-scaling concurrency
+
+Concurrency starts at `10` and is live-tunable with `+`/`-` on the run
+dashboard. For overnight runs where you don't want to babysit the slider,
+pass `--auto-scale` (or press `A` on the dashboard) to enable
+**resource-bound auto-scaling**.
+
+The auto-scaler watches CPU and RAM via `lib/resource-monitor.ts` and
+moves between five states, surfaced as `AUTO <STATE>` in the header:
+
+- **NORMAL** — under both thresholds, willing to spawn more agents up to
+  the queue depth.
+- **SCALING_UP** — actively granting spawn slots.
+- **BACKING_OFF** — usage above the stop threshold (default 90%); refuses
+  new spawns but leaves running agents alone.
+- **DESTROYING** — usage above the destroy threshold (default 95%); kills
+  the **newest** agent (`killed_by_autoscaler` phase) to recover headroom.
+  Killed cards are requeued and tried again later.
+- **COOLDOWN** — 30s pause after a destroy or backoff event so the system
+  doesn't oscillate.
+
+Manual `+`/`-` on the dashboard automatically disables auto-scale —
+press `A` to turn it back on. The status block also shows live `CPU%`
+and `RAM%`, mirroring the `SystemMetricsBar` so you don't have to
+correlate two readouts.
+
+Disable defaults by setting `agentMemoryEstimateMb`,
+`stopThresholdPercent`, `destroyThresholdPercent`, `cooldownMs`, and
+`maxAgents` in code if you embed the orchestrator; the CLI exposes only
+the on/off toggle.
+
+---
+
 ## Cost predictability
 
 A `huu` run's cost is bounded by the number of cards and the model chosen per stage. There is no agent loop that can decide to "also do X" — you get the run you paid for.
@@ -470,12 +541,42 @@ Until that lands, the convention is: stub-validate first, then run with eyes on 
 
 ## Configuration
 
+**API key registry**
+
+`huu` resolves API keys through a declarative registry
+(`src/lib/api-key-registry.ts`). Adding a key in the future is a
+one-entry append; everything else (TUI prompt, Docker secret mount,
+env-passthrough, orphan cleanup) iterates the same list.
+
+The current registry:
+
+| Key | Required | Used by |
+|---|---|---|
+| `OPENROUTER_API_KEY` (`openrouter`) | yes (without `--stub`) | The Pi SDK agent + the pipeline assistant + project recon. |
+| `ARTIFICIAL_ANALYSIS_API_KEY` (`artificialAnalysis`) | yes | Model recommendations / live capability lookups in the picker. |
+
+Resolution order for every spec (first non-empty wins):
+
+1. Container secret mount at `/run/secrets/<snake_case_name>` — same
+   convention as the postgres / mysql Docker images.
+2. `<NAME>_FILE` env var pointing at a file with the value.
+3. `<NAME>` env var (plain).
+4. The persisted global store at
+   `$XDG_CONFIG_HOME/huu/config.json` (fallback `~/.config/huu/config.json`,
+   mode `0600` in a `0700` directory). The TUI offers "save globally" the
+   first time you paste a key and writes there.
+
+Any key that resolves to empty AND is `required: true` causes the TUI to
+pop the prompt on the way to the first run. Stub mode (`--stub`)
+short-circuits the requirement check.
+
 **Environment variables**
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `OPENROUTER_API_KEY` | yes (without `--stub`) | Sent to OpenRouter through the Pi SDK. If missing, the TUI prompts on first real run and persists nothing. |
+| `OPENROUTER_API_KEY` | yes (without `--stub`) | Sent to OpenRouter through the Pi SDK. If missing, the TUI prompts on first real run; "save globally" persists to `~/.config/huu/config.json`. |
 | `OPENROUTER_API_KEY_FILE` | no | Path to a file containing the key. Wins over `OPENROUTER_API_KEY` when both are set; the canonical Docker-secret mount at `/run/secrets/openrouter_api_key` wins over both. |
+| `ARTIFICIAL_ANALYSIS_API_KEY` | yes | Used for live model-capability lookups (`supportsThinking`, pricing). Same precedence chain via `ARTIFICIAL_ANALYSIS_API_KEY_FILE` and `/run/secrets/artificial_analysis_api_key`. |
 | `HUU_WORKTREE_BASE` | no | Override the base directory for per-run worktrees. Absolute paths are used verbatim; relative paths are resolved against the repo root. Default: `<repo>/.huu-worktrees`. Used by the isolated-volume container mode. |
 | `HUU_CHECK_PUSH` | no | When set, preflight verifies the configured remote is reachable before the run starts. |
 | `HUU_IN_CONTAINER` | no | Set to `1` automatically by the official Docker image. Used by the wrapper to short-circuit the auto-Docker re-exec (so the same binary runs the TUI directly inside the container). |
@@ -489,6 +590,7 @@ Until that lands, the convention is: stub-validate first, then run with eyes on 
 
 | Path | Scope | Purpose |
 |---|---|---|
+| `~/.config/huu/config.json` | global | API keys persisted via the TUI's "save globally" prompt (mode `0600` in a `0700` directory). One JSON object keyed by registry `name`. |
 | `~/.huu/recents.json` | global | Recently-used models for the picker. |
 | `<repo>/.huu-worktrees/<runId>/` | repo | One subdirectory per agent during a run; removed at the end (manifest preserved). |
 | `<repo>/.huu/<stamp>-execution-<runId>.log` | repo | Full chronological transcript of a run. |

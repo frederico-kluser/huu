@@ -6,21 +6,32 @@ This document describes the layered structure of `huu` and the design decisions 
 
 ```
 src/
-├── cli.tsx                    # entry CLI (argv, --help, terminal restoration)
-├── app.tsx                    # screen router (welcome / editor / run / summary)
+├── cli.tsx                    # entry CLI (argv, --help, --yolo, --auto-scale, terminal restoration)
+├── app.tsx                    # screen router (welcome / assistant / editor / run / summary)
 ├── lib/
-│   ├── types.ts               # Pipeline, AgentStatus, RunManifest, defaults
+│   ├── types.ts               # Pipeline, AgentStatus, RunManifest, AutoScaleStatus, defaults
 │   ├── pipeline-io.ts         # JSON read/write (format v1)
 │   ├── file-scanner.ts        # repo file tree (gitignore-aware)
 │   ├── run-id.ts              # opaque run identifiers
 │   ├── run-logger.ts          # per-run chronological + per-agent logs
 │   ├── debug-logger.ts        # NDJSON tracing under .huu/
-│   ├── api-key.ts             # OPENROUTER_API_KEY resolver (env / _FILE / docker secret)
+│   ├── api-key-registry.ts    # declarative spec list (openrouter, artificialAnalysis, …)
+│   ├── api-key.ts             # generic resolver (mount → _FILE → env → ~/.config/huu/config.json)
 │   ├── docker-reexec.ts       # auto-execs into the official image; signal-safe; secret-file mount
 │   ├── active-run-sentinel.ts # /tmp/huu/active for the HEALTHCHECK probe
 │   ├── init-docker.ts         # `huu init-docker` scaffolder
 │   ├── status.ts              # `huu status` headless monitor
-│   └── prune.ts               # `huu prune` manual orphan inspection / cleanup
+│   ├── prune.ts               # `huu prune` manual orphan inspection / cleanup
+│   ├── resource-monitor.ts    # CPU/RAM sampling for the auto-scaler + SystemMetricsBar
+│   ├── package-info.ts        # version/name pulled from package.json (used by --help and TUI)
+│   ├── model-factory.ts       # LangChain ChatOpenAI factories (OpenRouter-tuned)
+│   ├── openrouter.ts          # OpenRouter helpers shared by recon + assistant
+│   ├── project-digest.ts      # compact project summary (file tree, package.json, README, …)
+│   ├── project-recon.ts       # 4-agent pre-flight LLM recon (digest-only, single-pass)
+│   ├── project-recon-prompts.ts  # mission statements for the four recon roles
+│   ├── assistant-client.ts    # LangChain chat client used by the pipeline assistant
+│   ├── assistant-prompts.ts   # interview system prompt + initial human message
+│   └── assistant-schema.ts    # Zod schema for AssistantTurn / PipelineDraft
 ├── git/
 │   ├── git-client.ts          # git wrapper with credential-helper isolation
 │   ├── worktree-manager.ts    # create / dispose worktrees
@@ -28,28 +39,35 @@ src/
 │   ├── preflight.ts           # repo-state validation
 │   └── integration-merge.ts   # branch merge into the central worktree
 ├── orchestrator/
-│   ├── index.ts               # Orchestrator class (pool, lifecycle, abort)
+│   ├── index.ts               # Orchestrator class (pool, lifecycle, abort, destroyAgent)
 │   ├── task-decomposer.ts     # step → tasks
 │   ├── stub-agent.ts          # synthetic lifecycle for demos / tests
 │   ├── real-agent.ts          # real LLM agent via pi-coding-agent
 │   ├── integration-agent.ts   # LLM conflict resolver
+│   ├── auto-scaler.ts         # resource-bound concurrency state machine
 │   ├── port-allocator.ts      # per-agent TCP port windows + probe
 │   ├── agent-env.ts           # .env.huu writer + with-ports shim
 │   ├── native-shim.ts         # on-demand compile of bind() interceptor
+│   ├── agents-md-generator.ts # writes per-agent AGENTS.md briefings
 │   └── types.ts               # AgentFactory and friends
 ├── models/                    # OpenRouter catalog + global recents
 ├── contracts/                 # zod schemas
+├── prompts/                   # static prompt fragments shared by agents
 └── ui/
     ├── components/
+    │   ├── PipelineAssistant.tsx   # conversational pipeline authoring
     │   ├── PipelineEditor.tsx
+    │   ├── PipelineImportList.tsx
+    │   ├── PipelineIOScreen.tsx
+    │   ├── ProjectRecon.tsx        # 4-agent pre-flight recon view
     │   ├── StepEditor.tsx
     │   ├── FileMultiSelect.tsx
     │   ├── ModelSelectorOverlay.tsx
-    │   ├── PipelineIOScreen.tsx
     │   ├── RunDashboard.tsx
     │   ├── RunKanban.tsx
     │   ├── RunModal.tsx
     │   ├── LogArea.tsx
+    │   ├── Spinner.tsx
     │   ├── SystemMetricsBar.tsx
     │   └── ApiKeyPrompt.tsx
     ├── hooks/
@@ -62,6 +80,12 @@ native/
 └── port-shim/
     ├── port-shim.c            # bind() interceptor (LD_PRELOAD / DYLD)
     └── Makefile               # local build target
+
+scripts/
+├── deploy.sh                  # interactive release driver (semver bump + tag + optional ghcr push)
+├── huu-docker                 # bash wrapper documented in the README's Docker section
+├── huu-compose                # auto-detects host UID/GID for `docker compose run`
+└── smoke-image.sh, smoke-pipeline.sh
 ```
 
 Dependencies flow **downward only**: the UI never imports the orchestrator's internals, and the orchestrator never imports the UI. See [`.agents/skills/architecture-conventions/SKILL.md`](../.agents/skills/architecture-conventions/SKILL.md) for the full set of layering rules.
@@ -101,6 +125,67 @@ Dependencies flow **downward only**: the UI never imports the orchestrator's int
 
 > See [`.agents/skills/git-workflow-orchestration/SKILL.md`](../.agents/skills/git-workflow-orchestration/SKILL.md) for the full lifecycle, branch naming, merge strategy, and conflict-resolution rules.
 
+## Authoring layer (pipeline assistant + project recon)
+
+The pipeline assistant (`ui/components/PipelineAssistant.tsx`) is the
+guided alternative to writing JSON by hand. Triggered with `A` on the
+welcome screen, it walks through five stages:
+
+```
+pick-model → intent → recon → asking ↻ ──┬──> editor (PipelineDraft → Pipeline)
+                              answering ─┘
+                              free-text ─┘
+```
+
+1. **`pick-model`** — the same `ModelSelectorOverlay` the run flow uses;
+   the default is the cheap `DEFAULT_ASSISTANT_MODEL` because authoring
+   shouldn't cost as much as running.
+2. **`intent`** — a single free-text input describing what the pipeline
+   should do.
+3. **`recon`** — `lib/project-recon.ts` fans out four parallel
+   `ChatOpenAI` calls (LangChain over OpenRouter), each with a focused
+   mission (`stack`, `structure`, `libraries`, `conventions`). They
+   share a single pre-built `lib/project-digest.ts` snapshot — the
+   agents have **no tool access** and run **single-pass, digest-only**,
+   so cost and latency are bounded. Each emits up to five terse bullets.
+   Default model: `minimax/minimax-m2.7`. The aggregated bullets get
+   embedded into the assistant's system prompt so the interview is
+   project-specific.
+4. **`asking` ↔ `answering` / `free-text`** — up to `MAX_TURNS = 8`
+   multiple-choice questions. Every question carries a free-text escape
+   hatch as its last option. The schema for each turn lives in
+   `lib/assistant-schema.ts` (Zod-validated `AssistantTurn`). When the
+   model emits a `done` turn, its `PipelineDraft` is converted to a
+   `Pipeline` and handed to the editor.
+5. The standard editor opens with the draft pre-loaded — review, tweak,
+   `G` to run.
+
+The assistant uses LangChain (`@langchain/openai`, `@langchain/core`)
+because the OpenAI tool-calling/structured-output surface there is
+better-tested than building a JSON-mode loop on the Pi SDK. The Pi SDK
+is reserved for the actual run agents — they need filesystem tools, and
+LangChain doesn't.
+
+## Auto-scaling layer
+
+`orchestrator/auto-scaler.ts` is a small state machine driven by
+`lib/resource-monitor.ts` (1Hz CPU/RAM sampling). It exposes three
+hooks the worker pool consults: `shouldSpawn()`, `shouldDestroy()`, and
+`notifyAgentSpawned/notifyTaskQueued`. The states are surfaced to the
+UI via `OrchestratorState.autoScale` (`AutoScaleStatus`):
+
+| State | Meaning |
+|---|---|
+| `NORMAL` | Under both thresholds; will grant `shouldSpawn() === true`. |
+| `SCALING_UP` | Actively granting spawn slots while the queue has work. |
+| `BACKING_OFF` | CPU or RAM ≥ stop threshold (default 90%); refuses new spawns but leaves running agents alone. |
+| `DESTROYING` | CPU or RAM ≥ destroy threshold (default 95%); `Orchestrator.destroyAgent(newestId)` runs and the killed task is requeued. |
+| `COOLDOWN` | 30s pause after a destroy/back-off event so the system doesn't oscillate. |
+
+Manual `+`/`-` on the run dashboard disables auto-scale (a single `A`
+press re-enables it). Killed agents land on the `killed_by_autoscaler`
+lifecycle phase, preserved in the run summary.
+
 ## Docker layer (host wrapper + container runtime)
 
 The `huu` binary is the same in both worlds; an environment-gated branch
@@ -115,10 +200,10 @@ at the very top of `cli.tsx` decides which it is.
                    │  cli.tsx top-level                          │
                    │  decideReexec(argv, env)                    │
                    │       │                                     │
-                   │       ├── HUU_NO_DOCKER=1     → native      │
-                   │       ├── --help/-h           → native      │
-                   │       ├── init-docker | status → native     │
-                   │       └── otherwise           → re-exec     │
+                   │       ├── HUU_NO_DOCKER=1 / --yolo → native │
+                   │       ├── --help/-h               → native  │
+                   │       ├── init-docker|status|prune → native │
+                   │       └── otherwise               → re-exec │
                    │                                  │          │
                    │  reexecInDocker(argv):           │          │
                    │  spawn `docker run --rm -it     │           │
@@ -171,6 +256,10 @@ Key invariants:
 | Default timeouts | `300000ms` single-file · `600000ms` multi-file/whole-project | Single-file work has very different latency from whole-project work. |
 | Default retries | `1` per card | Retries run in fresh worktrees off the current integration HEAD. |
 | Pipeline editor | Full in-app TUI, plus JSON import/export | Pipelines are reusable artifacts and round-trip cleanly. |
+| Pipeline assistant | Conversational drafting with mandatory single-pass project recon | Authoring is the work; the recon is digest-only (`lib/project-digest.ts` + `lib/project-recon.ts`) so cost is bounded and the interview can ground itself in real project facts before asking ≤8 questions. |
+| Auto-scaling | Resource-bound state machine (`orchestrator/auto-scaler.ts`) | Overnight runs need concurrency to track CPU/RAM headroom without operator input. Default thresholds: stop at 90%, destroy newest agent at 95%, 30s cooldown after each event, max 200 agents. Manual `+`/`-` disables auto-scale until `A` re-enables. |
+| API key registry | Declarative spec list (`lib/api-key-registry.ts`) | Adding a key is a one-entry append; resolver, TUI prompt, Docker-secret bind-mount, env passthrough, orphan secret-file cleanup all iterate the same list. |
+| Native escape hatch | `--yolo` flag (and `HUU_NO_DOCKER=1`) | Some users (and most contributors) need to skip Docker. The flag is composable with every other CLI mode (`huu --yolo run x.json`, `huu --yolo --stub`); a stderr warning is printed once per run because the agent gains access to the host's shell credentials. |
 
 ## Agent skills
 
