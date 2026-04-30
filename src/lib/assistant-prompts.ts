@@ -37,10 +37,41 @@ export function buildAssistantSystemPrompt(ctx: AssistantPromptContext): string 
             m.inputPrice !== undefined && m.outputPrice !== undefined
               ? ` (in $${m.inputPrice}/M, out $${m.outputPrice}/M)`
               : '';
-          return `- \`${m.id}\` — ${m.label}${price}`;
+          const tier = m.tier ? ` · tier: ${m.tier}` : '';
+          const tags =
+            m.bestFor && m.bestFor.length > 0
+              ? ` · bestFor: ${m.bestFor.join(', ')}`
+              : '';
+          const description = m.description ? `\n    ${m.description}` : '';
+          return `- \`${m.id}\` — ${m.label}${price}${tier}${tags}${description}`;
         })
         .join('\n')
     : '(catálogo vazio — deixe modelId vazio em todos os steps)';
+
+  // Group recommended models by primary use-case for a quick decision matrix.
+  const byUseCase = new Map<string, string[]>();
+  for (const m of ctx.models) {
+    if (!m.bestFor || m.bestFor.length === 0) continue;
+    for (const tag of m.bestFor) {
+      const list = byUseCase.get(tag) ?? [];
+      list.push(m.id);
+      byUseCase.set(tag, list);
+    }
+  }
+  const matrixLine = (tag: string, label: string): string => {
+    const ids = byUseCase.get(tag) ?? [];
+    if (ids.length === 0) return '';
+    return `- ${label}: ${ids.map((id) => `\`${id}\``).join(', ')}`;
+  };
+  const matrixLines = [
+    matrixLine('coding', 'Coding pesado / refactor multi-arquivo'),
+    matrixLine('reasoning', 'Raciocínio matemático / lógica'),
+    matrixLine('agentic', 'Agentic com tools / contexto longo'),
+    matrixLine('fast', 'Fast & cheap (fan-out per-file, lint, rename)'),
+    matrixLine('cheap', 'Workhorse barato (steps simples e custo-sensível)'),
+    matrixLine('general', 'Generalista flagship (tudo, mas caro)'),
+  ].filter((s) => s.length > 0);
+  const decisionMatrix = matrixLines.length > 0 ? matrixLines.join('\n') : '';
 
   const reconBlock =
     ctx.reconContext && ctx.reconContext.trim().length > 0
@@ -149,13 +180,18 @@ A LISTA DE ARQUIVOS NÃO É SUA RESPONSABILIDADE. O usuário seleciona arquivos 
 
 # Catálogo de modelos disponíveis
 
-Você pode atribuir um "modelId" por step a partir desta lista:
-${modelCatalog}
+Você pode atribuir um "modelId" por step a partir desta lista. Cada entrada tem o ID, label, preço, tier e tags \`bestFor\` (cenários onde o modelo brilha) seguidos de uma linha de descrição:
 
+${modelCatalog}
+${decisionMatrix ? `\n# Modelo recomendado por cenário\n\n${decisionMatrix}\n` : ''}
 Diretrizes de escolha:
-- Steps de coding pesado / refactor / multi-arquivo: prefira modelos com bom raciocínio (ex: kimi-k2.6, gpt-5.4).
-- Steps simples (lint, rename, comentário): modelos baratos (ex: gpt-5.4-mini, deepseek).
-- Se em dúvida, deixe modelId VAZIO — o usuário escolhe um modelo global no run.
+- Bata o cenário do step contra a matriz acima e escolha o modelo mais barato dentro do tier adequado. Não use flagship pra step trivial nem fast pra refactor cross-file.
+- Steps de coding pesado / refactor multi-arquivo / cross-file → tier flagship com bestFor incluindo \`coding\`.
+- Steps de raciocínio matemático ou lógica densa → modelo com bestFor incluindo \`reasoning\`.
+- Steps agentic (várias tools, planejamento, contexto longo) → modelo com bestFor incluindo \`agentic\`.
+- Steps simples e file-by-file (lint, rename, JSDoc, traduzir comentário) → modelo com bestFor incluindo \`fast\` ou \`cheap\` — você está rodando N agents em paralelo, custo é o gargalo.
+- Para o run inteiro: misture tiers — flagship só onde o trabalho exige, workhorse no resto.
+- Se em dúvida ou se nenhum modelo casa bem com o cenário do step, deixe modelId VAZIO — o usuário escolhe um modelo global no run.
 
 # Tom
 

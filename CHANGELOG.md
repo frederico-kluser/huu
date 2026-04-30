@@ -9,6 +9,27 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Added
 
+- **Recommended model catalog refreshed + Artificial Analysis enrichment in the picker.**
+  - Removed `deepseek/deepseek-v3.2`. Added `deepseek/deepseek-v4-pro`,
+    `deepseek/deepseek-v4-flash`, and `xiaomi/mimo-v2.5-pro`. Existing
+    entries (`minimax/minimax-m2.7`, `moonshotai/kimi-k2.6`, `z-ai/glm-5.1`,
+    `google/gemini-3.1-pro-preview`, `openai/gpt-5.4-mini`, `openai/gpt-5.4`)
+    were retained.
+  - Each catalog entry now carries `description`, `bestFor` (use-case tags:
+    `coding` / `reasoning` / `agentic` / `fast` / `cheap` / `general`), and
+    `tier` (`flagship` / `workhorse` / `fast`). The fields are optional on
+    the schema for retrocompatibility but populated for every recommended
+    entry.
+  - The quick model picker renders a fixed-width table — `Model · tok/s ·
+    Agnt · Code · Razn · $in/$out · BestFor` — with metrics pulled from
+    Artificial Analysis when `ARTIFICIAL_ANALYSIS_API_KEY` is set. Without a
+    key the columns degrade to `—` placeholders without blocking selection.
+    "More models..." also forwards the AA key so both views share the data
+    source.
+  - The pipeline-assistant prompt now lists each model's description and
+    bestFor tags inline, plus a "modelo recomendado por cenário" matrix so
+    the assistant picks `modelId` per step against the scenario rather than
+    a flat preference list.
 - **Project recon stage in the pipeline assistant.** Before the assistant
   starts asking questions, it now fires four MiniMax M2.7 agents in
   parallel — `stack`, `structure`, `libraries`, and `conventions` — each

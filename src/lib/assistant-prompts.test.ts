@@ -4,10 +4,25 @@ import {
   buildInitialHumanMessage,
   FORCE_DONE_NUDGE,
 } from './assistant-prompts.js';
+import type { ModelEntry } from '../contracts/models.js';
 
-const sampleModels = [
-  { id: 'moonshotai/kimi-k2.6', label: 'Kimi K2.6', inputPrice: 0.74, outputPrice: 4.66 },
-  { id: 'openai/gpt-5.4-mini', label: 'GPT-5.4 Mini' },
+const sampleModels: ModelEntry[] = [
+  {
+    id: 'moonshotai/kimi-k2.6',
+    label: 'Kimi K2.6',
+    inputPrice: 0.74,
+    outputPrice: 4.66,
+    description: 'Long-context e agentic strong.',
+    bestFor: ['agentic', 'coding'],
+    tier: 'workhorse',
+  },
+  {
+    id: 'openai/gpt-5.4-mini',
+    label: 'GPT-5.4 Mini',
+    description: 'Mini da OpenAI: rápido e barato.',
+    bestFor: ['fast', 'general', 'cheap'],
+    tier: 'fast',
+  },
 ];
 
 describe('buildAssistantSystemPrompt', () => {
@@ -94,6 +109,26 @@ describe('buildAssistantSystemPrompt', () => {
     // Must steer away from the user's reported failure mode where a single
     // README badge edit was marked per-file (no files) instead of project.
     expect(p).toMatch(/UM ÚNICO ARTEFATO/);
+  });
+
+  it('renders model description and bestFor tags inline with the catalog', () => {
+    const p = buildAssistantSystemPrompt({ models: sampleModels });
+    expect(p).toMatch(/bestFor: agentic, coding/);
+    expect(p).toMatch(/Long-context e agentic strong\./);
+    expect(p).toMatch(/tier: workhorse/);
+  });
+
+  it('emits a "modelo recomendado por cenário" matrix grouped by bestFor tag', () => {
+    const p = buildAssistantSystemPrompt({ models: sampleModels });
+    expect(p).toMatch(/Modelo recomendado por cenário/);
+    expect(p).toMatch(/Coding pesado.*moonshotai\/kimi-k2\.6/);
+    expect(p).toMatch(/Fast & cheap.*openai\/gpt-5\.4-mini/);
+  });
+
+  it('omits the matrix when no model declares bestFor tags', () => {
+    const bareModels = [{ id: 'foo/bar', label: 'Foo Bar' }];
+    const p = buildAssistantSystemPrompt({ models: bareModels });
+    expect(p).not.toMatch(/Modelo recomendado por cenário/);
   });
 
   it('omits the recon block when reconContext is missing or empty', () => {

@@ -32,10 +32,11 @@ thinking/reasoning detection, and API key management.
 ## Workflow
 
 ### Model Selection
-1. `models/catalog.ts` loads `recommended-models.json` (or hardcoded fallback)
+1. `models/catalog.ts` loads `recommended-models.json` (or hardcoded fallback). Each catalog entry carries `description`, `bestFor` (use-case tags), and `tier` so prompts and the picker can reason about scenario fit, not just price.
 2. `models/recents.ts` persists recents/favorites in `~/.huu/recents.json`
-3. `ModelSelectorOverlay` offers quick-pick (recents + favorites + recommended)
-4. Full table lazy-loaded via `model-selector-ink` ("More models...")
+3. `ModelSelectorOverlay` offers quick-pick (recents + favorites + recommended) rendered as a fixed-width table: `Model · tok/s · Agnt (intelligence) · Code (coding) · Razn (math) · $in/$out · BestFor`. Metric columns come from Artificial Analysis when `ARTIFICIAL_ANALYSIS_API_KEY` is set; otherwise the columns render `—` placeholders without blocking selection.
+4. Full table lazy-loaded via `model-selector-ink` ("More models..."). Same AA key is forwarded so both views share the data source.
+5. AA enrichment helpers live in `models/aa-enrichment.ts` (matching) and `models/format-row.ts` (column layout).
 
 ### Real Agent Factory (`real-agent.ts`)
 1. Validates `apiKey` and `modelId`
