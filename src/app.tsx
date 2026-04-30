@@ -3,6 +3,7 @@ import { pkg } from './lib/package-info.js';
 import { Box, Text, useApp, useInput, useStdout } from 'ink';
 import { join } from 'node:path';
 import { ModelSelectorOverlay } from './ui/components/ModelSelectorOverlay.js';
+import { PipelineAssistant } from './ui/components/PipelineAssistant.js';
 import { PipelineEditor } from './ui/components/PipelineEditor.js';
 import { PipelineIOScreen } from './ui/components/PipelineIOScreen.js';
 import { PipelineImportList } from './ui/components/PipelineImportList.js';
@@ -33,6 +34,7 @@ interface AppProps {
 
 type Screen =
   | { kind: 'welcome' }
+  | { kind: 'pipeline-assistant' }
   | { kind: 'pipeline-editor' }
   | { kind: 'pipeline-import' }
   | { kind: 'pipeline-import-custom' }
@@ -120,6 +122,10 @@ export function App({
           exit();
           return;
         }
+        if (input === 'a' || input === 'A') {
+          navigate({ kind: 'pipeline-assistant' });
+          return;
+        }
         if (input === 'n' || input === 'N') {
           navigate({ kind: 'pipeline-editor' });
           return;
@@ -181,6 +187,7 @@ export function App({
           <Text dimColor>Guided pipeline execution — multi-agent kanban with git worktrees</Text>
 
           <Box marginTop={1} flexDirection="column">
+            <Text>  <Text bold color="magenta">[A]</Text>  Assistente de pipeline</Text>
             <Text>  <Text bold color="cyan">[N]</Text>  New pipeline</Text>
             <Text>  <Text bold color="cyan">[I]</Text>  Import pipeline from list</Text>
             <Text>  <Text bold color="cyan">[Q]</Text>  Quit</Text>
@@ -213,6 +220,17 @@ export function App({
           </Box>
         </Box>
       </Box>
+    );
+  } else if (screen.kind === 'pipeline-assistant') {
+    body = (
+      <PipelineAssistant
+        apiKey={apiKey || 'stub'}
+        onComplete={(p) => {
+          setPipeline(p);
+          navigate({ kind: 'pipeline-editor' });
+        }}
+        onCancel={() => navigate({ kind: 'welcome' })}
+      />
     );
   } else if (screen.kind === 'pipeline-editor') {
     body = (
