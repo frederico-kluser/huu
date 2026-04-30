@@ -13,7 +13,13 @@ import { useTerminalResize } from './ui/hooks/useTerminalResize.js';
 import { SystemMetricsBar } from './ui/components/SystemMetricsBar.js';
 import { stubAgentFactory } from './orchestrator/stub-agent.js';
 import { listAllPipelines } from './lib/pipeline-io.js';
-import { resolveOpenRouterApiKey } from './lib/api-key.js';
+import {
+  findMissingRequiredKeys,
+  findSpec,
+  resolveApiKey,
+  saveApiKey,
+  type ApiKeySpec,
+} from './lib/api-key.js';
 import { log as dlog, bump as dbump } from './lib/debug-logger.js';
 import type { PipelineEntry } from './lib/pipeline-io.js';
 import type { AgentFactory } from './orchestrator/types.js';
@@ -40,7 +46,7 @@ type Screen =
   | { kind: 'pipeline-import-custom' }
   | { kind: 'pipeline-export' }
   | { kind: 'model-selector' }
-  | { kind: 'api-key' }
+  | { kind: 'api-key'; missing: ApiKeySpec[] }
   | { kind: 'run'; modelId: string; apiKey: string }
   | { kind: 'summary'; result: OrchestratorResult };
 
@@ -62,7 +68,10 @@ export function App({
   );
   const [pipeline, setPipeline] = useState<Pipeline | null>(initialPipeline ?? null);
   const [modelId, setModelId] = useState<string>('');
-  const [apiKey, setApiKey] = useState<string>(resolveOpenRouterApiKey());
+  const openrouterSpec = findSpec('openrouter');
+  const [apiKey, setApiKey] = useState<string>(
+    openrouterSpec ? resolveApiKey(openrouterSpec) : '',
+  );
   const [availablePipelines, setAvailablePipelines] = useState<PipelineEntry[]>([]);
   const [selectedPipelineIndex, setSelectedPipelineIndex] = useState<number>(0);
   const repoRoot = process.cwd();
@@ -288,10 +297,19 @@ export function App({
       <ModelSelectorOverlay
         onSelect={(id) => {
           setModelId(id);
-          if (requiresApiKey && !apiKey) {
-            navigate({ kind: 'api-key' });
-          } else {
+          if (!requiresApiKey) {
             navigate({ kind: 'run', modelId: id, apiKey });
+            return;
+          }
+          // Re-resolve at decision time so a key persisted earlier in
+          // this same session (or freshly mounted) is picked up.
+          const missing = findMissingRequiredKeys();
+          if (missing.length > 0) {
+            navigate({ kind: 'api-key', missing });
+          } else {
+            const next = openrouterSpec ? resolveApiKey(openrouterSpec) : apiKey;
+            setApiKey(next);
+            navigate({ kind: 'run', modelId: id, apiKey: next });
           }
         }}
         onCancel={() => navigate({ kind: 'pipeline-editor' })}
@@ -300,9 +318,21 @@ export function App({
   } else if (screen.kind === 'api-key') {
     body = (
       <ApiKeyPrompt
-        onSubmit={(key) => {
-          setApiKey(key);
-          navigate({ kind: 'run', modelId, apiKey: key });
+        specs={screen.missing}
+        onSubmit={(values, saveGlobally) => {
+          // Persist (when allowed) and propagate into process.env so the
+          // rest of the app — including downstream resolveApiKey() calls
+          // and any code that reads process.env directly — sees the new
+          // values without further plumbing.
+          for (const [name, value] of Object.entries(values)) {
+            const spec = findSpec(name);
+            if (!spec) continue;
+            process.env[spec.envVar] = value;
+            if (saveGlobally) saveApiKey(spec, value);
+          }
+          const orKey = openrouterSpec ? resolveApiKey(openrouterSpec) : '';
+          setApiKey(orKey);
+          navigate({ kind: 'run', modelId, apiKey: orKey });
         }}
         onCancel={() => navigate({ kind: 'model-selector' })}
       />

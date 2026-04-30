@@ -1,35 +1,125 @@
-import { readFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
+import {
+  API_KEY_REGISTRY,
+  findSpec,
+  type ApiKeySpec,
+} from './api-key-registry.js';
+
+export { API_KEY_REGISTRY, findSpec };
+export type { ApiKeySpec };
 
 /**
- * Resolve the OpenRouter API key from a hierarchy of sources, mirroring
- * the postgres / mysql Docker images' `_FILE` convention so the tool
- * plays well with `docker secret` and Compose's `secrets:` block.
+ * Generic resolver / saver for the API keys declared in the registry.
  *
- * Resolution order (first non-empty wins):
- *   1. `/run/secrets/openrouter_api_key` — the canonical Docker secret
- *      mount path. tmpfs-backed inside the container; never committed
- *      into images via `docker commit`.
- *   2. `OPENROUTER_API_KEY_FILE` — explicit path pointing at any file
- *      that contains the key. Useful when secrets are mounted at a
- *      non-default path or when running outside Docker.
- *   3. `OPENROUTER_API_KEY` — plain env var, the legacy path. Still
- *      supported for dev convenience.
+ * Resolution order for `resolveApiKey(spec)` (first non-empty wins):
+ *   1. Container secret mount (`spec.secretMountPath`).
+ *   2. `<NAME>_FILE` env var pointing at a file with the value.
+ *   3. `<NAME>` env var (plain).
+ *   4. Persisted global store at `$XDG_CONFIG_HOME/huu/config.json`
+ *      (fallback `~/.config/huu/config.json`). Populated by the TUI's
+ *      "save key globally" path. Lives on the HOST and is reachable
+ *      from the container only because the wrapper re-mounts the
+ *      resolved value as a secret file.
  *
- * Returns the trimmed key, or `''` if none of the sources yielded one.
- * Never throws on a missing file — callers (the TUI, the agent factory)
- * already handle the empty case with their own UX.
+ * Never throws on missing files — callers (TUI, agent factory, docker
+ * re-exec) handle the empty case explicitly.
  */
-export function resolveOpenRouterApiKey(): string {
-  const fromMount = readKeyFile('/run/secrets/openrouter_api_key');
+export function resolveApiKey(spec: ApiKeySpec): string {
+  const fromMount = readKeyFile(spec.secretMountPath);
   if (fromMount) return fromMount;
 
-  const fromFileEnv = process.env.OPENROUTER_API_KEY_FILE;
-  if (fromFileEnv) {
-    const fromFile = readKeyFile(fromFileEnv);
+  const fileVar = process.env[spec.envFileVar];
+  if (fileVar) {
+    const fromFile = readKeyFile(fileVar);
     if (fromFile) return fromFile;
   }
 
-  return (process.env.OPENROUTER_API_KEY ?? '').trim();
+  const fromEnv = (process.env[spec.envVar] ?? '').trim();
+  if (fromEnv) return fromEnv;
+
+  return loadStoredApiKey(spec);
+}
+
+/** Resolve every key in the registry. Map keyed by `spec.name`. */
+export function resolveAllApiKeys(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const spec of API_KEY_REGISTRY) {
+    out[spec.name] = resolveApiKey(spec);
+  }
+  return out;
+}
+
+/** Specs flagged `required: true` whose value couldn't be resolved. */
+export function findMissingRequiredKeys(): ApiKeySpec[] {
+  return API_KEY_REGISTRY.filter((s) => s.required && !resolveApiKey(s));
+}
+
+/**
+ * Persist `value` for `spec` into the global config file (mode 0600 in a
+ * 0700 directory). Subsequent runs on this user/machine will resolve the
+ * key without re-prompting.
+ */
+export function saveApiKey(spec: ApiKeySpec, value: string): void {
+  const trimmed = value.trim();
+  if (!trimmed) return;
+  const path = configFilePath();
+  const dir = dirname(path);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const store = readStore();
+  store[spec.name] = trimmed;
+  writeFileSync(path, JSON.stringify(store, null, 2), { mode: 0o600 });
+  // writeFileSync's `mode` is only honored on creation; chmod again so
+  // existing files (created with a wider umask earlier) tighten down.
+  try {
+    chmodSync(path, 0o600);
+  } catch {
+    /* Windows / fs without chmod — best effort */
+  }
+}
+
+/** Read just one key from the global store. Empty string if absent. */
+export function loadStoredApiKey(spec: ApiKeySpec): string {
+  const store = readStore();
+  const v = store[spec.name];
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+/** Path to the global config file. Exposed for help text + tests. */
+export function configFilePath(): string {
+  const xdg = process.env.XDG_CONFIG_HOME?.trim();
+  const dir = xdg ? join(xdg, 'huu') : join(homedir(), '.config', 'huu');
+  return join(dir, 'config.json');
+}
+
+/**
+ * Backwards-compat shim. New code should use
+ *   resolveApiKey(findSpec('openrouter')!)
+ * but legacy call sites in app.tsx / orchestrator continue to work.
+ */
+export function resolveOpenRouterApiKey(): string {
+  const spec = findSpec('openrouter');
+  if (!spec) return '';
+  return resolveApiKey(spec);
+}
+
+function readStore(): Record<string, unknown> {
+  try {
+    const raw = readFileSync(configFilePath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 function readKeyFile(path: string): string {

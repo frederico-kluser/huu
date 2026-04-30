@@ -37,6 +37,7 @@ exec docker run --rm -it \
     -v "$PWD:$PWD" \
     -w "$PWD" \
     -e OPENROUTER_API_KEY \
+    -e ARTIFICIAL_ANALYSIS_API_KEY \
     -e HUU_CHECK_PUSH \
     -e TERM=xterm-256color \
     "$IMAGE" \

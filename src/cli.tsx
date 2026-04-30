@@ -8,6 +8,7 @@
 // running it inside the container — the only thing the user notices
 // is a slightly slower first invocation while the image pulls.
 import { decideReexec, reexecInDocker } from './lib/docker-reexec.js';
+import { API_KEY_REGISTRY, configFilePath } from './lib/api-key.js';
 const reexec = decideReexec(process.argv.slice(2), process.env);
 if (reexec.shouldReexec) {
   // Top-level await is fine here: tsconfig targets ES2022 / ESNext
@@ -64,6 +65,9 @@ if (!isNonTui) {
 }
 
 function printUsage(): void {
+  const envLines = API_KEY_REGISTRY.map(
+    (s) => `  ${s.envVar.padEnd(34)} ${s.label} key. Asked in the TUI when missing.`,
+  ).join('\n');
   console.log(`huu — Humans Underwrite Undertakings · guided pipeline execution TUI with kanban
 
 Usage:
@@ -94,7 +98,10 @@ prune flags:
   --json                    Machine-readable output (combines with --list / --dry-run)
 
 Environment:
-  OPENROUTER_API_KEY    Your OpenRouter key. Asked in the TUI when missing.
+${envLines}
+
+Persisted globally at: ${configFilePath()}
+(written when you accept "Save globally" in the TUI prompt; mode 0600).
 `);
 }
 
