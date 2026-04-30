@@ -5,7 +5,7 @@ import { RecommendedModelsFileSchema, type ModelEntry } from '../contracts/model
 const DEFAULT_RECOMMENDED_MODELS: readonly ModelEntry[] = [
   { id: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2', inputPrice: 0.217, outputPrice: 0.479 },
   { id: 'minimax/minimax-m2.7', label: 'MiniMax M2.7', inputPrice: 0.134, outputPrice: 1.31 },
-  { id: 'moonshotai/kimi-k2.6', label: 'Kimi K2.6' },
+  { id: 'moonshotai/kimi-k2.6', label: 'Kimi K2.6', inputPrice: 0.74, outputPrice: 4.66 },
   { id: 'z-ai/glm-5.1', label: 'GLM 5.1', inputPrice: 0.496, outputPrice: 3.04 },
   { id: 'google/gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', inputPrice: 1.13, outputPrice: 12.04 },
   { id: 'openai/gpt-5.4-mini', label: 'GPT-5.4 Mini' },
