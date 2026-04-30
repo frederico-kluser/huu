@@ -43,6 +43,18 @@ if [[ "$MODE" == "native" && ! -x "$HUU_PROJECT/node_modules/.bin/tsx" ]]; then
     (cd "$HUU_PROJECT" && npm install)
 fi
 
+# Modo docker depende do `huu` instalado no host (npm link → dist/cli.js)
+# para fazer o re-exec em container. Se nunca buildou local, a symlink
+# resolve pra um arquivo inexistente e env(1) explode com ENOENT.
+if [[ "$MODE" == "docker" && ! -f "$HUU_PROJECT/dist/cli.js" ]]; then
+    if [[ ! -d "$HUU_PROJECT/node_modules" ]]; then
+        echo "==> instalando dependências em $HUU_PROJECT (primeira vez)" >&2
+        (cd "$HUU_PROJECT" && npm install)
+    fi
+    echo "==> compilando dist/ em $HUU_PROJECT (primeira vez)" >&2
+    (cd "$HUU_PROJECT" && npm run build)
+fi
+
 if [[ "$MODE" == "docker" && $SKIP_BUILD -eq 0 ]]; then
     echo "==> docker build -t huu:local . ($HUU_PROJECT)" >&2
     (cd "$HUU_PROJECT" && docker build -t huu:local .)
