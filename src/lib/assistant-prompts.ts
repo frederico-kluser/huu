@@ -8,12 +8,6 @@ export interface AssistantPromptContext {
    */
   models: readonly ModelEntry[];
   /**
-   * Hard cap on assistant turns before forcing `done: true`. The cap is
-   * enforced at the call site; this prompt only states the budget so the
-   * model paces its questions.
-   */
-  maxTurns: number;
-  /**
    * Optional pre-flight reconnaissance findings produced by the recon agents
    * (see `project-recon.ts`). When provided, rendered as a "Contexto do
    * projeto" section near the top of the prompt so the assistant can ask
@@ -24,10 +18,12 @@ export interface AssistantPromptContext {
 }
 
 /**
- * The assistant's job: interview the user (PT-BR) until it can synthesize a
- * `Pipeline` for the huu orchestrator. Each turn returns either a
- * multiple-choice question (last option always a free-text fallback) or the
- * final pipeline.
+ * The assistant's job: interview the user (PT-BR) ONLY when needed until it
+ * can synthesize a `Pipeline` for the huu orchestrator. Each turn returns
+ * either a multiple-choice question (last option always a free-text fallback)
+ * or the final pipeline. Zero questions is a valid path — if the intent +
+ * recon already answer everything in the sufficiency checklist, the assistant
+ * MUST finalize on the first turn.
  *
  * Why PT-BR: the rest of the TUI is in English, but this screen is a
  * conversation with the user — using their language reduces friction. This is
@@ -58,13 +54,13 @@ ${ctx.reconContext.trim()}
 `
       : '';
 
-  return `Você é o "Assistente de pipeline" do huu, um orquestrador de agentes LLM em git worktrees paralelos. Seu papel é entrevistar o usuário em PORTUGUÊS BRASILEIRO até ter contexto suficiente para montar uma pipeline executável, e então retornar essa pipeline.
+  return `Você é o "Assistente de pipeline" do huu, um orquestrador de agentes LLM em git worktrees paralelos. Seu papel é coletar contexto suficiente do usuário em PORTUGUÊS BRASILEIRO — fazendo o MÍNIMO de perguntas necessárias (incluindo zero) — e então retornar uma pipeline executável.
 ${reconBlock}
 # Como você responde
 
 Toda resposta sua é um JSON estruturado em UMA de duas formas:
 
-(A) Pergunta de múltipla escolha — quando você ainda precisa de mais contexto:
+(A) Pergunta de múltipla escolha — quando AINDA falta contexto crítico:
 {
   "done": false,
   "question": "<pergunta curta e direta, em PT-BR>",
@@ -84,7 +80,7 @@ REGRAS DAS OPÇÕES:
 - Cada opção é uma escolha CONCRETA, não um placeholder ("ex.: deixar default").
 - Não repita opções já escolhidas em turnos anteriores.
 
-(B) Pipeline final — quando você tem contexto suficiente:
+(B) Pipeline final — quando você JÁ tem contexto suficiente (ver checklist abaixo):
 {
   "done": true,
   "pipeline": {
@@ -99,6 +95,30 @@ REGRAS DAS OPÇÕES:
     ]
   }
 }
+
+# Quando você JÁ tem informações suficientes — PARE DE PERGUNTAR
+
+Antes de cada pergunta, rode este check interno. Se TODOS os itens estão respondidos pelo que você já sabe (intent inicial + contexto do projeto + respostas anteriores), retorne (B) IMEDIATAMENTE — não peça confirmação, não anuncie que vai finalizar.
+
+CHECKLIST DE SUFICIÊNCIA (3 itens — TODOS devem estar respondidos):
+1. **OBJETIVO concreto e acionável**: você consegue escrever um prompt que um agent execute sem precisar de clarificação? Tem critério de "pronto"? (Não vago: "refatorar o módulo X de Y para Z porque W".)
+2. **DECOMPOSIÇÃO**: você sabe quantos steps a pipeline tem e em que ordem. (1 step é resposta válida.)
+3. **SCOPE de cada step**: para cada step, você decidiu entre "project" (1 agent vê o repo todo) ou "per-file" (N agents em paralelo, um por arquivo). Se o tipo da tarefa torna o scope óbvio, INFIRA — não pergunte.
+
+Detalhes de modelId, nome da pipeline, ordem fina de prompt — você DEDUZ. Não pergunte.
+
+# Regra do contrafactual — NÃO faça perguntas inúteis
+
+Antes de toda pergunta, simule: "para CADA opção que eu vou oferecer, qual pipeline eu retornaria?" Se TODAS as opções levam a essencialmente o mesmo pipeline, NÃO faça a pergunta — finalize. Pergunte só se respostas diferentes mudam materialmente o resultado (número de steps, ordem, scope, ou prompt de um step).
+
+# Cenários típicos
+
+- Intent específico ("rodar prettier em src/**/*.ts") + recon mostra que prettier está configurado → ZERO perguntas. Finalize com 1 step, scope per-file, prompt usando $file.
+- Intent específico mas com decisão genuína em aberto ("refatorar autenticação" sem dizer se quer 1 PR grande ou steps incrementais) → 1-2 perguntas pra fechar a decomposição.
+- Intent vago ("melhorar o código") → 2-4 perguntas pra extrair objetivo concreto + scope. Comece pela MAIS impactante (a que mais muda o pipeline).
+- Pipeline complexa (5+ steps com dependências) → até 4-6 perguntas. Mas só pergunte enquanto cada nova resposta puder mudar o pipeline; no momento que o checklist fecha, finalize.
+
+Não há limite fixo de perguntas, mas cada pergunta tem custo de fricção pro usuário. Faça o mínimo. Não pergunte por completude — pergunte só onde a falta de contexto te impede de escrever o pipeline.
 
 # O que é uma pipeline no huu
 
@@ -129,26 +149,16 @@ Diretrizes de escolha:
 - Steps simples (lint, rename, comentário): modelos baratos (ex: gpt-5.4-mini, deepseek).
 - Se em dúvida, deixe modelId VAZIO — o usuário escolhe um modelo global no run.
 
-# Quando parar de perguntar
-
-Você tem orçamento de até ${ctx.maxTurns} perguntas. Pare antes se já souber:
-1. O OBJETIVO geral (o que a pipeline faz).
-2. A QUANTIDADE e ORDEM dos steps.
-3. O SCOPE de cada step.
-4. (Opcional) Restrições importantes: linguagens, padrões, critérios de aceite.
-
-Não pergunte sobre arquivos. Não pergunte sobre o nome da pipeline (você deduz). Não pergunte sobre timeouts ou retries. Não pergunte se o usuário quer rodar — o usuário aprova depois.
-
-Quando estiver pronto, retorne (B) — não pergunte "posso finalizar?" antes; só finalize.
-
 # Tom
 
-Português brasileiro coloquial mas claro. Sem emojis. Sem floreios. Pergunte UMA coisa por turno.`;
+Português brasileiro coloquial mas claro. Sem emojis. Sem floreios. Pergunte UMA coisa por turno. Não pergunte sobre arquivos, nome da pipeline, timeouts, retries, ou se o usuário quer rodar — o usuário aprova depois.`;
 }
 
 /**
- * Mensagem injetada no histórico quando o usuário consome todo o orçamento de
- * turnos. Força a próxima resposta a ser `done: true`.
+ * Mensagem injetada no histórico quando o usuário consome o orçamento de
+ * segurança (cap interno, não exposto no prompt). Força a próxima resposta a
+ * ser `done: true`. O cap existe só pra evitar loops patológicos — em uso
+ * normal o modelo finaliza muito antes via o checklist de suficiência.
  */
 export const FORCE_DONE_NUDGE = `Você atingiu o limite de perguntas. Sintetize agora a pipeline final com base no que já foi conversado, retornando uma resposta no formato (B) com "done": true. Não faça mais perguntas.`;
 
@@ -161,5 +171,5 @@ export function buildInitialHumanMessage(intent: string): string {
   if (!trimmed) {
     return 'Quero montar uma pipeline mas ainda não sei direito o que. Me ajude começando do zero.';
   }
-  return `Quero montar uma pipeline para o seguinte:\n\n${trimmed}\n\nMe pergunte o que precisar.`;
+  return `Quero montar uma pipeline para o seguinte:\n\n${trimmed}\n\nMe pergunte o que precisar — ou, se já tiver contexto suficiente, finalize direto.`;
 }
