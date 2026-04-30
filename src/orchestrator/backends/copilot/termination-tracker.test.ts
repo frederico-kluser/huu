@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { TerminationTracker } from './termination-tracker.js';
 
+// Note: `markUserExit` was removed as YAGNI — SIGINT handling lives in
+// cli.tsx and tears down via `agent.dispose()`, which already calls
+// `session.abort()` (the tracker observes that as 'abort'). If a future
+// PR needs to distinguish SIGINT from a programmatic abort, re-add a
+// dedicated method.
+
 describe('TerminationTracker', () => {
   it('finalize without any mark returns complete', () => {
     const t = new TerminationTracker();

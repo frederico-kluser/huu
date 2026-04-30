@@ -13,12 +13,7 @@
  * later `markTimeout()` from a stale watchdog firing after we already
  * tore down.
  */
-export type TerminationReason =
-  | 'complete'
-  | 'abort'
-  | 'timeout'
-  | 'error'
-  | 'user_exit';
+export type TerminationReason = 'complete' | 'abort' | 'timeout' | 'error';
 
 export class TerminationTracker {
   private reason: TerminationReason | null = null;
@@ -36,10 +31,6 @@ export class TerminationTracker {
     if (this.reason && this.reason !== 'error') return;
     this.reason = 'error';
     this.errorMessage = err instanceof Error ? err.message : String(err);
-  }
-
-  markUserExit(): void {
-    this.reason ??= 'user_exit';
   }
 
   finalize(shutdownType?: string): { reason: TerminationReason; message?: string } {

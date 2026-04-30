@@ -127,10 +127,3 @@ export const piAgentFactory: AgentFactory = async (
 
   return spawned;
 };
-
-/**
- * @deprecated Use `piAgentFactory`. Kept as alias to avoid churn at every
- * call site during the backend refactor; remove once the import in
- * `cli.tsx` / `app.tsx` migrates to the registry.
- */
-export const realAgentFactory: AgentFactory = piAgentFactory;

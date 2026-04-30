@@ -1,4 +1,4 @@
-import type { AgentFactory, SpawnedAgent } from '../../types.js';
+import type { AgentFactory, AgentEvent, SpawnedAgent } from '../../types.js';
 import { createDisposableState } from '../_shared/lifecycle.js';
 import { buildCopilotMessageHeader } from './system-prompt.js';
 import { translateCopilotEvent } from './event-mapper.js';
@@ -6,54 +6,102 @@ import { resolveCopilotCreds } from './auth.js';
 import { TerminationTracker } from './termination-tracker.js';
 
 /**
- * Local structural typing of the bits of `@github/copilot-sdk` we touch.
- * We deliberately don't `import type` the SDK so the package can be an
- * optionalDependency — typecheck must pass on machines that haven't
- * installed it. The runtime behavior comes from the dynamic import in
- * `loadSdk()`. If the SDK changes shape, our adapter breaks loud at
- * runtime (clear error in the factory) rather than silently at typecheck
- * with a confusing message.
+ * Local mirrors of the @github/copilot-sdk surface we touch. Kept in
+ * the file (instead of `import type`-ing the package directly) because
+ * the SDK is an `optionalDependency` — typecheck on machines that
+ * skipped optional installs must still pass. The shapes match v0.3.0
+ * (Apr 2026); if the SDK breaks compatibility, the factory's runtime
+ * dynamic import resolves to the real types and the cast surfaces the
+ * mismatch loudly. Mirrors are deliberately narrow (only the methods
+ * we call) to keep drift surface small.
  */
+type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+
+interface PermissionRequest {
+  kind: 'shell' | 'write' | 'mcp' | 'read' | 'url' | 'custom-tool' | 'memory' | 'hook';
+  toolCallId?: string;
+}
+type PermissionHandler = (
+  request: PermissionRequest,
+  invocation: { sessionId: string },
+) => unknown;
+
+interface CopilotClientOptions {
+  cliPath?: string;
+  cliArgs?: string[];
+  cwd?: string;
+  port?: number;
+  useStdio?: boolean;
+  autoStart?: boolean;
+}
+interface SessionConfig {
+  sessionId?: string;
+  clientName?: string;
+  model?: string;
+  reasoningEffort?: ReasoningEffort;
+  configDir?: string;
+  onPermissionRequest?: PermissionHandler;
+  systemMessage?:
+    | { mode?: 'append'; content?: string }
+    | { mode: 'replace'; content: string };
+}
+interface MessageOptions {
+  prompt: string;
+}
+
 interface CopilotSdkModule {
-  CopilotClient: new (opts: {
-    autoStart?: boolean;
-    cliArgs?: string[];
-    cliPath?: string;
-    cliUrl?: string;
-  }) => CopilotClientInstance;
-  approveAll: unknown;
+  CopilotClient: new (opts?: CopilotClientOptions) => CopilotClientInstance;
+  approveAll: PermissionHandler;
 }
 
 interface CopilotClientInstance {
   start(): Promise<void>;
-  stop(): Promise<void>;
-  createSession(opts: unknown): Promise<CopilotSessionInstance>;
+  stop(): Promise<unknown>;
+  forceStop?(): Promise<void>;
+  createSession(opts: SessionConfig): Promise<CopilotSessionInstance>;
 }
 
 interface CopilotSessionInstance {
   on(handler: (ev: unknown) => void): () => void;
-  send(opts: unknown): Promise<void>;
+  on(eventType: string, handler: (ev: unknown) => void): () => void;
+  send(opts: MessageOptions): Promise<string>;
   abort(): Promise<void>;
   disconnect(): Promise<void>;
 }
 
 /**
- * Maps the orchestrator's notion of "thinking" to Copilot's
- * `reasoningEffort`. Pi has `medium | off`; Copilot accepts
- * `low | medium | high | xhigh`. The orchestrator currently only ever
- * passes `medium | off`, so a 1:1 mapping is enough.
+ * Models known to support reasoning_effort. List comes from the Copilot
+ * CLI changelog (Apr 2026) — bare-name shapes (no `<provider>/` prefix).
+ * Pi's heuristic in `lib/model-factory.ts` uses OpenRouter-shaped IDs;
+ * we can't reuse it as-is.
+ *
+ * When the user picks a model not on this list (e.g. a future bare-name
+ * we haven't catalogued, or a BYOK-only model), we fall back to 'low'
+ * so the SDK doesn't reject the request. The orchestrator's behavior
+ * is unchanged — thinking is opt-in, not required.
  */
-function thinkingToReasoning(level: 'medium' | 'off'): 'low' | 'medium' {
-  return level === 'medium' ? 'medium' : 'low';
+const COPILOT_THINKING_PREFIXES: ReadonlyArray<string> = [
+  'claude-opus',
+  'claude-sonnet',
+  'claude-haiku',
+  'gpt-5',
+  'gpt-5.3',
+  'gpt-5.5',
+  'gemini-3',
+  'o1',
+  'o3',
+  'o4',
+];
+
+function copilotSupportsThinking(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  return COPILOT_THINKING_PREFIXES.some((p) => lower.startsWith(p));
 }
 
-/**
- * Decides if a model id looks like one Copilot can serve directly. We do
- * NOT block: Copilot accepts arbitrary `--model` and the SDK forwards.
- * The check is only used to emit a clear warning when the user tries
- * `claude-sonnet-4.6` (Copilot id) on Pi or `deepseek/deepseek-v4-pro`
- * (OpenRouter id) on Copilot.
- */
+function reasoningEffortFor(modelId: string): ReasoningEffort {
+  return copilotSupportsThinking(modelId) ? 'medium' : 'low';
+}
+
 function looksLikeCopilotModel(id: string): boolean {
   // Copilot uses bare names without a `<provider>/` prefix.
   return !id.includes('/');
@@ -65,7 +113,7 @@ function looksLikeCopilotModel(id: string): boolean {
  * graph). The cached promise dedupes concurrent loads when the user
  * launches multiple Copilot agents at once.
  *
- * The dynamic import path is built at runtime so TypeScript's
+ * The dynamic-import target is built from a local string so TypeScript's
  * resolver doesn't try to verify the module exists at typecheck time
  * (the package is an optionalDependency).
  */
@@ -81,8 +129,8 @@ async function loadSdk(): Promise<CopilotSdkModule> {
         const msg = err instanceof Error ? err.message : String(err);
         throw new Error(
           `Copilot backend selected but @github/copilot-sdk is not installed. ` +
-            `Run \`npm i @github/copilot-sdk\` (or rebuild the Docker image). ` +
-            `Original error: ${msg}`,
+            `Run \`npm install @github/copilot-sdk\` (it's an optionalDependency, ` +
+            `so npm may have skipped it). Original error: ${msg}`,
         );
       }
     })();
@@ -91,65 +139,13 @@ async function loadSdk(): Promise<CopilotSdkModule> {
 }
 
 /**
- * One CopilotClient per agent. Sharing a client across worktrees works
- * for small N but breaks the LD_PRELOAD-per-agent model: the bind()
- * shim's port range comes from the spawned process env, and a shared
- * client only spawns once. Per-agent isolation costs ~1 process per
- * agent, which is the same overhead the Pi backend already accepts via
- * its in-memory session.
+ * One CopilotClient per agent. The client constructor takes `cwd` —
+ * which directs the spawned CLI process at the agent's worktree. That's
+ * how Copilot gets per-agent filesystem isolation (the SDK's session
+ * config has no `workspacePath`, contrary to some early docs). Sharing
+ * a client across worktrees would force every session into the same
+ * cwd, breaking the orchestrator's worktree-per-task model.
  */
-async function createCopilotClient(env: Record<string, string>): Promise<{
-  client: CopilotClientInstance;
-  shutdown: () => Promise<void>;
-}> {
-  const sdk = await loadSdk();
-  const client = new sdk.CopilotClient({
-    autoStart: false,
-    // The SDK's CLI server inherits the parent process env. Merging here
-    // means any LD_PRELOAD / .env.huu / BYOK vars set by the orchestrator
-    // before this call propagate to the underlying `copilot` binary.
-    // Note: the public `CopilotClientOptions` does not formally document
-    // an `env` field. If a future SDK version exposes it, switch to
-    // passing `env` directly here.
-    cliArgs: [],
-  });
-
-  // process.env mutation is scoped to this call only; the factory
-  // restores prior values on dispose. We do this because the SDK's
-  // documented surface (Apr 2026) accepts no env override.
-  const previousEnv: Record<string, string | undefined> = {};
-  for (const [k, v] of Object.entries(env)) {
-    previousEnv[k] = process.env[k];
-    process.env[k] = v;
-  }
-
-  await client.start();
-
-  return {
-    client,
-    shutdown: async () => {
-      try {
-        await client.stop();
-      } catch {
-        // best effort — `forceStop` exists on some versions but is not
-        // part of the public type; cast and try.
-        const maybe = client as unknown as { forceStop?: () => Promise<void> };
-        if (typeof maybe.forceStop === 'function') {
-          try {
-            await maybe.forceStop();
-          } catch {
-            /* swallow */
-          }
-        }
-      }
-      for (const [k, v] of Object.entries(previousEnv)) {
-        if (v === undefined) delete process.env[k];
-        else process.env[k] = v;
-      }
-    },
-  };
-}
-
 export const copilotAgentFactory: AgentFactory = async (
   task,
   config,
@@ -174,47 +170,56 @@ export const copilotAgentFactory: AgentFactory = async (
     throw new Error(
       'Copilot credentials missing. Set COPILOT_GITHUB_TOKEN, GH_TOKEN, ' +
         'GITHUB_TOKEN, or BYOK env vars (COPILOT_PROVIDER_API_KEY + ' +
-        'COPILOT_PROVIDER_BASE_URL). See backends/copilot/auth.ts.',
+        'COPILOT_PROVIDER_BASE_URL). The huu CLI passes these through ' +
+        'to the spawned Copilot CLI process automatically when present ' +
+        'in the parent environment; we do not mutate process.env here.',
     );
   }
-
-  const env: Record<string, string> = { ...creds.env };
-  // Isolate per-run state so `huu prune` (future PR) can target it
-  // without nuking the user's interactive Copilot home.
-  if (!process.env.COPILOT_HOME) {
-    env.COPILOT_HOME = `${cwd}/.huu/copilot-state`;
-  }
-
-  const { client, shutdown } = await createCopilotClient(env);
+  // Note: creds.env is informational only. We don't mutate process.env
+  // because the SDK spawns the CLI subprocess inheriting the parent
+  // env — and parallel Copilot agents would race on shared process.env
+  // mutations. Whoever launched huu must already have the token in env
+  // (or in /run/secrets/copilot_token, which copilot CLI reads
+  // directly). resolveCopilotCreds.hasAuth verifies that's true.
 
   const sdk = await loadSdk();
+  const client = new sdk.CopilotClient({ cwd, autoStart: false });
+  await client.start();
+
   const tracker = new TerminationTracker();
-
-  // Each session gets a deterministic id so debugging via the persisted
-  // events.jsonl is straightforward. Keys with `huu-` prefix make the
-  // future `huu prune --copilot-state` filter trivial.
+  // Stable, agent-scoped session id makes debugging via the persisted
+  // events.jsonl trivial: `ls $cwd/.huu/copilot-state/session-state/huu-*`.
   const sessionId = `huu-${task.agentId}-${Date.now()}`;
+  // Per-agent configDir prevents collisions on session-store.db
+  // (issue copilot-cli/2609). Lives under the agent's worktree so
+  // worktree teardown reclaims the space automatically.
+  const configDir = `${cwd}/.huu/copilot-state`;
 
-  const session = await client.createSession({
-    sessionId,
-    model: modelId as never,
-    streaming: true,
-    reasoningEffort: thinkingToReasoning(
-      // Pi-style label. The orchestrator doesn't pass `thinkingLevel`
-      // through `AppConfig` today, so we default to 'medium' until that
-      // wiring lands. This mirrors what the Pi factory does.
-      'medium',
-    ),
-    onPermissionRequest: sdk.approveAll,
-    systemMessage: { mode: 'append', content: '' },
-    // Tools default to the CLI's built-ins (bash, edit_file, view, ...).
-    // Custom tools could be added here once the orchestrator needs to
-    // emit signals (see plan §B.4).
-  } as never);
+  let session: CopilotSessionInstance;
+  try {
+    session = await client.createSession({
+      sessionId,
+      clientName: 'huu',
+      model: modelId,
+      reasoningEffort: reasoningEffortFor(modelId),
+      configDir,
+      onPermissionRequest: sdk.approveAll,
+      // We embed the role/scope/git-context header inside the user
+      // message (same approach as Pi >= 0.70). This keeps the SDK's
+      // built-in coding-agent persona and adds our task-specific rules
+      // on top. A future PR can move the header to systemMessage.append.
+    });
+  } catch (err) {
+    await client.stop().catch(() => {});
+    throw err;
+  }
 
-  const unsubscribe = session.on((ev: unknown) => {
+  // Translation handler: install IMMEDIATELY after createSession so we
+  // capture early events (some SDK versions emit `session.start` before
+  // returning from createSession; capturing it here is best-effort).
+  const unsubscribeTranslator = session.on((event: unknown) => {
     try {
-      translateCopilotEvent(ev, onEvent);
+      translateCopilotEvent(event, onEvent);
     } catch (err) {
       onEvent({
         type: 'log',
@@ -224,13 +229,22 @@ export const copilotAgentFactory: AgentFactory = async (
     }
   });
 
+  // Completion-waiter listener cleanups must be reachable from
+  // dispose() so a forced teardown (orchestrator timeout, SIGINT) can
+  // unhook them — otherwise the inner Promise leaks.
+  let completionUnsubscribers: Array<() => void> = [];
+
   const lifecycle = createDisposableState([
+    () => unsubscribeTranslator(),
     () => {
-      try {
-        unsubscribe();
-      } catch {
-        /* */
+      for (const off of completionUnsubscribers) {
+        try {
+          off();
+        } catch {
+          /* */
+        }
       }
+      completionUnsubscribers = [];
     },
     async () => {
       try {
@@ -246,12 +260,21 @@ export const copilotAgentFactory: AgentFactory = async (
         /* */
       }
     },
-    () => shutdown(),
+    async () => {
+      try {
+        await client.stop();
+      } catch {
+        if (typeof client.forceStop === 'function') {
+          try {
+            await client.forceStop();
+          } catch {
+            /* */
+          }
+        }
+      }
+    },
   ]);
 
-  // Ports + shim availability go into the Copilot system prompt the same
-  // way Pi consumes them. Backends are agnostic about WHO consumes the
-  // ports; both LLM and the agent's spawned bash inherit the same env.
   const spawned: SpawnedAgent = {
     agentId: task.agentId,
     task,
@@ -265,20 +288,65 @@ export const copilotAgentFactory: AgentFactory = async (
         runtimeContext?.shimAvailable ?? false,
       );
 
+      // CRITICAL: install completion listeners BEFORE calling send().
+      // The SDK fires `session.idle` once the assistant finishes.
+      // For very fast turns (BYOK to a local model, cached responses)
+      // idle can fire synchronously with send's promise resolving;
+      // attaching afterwards would miss it and the await-completion
+      // promise would hang forever.
+      const completion = new Promise<void>((resolve, reject) => {
+        const offIdle = session.on('session.idle', () => {
+          cleanupCompletionListeners();
+          resolve();
+        });
+        const offError = session.on('session.error', (ev) => {
+          cleanupCompletionListeners();
+          const data =
+            ev && typeof ev === 'object' && 'data' in ev
+              ? (ev as { data?: { message?: string } }).data
+              : undefined;
+          const msg = data?.message ?? 'session error';
+          tracker.markError(new Error(msg));
+          reject(new Error(msg));
+        });
+        const offShutdown = session.on('session.shutdown', () => {
+          cleanupCompletionListeners();
+          // session.shutdown collapses true reason into routine|error
+          // (issue copilot-cli/2852). We treat it as success here and
+          // let the tracker carry whatever was already marked (timeout,
+          // abort) by the time we get here.
+          resolve();
+        });
+        completionUnsubscribers = [offIdle, offError, offShutdown];
+        function cleanupCompletionListeners(): void {
+          for (const off of completionUnsubscribers) {
+            try {
+              off();
+            } catch {
+              /* */
+            }
+          }
+          completionUnsubscribers = [];
+        }
+      });
+
       try {
-        await session.send({ prompt: fullMessage } as never);
-        await waitIdleOrShutdown(session);
+        await session.send({ prompt: fullMessage });
+        await completion;
       } catch (err) {
-        tracker.markError(err);
         const msg = err instanceof Error ? err.message : String(err);
-        onEvent({ type: 'error', message: msg });
+        if (/timeout/i.test(msg)) tracker.markTimeout();
+        else if (!tracker.finalize().reason || tracker.finalize().reason === 'complete') {
+          tracker.markError(err);
+        }
+        emitError(onEvent, msg);
         throw err;
       }
 
       const final = tracker.finalize();
       if (final.reason === 'error' || final.reason === 'timeout') {
         const text = final.message ?? `terminated: ${final.reason}`;
-        onEvent({ type: 'error', message: text });
+        emitError(onEvent, text);
         throw new Error(text);
       }
       onEvent({ type: 'done' });
@@ -289,25 +357,9 @@ export const copilotAgentFactory: AgentFactory = async (
   return spawned;
 };
 
-/**
- * Resolves on the first `session.idle` (turn end) or `session.shutdown`
- * (real terminal). Returns even if the session emits an error event —
- * the factory's prompt() inspects the TerminationTracker afterwards.
- */
-async function waitIdleOrShutdown(session: {
-  on: (cb: (ev: unknown) => void) => () => void;
-}): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const off = session.on((ev: unknown) => {
-      const t = (ev as { type?: string })?.type;
-      if (t === 'session.idle' || t === 'session.shutdown' || t === 'session.error') {
-        try {
-          off();
-        } catch {
-          /* */
-        }
-        resolve();
-      }
-    });
-  });
+function emitError(
+  onEvent: (e: AgentEvent) => void,
+  message: string,
+): void {
+  onEvent({ type: 'error', message });
 }

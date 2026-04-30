@@ -56,6 +56,13 @@ export interface ApiKeySpec {
    * means "nice to have, plumb it but don't pop the prompt".
    */
   required: boolean;
+  /**
+   * When set, this spec is "owned" by a specific agent backend and the
+   * App should only enforce its presence when that backend is active.
+   * Specs without `backendBound` are universal — required regardless of
+   * backend (e.g. ARTIFICIAL_ANALYSIS_API_KEY for catalog enrichment).
+   */
+  backendBound?: 'pi' | 'copilot';
 }
 
 export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
@@ -69,6 +76,7 @@ export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
     hint: 'starts with sk-or-',
     validatePrefix: 'sk-or-',
     required: true,
+    backendBound: 'pi',
   },
   {
     name: 'artificialAnalysis',
@@ -81,11 +89,11 @@ export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
     required: true,
   },
   {
-    // Used when --backend=copilot. Marked `required: false` because the
-    // OpenRouter spec also has `required: true` and only ONE of the
-    // two is needed for any given run. The App's missing-key check is
-    // backend-aware (see app.tsx) — it only blocks on the spec that
-    // matches the active backend.
+    // Used when --backend=copilot. `required: false` so legacy callers
+    // (`findMissingRequiredKeys()`, smoke scripts) don't gate on it for
+    // pi runs. `backendBound: 'copilot'` makes the App's
+    // backend-aware helper (`findMissingKeysForBackend`) enforce it
+    // whenever copilot is the active backend, regardless of `required`.
     name: 'copilot',
     envVar: 'COPILOT_GITHUB_TOKEN',
     envFileVar: 'COPILOT_GITHUB_TOKEN_FILE',
@@ -94,6 +102,7 @@ export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
     label: 'GitHub Copilot',
     hint: 'GitHub fine-grained PAT with "Copilot Requests" scope, or COPILOT_GITHUB_TOKEN/GH_TOKEN',
     required: false,
+    backendBound: 'copilot',
   },
 ];
 

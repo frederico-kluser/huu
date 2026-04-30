@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 
 /**
  * Resolves credentials for the Copilot CLI / SDK in the same precedence
@@ -94,8 +94,9 @@ export function resolveCopilotCreds(
 }
 
 function readKeyFile(path: string): string {
+  // No existsSync precheck: readFileSync throws ENOENT/EACCES which we
+  // catch — the precheck would TOCTOU with the next read anyway.
   try {
-    if (!existsSync(path)) return '';
     return readFileSync(path, 'utf8').trim();
   } catch {
     return '';

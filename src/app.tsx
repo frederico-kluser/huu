@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { pkg } from './lib/package-info.js';
 import { Box, Text, useApp, useInput, useStdout } from 'ink';
 import { join } from 'node:path';
@@ -20,7 +20,7 @@ import {
 import { listAllPipelines, savePipelineToMemory, deletePipelineFromMemory } from './lib/pipeline-io.js';
 import { listPipelinesInMemory } from './lib/pipeline-memory.js';
 import {
-  findMissingRequiredKeys,
+  findMissingKeysForBackend,
   findSpec,
   resolveApiKey,
   saveApiKey,
@@ -115,8 +115,11 @@ export function App({
   // CLI-provided factory wins. When the user picks via TUI we set
   // `activeFactory` from selectBackend(). The fallback chain is:
   // activeFactory → CLI-injected agentFactory → pi (registry default).
+  // Memoize so re-renders don't allocate a new BackendBundle just to
+  // read its agentFactory — selectBackend() returns a fresh object.
+  const piFallbackBundle = useMemo(() => selectBackend('pi'), []);
   const factory =
-    activeFactory ?? agentFactory ?? selectBackend('pi').agentFactory;
+    activeFactory ?? agentFactory ?? piFallbackBundle.agentFactory;
   const resolverFactory = activeResolverFactory ?? conflictResolverFactory;
 
   // Active spec used by the missing-key check. Backend determines which
@@ -397,25 +400,22 @@ export function App({
         backend={backendKind}
         onSelect={(id) => {
           setModelId(id);
-          if (!activeRequiresApiKey) {
+          if (!activeRequiresApiKey || backendKind === 'stub') {
             navigate({ kind: 'run', modelId: id, apiKey });
             return;
           }
-          // Re-resolve at decision time so a key persisted earlier in
-          // this same session (or freshly mounted) is picked up. We only
-          // gate on the spec for the active backend — having an
-          // OpenRouter key shouldn't unblock a Copilot run, and vice
-          // versa.
-          const needed = activeSpec ? resolveApiKey(activeSpec) : '';
-          if (!needed) {
-            navigate(
-              activeSpec
-                ? { kind: 'api-key', missing: [activeSpec] }
-                : { kind: 'run', modelId: id, apiKey },
-            );
+          // findMissingKeysForBackend gates on the backend's primary
+          // spec PLUS any universal spec (artificialAnalysis for catalog
+          // enrichment). Re-resolve at decision time so keys persisted
+          // earlier in the same session are picked up. backendKind here
+          // is 'pi' or 'copilot' because we short-circuited 'stub' above.
+          const missing = findMissingKeysForBackend(backendKind);
+          if (missing.length > 0) {
+            navigate({ kind: 'api-key', missing });
           } else {
-            setApiKey(needed);
-            navigate({ kind: 'run', modelId: id, apiKey: needed });
+            const next = activeSpec ? resolveApiKey(activeSpec) : apiKey;
+            setApiKey(next);
+            navigate({ kind: 'run', modelId: id, apiKey: next });
           }
         }}
         onCancel={() =>

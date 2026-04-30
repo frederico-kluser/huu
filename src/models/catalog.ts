@@ -185,7 +185,12 @@ export function loadRecommendedModels(
 
   const all: ModelEntry[] = [...openrouterEntries, ...DEFAULT_COPILOT_MODELS];
 
-  if (!backend) return all;
+  // No filter when backend is undefined OR 'stub'. Stub never calls a
+  // provider, so picking a Copilot model under --stub --copilot
+  // (smoke-test the Copilot UI flow without burning quota) MUST not
+  // be blocked by a filter. Filtering only when running a real
+  // backend prevents accidental wrong-provider selections.
+  if (!backend || backend === 'stub') return all;
   return all.filter((m) => providerFor(m) === backendToProvider(backend));
 }
 
@@ -193,10 +198,7 @@ function providerFor(m: ModelEntry): ModelProvider {
   return m.provider ?? 'openrouter';
 }
 
-function backendToProvider(backend: AgentBackendKind): ModelProvider {
-  // `stub` doesn't actually call any provider — but the catalog still
-  // needs a deterministic filter. We default stub to OpenRouter so the
-  // user can pick whatever they want with --stub for smoke tests.
+function backendToProvider(backend: 'pi' | 'copilot'): ModelProvider {
   return backend === 'copilot' ? 'copilot' : 'openrouter';
 }
 

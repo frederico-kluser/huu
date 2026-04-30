@@ -63,6 +63,37 @@ export function findMissingRequiredKeys(): ApiKeySpec[] {
 }
 
 /**
+ * Backend-aware variant of `findMissingRequiredKeys`. Returns specs the
+ * given backend would block on:
+ *   1. The backend-bound spec for `backend` (regardless of `required`),
+ *      because choosing a backend implies its primary credential is
+ *      mandatory — even when the registry has `required: false` to
+ *      keep legacy callers from blocking other backends.
+ *   2. Plus any spec without `backendBound` that is `required: true` —
+ *      those are universal (e.g. `artificialAnalysis` for catalog
+ *      enrichment), enforced regardless of which backend runs.
+ *
+ * Specs bound to a DIFFERENT backend are skipped so a Copilot run
+ * doesn't ask for an OpenRouter key the user will never use.
+ */
+export function findMissingKeysForBackend(
+  backend: 'pi' | 'copilot',
+): ApiKeySpec[] {
+  const out: ApiKeySpec[] = [];
+  for (const spec of API_KEY_REGISTRY) {
+    const bound = spec.backendBound;
+    if (bound) {
+      if (bound !== backend) continue;
+      // Backend-bound spec for the active backend: always enforce.
+      if (!resolveApiKey(spec)) out.push(spec);
+    } else if (spec.required) {
+      if (!resolveApiKey(spec)) out.push(spec);
+    }
+  }
+  return out;
+}
+
+/**
  * Persist `value` for `spec` into the global config file (mode 0600 in a
  * 0700 directory). Subsequent runs on this user/machine will resolve the
  * key without re-prompting.

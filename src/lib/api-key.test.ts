@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   API_KEY_REGISTRY,
   configFilePath,
+  findMissingKeysForBackend,
   findMissingRequiredKeys,
   findSpec,
   loadStoredApiKey,
@@ -22,6 +23,8 @@ describe('api-key registry', () => {
     'OPENROUTER_API_KEY_FILE',
     'ARTIFICIAL_ANALYSIS_API_KEY',
     'ARTIFICIAL_ANALYSIS_API_KEY_FILE',
+    'COPILOT_GITHUB_TOKEN',
+    'COPILOT_GITHUB_TOKEN_FILE',
     'XDG_CONFIG_HOME',
   ] as const;
   const saved: Record<string, string | undefined> = {};
@@ -168,6 +171,68 @@ describe('api-key registry', () => {
       const missing = findMissingRequiredKeys();
       const names = missing.map((s) => s.name);
       expect(names).not.toContain('artificialAnalysis');
+    });
+
+    it('does not return copilot spec by default (required: false)', () => {
+      // The Copilot spec is `required: false` so legacy callers don't
+      // gate a Pi run on a missing Copilot token. This is the
+      // contract; if it changes, update both this test and the
+      // App's missing-key check.
+      const missing = findMissingRequiredKeys();
+      const names = missing.map((s) => s.name);
+      expect(names).not.toContain('copilot');
+    });
+  });
+
+  describe('findMissingKeysForBackend (backend-aware)', () => {
+    it('pi backend: requires openrouter + universal AA key', () => {
+      const missing = findMissingKeysForBackend('pi');
+      const names = missing.map((s) => s.name);
+      expect(names).toContain('openrouter');
+      expect(names).toContain('artificialAnalysis');
+      expect(names).not.toContain('copilot');
+    });
+
+    it('copilot backend: requires copilot + universal AA key', () => {
+      // Regression guard: an earlier refactor accidentally dropped the
+      // AA prompt when switching to backend-aware checking, breaking
+      // catalog enrichment for Copilot users. AA is universal.
+      const missing = findMissingKeysForBackend('copilot');
+      const names = missing.map((s) => s.name);
+      expect(names).toContain('copilot');
+      expect(names).toContain('artificialAnalysis');
+      expect(names).not.toContain('openrouter');
+    });
+
+    it('copilot backend: still requires copilot even though spec is required:false', () => {
+      // backend-bound specs are enforced regardless of `required` flag
+      // when the matching backend is active — choosing a backend IS
+      // the implicit "I need this credential" signal.
+      const missing = findMissingKeysForBackend('copilot');
+      expect(missing.find((s) => s.name === 'copilot')).toBeDefined();
+    });
+
+    it('drops backend-bound spec when its key is set', () => {
+      process.env.OPENROUTER_API_KEY = 'sk-or-set';
+      const missing = findMissingKeysForBackend('pi');
+      const names = missing.map((s) => s.name);
+      expect(names).not.toContain('openrouter');
+    });
+
+    it('drops universal spec when its key is set', () => {
+      process.env.ARTIFICIAL_ANALYSIS_API_KEY = 'aa-set';
+      const missing = findMissingKeysForBackend('pi');
+      const names = missing.map((s) => s.name);
+      expect(names).not.toContain('artificialAnalysis');
+    });
+
+    it('does not include other backend\'s spec', () => {
+      // Even if the user has openrouter set, switching to copilot
+      // shouldn't list openrouter as still-needed.
+      process.env.OPENROUTER_API_KEY = 'sk-or-set';
+      const missing = findMissingKeysForBackend('copilot');
+      const names = missing.map((s) => s.name);
+      expect(names).not.toContain('openrouter');
     });
   });
 
