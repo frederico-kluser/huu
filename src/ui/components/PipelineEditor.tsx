@@ -9,9 +9,11 @@ import {
 } from '../../lib/types.js';
 import { StepEditor } from './StepEditor.js';
 import { log as dlog, bump as dbump } from '../../lib/debug-logger.js';
+import { savePipelineToMemory } from '../../lib/pipeline-io.js';
 
 interface Props {
   initialPipeline?: Pipeline;
+  sourceName?: string;
   repoRoot: string;
   onComplete: (pipeline: Pipeline) => void;
   onImport: () => void;
@@ -51,6 +53,7 @@ const FULL_CLEAR = '\x1b[3J';
 
 export function PipelineEditor({
   initialPipeline,
+  sourceName,
   repoRoot,
   onComplete,
   onImport,
@@ -76,6 +79,18 @@ export function PipelineEditor({
     dlog('mount', 'PipelineEditor', { hasInitial: Boolean(initialPipeline) });
     return () => dlog('mount', 'PipelineEditor.unmount');
   }, [initialPipeline]);
+
+  useEffect(() => {
+    if (sourceName) {
+      savePipelineToMemory(pipeline);
+    }
+  }, [pipeline, sourceName]);
+
+  useEffect(() => {
+    if (sourceName && pipeline.name === sourceName) {
+      savePipelineToMemory(pipeline);
+    }
+  }, [pipeline, sourceName]);
 
   useInput((input, key) => {
     dbump('input.PipelineEditor');

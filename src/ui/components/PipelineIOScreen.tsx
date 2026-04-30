@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { Pipeline } from '../../lib/types.js';
-import { exportPipeline, importPipeline } from '../../lib/pipeline-io.js';
+import { exportPipeline, importPipeline, savePipelineToMemory } from '../../lib/pipeline-io.js';
 
 export type PipelineIOMode = 'import' | 'export';
 
@@ -60,6 +60,7 @@ export function PipelineIOScreen({
         const target = trimmed || defaultExportPath;
         mkdirSync(dirname(target), { recursive: true });
         exportPipeline(pipeline, target);
+        savePipelineToMemory(pipeline);
         setDone(
           trimmed
             ? `Saved to ${target}`
