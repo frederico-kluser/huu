@@ -7,6 +7,23 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
+### Added
+
+- **Project recon stage in the pipeline assistant.** Before the assistant
+  starts asking questions, it now fires four MiniMax M2.7 agents in
+  parallel — `stack`, `structure`, `libraries`, and `conventions` — each
+  with its own loader and its own focused mission. Their findings are
+  aggregated into a "Contexto do projeto" section injected into the
+  assistant's system prompt, so the interview can ask project-specific
+  questions instead of generic ones.
+  - Errors are isolated per agent: if one times out or fails to parse,
+    the other three still complete and the assistant proceeds with
+    whatever context survived.
+  - Stub mode (`apiKey === "stub"` / `HUU_LANGCHAIN_STUB=1`) returns
+    canned bullets so smoke tests never touch the network.
+  - `ESC` during recon goes back to the intent prompt (no
+    confirm dialog — there's no user work to lose).
+
 ## [0.3.1] - 2026-04-29
 
 ### Added

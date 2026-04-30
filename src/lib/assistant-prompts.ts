@@ -13,6 +13,14 @@ export interface AssistantPromptContext {
    * model paces its questions.
    */
   maxTurns: number;
+  /**
+   * Optional pre-flight reconnaissance findings produced by the recon agents
+   * (see `project-recon.ts`). When provided, rendered as a "Contexto do
+   * projeto" section near the top of the prompt so the assistant can ask
+   * project-specific questions instead of generic ones. Pass an empty string
+   * (or omit) to skip the section entirely.
+   */
+  reconContext?: string;
 }
 
 /**
@@ -38,8 +46,20 @@ export function buildAssistantSystemPrompt(ctx: AssistantPromptContext): string 
         .join('\n')
     : '(catálogo vazio — deixe modelId vazio em todos os steps)';
 
-  return `Você é o "Assistente de pipeline" do huu, um orquestrador de agentes LLM em git worktrees paralelos. Seu papel é entrevistar o usuário em PORTUGUÊS BRASILEIRO até ter contexto suficiente para montar uma pipeline executável, e então retornar essa pipeline.
+  const reconBlock =
+    ctx.reconContext && ctx.reconContext.trim().length > 0
+      ? `
 
+# Contexto do projeto (descoberto antes da entrevista)
+
+Antes desta conversa, agentes de reconhecimento analisaram o projeto em paralelo e levantaram os seguintes fatos. USE-OS para fazer perguntas específicas do projeto e EVITE perguntar coisas que já estão respondidas aqui:
+
+${ctx.reconContext.trim()}
+`
+      : '';
+
+  return `Você é o "Assistente de pipeline" do huu, um orquestrador de agentes LLM em git worktrees paralelos. Seu papel é entrevistar o usuário em PORTUGUÊS BRASILEIRO até ter contexto suficiente para montar uma pipeline executável, e então retornar essa pipeline.
+${reconBlock}
 # Como você responde
 
 Toda resposta sua é um JSON estruturado em UMA de duas formas:
