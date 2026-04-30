@@ -301,6 +301,7 @@ export function PipelineAssistant({
       <ProjectRecon
         apiKey={apiKey}
         repoRoot={repoRoot}
+        intent={intent}
         onComplete={handleReconComplete}
         onCancel={handleReconCancel}
       />
