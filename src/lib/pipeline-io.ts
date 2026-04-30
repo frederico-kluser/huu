@@ -3,6 +3,21 @@ import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { z } from 'zod';
 import type { Pipeline } from './types.js';
+import {
+  savePipelineToMemory,
+  loadPipelineFromMemory,
+  deletePipelineFromMemory,
+  listPipelinesInMemory,
+  pipelineExistsInMemory,
+} from './pipeline-memory.js';
+
+export {
+  savePipelineToMemory,
+  loadPipelineFromMemory,
+  deletePipelineFromMemory,
+  listPipelinesInMemory,
+  pipelineExistsInMemory,
+};
 
 const StepScopeSchema = z.enum(['project', 'per-file', 'flexible']);
 
@@ -14,7 +29,7 @@ const PromptStepSchema = z.object({
   scope: StepScopeSchema.optional(),
 });
 
-const PipelineSchema = z.object({
+export const PipelineSchema = z.object({
   name: z.string().min(1),
   steps: z.array(PromptStepSchema).min(1),
   cardTimeoutMs: z.number().int().positive().optional(),

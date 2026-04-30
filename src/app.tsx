@@ -11,8 +11,10 @@ import { RunDashboard } from './ui/components/RunDashboard.js';
 import { ApiKeyPrompt } from './ui/components/ApiKeyPrompt.js';
 import { useTerminalResize } from './ui/hooks/useTerminalResize.js';
 import { SystemMetricsBar } from './ui/components/SystemMetricsBar.js';
+import { SavedPipelinesManager } from './ui/components/SavedPipelinesManager.js';
 import { stubAgentFactory } from './orchestrator/stub-agent.js';
-import { listAllPipelines } from './lib/pipeline-io.js';
+import { listAllPipelines, savePipelineToMemory, deletePipelineFromMemory } from './lib/pipeline-io.js';
+import { listPipelinesInMemory } from './lib/pipeline-memory.js';
 import {
   findMissingRequiredKeys,
   findSpec,
@@ -45,6 +47,7 @@ type Screen =
   | { kind: 'pipeline-import' }
   | { kind: 'pipeline-import-custom' }
   | { kind: 'pipeline-export' }
+  | { kind: 'saved-pipelines' }
   | { kind: 'model-selector' }
   | { kind: 'api-key'; missing: ApiKeySpec[] }
   | { kind: 'run'; modelId: string; apiKey: string }
@@ -74,6 +77,8 @@ export function App({
   );
   const [availablePipelines, setAvailablePipelines] = useState<PipelineEntry[]>([]);
   const [selectedPipelineIndex, setSelectedPipelineIndex] = useState<number>(0);
+  const [pipelineSourceName, setPipelineSourceName] = useState<string | null>(null);
+  const [savedPipelines, setSavedPipelines] = useState<PipelineEntry[]>([]);
   const repoRoot = process.cwd();
   const factory = agentFactory ?? stubAgentFactory;
 
@@ -85,6 +90,15 @@ export function App({
       const entries = listAllPipelines(join(repoRoot, 'pipelines'));
       setAvailablePipelines(entries);
       setSelectedPipelineIndex(0);
+    }
+    if (screen.kind === 'welcome' || screen.kind === 'saved-pipelines') {
+      const memoryEntries = listPipelinesInMemory().map((e) => ({
+        fileName: e.name,
+        filePath: `memory://${e.name}`,
+        pipeline: e.pipeline,
+        source: 'global' as const,
+      }));
+      setSavedPipelines(memoryEntries);
     }
   }, [screen.kind, repoRoot]);
 
@@ -143,6 +157,10 @@ export function App({
           navigate({ kind: 'pipeline-import' });
           return;
         }
+        if (input === 'm' || input === 'M') {
+          navigate({ kind: 'saved-pipelines' });
+          return;
+        }
         if (key.upArrow) {
           setSelectedPipelineIndex((prev) => Math.max(0, prev - 1));
           return;
@@ -199,6 +217,7 @@ export function App({
             <Text>  <Text bold color="magenta">[A]</Text>  Assistente de pipeline</Text>
             <Text>  <Text bold color="cyan">[N]</Text>  New pipeline</Text>
             <Text>  <Text bold color="cyan">[I]</Text>  Import pipeline from list</Text>
+            <Text>  <Text bold color="cyan">[M]</Text>  Saved pipelines</Text>
             <Text>  <Text bold color="cyan">[Q]</Text>  Quit</Text>
           </Box>
 
@@ -245,6 +264,7 @@ export function App({
     body = (
       <PipelineEditor
         initialPipeline={pipeline ?? undefined}
+        sourceName={pipelineSourceName ?? undefined}
         repoRoot={repoRoot}
         onComplete={(p) => {
           setPipeline(p);
@@ -290,6 +310,22 @@ export function App({
         pipeline={pipeline ?? undefined}
         onComplete={() => navigate({ kind: 'pipeline-editor' })}
         onCancel={() => navigate({ kind: 'pipeline-editor' })}
+      />
+    );
+  } else if (screen.kind === 'saved-pipelines') {
+    body = (
+      <SavedPipelinesManager
+        entries={savedPipelines}
+        onSelect={(loaded) => {
+          setPipeline(loaded);
+          setPipelineSourceName(loaded.name);
+          navigate({ kind: 'pipeline-editor' });
+        }}
+        onDelete={(name) => {
+          deletePipelineFromMemory(name);
+          setSavedPipelines((prev) => prev.filter((e) => e.pipeline.name !== name));
+        }}
+        onCancel={() => navigate({ kind: 'welcome' })}
       />
     );
   } else if (screen.kind === 'model-selector') {
