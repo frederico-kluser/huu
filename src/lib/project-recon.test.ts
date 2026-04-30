@@ -3,12 +3,14 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  RECON_AGENTS,
+  RECON_CATALOG,
   RECON_MODEL,
   ReconBulletsSchema,
   buildReconContextMarkdown,
+  fallbackCoreItems,
   runProjectRecon,
   type ReconAgentResult,
+  type ReconRunItem,
   type ReconUpdate,
 } from './project-recon.js';
 
@@ -36,42 +38,69 @@ describe('ReconBulletsSchema', () => {
 });
 
 describe('buildReconContextMarkdown', () => {
+  const stack = RECON_CATALOG.find((e) => e.id === 'stack')!;
+  const structure = RECON_CATALOG.find((e) => e.id === 'structure')!;
+  const libraries = RECON_CATALOG.find((e) => e.id === 'libraries')!;
+
+  const toRunItem = (e: typeof stack): ReconRunItem => ({
+    tag: e.id,
+    label: e.label,
+    mission: e.mission,
+    source: 'catalog',
+  });
+
   const sample: ReconAgentResult[] = [
     {
-      agent: RECON_AGENTS[0]!,
+      agent: toRunItem(stack),
       status: 'done',
       bullets: ['fato 1', 'fato 2'],
     },
     {
-      agent: RECON_AGENTS[1]!,
+      agent: toRunItem(structure),
       status: 'error',
       bullets: [],
       error: 'oops',
     },
     {
-      agent: RECON_AGENTS[2]!,
+      agent: toRunItem(libraries),
       status: 'done',
       bullets: ['lib X usa Y'],
     },
   ];
 
-  it('renders sections for agents that produced bullets', () => {
+  it('renders sections for items that produced bullets', () => {
     const md = buildReconContextMarkdown(sample);
     expect(md).toMatch(/### /);
     expect(md).toMatch(/- fato 1/);
     expect(md).toMatch(/- lib X usa Y/);
   });
 
-  it('skips errored agents (no empty sections)', () => {
+  it('skips errored items (no empty sections)', () => {
     const md = buildReconContextMarkdown(sample);
-    expect(md).not.toMatch(new RegExp(`### ${RECON_AGENTS[1]!.label}`));
+    expect(md).not.toMatch(new RegExp(`### ${structure.label}`));
   });
 
   it('returns empty string when nothing succeeded', () => {
     const md = buildReconContextMarkdown([
-      { agent: RECON_AGENTS[0]!, status: 'error', bullets: [] },
+      { agent: toRunItem(stack), status: 'error', bullets: [] },
     ]);
     expect(md).toBe('');
+  });
+
+  it('preserves custom item labels in section headers', () => {
+    const customResult: ReconAgentResult = {
+      agent: {
+        tag: 'custom:0',
+        label: 'My custom mission',
+        mission: 'do stuff',
+        source: 'custom',
+      },
+      status: 'done',
+      bullets: ['custom bullet'],
+    };
+    const md = buildReconContextMarkdown([customResult]);
+    expect(md).toMatch(/### My custom mission/);
+    expect(md).toMatch(/- custom bullet/);
   });
 });
 
@@ -90,7 +119,7 @@ describe('runProjectRecon — stub mode', () => {
     else process.env.HUU_LANGCHAIN_STUB = originalStubFlag;
   });
 
-  it('returns one canned result per RECON_AGENT when apiKey === "stub"', async () => {
+  it('falls back to core items when no items list is passed', async () => {
     writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'x' }));
     const updates: ReconUpdate[] = [];
     const results = await runProjectRecon({
@@ -98,22 +127,53 @@ describe('runProjectRecon — stub mode', () => {
       repoRoot: root,
       onUpdate: (u) => updates.push(u),
     });
-    expect(results).toHaveLength(RECON_AGENTS.length);
+    expect(results).toHaveLength(fallbackCoreItems().length);
     for (const r of results) {
       expect(r.status).toBe('done');
       expect(r.bullets.length).toBeGreaterThan(0);
     }
   });
 
-  it('emits at least one running and one done update per agent', async () => {
+  it('runs only the items it was given (selector-driven flow)', async () => {
+    const items: ReconRunItem[] = [
+      {
+        tag: 'stack',
+        label: 'Stack',
+        mission: 'm',
+        source: 'catalog',
+      },
+      {
+        tag: 'custom:0',
+        label: 'My custom mission',
+        mission: 'do stuff',
+        source: 'custom',
+      },
+    ];
+    const updates: ReconUpdate[] = [];
+    const results = await runProjectRecon({
+      apiKey: 'stub',
+      repoRoot: root,
+      items,
+      onUpdate: (u) => updates.push(u),
+    });
+    expect(results).toHaveLength(2);
+    expect(results[0]!.agent.tag).toBe('stack');
+    expect(results[1]!.agent.tag).toBe('custom:0');
+    expect(results[1]!.agent.source).toBe('custom');
+    for (const r of results) expect(r.bullets.length).toBeGreaterThan(0);
+  });
+
+  it('emits at least one running and one done update per item', async () => {
+    const items = fallbackCoreItems();
     const updates: ReconUpdate[] = [];
     await runProjectRecon({
       apiKey: 'stub',
       repoRoot: root,
+      items,
       onUpdate: (u) => updates.push(u),
     });
-    for (const agent of RECON_AGENTS) {
-      const mine = updates.filter((u) => u.agentId === agent.id);
+    for (const item of items) {
+      const mine = updates.filter((u) => u.agentId === item.tag);
       expect(mine.some((u) => u.status === 'running')).toBe(true);
       expect(mine.some((u) => u.status === 'done')).toBe(true);
     }
@@ -124,6 +184,7 @@ describe('runProjectRecon — stub mode', () => {
     const results = await runProjectRecon({
       apiKey: 'sk-or-real-looking',
       repoRoot: root,
+      items: fallbackCoreItems(),
       onUpdate: () => {},
     });
     for (const r of results) expect(r.status).toBe('done');
@@ -142,16 +203,18 @@ describe('runProjectRecon — real mode guards', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it('errors out (and notifies every agent) when apiKey is empty', async () => {
+  it('errors out (and notifies every item) when apiKey is empty', async () => {
+    const items = fallbackCoreItems();
     const updates: ReconUpdate[] = [];
     await expect(
       runProjectRecon({
         apiKey: '',
         repoRoot: root,
+        items,
         onUpdate: (u) => updates.push(u),
       }),
     ).rejects.toThrow(/API key/i);
     const errored = updates.filter((u) => u.status === 'error');
-    expect(errored.length).toBe(RECON_AGENTS.length);
+    expect(errored.length).toBe(items.length);
   });
 });
