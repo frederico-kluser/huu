@@ -9,10 +9,14 @@ import { PipelineIOScreen } from './ui/components/PipelineIOScreen.js';
 import { PipelineImportList } from './ui/components/PipelineImportList.js';
 import { RunDashboard } from './ui/components/RunDashboard.js';
 import { ApiKeyPrompt } from './ui/components/ApiKeyPrompt.js';
+import { BackendSelector } from './ui/components/BackendSelector.js';
 import { useTerminalResize } from './ui/hooks/useTerminalResize.js';
 import { SystemMetricsBar } from './ui/components/SystemMetricsBar.js';
 import { SavedPipelinesManager } from './ui/components/SavedPipelinesManager.js';
-import { stubAgentFactory } from './orchestrator/stub-agent.js';
+import {
+  selectBackend,
+  type AgentBackendKind,
+} from './orchestrator/backends/registry.js';
 import { listAllPipelines, savePipelineToMemory, deletePipelineFromMemory } from './lib/pipeline-io.js';
 import { listPipelinesInMemory } from './lib/pipeline-memory.js';
 import {
@@ -34,6 +38,12 @@ interface AppProps {
   conflictResolverFactory?: AgentFactory;
   /** If true, an API key is required before running (real LLM). */
   requiresApiKey?: boolean;
+  /**
+   * Backend kind locked from the CLI flag. When provided, the
+   * BackendSelector screen is skipped. When undefined, the user is
+   * shown the selector before model picking.
+   */
+  backend?: AgentBackendKind;
   /** When true and initialPipeline is set, jumps straight from welcome → editor. */
   autoStart?: boolean;
   /** When true, enables resource-bound auto-scaling of concurrency. */
@@ -48,6 +58,7 @@ type Screen =
   | { kind: 'pipeline-import-custom' }
   | { kind: 'pipeline-export' }
   | { kind: 'saved-pipelines' }
+  | { kind: 'backend-selector' }
   | { kind: 'model-selector' }
   | { kind: 'api-key'; missing: ApiKeySpec[] }
   | { kind: 'run'; modelId: string; apiKey: string }
@@ -60,6 +71,7 @@ export function App({
   agentFactory,
   conflictResolverFactory,
   requiresApiKey,
+  backend: initialBackend,
   autoStart,
   autoScale,
 }: AppProps): React.JSX.Element {
@@ -71,7 +83,27 @@ export function App({
   );
   const [pipeline, setPipeline] = useState<Pipeline | null>(initialPipeline ?? null);
   const [modelId, setModelId] = useState<string>('');
+
+  // Backend chosen at runtime — starts from the CLI flag (if any) or
+  // 'pi' as default. The BackendSelector updates this when the user
+  // hasn't pre-selected via flag.
+  const [backendKind, setBackendKind] = useState<AgentBackendKind>(
+    initialBackend ?? 'pi',
+  );
+  // The factory + resolver pair must mirror `backendKind`. Keeping them
+  // in state means switching backends in the TUI doesn't require remount.
+  const [activeFactory, setActiveFactory] = useState<AgentFactory | null>(
+    agentFactory ?? null,
+  );
+  const [activeResolverFactory, setActiveResolverFactory] = useState<
+    AgentFactory | undefined
+  >(conflictResolverFactory);
+  const [activeRequiresApiKey, setActiveRequiresApiKey] = useState<boolean>(
+    requiresApiKey ?? true,
+  );
+
   const openrouterSpec = findSpec('openrouter');
+  const copilotSpec = findSpec('copilot');
   const [apiKey, setApiKey] = useState<string>(
     openrouterSpec ? resolveApiKey(openrouterSpec) : '',
   );
@@ -80,7 +112,18 @@ export function App({
   const [pipelineSourceName, setPipelineSourceName] = useState<string | null>(null);
   const [savedPipelines, setSavedPipelines] = useState<PipelineEntry[]>([]);
   const repoRoot = process.cwd();
-  const factory = agentFactory ?? stubAgentFactory;
+  // CLI-provided factory wins. When the user picks via TUI we set
+  // `activeFactory` from selectBackend(). The fallback chain is:
+  // activeFactory → CLI-injected agentFactory → pi (registry default).
+  const factory =
+    activeFactory ?? agentFactory ?? selectBackend('pi').agentFactory;
+  const resolverFactory = activeResolverFactory ?? conflictResolverFactory;
+
+  // Active spec used by the missing-key check. Backend determines which
+  // entry of API_KEY_REGISTRY is "the required one"; the others stay
+  // optional regardless of their `required` flag.
+  const activeSpec: ApiKeySpec | undefined =
+    backendKind === 'copilot' ? copilotSpec : openrouterSpec;
 
   const screenRef = useRef<Screen>(screen);
   screenRef.current = screen;
@@ -268,7 +311,13 @@ export function App({
         repoRoot={repoRoot}
         onComplete={(p) => {
           setPipeline(p);
-          navigate({ kind: 'model-selector' });
+          // When the CLI didn't pre-select a backend, ask the user
+          // explicitly. With a flag, jump straight to model selection.
+          navigate(
+            initialBackend
+              ? { kind: 'model-selector' }
+              : { kind: 'backend-selector' },
+          );
         }}
         onImport={() => navigate({ kind: 'pipeline-import' })}
         onExport={(p) => {
@@ -276,6 +325,20 @@ export function App({
           navigate({ kind: 'pipeline-export' });
         }}
         onCancel={() => navigate({ kind: 'welcome' })}
+      />
+    );
+  } else if (screen.kind === 'backend-selector') {
+    body = (
+      <BackendSelector
+        onSelect={(kind) => {
+          const bundle = selectBackend(kind);
+          setBackendKind(kind);
+          setActiveFactory(() => bundle.agentFactory);
+          setActiveResolverFactory(() => bundle.conflictResolverFactory);
+          setActiveRequiresApiKey(bundle.requiresApiKey);
+          navigate({ kind: 'model-selector' });
+        }}
+        onCancel={() => navigate({ kind: 'pipeline-editor' })}
       />
     );
   } else if (screen.kind === 'pipeline-import') {
@@ -331,24 +394,37 @@ export function App({
   } else if (screen.kind === 'model-selector') {
     body = (
       <ModelSelectorOverlay
+        backend={backendKind}
         onSelect={(id) => {
           setModelId(id);
-          if (!requiresApiKey) {
+          if (!activeRequiresApiKey) {
             navigate({ kind: 'run', modelId: id, apiKey });
             return;
           }
           // Re-resolve at decision time so a key persisted earlier in
-          // this same session (or freshly mounted) is picked up.
-          const missing = findMissingRequiredKeys();
-          if (missing.length > 0) {
-            navigate({ kind: 'api-key', missing });
+          // this same session (or freshly mounted) is picked up. We only
+          // gate on the spec for the active backend — having an
+          // OpenRouter key shouldn't unblock a Copilot run, and vice
+          // versa.
+          const needed = activeSpec ? resolveApiKey(activeSpec) : '';
+          if (!needed) {
+            navigate(
+              activeSpec
+                ? { kind: 'api-key', missing: [activeSpec] }
+                : { kind: 'run', modelId: id, apiKey },
+            );
           } else {
-            const next = openrouterSpec ? resolveApiKey(openrouterSpec) : apiKey;
-            setApiKey(next);
-            navigate({ kind: 'run', modelId: id, apiKey: next });
+            setApiKey(needed);
+            navigate({ kind: 'run', modelId: id, apiKey: needed });
           }
         }}
-        onCancel={() => navigate({ kind: 'pipeline-editor' })}
+        onCancel={() =>
+          navigate(
+            initialBackend
+              ? { kind: 'pipeline-editor' }
+              : { kind: 'backend-selector' },
+          )
+        }
       />
     );
   } else if (screen.kind === 'api-key') {
@@ -366,9 +442,9 @@ export function App({
             process.env[spec.envVar] = value;
             if (saveGlobally) saveApiKey(spec, value);
           }
-          const orKey = openrouterSpec ? resolveApiKey(openrouterSpec) : '';
-          setApiKey(orKey);
-          navigate({ kind: 'run', modelId, apiKey: orKey });
+          const next = activeSpec ? resolveApiKey(activeSpec) : '';
+          setApiKey(next);
+          navigate({ kind: 'run', modelId, apiKey: next });
         }}
         onCancel={() => navigate({ kind: 'model-selector' })}
       />
@@ -376,11 +452,15 @@ export function App({
   } else if (screen.kind === 'run' && pipeline) {
     body = (
       <RunDashboard
-        config={{ apiKey: screen.apiKey || 'stub', modelId: screen.modelId }}
+        config={{
+          apiKey: screen.apiKey || 'stub',
+          modelId: screen.modelId,
+          backend: backendKind,
+        }}
         pipeline={pipeline}
         cwd={repoRoot}
         agentFactory={factory}
-        conflictResolverFactory={conflictResolverFactory}
+        conflictResolverFactory={resolverFactory}
         autoScale={autoScale}
         onComplete={(result) => navigate({ kind: 'summary', result })}
         onAbort={() => navigate({ kind: 'pipeline-editor' })}

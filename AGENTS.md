@@ -54,6 +54,12 @@ Consult the relevant skill before starting any task.
                 ↓
               orchestrator/ (worker pool, stage lifecycle, merge)
                 ↓
+              orchestrator/backends/ (pluggable agent SDKs:
+                pi/      — @mariozechner/pi-coding-agent (default, OpenRouter)
+                copilot/ — @github/copilot-sdk (GitHub subscription)
+                stub/    — no-LLM mock for smoke tests
+                registry.ts — single dispatch from kind → factory)
+                ↓
               git/ (worktree manager, branch ops, preflight, merge)
                 ↓
               lib/ (types, pipeline-io, file-scanner, run-id, status,

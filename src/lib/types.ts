@@ -1,10 +1,26 @@
 // Trimmed from pi-orq/src/lib/types.ts — guided-execution-only.
 // Removed: parallel/dag/autonomous modes, retries, scaling, safety model, per-step modelId.
 
+/**
+ * Which agent SDK is driving execution. The list is duplicated in
+ * `src/orchestrator/backends/registry.ts` (as `AgentBackendKind`) — the
+ * canonical declaration lives there because it's tightly coupled to the
+ * factory dispatch. This local alias avoids a `lib/` → `orchestrator/`
+ * import cycle (lib imports must stay backend-agnostic).
+ */
+export type AgentBackendKind = 'pi' | 'copilot' | 'stub';
+
 export interface AppConfig {
   apiKey: string;
   modelId: string;
   budgetUsd?: number;
+  /**
+   * Optional. Default `'pi'`. Set by the CLI flag `--backend=` or the
+   * TUI BackendSelector. Used by the api-key resolver to know which
+   * spec is "the required one" and by the model selector to filter
+   * the catalog.
+   */
+  backend?: AgentBackendKind;
 }
 
 /**

@@ -1,6 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentFactory } from './types.js';
+import type { AgentFactory } from '../../types.js';
+import { createDisposableState } from '../_shared/lifecycle.js';
 
 /**
  * Fake LLM agent for M4 verification. Sleeps a randomized few seconds,
@@ -14,13 +15,16 @@ export const stubAgentFactory: AgentFactory = async (
   onEvent,
   _runtimeContext,
 ) => {
-  let disposed = false;
+  const lifecycle = createDisposableState([]);
 
   return {
     agentId: task.agentId,
     task,
     async prompt(message: string): Promise<void> {
-      onEvent({ type: 'log', message: `stub agent #${task.agentId} starting on ${task.files.length === 0 ? 'whole project' : task.files[0]}` });
+      onEvent({
+        type: 'log',
+        message: `stub agent #${task.agentId} starting on ${task.files.length === 0 ? 'whole project' : task.files[0]}`,
+      });
       onEvent({ type: 'state_change', state: 'streaming' });
 
       const totalDelay = 2000 + Math.floor(Math.random() * 3000);
@@ -29,8 +33,11 @@ export const stubAgentFactory: AgentFactory = async (
 
       for (let i = 0; i < steps; i++) {
         await new Promise((resolve) => setTimeout(resolve, stepDelay));
-        if (disposed) return;
-        onEvent({ type: 'log', message: `stub step ${i + 1}/${steps}: simulating LLM call...` });
+        if (lifecycle.isDisposed()) return;
+        onEvent({
+          type: 'log',
+          message: `stub step ${i + 1}/${steps}: simulating LLM call...`,
+        });
       }
 
       const safeName = task.stageName.replace(/[^a-z0-9-_]/gi, '_');
@@ -52,14 +59,15 @@ export const stubAgentFactory: AgentFactory = async (
         onEvent({ type: 'file_write', file: stubFile });
         onEvent({ type: 'log', message: `wrote ${stubFile}` });
       } catch (err) {
-        onEvent({ type: 'error', message: `failed to write stub file: ${err instanceof Error ? err.message : String(err)}` });
+        onEvent({
+          type: 'error',
+          message: `failed to write stub file: ${err instanceof Error ? err.message : String(err)}`,
+        });
         return;
       }
 
       onEvent({ type: 'done' });
     },
-    async dispose(): Promise<void> {
-      disposed = true;
-    },
+    dispose: lifecycle.dispose,
   };
 };

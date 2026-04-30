@@ -16,6 +16,11 @@ WORKDIR /build
 # .npmrc is required: the lockfile resolved with legacy-peer-deps=true
 # (model-selector-ink declares a peer of ink@^6 while the rest of the
 # tree pins ink@^4 — npm 7+ refuses to install otherwise).
+#
+# `--include=dev` brings vitest/tsx for the build step. `optionalDependencies`
+# (@github/copilot-sdk) install by default; if a future version is unavailable
+# at build time, npm ci will skip it without failing — the Copilot backend
+# falls back to a clear runtime error and the rest of huu still works.
 COPY package.json package-lock.json .npmrc ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --include=dev

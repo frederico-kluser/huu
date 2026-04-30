@@ -80,6 +80,21 @@ export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
     hint: 'API key from artificialanalysis.ai',
     required: true,
   },
+  {
+    // Used when --backend=copilot. Marked `required: false` because the
+    // OpenRouter spec also has `required: true` and only ONE of the
+    // two is needed for any given run. The App's missing-key check is
+    // backend-aware (see app.tsx) — it only blocks on the spec that
+    // matches the active backend.
+    name: 'copilot',
+    envVar: 'COPILOT_GITHUB_TOKEN',
+    envFileVar: 'COPILOT_GITHUB_TOKEN_FILE',
+    secretMountPath: '/run/secrets/copilot_token',
+    hostSecretScope: 'huu-copilot-token',
+    label: 'GitHub Copilot',
+    hint: 'GitHub fine-grained PAT with "Copilot Requests" scope, or COPILOT_GITHUB_TOKEN/GH_TOKEN',
+    required: false,
+  },
 ];
 
 export function findSpec(name: string): ApiKeySpec | undefined {

@@ -31,6 +31,17 @@ export type ModelUseCase = z.infer<typeof ModelUseCaseSchema>;
 export const ModelTierSchema = z.enum(['flagship', 'workhorse', 'fast']);
 export type ModelTier = z.infer<typeof ModelTierSchema>;
 
+/**
+ * Which agent backend can serve this model. `openrouter` is the default
+ * when omitted (matches existing recommended-models.json with no
+ * provider field). `copilot` is the GitHub Copilot CLI / SDK; only models
+ * Copilot exposes via `--model` are valid (claude-sonnet-4.6, gpt-5.5,
+ * gemini-3-pro, etc.). The model selector filters the catalog by this
+ * field according to the active `AppConfig.backend`.
+ */
+export const ModelProviderSchema = z.enum(['openrouter', 'copilot']);
+export type ModelProvider = z.infer<typeof ModelProviderSchema>;
+
 export const ModelEntrySchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -42,6 +53,12 @@ export const ModelEntrySchema = z.object({
   bestFor: z.array(ModelUseCaseSchema).min(1).max(4).optional(),
   /** Pricing/capability tier. Drives default biases in the assistant prompt. */
   tier: ModelTierSchema.optional(),
+  /**
+   * Backend that can run this model. Defaults to `openrouter` when
+   * omitted to keep `recommended-models.json` files written before this
+   * field existed parsing without churn.
+   */
+  provider: ModelProviderSchema.optional(),
 });
 
 export type ModelEntry = z.infer<typeof ModelEntrySchema>;

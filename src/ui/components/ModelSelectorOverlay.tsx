@@ -16,6 +16,7 @@ import {
 import { buildMetricsIndex } from '../../models/aa-enrichment.js';
 import type { AAModel } from 'model-selector-ink';
 import type { ModelEntry } from '../../contracts/models.js';
+import type { AgentBackendKind } from '../../lib/types.js';
 
 const MORE_MODELS_VALUE = '__more_models__';
 const MIN_RECENTS_TO_SHOW = 3;
@@ -24,6 +25,14 @@ const MAX_RECENTS_IN_QUICK = 3;
 export interface ModelSelectorOverlayProps {
   onSelect: (modelId: string) => void;
   onCancel: () => void;
+  /**
+   * Optional. When set, the catalog is filtered to only models the
+   * given backend can serve. Recents/favorites are kept regardless —
+   * the user might still want to pick a model they used yesterday on
+   * a different backend; the upstream factory will reject if the
+   * combination is invalid.
+   */
+  backend?: AgentBackendKind;
 }
 
 type OverlayMode = 'quick' | 'table';
@@ -51,6 +60,7 @@ function buildItem(
 
 export function buildQuickItems(
   metricsIndex: ReadonlyMap<string, AARowMetrics> | null,
+  backend?: AgentBackendKind,
 ): SelectItem[] {
   const startedAt = Date.now();
   const projectRoot = process.cwd();
@@ -93,7 +103,7 @@ export function buildQuickItems(
 
   items.push({ label: '── Recommended ──', value: '__separator_1__' });
 
-  for (const entry of loadRecommendedModels(projectRoot)) {
+  for (const entry of loadRecommendedModels(projectRoot, backend)) {
     if (seen.has(entry.id)) continue;
     items.push(buildItem(entry, getMetrics(entry.id), ''));
   }
@@ -161,6 +171,7 @@ function useAAState(): AAState {
 export function ModelSelectorOverlay({
   onSelect,
   onCancel,
+  backend,
 }: ModelSelectorOverlayProps): React.JSX.Element {
   const [mode, setMode] = useState<OverlayMode>('quick');
   const aaState = useAAState();
@@ -168,9 +179,9 @@ export function ModelSelectorOverlay({
   const metricsIndex = useMemo(() => {
     if (aaState.kind !== 'loaded') return null;
     const projectRoot = process.cwd();
-    const catalog = loadRecommendedModels(projectRoot);
+    const catalog = loadRecommendedModels(projectRoot, backend);
     return buildMetricsIndex(catalog, aaState.models);
-  }, [aaState]);
+  }, [aaState, backend]);
 
   useEffect(() => {
     dlog('mount', 'ModelSelectorOverlay', { mode });
@@ -227,7 +238,7 @@ export function ModelSelectorOverlay({
   );
 
   if (mode === 'quick') {
-    const items = buildQuickItems(metricsIndex);
+    const items = buildQuickItems(metricsIndex, backend);
     const aaSubtitle =
       aaState.kind === 'loading'
         ? 'carregando métricas Artificial Analysis...'

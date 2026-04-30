@@ -30,9 +30,12 @@ import {
   clearActiveRunSentinel,
   writeActiveRunSentinel,
 } from './lib/active-run-sentinel.js';
-import { stubAgentFactory } from './orchestrator/stub-agent.js';
-import { realAgentFactory } from './orchestrator/real-agent.js';
-import type { AgentFactory } from './orchestrator/types.js';
+import {
+  selectBackend,
+  parseBackendKind,
+  ALL_BACKENDS,
+  type AgentBackendKind,
+} from './orchestrator/backends/registry.js';
 import type { Pipeline } from './lib/types.js';
 import { installSafeTerminal } from './ui/safe-terminal.js';
 import { initDebugLogger, log as dlog } from './lib/debug-logger.js';
@@ -76,7 +79,9 @@ Usage:
   huu init-docker [...]     Scaffold compose.huu.yaml into the current repo
   huu status [...]          Inspect the latest run via .huu/debug-*.log
   huu prune [...]           List/kill orphan huu containers + stale cidfiles
-  huu --stub                Force the stub agent (no real LLM)
+  huu --backend=<kind>      Pick agent backend: pi (default), copilot, stub
+  huu --copilot             Alias for --backend=copilot
+  huu --stub                Alias for --backend=stub (no real LLM)
   huu --yolo                Skip Docker, run native on the host (agent sees your shell creds)
   huu --auto-scale          Enable auto-scaling mode (resource-bound concurrency)
   huu --help                Show this help
@@ -171,11 +176,43 @@ process.on('unhandledRejection', (reason) => {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const useStub = args.includes('--stub');
+  const useCopilot = args.includes('--copilot');
   const useYolo = args.includes('--yolo');
   const autoScale = args.includes('--auto-scale');
+
+  // --backend=<kind> takes precedence over --stub/--copilot aliases. Last wins
+  // so the user can override an alias they pre-set somewhere.
+  const backendArg = args
+    .filter((a) => a.startsWith('--backend='))
+    .map((a) => a.slice('--backend='.length))
+    .pop();
+
+  let backendKindFromCli: AgentBackendKind | null = null;
+  if (backendArg !== undefined) {
+    const parsed = parseBackendKind(backendArg);
+    if (!parsed) {
+      console.error(
+        `huu: --backend=${backendArg}: unknown backend. Valid: ${ALL_BACKENDS.join(', ')}`,
+      );
+      process.exit(1);
+    }
+    backendKindFromCli = parsed;
+  } else if (useCopilot) {
+    backendKindFromCli = 'copilot';
+  } else if (useStub) {
+    backendKindFromCli = 'stub';
+  }
+
   // These flags are CLI-only; the rest of the pipeline (subcommand dispatch,
   // pipeline import) must not see them.
-  const filtered = args.filter((a) => a !== '--stub' && a !== '--yolo' && a !== '--auto-scale');
+  const filtered = args.filter(
+    (a) =>
+      a !== '--stub' &&
+      a !== '--copilot' &&
+      a !== '--yolo' &&
+      a !== '--auto-scale' &&
+      !a.startsWith('--backend='),
+  );
 
   if (filtered.includes('--help') || filtered.includes('-h')) {
     printUsage();
@@ -228,18 +265,26 @@ async function main(): Promise<void> {
     }
   }
 
-  const agentFactory: AgentFactory = useStub ? stubAgentFactory : realAgentFactory;
-  // Stub agents can't resolve merge conflicts; only enable the LLM resolver
-  // when running with the real factory.
-  const conflictResolverFactory: AgentFactory | undefined = useStub ? undefined : realAgentFactory;
+  // When the user explicitly picked a backend on the CLI, lock it in.
+  // When they didn't, defer to the App: it'll show the BackendSelector
+  // screen so the choice is explicit before launch (avoids the foot-gun
+  // where someone runs `huu run` and silently burns OpenRouter quota).
+  const lockedBackend = backendKindFromCli ?? undefined;
+  const initialBundle = selectBackend(lockedBackend ?? 'pi');
 
-  dlog('lifecycle', 'render_start', { useStub, autoStart });
+  dlog('lifecycle', 'render_start', {
+    useStub,
+    useCopilot,
+    backend: lockedBackend ?? 'unspecified',
+    autoStart,
+  });
   const { waitUntilExit } = render(
     <App
       initialPipeline={initialPipeline}
-      agentFactory={agentFactory}
-      conflictResolverFactory={conflictResolverFactory}
-      requiresApiKey={!useStub}
+      agentFactory={initialBundle.agentFactory}
+      conflictResolverFactory={initialBundle.conflictResolverFactory}
+      requiresApiKey={initialBundle.requiresApiKey}
+      backend={lockedBackend}
       autoStart={autoStart}
       autoScale={autoScale}
     />,
