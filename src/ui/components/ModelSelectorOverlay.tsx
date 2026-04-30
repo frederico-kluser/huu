@@ -118,7 +118,7 @@ export function ModelSelectorOverlay({
       if (mode === 'table') setMode('quick');
       else onCancel();
     }
-  });
+  }, { isActive: mode === 'quick' });
 
   const handleQuickSelect = useCallback(
     (item: SelectItem) => {
@@ -162,14 +162,15 @@ export function ModelSelectorOverlay({
     );
   }
 
-  return <TableView onSelect={handleTableSelect} />;
+  return <TableView onSelect={handleTableSelect} onCancel={() => setMode('quick')} />;
 }
 
 interface TableViewProps {
   onSelect: (modelId: string) => void;
+  onCancel: () => void;
 }
 
-function TableView({ onSelect }: TableViewProps): React.JSX.Element {
+function TableView({ onSelect, onCancel }: TableViewProps): React.JSX.Element {
   const [Loaded, setLoaded] = useState<{
     Selector: typeof import('model-selector-ink')['ModelSelector'];
   } | null>(null);
@@ -194,6 +195,7 @@ function TableView({ onSelect }: TableViewProps): React.JSX.Element {
       </Text>
       <Loaded.Selector
         onSelect={(model) => onSelect(model.id)}
+        onCancel={onCancel}
         title="Select a model"
       />
     </Box>
