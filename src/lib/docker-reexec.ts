@@ -11,6 +11,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { API_KEY_REGISTRY, resolveApiKey } from './api-key.js';
 
 /**
  * Transparent re-exec from the host into the official Docker image.
@@ -152,13 +153,15 @@ export function buildDockerArgv(opts: DockerCommandOptions): string[] {
   //      container, less leakage on the host.
   // Secrets that should ALSO be hidden from `docker inspect` go through
   // secretMounts above, not env at all.
-  const passthrough = new Set([
-    'OPENROUTER_API_KEY',
-    'OPENROUTER_API_KEY_FILE',
-    'HUU_CHECK_PUSH',
-    'HUU_WORKTREE_BASE',
-    'TERM',
-  ]);
+  const passthrough = new Set<string>(['HUU_CHECK_PUSH', 'HUU_WORKTREE_BASE', 'TERM']);
+  // Every API key spec contributes both `<NAME>` and `<NAME>_FILE` to the
+  // passthrough — secret-mounting (when present) supersedes it via
+  // excludeFromEnv, but we still want the `_FILE` path forwarded for the
+  // dev-only path where the user mounts a file outside Docker.
+  for (const spec of API_KEY_REGISTRY) {
+    passthrough.add(spec.envVar);
+    passthrough.add(spec.envFileVar);
+  }
   const extra = (process.env.HUU_DOCKER_PASS_ENV ?? '').split(/\s+/).filter(Boolean);
   for (const k of extra) passthrough.add(k);
   const exclude = opts.excludeFromEnv ?? new Set<string>();
@@ -242,14 +245,25 @@ function pruneOrphans(): void {
     // Same prune pass for orphan secret files. SIGKILL of the wrapper
     // (no traps fire) leaves these in /dev/shm or os.tmpdir() with
     // mode 0600 — harmless to anyone but the original user, but worth
-    // sweeping so /dev/shm doesn't accumulate forever.
+    // sweeping so /dev/shm doesn't accumulate forever. The registry
+    // owns the list of scope prefixes — adding a new key here is
+    // automatic.
+    const scopePatterns = API_KEY_REGISTRY.map(
+      (s) => new RegExp(`^${escapeRegex(s.hostSecretScope)}-(\\d+)-`),
+    );
     for (const dir of ['/dev/shm', tmpdir()]) {
       try {
         if (!existsSync(dir)) continue;
         for (const name of readdirSync(dir)) {
-          const m = /^huu-openrouter-key-(\d+)-/.exec(name);
-          if (!m) continue;
-          const pid = Number(m[1]);
+          let pid: number | null = null;
+          for (const re of scopePatterns) {
+            const m = re.exec(name);
+            if (m) {
+              pid = Number(m[1]);
+              break;
+            }
+          }
+          if (pid === null) continue;
           if (pid === process.pid) continue;
           try {
             process.kill(pid, 0);
@@ -270,6 +284,10 @@ function pruneOrphans(): void {
   } catch {
     /* never let pruning crash the wrapper */
   }
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function makeCidfilePath(): string {
@@ -335,19 +353,26 @@ export async function reexecInDocker(args: string[]): Promise<number> {
 
   const cidfile = makeCidfilePath();
 
-  // Hand OPENROUTER_API_KEY to the container as a bind-mounted secret
-  // file rather than via -e KEY=value. The container's resolver already
-  // checks /run/secrets/openrouter_api_key first (lib/api-key.ts). This
-  // keeps the value out of `docker inspect` AND off process listings.
+  // For every API key in the registry, hand the value to the container
+  // as a bind-mounted secret file rather than via -e KEY=value. The
+  // container's resolver already checks `spec.secretMountPath` first
+  // (lib/api-key.ts). Two wins over plain env:
+  //   1. Value stays out of `docker inspect`.
+  //   2. Value stays off `ps`/proc listings.
+  //
+  // resolveApiKey() walks env → `_FILE` → global config store, so a key
+  // the user persisted in `~/.config/huu/config.json` is forwarded
+  // automatically without having to re-enter it.
   const secretMounts: SecretMount[] = [];
   const excludeFromEnv = new Set<string>();
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (apiKey) {
+  for (const spec of API_KEY_REGISTRY) {
+    const value = resolveApiKey(spec);
+    if (!value) continue;
     secretMounts.push({
-      hostPath: makeSecretFile(apiKey, 'huu-openrouter-key'),
-      containerPath: '/run/secrets/openrouter_api_key',
+      hostPath: makeSecretFile(value, spec.hostSecretScope),
+      containerPath: spec.secretMountPath,
     });
-    excludeFromEnv.add('OPENROUTER_API_KEY');
+    excludeFromEnv.add(spec.envVar);
   }
 
   const argv = buildDockerArgv({

@@ -1,63 +1,184 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { resolveOpenRouterApiKey } from './api-key.js';
+import {
+  API_KEY_REGISTRY,
+  configFilePath,
+  findMissingRequiredKeys,
+  findSpec,
+  loadStoredApiKey,
+  resolveApiKey,
+  resolveOpenRouterApiKey,
+  saveApiKey,
+} from './api-key.js';
 
-describe('resolveOpenRouterApiKey', () => {
-  const ENV_KEYS = ['OPENROUTER_API_KEY', 'OPENROUTER_API_KEY_FILE'] as const;
+describe('api-key registry', () => {
+  // Tests must isolate from the user's real ~/.config/huu/config.json.
+  // We point XDG_CONFIG_HOME at a tmpdir for every test so saves and
+  // loads land there.
+  const TRACKED_ENV = [
+    'OPENROUTER_API_KEY',
+    'OPENROUTER_API_KEY_FILE',
+    'ARTIFICIAL_ANALYSIS_API_KEY',
+    'ARTIFICIAL_ANALYSIS_API_KEY_FILE',
+    'XDG_CONFIG_HOME',
+  ] as const;
   const saved: Record<string, string | undefined> = {};
   let tmpDir: string;
+  let configHome: string;
 
   beforeEach(() => {
-    for (const k of ENV_KEYS) saved[k] = process.env[k];
-    for (const k of ENV_KEYS) delete process.env[k];
+    for (const k of TRACKED_ENV) saved[k] = process.env[k];
+    for (const k of TRACKED_ENV) delete process.env[k];
     tmpDir = mkdtempSync(join(tmpdir(), 'huu-api-key-test-'));
+    configHome = join(tmpDir, 'xdg');
+    process.env.XDG_CONFIG_HOME = configHome;
   });
 
   afterEach(() => {
-    for (const k of ENV_KEYS) {
+    for (const k of TRACKED_ENV) {
       if (saved[k] === undefined) delete process.env[k];
       else process.env[k] = saved[k];
     }
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('returns empty string when nothing is set', () => {
-    expect(resolveOpenRouterApiKey()).toBe('');
+  describe('registry shape', () => {
+    it('includes both required keys', () => {
+      const names = API_KEY_REGISTRY.map((s) => s.name);
+      expect(names).toContain('openrouter');
+      expect(names).toContain('artificialAnalysis');
+    });
+
+    it('every entry has the secret-mount path under /run/secrets', () => {
+      for (const spec of API_KEY_REGISTRY) {
+        expect(spec.secretMountPath.startsWith('/run/secrets/')).toBe(true);
+      }
+    });
+
+    it('findSpec returns by name', () => {
+      const s = findSpec('openrouter');
+      expect(s?.envVar).toBe('OPENROUTER_API_KEY');
+    });
   });
 
-  it('reads OPENROUTER_API_KEY when set', () => {
-    process.env.OPENROUTER_API_KEY = '  sk-or-plain  ';
-    expect(resolveOpenRouterApiKey()).toBe('sk-or-plain');
+  describe('resolveApiKey', () => {
+    it('returns empty when nothing is set anywhere', () => {
+      const spec = findSpec('openrouter')!;
+      expect(resolveApiKey(spec)).toBe('');
+    });
+
+    it('reads the env var when set', () => {
+      const spec = findSpec('openrouter')!;
+      process.env.OPENROUTER_API_KEY = '  sk-or-plain  ';
+      expect(resolveApiKey(spec)).toBe('sk-or-plain');
+    });
+
+    it('reads via _FILE env var (trimmed)', () => {
+      const spec = findSpec('openrouter')!;
+      const path = join(tmpDir, 'key.txt');
+      writeFileSync(path, 'sk-or-from-file\n');
+      process.env.OPENROUTER_API_KEY_FILE = path;
+      expect(resolveApiKey(spec)).toBe('sk-or-from-file');
+    });
+
+    it('_FILE wins over plain env when both are set', () => {
+      const spec = findSpec('openrouter')!;
+      const path = join(tmpDir, 'key.txt');
+      writeFileSync(path, 'sk-or-from-file');
+      process.env.OPENROUTER_API_KEY_FILE = path;
+      process.env.OPENROUTER_API_KEY = 'sk-or-plain';
+      expect(resolveApiKey(spec)).toBe('sk-or-from-file');
+    });
+
+    it('falls back to plain env when _FILE points at a missing path', () => {
+      const spec = findSpec('openrouter')!;
+      process.env.OPENROUTER_API_KEY_FILE = join(tmpDir, 'does-not-exist');
+      process.env.OPENROUTER_API_KEY = 'sk-or-fallback';
+      expect(resolveApiKey(spec)).toBe('sk-or-fallback');
+    });
+
+    it('falls back to the global store when env is empty', () => {
+      const spec = findSpec('openrouter')!;
+      saveApiKey(spec, 'sk-or-from-store');
+      expect(resolveApiKey(spec)).toBe('sk-or-from-store');
+    });
+
+    it('env wins over the global store', () => {
+      const spec = findSpec('openrouter')!;
+      saveApiKey(spec, 'sk-or-from-store');
+      process.env.OPENROUTER_API_KEY = 'sk-or-from-env';
+      expect(resolveApiKey(spec)).toBe('sk-or-from-env');
+    });
+
+    it('resolves arbitrary specs (artificialAnalysis)', () => {
+      const spec = findSpec('artificialAnalysis')!;
+      process.env.ARTIFICIAL_ANALYSIS_API_KEY = 'aa-12345';
+      expect(resolveApiKey(spec)).toBe('aa-12345');
+    });
   });
 
-  it('reads OPENROUTER_API_KEY_FILE and trims whitespace/newlines', () => {
-    const path = join(tmpDir, 'key.txt');
-    writeFileSync(path, 'sk-or-from-file\n');
-    process.env.OPENROUTER_API_KEY_FILE = path;
-    expect(resolveOpenRouterApiKey()).toBe('sk-or-from-file');
+  describe('saveApiKey', () => {
+    it('writes the global store with mode 0600 in a 0700 dir', () => {
+      const spec = findSpec('openrouter')!;
+      saveApiKey(spec, 'sk-or-saved');
+      const path = configFilePath();
+      expect(path.startsWith(configHome)).toBe(true);
+      // 0o777 mask filters umask noise.
+      expect(statSync(path).mode & 0o777).toBe(0o600);
+      const parsed = JSON.parse(readFileSync(path, 'utf8'));
+      expect(parsed.openrouter).toBe('sk-or-saved');
+    });
+
+    it('preserves other keys when saving one', () => {
+      const or = findSpec('openrouter')!;
+      const aa = findSpec('artificialAnalysis')!;
+      saveApiKey(or, 'sk-or-1');
+      saveApiKey(aa, 'aa-2');
+      const parsed = JSON.parse(readFileSync(configFilePath(), 'utf8'));
+      expect(parsed).toEqual({ openrouter: 'sk-or-1', artificialAnalysis: 'aa-2' });
+    });
+
+    it('ignores empty values (doesn’t pollute the store)', () => {
+      const spec = findSpec('openrouter')!;
+      saveApiKey(spec, '   ');
+      expect(loadStoredApiKey(spec)).toBe('');
+    });
   });
 
-  it('OPENROUTER_API_KEY_FILE wins over OPENROUTER_API_KEY when both are set', () => {
-    const path = join(tmpDir, 'key.txt');
-    writeFileSync(path, 'sk-or-from-file');
-    process.env.OPENROUTER_API_KEY_FILE = path;
-    process.env.OPENROUTER_API_KEY = 'sk-or-plain';
-    // /run/secrets path doesn't exist, _FILE does — _FILE wins.
-    expect(resolveOpenRouterApiKey()).toBe('sk-or-from-file');
+  describe('findMissingRequiredKeys', () => {
+    it('returns every required spec when nothing is set', () => {
+      const missing = findMissingRequiredKeys();
+      const names = missing.map((s) => s.name);
+      expect(names).toContain('openrouter');
+      expect(names).toContain('artificialAnalysis');
+    });
+
+    it('drops a spec once its key is in env', () => {
+      process.env.OPENROUTER_API_KEY = 'sk-or-set';
+      const missing = findMissingRequiredKeys();
+      const names = missing.map((s) => s.name);
+      expect(names).not.toContain('openrouter');
+    });
+
+    it('drops a spec once its key is in the global store', () => {
+      const spec = findSpec('artificialAnalysis')!;
+      saveApiKey(spec, 'aa-stored');
+      const missing = findMissingRequiredKeys();
+      const names = missing.map((s) => s.name);
+      expect(names).not.toContain('artificialAnalysis');
+    });
   });
 
-  it('falls back to OPENROUTER_API_KEY when _FILE points at a missing path', () => {
-    process.env.OPENROUTER_API_KEY_FILE = join(tmpDir, 'does-not-exist');
-    process.env.OPENROUTER_API_KEY = 'sk-or-fallback';
-    expect(resolveOpenRouterApiKey()).toBe('sk-or-fallback');
-  });
+  describe('resolveOpenRouterApiKey (legacy shim)', () => {
+    it('returns the OpenRouter key via the registry path', () => {
+      process.env.OPENROUTER_API_KEY = 'sk-or-legacy';
+      expect(resolveOpenRouterApiKey()).toBe('sk-or-legacy');
+    });
 
-  it('returns empty when the _FILE path exists but is empty', () => {
-    const path = join(tmpDir, 'empty.txt');
-    writeFileSync(path, '   \n  \t\n');
-    process.env.OPENROUTER_API_KEY_FILE = path;
-    expect(resolveOpenRouterApiKey()).toBe('');
+    it('is empty when nothing is set', () => {
+      expect(resolveOpenRouterApiKey()).toBe('');
+    });
   });
 });

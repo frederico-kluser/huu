@@ -152,6 +152,27 @@ describe('buildDockerArgv', () => {
     }
   });
 
+  it('forwards every API key from the registry by name only', () => {
+    // Registry-driven: adding a new key should automatically appear in argv.
+    const saved = {
+      or: process.env.OPENROUTER_API_KEY,
+      aa: process.env.ARTIFICIAL_ANALYSIS_API_KEY,
+    };
+    try {
+      process.env.OPENROUTER_API_KEY = 'sk-or-x';
+      process.env.ARTIFICIAL_ANALYSIS_API_KEY = 'aa-y';
+      const argv = buildDockerArgv(baseOpts);
+      expect(argv).toContain('OPENROUTER_API_KEY');
+      expect(argv).toContain('ARTIFICIAL_ANALYSIS_API_KEY');
+      expect(argv.find((a) => a === 'sk-or-x' || a === 'aa-y')).toBeUndefined();
+    } finally {
+      if (saved.or === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = saved.or;
+      if (saved.aa === undefined) delete process.env.ARTIFICIAL_ANALYSIS_API_KEY;
+      else process.env.ARTIFICIAL_ANALYSIS_API_KEY = saved.aa;
+    }
+  });
+
   it('omits OPENROUTER_API_KEY entirely when excludeFromEnv has it (file-mount path)', () => {
     const saved = process.env.OPENROUTER_API_KEY;
     try {
