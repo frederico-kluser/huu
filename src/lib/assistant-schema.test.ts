@@ -3,6 +3,7 @@ import {
   AssistantTurnSchema,
   QuestionTurnSchema,
   PipelineTurnSchema,
+  normalizeQuestionShape,
   validateQuestionShape,
   type QuestionTurn,
 } from './assistant-schema.js';
@@ -124,5 +125,80 @@ describe('validateQuestionShape', () => {
       ],
     };
     expect(() => validateQuestionShape(turn)).toThrow(/exactly one/i);
+  });
+});
+
+describe('normalizeQuestionShape', () => {
+  it('returns the turn unchanged when it already satisfies the contract', () => {
+    const turn: QuestionTurn = {
+      done: false,
+      question: 'X?',
+      options: [
+        { label: 'A' },
+        { label: 'Outra (digite)', isFreeText: true },
+      ],
+    };
+    const out = normalizeQuestionShape(turn);
+    expect(out).toBe(turn);
+    expect(() => validateQuestionShape(out)).not.toThrow();
+  });
+
+  it('promotes the last option when the model forgot the free-text flag', () => {
+    const turn: QuestionTurn = {
+      done: false,
+      question: 'X?',
+      options: [{ label: 'A' }, { label: 'B' }],
+    };
+    const out = normalizeQuestionShape(turn);
+    expect(out.options).toHaveLength(2);
+    expect(out.options[1]?.isFreeText).toBe(true);
+    expect(out.options[1]?.label).toBe('Outra opção (digite)');
+    expect(() => validateQuestionShape(out)).not.toThrow();
+  });
+
+  it('preserves the last option label when it already looks like a fallback', () => {
+    const turn: QuestionTurn = {
+      done: false,
+      question: 'X?',
+      options: [{ label: 'A' }, { label: 'Nenhuma das opções — digite' }],
+    };
+    const out = normalizeQuestionShape(turn);
+    expect(out.options[1]?.isFreeText).toBe(true);
+    expect(out.options[1]?.label).toBe('Nenhuma das opções — digite');
+    expect(() => validateQuestionShape(out)).not.toThrow();
+  });
+
+  it('moves a misplaced free-text option to the end', () => {
+    const turn: QuestionTurn = {
+      done: false,
+      question: 'X?',
+      options: [
+        { label: 'Outra (digite)', isFreeText: true },
+        { label: 'A' },
+        { label: 'B' },
+      ],
+    };
+    const out = normalizeQuestionShape(turn);
+    expect(out.options.map((o) => o.label)).toEqual(['A', 'B', 'Outra (digite)']);
+    expect(out.options[2]?.isFreeText).toBe(true);
+    expect(() => validateQuestionShape(out)).not.toThrow();
+  });
+
+  it('keeps only the last free-text option when several are flagged', () => {
+    const turn: QuestionTurn = {
+      done: false,
+      question: 'X?',
+      options: [
+        { label: 'A', isFreeText: true },
+        { label: 'B' },
+        { label: 'Outra (digite)', isFreeText: true },
+      ],
+    };
+    const out = normalizeQuestionShape(turn);
+    expect(out.options.filter((o) => o.isFreeText)).toHaveLength(1);
+    expect(out.options[out.options.length - 1]?.label).toBe('Outra (digite)');
+    expect(out.options[out.options.length - 1]?.isFreeText).toBe(true);
+    expect(out.options[0]?.isFreeText).toBeUndefined();
+    expect(() => validateQuestionShape(out)).not.toThrow();
   });
 });

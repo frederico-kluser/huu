@@ -46,13 +46,13 @@ describe('buildReconSystemPrompt', () => {
   it('mentions the bullets[] JSON output format', () => {
     const p = buildReconSystemPrompt(stack);
     expect(p).toMatch(/"bullets"/);
-    expect(p).toMatch(/Mínimo 2, máximo 4/);
+    expect(p).toMatch(/Mínimo 2, máximo 6/);
   });
 
-  it('frames the agent in fast / shallow / single-pass mode', () => {
+  it('frames the agent in fast / focused mode', () => {
     const p = buildReconSystemPrompt(stack);
-    expect(p).toMatch(/RÁPIDO|VARREDURA SUPERFICIAL/);
-    expect(p).toMatch(/PASSO ÚNICO|chain-of-thought/i);
+    expect(p).toMatch(/RÁPIDO|VARREDURA FOCADA/);
+    expect(p).toMatch(/direto ao ponto|conciso/i);
   });
 
   it('forbids exploring beyond the digest (no node_modules / no fs)', () => {
