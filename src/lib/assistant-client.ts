@@ -7,6 +7,7 @@ import {
 } from '@langchain/core/messages';
 import {
   AssistantTurnSchema,
+  normalizeQuestionShape,
   validateQuestionShape,
   type AssistantTurn,
   type PipelineDraft,
@@ -80,7 +81,15 @@ export function createAssistantChat(opts: CreateAssistantChatOptions): Assistant
     async invokeStructured(messages: BaseMessage[]): Promise<AssistantTurn> {
       const result = (await structured.invoke(messages)) as AssistantTurn;
       const parsed = AssistantTurnSchema.parse(result);
-      if (parsed.done === false) validateQuestionShape(parsed);
+      if (parsed.done === false) {
+        // Auto-fix the common LLM drift modes (missing/misplaced/duplicated
+        // free-text flag) before validating. Without this we used to throw
+        // "AssistantTurn invalid: the last option must have isFreeText=true"
+        // back to the user whenever the model forgot the flag.
+        const fixed = normalizeQuestionShape(parsed);
+        validateQuestionShape(fixed);
+        return fixed;
+      }
       return parsed;
     },
   };

@@ -50,31 +50,31 @@ export function buildReconSystemPrompt(agent: ReconAgent, projectName?: string):
 
 ${agent.mission}
 
-Modo de operação: VARREDURA SUPERFICIAL. Esta é uma soleta de pré-entrevista — quanto mais rápido, melhor. Você recebe a seguir UM digest pronto do projeto${projectRef} (file tree truncado, package.json, README, CLAUDE.md, AGENTS.md, tsconfig). NÃO há ferramentas, NÃO há sistema de arquivos, NÃO há node_modules para explorar — o digest é tudo o que existe e tudo o que você precisa.
+Modo de operação: VARREDURA FOCADA. Você recebe a seguir UM digest pronto do projeto${projectRef} (file tree truncado, package.json, README, CLAUDE.md, AGENTS.md, tsconfig). NÃO há ferramentas, NÃO há sistema de arquivos, NÃO há node_modules para explorar — o digest é tudo o que existe e tudo o que você precisa. Pense brevemente, mas vá direto ao ponto.
 
-# Modo rápido (obrigatório)
+# Como trabalhar
 
-- PASSO ÚNICO. Sem rascunho, sem chain-of-thought, sem auto-revisão. Leia → escreva os bullets → pare.
-- Responda APENAS com base nos blocos citados na sua missão. NÃO leia outros blocos do digest. NÃO especule.
-- Se a evidência não estiver clara em UMA passada, escreva UM bullet "sem evidência clara em <bloco>" e pare. NÃO tente deduzir.
-- Português brasileiro, telegráfico. Sem adjetivos vazios ("robusto", "moderno", "completo").
+- Leia com atenção os blocos citados na sua missão e extraia fatos verificáveis. Pode raciocinar internamente, mas seja conciso na saída.
+- Use APENAS os blocos citados na missão. Os demais blocos do digest existem como contexto, mas não embase bullets neles.
+- Se realmente não houver evidência clara para a missão, escreva UM bullet "sem evidência clara em <bloco>" e pare — não invente.
+- Português brasileiro, direto. Sem adjetivos vazios ("robusto", "moderno", "completo").
 
 # Formato de saída (obrigatório)
 
 Retorne JSON estruturado:
 {
   "bullets": [
-    "<bullet 1 — fato concreto, ≤ 140 chars>",
-    "<bullet 2 — fato concreto, ≤ 140 chars>",
+    "<bullet 1 — fato concreto, ≤ 220 chars>",
+    "<bullet 2 — fato concreto, ≤ 220 chars>",
     ...
   ]
 }
 
 # Regras
 
-- Mínimo 2, máximo 4 bullets. Quatro é o teto absoluto.
-- Cada bullet ≤ 140 caracteres.
-- Cada bullet é um FATO citável — script, dep, dir top-level, frase do doc. Sem opinião, sem síntese, sem "provavelmente".
+- Mínimo 2, máximo 6 bullets.
+- Cada bullet ≤ 220 caracteres.
+- Cada bullet é um FATO citável — script, dep, dir top-level, frase do doc. Sem opinião, sem síntese vazia, sem "provavelmente".
 - NÃO repita o texto da missão como bullet.
 - NÃO faça suposições sobre o que o usuário quer fazer — só liste o que existe no digest.
 - NÃO adicione preâmbulo, NÃO adicione comentários fora do JSON, NÃO peça mais contexto.`;

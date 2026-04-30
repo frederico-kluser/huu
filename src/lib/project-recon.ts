@@ -24,7 +24,7 @@ const OPENROUTER_HEADERS = {
 export const RECON_MODEL = 'minimax/minimax-m2.7';
 
 export const ReconBulletsSchema = z.object({
-  bullets: z.array(z.string().min(1).max(180)).min(1).max(5),
+  bullets: z.array(z.string().min(1).max(240)).min(1).max(6),
 });
 export type ReconBullets = z.infer<typeof ReconBulletsSchema>;
 
@@ -108,18 +108,13 @@ export async function runProjectRecon(
     try {
       const chat = new ChatOpenAI({
         model: modelId,
-        // temperature 0 + low maxTokens keep recon deterministic and short.
-        // The agents work from a static digest, so creativity buys nothing.
+        // temperature 0 keeps recon deterministic — the agents read a static
+        // digest, so sampling buys nothing. We let the model decide whether
+        // to spend any reasoning budget (no `reasoning` param) and only cap
+        // the total output via maxTokens; the prompt does the rest of the
+        // shaping (bullet count, length, scope).
         temperature: 0,
-        maxTokens: 400,
-        modelKwargs: {
-          // OpenRouter "reasoning" param — `effort: "none"` disables extended
-          // thinking entirely on models that support it (MiniMax M2.x ships
-          // with thinking ON by default). For pre-flight recon we want a
-          // single fast pass over a static digest, not multi-step reasoning.
-          // See https://openrouter.ai/docs/guides/best-practices/reasoning-tokens
-          reasoning: { effort: 'none' },
-        },
+        maxTokens: 1200,
         configuration: {
           baseURL: OPENROUTER_BASE_URL,
           apiKey,
