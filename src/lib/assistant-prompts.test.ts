@@ -49,6 +49,28 @@ describe('buildAssistantSystemPrompt', () => {
     const p = buildAssistantSystemPrompt({ models: sampleModels, maxTurns: 8 });
     expect(p).toMatch(/Não pergunte sobre arquivos/);
   });
+
+  it('omits the recon block when reconContext is missing or empty', () => {
+    const noCtx = buildAssistantSystemPrompt({ models: sampleModels, maxTurns: 8 });
+    const emptyCtx = buildAssistantSystemPrompt({
+      models: sampleModels,
+      maxTurns: 8,
+      reconContext: '   ',
+    });
+    expect(noCtx).not.toMatch(/Contexto do projeto/);
+    expect(emptyCtx).not.toMatch(/Contexto do projeto/);
+  });
+
+  it('renders the recon block when reconContext is provided', () => {
+    const p = buildAssistantSystemPrompt({
+      models: sampleModels,
+      maxTurns: 8,
+      reconContext: '### Stack & ferramentas\n- TypeScript + React (Ink)',
+    });
+    expect(p).toMatch(/Contexto do projeto/);
+    expect(p).toMatch(/TypeScript \+ React \(Ink\)/);
+    expect(p).toMatch(/Stack & ferramentas/);
+  });
 });
 
 describe('buildInitialHumanMessage', () => {

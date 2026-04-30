@@ -19,6 +19,8 @@ import { loadRecommendedModels } from '../../models/catalog.js';
 import type { AssistantTurn, PipelineDraft, QuestionTurn } from '../../lib/assistant-schema.js';
 import type { Pipeline, PromptStep } from '../../lib/types.js';
 import { ModelSelectorOverlay } from './ModelSelectorOverlay.js';
+import { ProjectRecon } from './ProjectRecon.js';
+import type { ReconAgentResult } from '../../lib/project-recon.js';
 import { Spinner } from './Spinner.js';
 import { log as dlog } from '../../lib/debug-logger.js';
 
@@ -34,6 +36,7 @@ interface Props {
 type Stage =
   | { kind: 'pick-model' }
   | { kind: 'intent' }
+  | { kind: 'recon' }
   | { kind: 'asking' }
   | { kind: 'answering'; turn: QuestionTurn }
   | { kind: 'free-text'; turn: QuestionTurn }
@@ -132,7 +135,7 @@ export function PipelineAssistant({
   );
 
   const startConversation = useCallback(
-    (chosenModelId: string, userIntent: string): void => {
+    (chosenModelId: string, userIntent: string, reconContext: string): void => {
       try {
         chatRef.current = createAssistantChat({ apiKey, modelId: chosenModelId });
       } catch (err) {
@@ -141,7 +144,11 @@ export function PipelineAssistant({
         return;
       }
       const models = loadRecommendedModels(repoRoot);
-      const systemPrompt = buildAssistantSystemPrompt({ models, maxTurns: MAX_TURNS });
+      const systemPrompt = buildAssistantSystemPrompt({
+        models,
+        maxTurns: MAX_TURNS,
+        reconContext,
+      });
       const seed = buildInitialHumanMessage(userIntent);
       messagesRef.current = [new SystemMessage(systemPrompt), new HumanMessage(seed)];
       setHistory([{ role: 'user', text: userIntent.trim() || '(sem descrição inicial)' }]);
@@ -170,6 +177,22 @@ export function PipelineAssistant({
     },
     [apiKey, onComplete, repoRoot],
   );
+
+  // ProjectRecon owns its own keyboard handler — the parent's must stay quiet
+  // while it's mounted so ESC doesn't trip both layers and cancel/abort race.
+  const inputActive = stage.kind !== 'recon';
+
+  // Memoized so ProjectRecon's effect-deps don't re-fire and re-trigger recon
+  // every render. `intent` and `modelId` are frozen by the time we enter recon.
+  const handleReconComplete = useCallback(
+    ({ markdown }: { markdown: string; results: ReconAgentResult[] }) => {
+      startConversation(modelId, intent, markdown);
+    },
+    [startConversation, modelId, intent],
+  );
+  const handleReconCancel = useCallback(() => {
+    setStage({ kind: 'intent' });
+  }, []);
 
   useInput((input, key) => {
     if (stage.kind === 'confirm-cancel') {
@@ -208,7 +231,7 @@ export function PipelineAssistant({
         }
       }
     }
-  });
+  }, { isActive: inputActive });
 
   // — render —
 
@@ -250,7 +273,7 @@ export function PipelineAssistant({
               value={intent}
               onChange={setIntent}
               onSubmit={() => {
-                if (intent.trim()) startConversation(modelId, intent);
+                if (intent.trim()) setStage({ kind: 'recon' });
               }}
             />
           </Box>
@@ -262,6 +285,17 @@ export function PipelineAssistant({
           </Box>
         </Box>
       </Box>
+    );
+  }
+
+  if (stage.kind === 'recon') {
+    return (
+      <ProjectRecon
+        apiKey={apiKey}
+        repoRoot={repoRoot}
+        onComplete={handleReconComplete}
+        onCancel={handleReconCancel}
+      />
     );
   }
 
