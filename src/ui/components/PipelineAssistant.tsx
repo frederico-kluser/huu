@@ -25,7 +25,14 @@ import { Spinner } from './Spinner.js';
 import { log as dlog } from '../../lib/debug-logger.js';
 
 const FULL_CLEAR = '\x1b[3J';
-const MAX_TURNS = 8;
+/**
+ * Hidden safety cap. Not surfaced to the model in the system prompt — the
+ * prompt's sufficiency-checklist + counterfactual rules drive when the model
+ * finalizes. This cap exists ONLY to prevent runaway loops if the model fails
+ * to converge: once exceeded we inject FORCE_DONE_NUDGE on the next turn.
+ * Generous on purpose (15) — should never fire in a well-formed conversation.
+ */
+const HARD_SAFETY_CAP = 15;
 
 interface Props {
   apiKey: string;
@@ -100,8 +107,10 @@ export function PipelineAssistant({
       messagesRef.current.push(new HumanMessage(trimmed));
       setStage({ kind: 'asking' });
 
-      // Cap reached → nudge the model toward `done: true` before the call.
-      if (turnsAsked >= MAX_TURNS) {
+      // Safety cap reached → nudge the model toward `done: true` before the
+      // call. In normal use the prompt's sufficiency checklist finalizes far
+      // earlier; this only kicks in if the model fails to converge.
+      if (turnsAsked >= HARD_SAFETY_CAP) {
         messagesRef.current.push(new SystemMessage(FORCE_DONE_NUDGE));
       }
 
@@ -146,7 +155,6 @@ export function PipelineAssistant({
       const models = loadRecommendedModels(repoRoot);
       const systemPrompt = buildAssistantSystemPrompt({
         models,
-        maxTurns: MAX_TURNS,
         reconContext,
       });
       const seed = buildInitialHumanMessage(userIntent);
@@ -304,7 +312,7 @@ export function PipelineAssistant({
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor="magenta" paddingX={1} flexDirection="column" width="100%">
           <Text bold color="magenta">Assistente de pipeline</Text>
-          <Text dimColor>Modelo: {modelId} · Turno {turnsAsked + 1}/{MAX_TURNS}</Text>
+          <Text dimColor>Modelo: {modelId} · Turno {turnsAsked + 1}</Text>
 
           {history.length > 0 && (
             <Box marginTop={1} flexDirection="column">
@@ -338,7 +346,7 @@ export function PipelineAssistant({
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor="magenta" paddingX={1} flexDirection="column" width="100%">
           <Text bold color="magenta">Assistente de pipeline</Text>
-          <Text dimColor>Modelo: {modelId} · Turno {turnsAsked}/{MAX_TURNS}</Text>
+          <Text dimColor>Modelo: {modelId} · Turno {turnsAsked}</Text>
 
           <Box marginTop={1} flexDirection="column">
             <Text bold>{stage.turn.question}</Text>
