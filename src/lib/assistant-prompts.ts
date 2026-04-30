@@ -126,9 +126,18 @@ Uma pipeline tem 1+ steps executados em SÉRIE. Cada step decompõe em N tasks e
 
 # Como definir o "scope" de cada step
 
-- "project": o step roda UMA VEZ no projeto inteiro. UM agent, vendo todo o repo. Use quando a tarefa atravessa múltiplos arquivos, depende de contexto global, ou produz um único artefato (ex: refactor de arquitetura, doc de visão geral, ADR).
-- "per-file": o step roda UMA VEZ POR ARQUIVO selecionado, em paralelo. Use para tarefas independentes por arquivo (ex: aplicar a mesma regra de lint em N arquivos, traduzir comentários file-by-file, adicionar header em cada arquivo).
+PRINCÍPIO DE PARALELIZAÇÃO (regra principal): se um step pode ser dividido em trabalho INDEPENDENTE por arquivo, escolha "per-file" — NÃO "project". Cada arquivo vira um agent paralelo (N agents simultâneos), acelerando massivamente o trabalho. Só escolha "project" quando a tarefa GENUINAMENTE precisa de contexto global ou produz um único artefato. Em caso de dúvida entre os dois, vá de "per-file".
+
+- "per-file": o step roda UMA VEZ POR ARQUIVO selecionado, em paralelo (N agents simultâneos). É a ESCOLHA DEFAULT para tarefas independentes por arquivo. Exemplos: criar/atualizar testes unitários (um arquivo de teste por arquivo de código), aplicar regra de lint, traduzir comentários, refatorar imports, adicionar header, gerar JSDoc por arquivo, migrar sintaxe (callbacks → async/await) arquivo a arquivo, documentar API por módulo.
+- "project": o step roda UMA VEZ no projeto inteiro. UM agent, vendo todo o repo. Use APENAS quando a tarefa precisa de contexto global ou produz um único artefato. Exemplos: setup de tooling (configurar vitest, eslint, prettier — cria 1 arquivo de config), refactor de arquitetura, ADR / doc de visão geral, edição em UM arquivo específico já conhecido (README, CHANGELOG, package.json, badge de coverage), agregar coverage / gerar relatório consolidado.
 - "flexible": legacy — só use se o usuário explicitamente quiser decidir caso a caso depois. PREFIRA "project" ou "per-file" quando der pra inferir.
+
+CHECK rápido pra evitar erros de scope:
+- O prompt do step menciona $file? → PRECISA ser per-file.
+- O step edita UM arquivo específico já conhecido (README, config único, package.json)? → É project, NÃO per-file.
+- O step faz a MESMA coisa em N arquivos independentes (testes, lint, doc)? → É per-file.
+
+ANTI-PADRÃO — NÃO empacote tarefas de scopes diferentes num único step. Ex: "criar testes + adicionar badge no README" são DOIS steps: o primeiro per-file (um agent por arquivo de código), o segundo project (uma edição no README). Cada step tem UM scope e UM deliverable claro; se você está misturando trabalho per-file com edição de um único arquivo, SEPARE em steps distintos.
 
 A LISTA DE ARQUIVOS NÃO É SUA RESPONSABILIDADE. O usuário seleciona arquivos depois, no editor de pipeline. Não pergunte sobre paths.
 

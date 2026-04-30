@@ -72,6 +72,30 @@ describe('buildAssistantSystemPrompt', () => {
     expect(p).toMatch(/Não pergunte sobre arquivos/);
   });
 
+  it('declares the parallelization principle (per-file is default for independent work)', () => {
+    const p = buildAssistantSystemPrompt({ models: sampleModels });
+    expect(p).toMatch(/PARALELIZAÇÃO/);
+    expect(p).toMatch(/dúvida.*per-file/i);
+  });
+
+  it('lists test creation as a per-file example', () => {
+    const p = buildAssistantSystemPrompt({ models: sampleModels });
+    expect(p).toMatch(/testes unit/i);
+  });
+
+  it('warns against packing different scopes into one step', () => {
+    const p = buildAssistantSystemPrompt({ models: sampleModels });
+    expect(p).toMatch(/ANTI-PADR[ÃA]O/);
+    expect(p).toMatch(/badge.*README|README.*badge/i);
+  });
+
+  it('lists single-file edits (README, config) as project scope', () => {
+    const p = buildAssistantSystemPrompt({ models: sampleModels });
+    // Must steer away from the user's reported failure mode where a single
+    // README badge edit was marked per-file (no files) instead of project.
+    expect(p).toMatch(/UM arquivo específico/);
+  });
+
   it('omits the recon block when reconContext is missing or empty', () => {
     const noCtx = buildAssistantSystemPrompt({ models: sampleModels });
     const emptyCtx = buildAssistantSystemPrompt({
