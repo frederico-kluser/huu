@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# scripts/huu-compose — wrapper that injects HUU_UID/HUU_GID from the
+# host's id(1) before delegating to `docker compose run`.
+#
+# Why this exists: ${UID:-1000} in compose.yaml does not work in
+# zsh/fish (UID is not exported there). This shim does what the shell
+# would have done in bash. It is the right entry point on any host
+# whose primary user is not UID 1000 (macOS secondary accounts,
+# shared servers, custom Linux setups).
+#
+# Usage:
+#   scripts/huu-compose                       # opens the welcome TUI
+#   scripts/huu-compose run pipeline.json     # runs a pipeline
+#   scripts/huu-compose --stub                # stub agent, no LLM
+set -euo pipefail
+export HUU_UID="$(id -u)"
+export HUU_GID="$(id -g)"
+exec docker compose run --rm huu "$@"

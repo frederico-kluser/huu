@@ -1,0 +1,21 @@
+{
+  "_format": "huu-pipeline-v1",
+  "pipeline": {
+    "name": "smoke",
+    "cardTimeoutMs": 60000,
+    "singleFileCardTimeoutMs": 30000,
+    "maxRetries": 0,
+    "steps": [
+      {
+        "name": "stage-1-edit-each",
+        "prompt": "Stub agent: this prompt is never sent.",
+        "files": ["a.txt", "b.txt"]
+      },
+      {
+        "name": "stage-2-whole-project",
+        "prompt": "Stub agent: this prompt is never sent.",
+        "files": []
+      }
+    ]
+  }
+}

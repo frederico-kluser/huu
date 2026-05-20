@@ -1,0 +1,49 @@
+{
+  "_format": "huu-pipeline-v2",
+  "exportedAt": "2026-04-24T00:00:00.000Z",
+  "pipeline": {
+    "name": "exemplo-conditional-coverage",
+    "maxNodeExecutions": 20,
+    "steps": [
+      {
+        "type": "work",
+        "name": "Implementar feature",
+        "prompt": "Implemente a feature descrita em $file e respeite o estilo do projeto.",
+        "files": ["src/app.tsx"],
+        "scope": "per-file"
+      },
+      {
+        "type": "work",
+        "name": "Escrever testes",
+        "prompt": "Adicione testes Vitest cobrindo o codigo novo. Garanta que `npm test` passe.",
+        "files": [],
+        "scope": "project"
+      },
+      {
+        "type": "check",
+        "name": "Cobertura aceitavel?",
+        "condition": "Rode `npm test -- --coverage` e verifique se a cobertura de linhas global eh >= 60%. Estamos na tentativa $runs (maximo 3); se ja estamos na tentativa >= 3, libere mesmo que abaixo do alvo.",
+        "instructionDraft": "Use `npm test -- --coverage --reporter=text-summary` e leia a linha 'Lines'. Se >= 60%, label 'ok'. Caso contrario, label 'baixa'. A partir de runs=3, sempre 'ok'.",
+        "maxRuns": 3,
+        "outcomes": [
+          {
+            "label": "ok",
+            "nextStepName": "Atualizar CHANGELOG",
+            "default": true
+          },
+          {
+            "label": "baixa",
+            "nextStepName": "Escrever testes"
+          }
+        ]
+      },
+      {
+        "type": "work",
+        "name": "Atualizar CHANGELOG",
+        "prompt": "Adicione uma entrada em CHANGELOG.md descrevendo a feature e cobertura final.",
+        "files": [],
+        "scope": "project"
+      }
+    ]
+  }
+}

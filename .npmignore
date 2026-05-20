@@ -1,0 +1,3 @@
+# Exclude test artifacts from the published package
+**/*.test.*
+**/*.spec.*

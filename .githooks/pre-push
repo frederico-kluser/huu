@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Pre-push hook: validação local que substitui CI automatizada.
+# Falha → push abortado.
+#
+# Habilitar uma vez por clone:
+#   git config core.hooksPath .githooks
+#
+# Desabilitar:
+#   git config --unset core.hooksPath
+#
+# O smoke da imagem (`smoke-image.sh` + `smoke-pipeline.sh`) é
+# opt-in dentro deste hook: só roda se HUU_PREPUSH_SMOKE=1 no env,
+# porque builda a imagem e leva ~90s. Em dia-a-dia roda só
+# typecheck+test (~3s). Antes de release/PR não-trivial:
+#
+#   HUU_PREPUSH_SMOKE=1 git push
+set -euo pipefail
+
+echo "[pre-push] typecheck"
+npm run typecheck
+
+echo "[pre-push] tests"
+npm test
+
+if [ "${HUU_PREPUSH_SMOKE:-}" = "1" ]; then
+    echo "[pre-push] docker build (HUU_PREPUSH_SMOKE=1)"
+    docker build -q -t huu:prepush . >/dev/null
+
+    echo "[pre-push] smoke-image"
+    ./scripts/smoke-image.sh huu:prepush
+
+    echo "[pre-push] smoke-pipeline"
+    ./scripts/smoke-pipeline.sh huu:prepush
+fi
+
+echo "[pre-push] OK"

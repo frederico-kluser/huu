@@ -1,0 +1,19 @@
+{
+  "_format": "huu-pipeline-v1",
+  "exportedAt": "2026-04-24T00:00:00.000Z",
+  "pipeline": {
+    "name": "exemplo-padronizar-headers",
+    "steps": [
+      {
+        "name": "Padronizar headers",
+        "prompt": "Adicione um cabecalho JSDoc no topo de $file com @author huu. Nao mexa em nada alem do header.",
+        "files": ["src/cli.tsx", "src/app.tsx"]
+      },
+      {
+        "name": "Gerar CHANGELOG",
+        "prompt": "Crie ou atualize o arquivo CHANGELOG.md na raiz com uma entrada nova listando o trabalho feito acima.",
+        "files": []
+      }
+    ]
+  }
+}
