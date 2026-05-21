@@ -16,7 +16,7 @@ describe('AssistantTurnSchema', () => {
       options: [
         { label: 'Projeto inteiro' },
         { label: 'Por arquivo' },
-        { label: 'Outra opção (digite)', isFreeText: true },
+        { label: 'Other (type it)', isFreeText: true },
       ],
     });
     expect(parsed.done).toBe(false);
@@ -152,7 +152,7 @@ describe('normalizeQuestionShape', () => {
     const out = normalizeQuestionShape(turn);
     expect(out.options).toHaveLength(2);
     expect(out.options[1]?.isFreeText).toBe(true);
-    expect(out.options[1]?.label).toBe('Outra opção (digite)');
+    expect(out.options[1]?.label).toBe('Other (type it)');
     expect(() => validateQuestionShape(out)).not.toThrow();
   });
 

@@ -12,7 +12,10 @@ import type { Pipeline } from '../types.js';
 export const DEFAULT_PIPELINE_FILENAME = 'huu-security-audit.pipeline.json';
 export const DEFAULT_PIPELINE_NAME = 'huu Security Audit';
 
-const STEP1_PROMPT = `You are huu's security-audit bootstrap agent. Goal: detect the stack, try installing security scanners, write \`huu-security.md\` scaffold, initialize \`huu-security-faq.json\`.
+const STEP1_PROMPT = `You are huu's security-audit bootstrap agent. Goal: detect the stack, make ephemeral security scanners available, write \`.huu/audits/security.md\` scaffold, initialize \`.huu/audits/security-faq.json\`.
+
+=== STEP 0 — REPORT-ONLY HARD RULE ===
+You may NOT modify any file in the repo OTHER than the audit artifacts under \`.huu/audits/\` (and \`.huu/audits/.tmp/\` for working files). If a tool requires installation, use \`npx --yes <tool>\` (Node), \`pipx run <tool>\` (Python), or vendored binaries under \`$HOME/.huu/bin/\`. NEVER touch package.json, requirements.txt, pyproject.toml, Cargo.toml, go.mod, lockfiles, or any production source. Create the output directory with \`mkdir -p .huu/audits/.tmp/security\` before writing.
 
 === STEP 1 — Detect the stack and manifest files ===
 Identify presence of:
@@ -47,10 +50,10 @@ Each install attempt is independent; STOP at first success per tool family; NEVE
 - Go: \`go install golang.org/x/vuln/cmd/govulncheck@latest\`.
 - Cross-language: \`pipx install osv-scanner\` (Google OSV).
 
-=== STEP 3 — Write huu-security.md scaffold ===
-Path: \`./huu-security.md\`.
+=== STEP 3 — Write .huu/audits/security.md scaffold ===
+Path: \`./.huu/audits/security.md\`.
 
-# huu-security.md — Security audit
+# .huu/audits/security.md — Security audit
 
 > Report-only audit aligned to OWASP Top 10:2021 + CWE Top 25 (2024) + dependency CVEs + secret-leak scan. No code was modified.
 > References: https://owasp.org/Top10/2021/ ; https://cheatsheetseries.owasp.org/IndexTopTen.html ; https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html
@@ -76,7 +79,7 @@ Path: \`./huu-security.md\`.
 ## 6. Remediation roadmap
 (filled in by step 5)
 
-=== STEP 4 — Initialize huu-security-faq.json ===
+=== STEP 4 — Initialize .huu/audits/security-faq.json ===
 Schema:
 \`\`\`json
 { "summary": "<=256>", "knowledge": "<=5000>", "path": "<file or 'global'>", "category": "secret|owasp-a01|owasp-a02|owasp-a03|owasp-a04|owasp-a05|owasp-a06|owasp-a07|owasp-a08|owasp-a09|owasp-a10|cve|misc", "cwe_id": "CWE-XXX or null", "severity": "info|warn|critical", "cheatsheet": "<URL>" }
@@ -87,19 +90,19 @@ Schema:
 - DO NOT exfiltrate any secrets you find — redact them in findings (first 4 + last 4 chars only).
 - DO NOT call external services beyond the listed scanners (e.g. don't curl arbitrary URLs from secrets).`;
 
-const STEP2_PROMPT = `You are at step 2 — secrets sweep (whole-project). Goal: find committed secrets in current files AND in git history, redact them, append findings, populate section "2. Secrets sweep" of \`huu-security.md\`. NO code changes.
+const STEP2_PROMPT = `You are at step 2 — secrets sweep (whole-project). Goal: find committed secrets in current files AND in git history, redact them, append findings, populate section "2. Secrets sweep" of \`.huu/audits/security.md\`. NO code changes.
 
 === STEP 1 — Run gitleaks (preferred) ===
 If gitleaks is available:
 \`\`\`bash
-gitleaks detect --redact --report-format json --report-path ./.huu-gitleaks.json --no-banner
+gitleaks detect --redact --report-format json --report-path ./.huu/audits/.tmp/security/gitleaks.json --no-banner
 \`\`\`
 
 Add \`--source .\` if the repo isn't the cwd.
 
 Also scan git history:
 \`\`\`bash
-gitleaks detect --redact --report-format json --report-path ./.huu-gitleaks-history.json --no-banner --log-opts="--all"
+gitleaks detect --redact --report-format json --report-path ./.huu/audits/.tmp/security/gitleaks-history.json --no-banner --log-opts="--all"
 \`\`\`
 
 Parse the JSON reports.
@@ -125,7 +128,7 @@ For each match:
 
 Severity = critical for any plausible secret, warn for ambiguous matches (e.g. anything caught by the generic high-entropy regex without an AWS/GitHub prefix).
 
-=== STEP 4 — Update section "2. Secrets sweep" of huu-security.md ===
+=== STEP 4 — Update section "2. Secrets sweep" of .huu/audits/security.md ===
 
 \`\`\`
 Tool used: <gitleaks | grep heuristics>
@@ -139,17 +142,22 @@ Top findings:
 \`\`\`
 
 === Cleanup ===
-- Delete \`./.huu-gitleaks.json\` and \`./.huu-gitleaks-history.json\` after parsing.
+- Delete \`./.huu/audits/.tmp/security/gitleaks.json\` and \`./.huu/audits/.tmp/security/gitleaks-history.json\` after parsing.
 
 === HARD RULES ===
 - ALL secrets must be redacted (first 4 + last 4 chars only). Never write a full secret to the report.
 - DO NOT attempt to "validate" found secrets by calling the related service.
 - DO NOT remove the secrets from source files in this step (that's a remediation decision for a human).`;
 
-const STEP3_PROMPT = `You are at step 3 — OWASP Top 10 per-file sweep for \`$file\`. Goal: scan \`$file\` for OWASP Top 10:2021 patterns, append findings to \`huu-security-faq.json\`. NO code changes.
+const STEP3_PROMPT = `You are at step 3 — OWASP Top 10 per-file sweep for \`$file\`. Goal: scan \`$file\` for OWASP Top 10:2021 patterns, append findings to \`.huu/audits/security-faq.json\`. NO code changes.
+
+=== STEP 0 — SCOPE NOTE + SKIP RULE ===
+This step spawns one agent per selected file. The pipeline caps total nodes at \`maxNodeExecutions: 50\` (~45 files on a 5-step pipeline). If you are auditing a larger repo, narrow your file selection with Smart Select in the file picker.
+
+SKIP IMMEDIATELY (no findings, no FAQ append) if \`$file\` matches: \`node_modules/\`, \`dist/\`, \`build/\`, \`out/\`, \`coverage/\`, \`.git/\`, \`vendor/\`, \`target/\`, \`__pycache__/\`, \`*.generated.*\`, \`*.min.js\`, \`*.min.css\`, \`*.d.ts\`, \`*.lock\`, \`*.snap\`.
 
 === OWASP Top 10:2021 checklist ===
-For each category, the patterns to flag in \`$file\`. Where Semgrep is available (check huu-security.md section 1), prefer running \`semgrep --config p/owasp-top-ten "$file"\` and merge with the heuristic findings below.
+For each category, the patterns to flag in \`$file\`. Where Semgrep is available (check .huu/audits/security.md section 1), prefer running \`semgrep --config p/owasp-top-ten "$file"\` and merge with the heuristic findings below.
 
 **A01 — Broken Access Control** (CWE-284, CWE-285, CWE-639)
 - HTTP handlers that read a user-supplied ID and return data without an authz check (\`req.params.id\`, \`request.GET['id']\` going straight into DB without a "current user owns this" check).
@@ -207,13 +215,13 @@ For each category, the patterns to flag in \`$file\`. Where Semgrep is available
 - Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
 
 === STEP 1 — Read inputs ===
-- \`./huu-security.md\` (note which tools are available).
-- \`./huu-security-faq.json\`.
+- \`./.huu/audits/security.md\` (note which tools are available).
+- \`./.huu/audits/security-faq.json\`.
 - \`$file\`.
 
 === STEP 2 — Run Semgrep on \`$file\` if available ===
 \`\`\`bash
-semgrep --config p/owasp-top-ten --json "$file" > ./.huu-semgrep-tmp.json
+semgrep --config p/owasp-top-ten --json "$file" > ./.huu/audits/.tmp/security/semgrep.json
 \`\`\`
 Parse the JSON and merge findings.
 
@@ -229,36 +237,36 @@ Severity rules:
 - info: low-confidence patterns (\`TODO: add auth\` style).
 
 === Cleanup ===
-- Delete \`./.huu-semgrep-tmp.json\` after parsing.
+- Delete \`./.huu/audits/.tmp/security/semgrep.json\` after parsing.
 
 === HARD RULES ===
 - DO NOT modify \`$file\` or any other file.
 - Append-only to FAQ (re-read before each append).
 - Skip generated/vendored files (\`*.generated.*\`, \`dist/\`, \`build/\`, \`vendor/\`, \`node_modules/\`).`;
 
-const STEP4_PROMPT = `You are at step 4 — dependency CVE scan (whole-project). Goal: scan each manifest for known-vulnerable dependencies, append findings, populate section "4. Dependency CVEs" of \`huu-security.md\`.
+const STEP4_PROMPT = `You are at step 4 — dependency CVE scan (whole-project). Goal: scan each manifest for known-vulnerable dependencies, append findings, populate section "4. Dependency CVEs" of \`.huu/audits/security.md\`.
 
 === STEP 1 — Detect manifests ===
 From step 1, you already know which manifests exist. For each, pick the most authoritative scanner.
 
 **Node (package.json + lockfile)**
-- \`npm audit --json > ./.huu-npm-audit.json\` (Node ships this; no install required).
+- \`npm audit --json > ./.huu/audits/.tmp/security/npm-audit.json\` (Node ships this; no install required).
 - If that fails (no lockfile), try \`npx --yes audit-ci --report-type=full\`.
 
 **Python**
-- \`pip-audit --strict --format json > ./.huu-pip-audit.json\`.
-- If pip-audit unavailable: \`safety check --json > ./.huu-safety.json\`.
+- \`pip-audit --strict --format json > ./.huu/audits/.tmp/security/pip-audit.json\`.
+- If pip-audit unavailable: \`safety check --json > ./.huu/audits/.tmp/security/safety.json\`.
 
 **Rust**
-- \`cargo audit --json > ./.huu-cargo-audit.json\`.
+- \`cargo audit --json > ./.huu/audits/.tmp/security/cargo-audit.json\`.
 
 **Go**
-- \`govulncheck -json ./... > ./.huu-govulncheck.json\`.
+- \`govulncheck -json ./... > ./.huu/audits/.tmp/security/govulncheck.json\`.
 
 **Cross-language**
 - If \`osv-scanner\` is available, run it against the whole repo as a second pass:
   \`\`\`bash
-  osv-scanner --format json --output ./.huu-osv.json -r .
+  osv-scanner --format json --output ./.huu/audits/.tmp/security/osv.json -r .
   \`\`\`
 
 === STEP 2 — Parse outputs ===
@@ -296,7 +304,7 @@ Top critical findings:
 | lodash | 4.17.10 | CVE-2019-10744 | critical | 4.17.12 |
 | ... | | | | |
 
-(see full list in huu-security-faq.json — category = "cve")
+(see full list in .huu/audits/security-faq.json — category = "cve")
 \`\`\`
 
 === Cleanup ===
@@ -307,11 +315,11 @@ Top critical findings:
 - DO NOT call \`npm install\` or any package manager beyond the audit commands.
 - If a scanner is unavailable for a stack, write an info-severity FAQ entry and continue.`;
 
-const STEP5_PROMPT = `You are the final agent — step 5. Goal: consolidate all findings in \`huu-security-faq.json\` into a remediation roadmap, populate sections "5. Summary by severity" and "6. Remediation roadmap" of \`huu-security.md\`. Add a security badge to README.md.
+const STEP5_PROMPT = `You are the final agent — step 5. Goal: consolidate all findings in \`.huu/audits/security-faq.json\` into a remediation roadmap, populate sections "5. Summary by severity" and "6. Remediation roadmap" of \`.huu/audits/security.md\`. Add a security badge to README.md.
 
 === STEP 1 — Read inputs ===
-- \`./huu-security.md\` (sections 1–4 populated).
-- \`./huu-security-faq.json\` (all findings).
+- \`./.huu/audits/security.md\` (sections 1–4 populated).
+- \`./.huu/audits/security-faq.json\` (all findings).
 
 === STEP 2 — Count by severity and category ===
 Aggregate:
@@ -362,27 +370,11 @@ Order findings into a prioritized roadmap. For each item, link to the OWASP Chea
 - Add a SECURITY.md.
 - Set up Dependabot / OSV-Scanner in CI.
 
-=== STEP 5 — Add a security badge to README.md ===
-Idempotent badge:
-- Format: \`![security](https://img.shields.io/badge/security-<grade>-<color>)\`.
-- Grade by tier-1 count: \`0 → A (brightgreen)\`, \`1-3 → B (yellow)\`, \`4-9 → C (orange)\`, \`10+ → F (red)\`.
-- Replace existing line matching \`img.shields.io/badge/security-\`.
-- Else insert after first H1.
-
 === HARD RULES ===
-- DO NOT modify source code beyond the README badge.
+- DO NOT modify any production file. The only output is \`.huu/audits/security.md\`.
+- DO NOT add a README badge. If the user wants a security grade in their README, they can copy the grade from the report manually.
 - DO NOT rotate any secrets — that requires service-side action.
 - DO NOT auto-upgrade dependencies — that needs human review and testing.`;
-
-const CHECK_FINDINGS_CONDITION = `Read \`./huu-security-faq.json\`. Count critical-severity entries (those with \`"severity": "critical"\`).
-
-Verdict labels:
-- \`clean\` — zero critical findings.
-- \`found\` — one or more critical findings.
-
-Both outcomes proceed to the final report step. This check exists for visibility — both paths converge so the report is always written.
-
-You are on attempt $runs. Maximum 1 (no looping); just emit the label.`;
 
 export function getDefaultPipeline(): Pipeline {
   return {
@@ -392,7 +384,7 @@ export function getDefaultPipeline(): Pipeline {
     steps: [
       {
         type: 'work',
-        name: '1. Detect stack, install scanners, scaffold huu-security.md',
+        name: '1. Detect stack, install scanners, scaffold report',
         prompt: STEP1_PROMPT,
         files: [],
         scope: 'project',
@@ -419,18 +411,8 @@ export function getDefaultPipeline(): Pipeline {
         scope: 'project',
       },
       {
-        type: 'check',
-        name: '4.5 Critical findings present?',
-        condition: CHECK_FINDINGS_CONDITION,
-        maxRuns: 1,
-        outcomes: [
-          { label: 'clean', nextStepName: '5. Remediation roadmap + badge', default: true },
-          { label: 'found', nextStepName: '5. Remediation roadmap + badge' },
-        ],
-      },
-      {
         type: 'work',
-        name: '5. Remediation roadmap + badge',
+        name: '5. Remediation roadmap',
         prompt: STEP5_PROMPT,
         files: [],
         scope: 'project',

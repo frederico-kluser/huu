@@ -48,7 +48,7 @@ describe('buildProjectDigest', () => {
     const huge = 'x'.repeat(10_000);
     writeFileSync(join(root, 'README.md'), huge);
     const d = buildProjectDigest(root);
-    expect(d.digest).toMatch(/truncados/);
+    expect(d.digest).toMatch(/truncated/);
     expect(d.digest.length).toBeLessThan(huge.length + 5_000);
   });
 

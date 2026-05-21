@@ -87,10 +87,10 @@ export function normalizeQuestionShape(turn: QuestionTurn): QuestionTurn {
 
   let normalized: AssistantOption[];
   if (freeCount === 0) {
-    const labelLooksFree = /digit|outra|nenhuma|livre/i.test(opts[lastIdx]!.label);
+    const labelLooksFree = /type|other|none|free|digit|outra|nenhuma|livre/i.test(opts[lastIdx]!.label);
     normalized = opts.map((o, i) =>
       i === lastIdx
-        ? { label: labelLooksFree ? o.label : 'Outra opção (digite)', isFreeText: true }
+        ? { label: labelLooksFree ? o.label : 'Other (type it)', isFreeText: true }
         : { label: o.label },
     );
   } else {

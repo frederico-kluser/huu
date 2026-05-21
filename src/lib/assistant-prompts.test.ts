@@ -3,6 +3,7 @@ import {
   buildAssistantSystemPrompt,
   buildInitialHumanMessage,
   FORCE_DONE_NUDGE,
+  PARALLEL_RULE_SHORT,
 } from './assistant-prompts.js';
 import type { ModelEntry } from '../contracts/models.js';
 
@@ -37,8 +38,9 @@ describe('buildAssistantSystemPrompt', () => {
 
   it('enforces the free-text rule explicitly', () => {
     const p = buildAssistantSystemPrompt({ models: sampleModels });
-    expect(p).toMatch(/isFreeText/);
-    expect(p).toMatch(/last option/i);
+    // `isFreeText` is a structural marker tied to the schema, not prose —
+    // resilient to copy-edits of the surrounding instructions.
+    expect(p).toMatch(/"isFreeText":\s*true/);
   });
 
   it('declares English as the response language', () => {
@@ -92,7 +94,7 @@ describe('buildAssistantSystemPrompt', () => {
   it('declares the parallelization principle (per-file is default for independent work)', () => {
     const p = buildAssistantSystemPrompt({ models: sampleModels });
     expect(p).toMatch(/MASTER RULE/);
-    expect(p).toMatch(/N independent → per-file/);
+    expect(p).toContain(PARALLEL_RULE_SHORT);
   });
 
   it('lists test creation as a per-file example', () => {

@@ -21,7 +21,7 @@ function readBoundedFile(path: string, max: number): string | undefined {
     if (!stat.isFile()) return undefined;
     const content = readFileSync(path, 'utf8');
     if (content.length <= max) return content;
-    return `${content.slice(0, max)}\n\n[…${content.length - max} chars truncados…]`;
+    return `${content.slice(0, max)}\n\n[…${content.length - max} chars truncated…]`;
   } catch {
     return undefined;
   }
@@ -73,10 +73,10 @@ export function buildProjectDigest(rootDir: string): ProjectDigest {
   const visible = files.slice(0, MAX_FILE_TREE_ENTRIES);
   const tail =
     files.length > MAX_FILE_TREE_ENTRIES
-      ? `\n[… +${files.length - MAX_FILE_TREE_ENTRIES} arquivos restantes truncados]`
+      ? `\n[… +${files.length - MAX_FILE_TREE_ENTRIES} remaining files truncated]`
       : '';
   sections.push(
-    `## File tree (paths relativos, ignora node_modules/dist/.git/etc)\n${visible.join('\n')}${tail}`,
+    `## File tree (relative paths; ignores node_modules/dist/.git/etc)\n${visible.join('\n')}${tail}`,
   );
 
   return {

@@ -321,7 +321,7 @@ export function PipelineAssistant({
               {history.slice(-4).map((t, i) => (
                 <Box key={i}>
                   <Text color={t.role === 'user' ? 'cyan' : 'yellow'} bold>
-                    {t.role === 'user' ? 'Você: ' : 'Assistente: '}
+                    {t.role === 'user' ? 'You: ' : 'Assistant: '}
                   </Text>
                   <Text>{t.text}</Text>
                 </Box>
@@ -413,11 +413,11 @@ export function PipelineAssistant({
     return (
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor="yellow" paddingX={1} flexDirection="column" width="100%">
-          <Text bold color="yellow">Descartar conversa?</Text>
-          <Text dimColor>Você vai perder o contexto coletado até aqui e voltar pra home.</Text>
+          <Text bold color="yellow">Discard conversation?</Text>
+          <Text dimColor>You will lose the context gathered so far and return to home.</Text>
           <Box marginTop={1}>
             <Text>
-              <Text bold color="cyan">[Y]</Text> sim, descartar  ·  <Text bold color="cyan">[N]</Text> continuar
+              <Text bold color="cyan">[Y]</Text> yes, discard  ·  <Text bold color="cyan">[N]</Text> keep going
             </Text>
           </Box>
         </Box>

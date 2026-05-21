@@ -264,22 +264,11 @@ DO NOT touch other parts of the README. DO NOT touch huu-tests.md, huu-tests-faq
 - No test file was DELETED (only internal blocks).
 - huu-tests-faq.json is still a valid JSON array (should NOT have been touched in this step).`;
 
-const CHECK_TESTS_GREEN_CONDITION = `Read \`huu-tests.md\` and run the "run all tests" command exactly as documented there. The runner's exit code is the source of truth.
-
-Verdict labels:
-- \`green\` — runner exits 0 with no failing tests reported.
-- \`failing\` — runner exits non-zero OR reports at least one failing/errored test.
-
-If you cannot read huu-tests.md or cannot execute the command at all, emit \`failing\`.
-
-You are on attempt $runs (max 3). If $runs >= 3, emit \`green\` regardless — step 4 will delete the residual failing blocks.`;
-
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
     _default: true,
     maxRetries: 1,
-    maxNodeExecutions: 30,
     steps: [
       {
         type: 'work',
@@ -301,16 +290,6 @@ export function getDefaultPipeline(): Pipeline {
         prompt: STEP3_PROMPT,
         files: [],
         scope: 'per-file',
-      },
-      {
-        type: 'check',
-        name: '3.5 All tests green?',
-        condition: CHECK_TESTS_GREEN_CONDITION,
-        maxRuns: 3,
-        outcomes: [
-          { label: 'green', nextStepName: '4. Final cleanup + coverage badge', default: true },
-          { label: 'failing', nextStepName: '2. Test 3 representative files' },
-        ],
       },
       {
         type: 'work',

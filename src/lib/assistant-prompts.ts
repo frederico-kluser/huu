@@ -1,5 +1,12 @@
 import type { ModelEntry } from '../contracts/models.js';
 
+/**
+ * Stable marker phrase used in the parallelization MASTER RULE block.
+ * Exported so tests can assert presence without coupling to surrounding
+ * prose copy-edits.
+ */
+export const PARALLEL_RULE_SHORT = 'N independent → per-file. 1 shared → project';
+
 export interface AssistantPromptContext {
   /**
    * Catalog of recommended models the assistant can pick from when assigning
@@ -154,7 +161,7 @@ A pipeline has 1+ steps run in SERIES. Each step decomposes into N tasks run in 
 
 # How to choose the "scope" of each step
 
-MASTER RULE: huu's main feature is running N agents in parallel inside a per-file step. Whenever the step's work decomposes into independent units per file, CHOOSE per-file — parallelism is the default, project is the fallback. If you are unsure between the two, ask: "does this step produce N independent artifacts (one per file) or 1 shared artifact?". N independent → per-file. 1 shared → project.
+MASTER RULE: huu's main feature is running N agents in parallel inside a per-file step. Whenever the step's work decomposes into independent units per file, CHOOSE per-file — parallelism is the default, project is the fallback. If you are unsure between the two, ask: "does this step produce N independent artifacts (one per file) or 1 shared artifact?". ${PARALLEL_RULE_SHORT}.
 
 - "per-file": the step runs ONCE PER SELECTED FILE, in parallel (N simultaneous agents in isolated git worktrees). Use whenever the task fans out per file: create/update unit tests per module, generate JSDoc/docstring per file, apply the same lint rule, translate comments, add a header, migrate import/syntax file-by-file, refactor local boilerplate. CRITICAL VERB DISTINCTION: "RUN the test suite / build / lint" is project (1 command, single global output); "CREATE/WRITE tests for each file" is per-file (1 agent per source file). Same principle: "generate coverage report" is project; "write tests to raise coverage" is per-file.
 - "project": the step runs ONCE on the whole project. ONE agent, sees the entire repo. Use when the task requires cross-file context (architecture refactor, move symbols between modules, rename an API with callers everywhere), depends on global state (install deps, configure tooling, run build/test/lint), or produces a SINGLE artifact (edit README, add a badge, write an ADR, generate changelog, update package.json).

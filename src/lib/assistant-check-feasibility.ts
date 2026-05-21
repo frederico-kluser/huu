@@ -128,7 +128,7 @@ function stubFeasibility(step: CheckStep): FeasibilityResult {
   return {
     feasible: true,
     reason: 'stub: feasibility analyzer unavailable; assuming runnable.',
-    instructionDraft: `Stub draft — substitua antes de rodar com modelo real. Avalie a condição "${step.condition.slice(0, 80)}" e retorne uma label entre {${labels}}.`,
-    warnings: ['stub mode — análise real só roda com OPENROUTER_API_KEY'],
+    instructionDraft: `Stub draft — replace before running with a real model. Evaluate the condition "${step.condition.slice(0, 80)}" and return a label from {${labels}}.`,
+    warnings: ['stub mode — real analysis requires OPENROUTER_API_KEY'],
   };
 }

@@ -21,6 +21,7 @@ import {
 } from './orchestrator/backends/registry.js';
 import { listAllPipelines, savePipelineToMemory, deletePipelineFromMemory } from './lib/pipeline-io.js';
 import { listPipelinesInMemory } from './lib/pipeline-memory.js';
+import { ensureAllDefaultPipelines } from './lib/pipeline-bootstrap.js';
 import {
   findMissingKeysForBackend,
   findSpec,
@@ -138,6 +139,25 @@ export function App({
       prevKindRef.current = screen.kind;
     }
   }, [screen.kind, stdout]);
+
+  // One-shot bootstrap: materialize bundled default pipelines into the
+  // user's `pipelines/` directory on first mount (idempotent — never
+  // overwrites an existing file). Best-effort: failures are logged and
+  // don't block the app.
+  useEffect(() => {
+    try {
+      ensureAllDefaultPipelines(repoRoot, (err, mod) => {
+        dlog('bootstrap', 'default_pipeline_failed', {
+          name: mod.DEFAULT_PIPELINE_NAME,
+          error: err.message,
+        });
+      });
+    } catch (err) {
+      dlog('bootstrap', 'ensureAllDefaultPipelines_threw', {
+        error: (err as Error).message,
+      });
+    }
+  }, [repoRoot]);
 
   useEffect(() => {
     if (screen.kind === 'welcome' || screen.kind === 'pipeline-import') {
