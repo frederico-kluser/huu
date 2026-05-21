@@ -107,21 +107,36 @@ default pipelines into `pipelines/` on first run. Each one is idempotent
 
 | Pipeline | What it does | Methodology |
 |---|---|---|
-| `huu Test Suite` (`_default`) | Stack detection → test runner setup → unit tests for 3 representative files + user-selected files → coverage badge. Includes a CheckStep gate to keep iterating until the suite is green. | Unit-test fundamentals |
+| `huu Test Suite` (`_default`) | Stack detection → test runner setup → unit tests for 3 representative files + user-selected files → prune failing blocks → add coverage badge to README. | Unit-test fundamentals |
 | `huu Docs Audit` | Inventories every doc, classifies by Diátaxis quadrant, scores the README, flags stale references, measures inline API-doc coverage. Report-only. | [Diátaxis](https://diataxis.fr/) + Awesome-README |
-| `huu Quality Audit` | Sonar-style report: cyclomatic / cognitive complexity, function/file size, parameter count, nesting depth, duplication, dead code, composite score + badge. Report-only. | [SonarSource](https://www.sonarsource.com/resources/library/cyclomatic-complexity/) + Fowler smells |
+| `huu Quality Audit` | Sonar-style report: cyclomatic / cognitive complexity, function/file size, parameter count, nesting depth, duplication, dead code, composite score. Report-only. | [SonarSource](https://www.sonarsource.com/resources/library/cyclomatic-complexity/) + Fowler smells |
 | `huu Performance Audit` | Static hotspot scan (N+1, big-O, sync I/O, memory leak signals), Core Web Vitals scorecard for frontends, USE-method checklist for backends/CLIs. Report-only. | [USE method](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
-| `huu Refactor Plan` | Characterization-test baseline → per-file smell catalog → top-5 target ranking → Mikado graph per target → final Fowler refactoring recommendations. Report-only. | [Fowler refactoring catalog](https://refactoring.com/catalog/) + [Mikado method](https://www.manning.com/books/the-mikado-method) |
-| `huu Security Audit` | Secrets sweep (gitleaks), OWASP Top 10:2021 per-file scan (semgrep when available), dependency CVE scan, remediation roadmap + severity badge. Report-only. | [OWASP Top 10](https://owasp.org/Top10/2021/) + [CWE Top 25 (2024)](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) |
+| `huu Refactor Plan` | Characterization-test baseline → per-file smell catalog → top-5 target ranking → STATIC Mikado-style graph per target → final Fowler recommendations. Report-only. | [Fowler refactoring catalog](https://refactoring.com/catalog/) + [Mikado method](https://www.manning.com/books/the-mikado-method) |
+| `huu Security Audit` | Secrets sweep (gitleaks), OWASP Top 10:2021 per-file scan (semgrep when available), dependency CVE scan, remediation roadmap. Report-only. | [OWASP Top 10](https://owasp.org/Top10/2021/) + [CWE Top 25 (2024)](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) |
 
 Only `huu Test Suite` carries `_default: true` — it's the entry the Welcome
 screen highlights. The other five are surfaced in the pipeline picker but
 are not flagged as "the default".
 
-Each default pipeline tries to install its own auxiliary tooling
-(gitleaks, semgrep, eslint, jscpd, depcheck, lighthouse-ci, …) into the
-worktree on demand and falls back to grep/awk reasoning if the install
-fails. No pipeline ever hard-fails because of a missing tool.
+### Side-effect surface
+
+The five audits are **strict report-only**: they write ONLY to
+`.huu/audits/<topic>.md` and `.huu/audits/<topic>-faq.json` (working
+files under `.huu/audits/.tmp/`). They never touch `README.md`,
+`package.json`, `requirements.txt`, `pyproject.toml`, `Cargo.toml`,
+`go.mod`, lockfiles, or any production source. Auxiliary tooling
+(gitleaks, semgrep, jscpd, lighthouse-ci, depcheck, vulture, …) is
+invoked ephemerally via `npx --yes`, `pipx run`, or vendored binaries
+under `$HOME/.huu/bin/` — never added to your project's manifests.
+
+The only pipeline that mutates production state is `huu Test Suite`
+(writes `huu-tests.md` to repo root + inserts a tests-coverage badge in
+`README.md`). This is intentional — it's a setup pipeline, not an audit.
+
+Per-file steps are bounded by `Pipeline.maxNodeExecutions = 50`. Each
+per-file prompt opens with an auto-skip rule for `node_modules/`,
+`dist/`, `build/`, `vendor/`, `*.generated.*`, `*.d.ts`, lock/snapshot
+files, etc.
 
 ## Commit Rules
 
