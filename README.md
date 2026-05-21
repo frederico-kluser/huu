@@ -18,7 +18,7 @@
 
 <p align="center">
   <a href="#license"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
-  <img alt="Node.js 18+" src="https://img.shields.io/badge/node-%E2%89%A5%2018-339933?logo=node.js&logoColor=white">
+  <img alt="Node.js 20+" src="https://img.shields.io/badge/node-%E2%89%A5%2020-339933?logo=node.js&logoColor=white">
   <img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.x-3178C6?logo=typescript&logoColor=white">
   <img alt="Built with Ink" src="https://img.shields.io/badge/TUI-Ink%204-000000">
 </p>
@@ -322,16 +322,16 @@ huu --copilot run example.pipeline.json
 {
   "_format": "huu-pipeline-v1",
   "pipeline": {
-    "name": "exemplo-padronizar-headers",
+    "name": "example-standardize-headers",
     "steps": [
       {
-        "name": "Padronizar headers",
-        "prompt": "Adicione um cabecalho JSDoc no topo de $file com @author huu.",
+        "name": "Standardize headers",
+        "prompt": "Add a JSDoc header at the top of $file with @author huu.",
         "files": ["src/cli.tsx", "src/app.tsx"]
       },
       {
-        "name": "Gerar CHANGELOG",
-        "prompt": "Crie ou atualize o arquivo CHANGELOG.md ...",
+        "name": "Generate CHANGELOG",
+        "prompt": "Create or update the CHANGELOG.md ...",
         "files": []
       }
     ]
@@ -721,7 +721,7 @@ short-circuits the requirement check.
 | `HUU_WORKTREE_BASE` | no | Override the base directory for per-run worktrees. Absolute paths are used verbatim; relative paths are resolved against the repo root. Default: `<repo>/.huu-worktrees`. Used by the isolated-volume container mode. |
 | `HUU_CHECK_PUSH` | no | When set, preflight verifies the configured remote is reachable before the run starts. |
 | `HUU_IN_CONTAINER` | no | Set to `1` automatically by the official Docker image. Used by the wrapper to short-circuit the auto-Docker re-exec (so the same binary runs the TUI directly inside the container). |
-| `HUU_IMAGE` | no | Override the container image used by the auto-Docker wrapper. Default: `ghcr.io/frederico-kluser/huu:latest`. Useful for pinning a release (e.g. `ghcr.io/frederico-kluser/huu:0.2.0`) or pointing at a private mirror. |
+| `HUU_IMAGE` | no | Override the container image used by the auto-Docker wrapper. Default: `ghcr.io/frederico-kluser/huu:latest`. Useful for pinning a release (e.g. `ghcr.io/frederico-kluser/huu:1.0.2`) or pointing at a private mirror. |
 | `HUU_NO_DOCKER` | no | When set to `1` or `true`, skip the auto-Docker re-exec and run huu natively. Requires the local `npm install` of huu's deps. Mainly useful for huu development itself. |
 | `HUU_DOCKER_PASS_ENV` | no | Whitespace-separated list of additional env var names to forward into the container. The wrapper always forwards `OPENROUTER_API_KEY`, `OPENROUTER_API_KEY_FILE`, `HUU_CHECK_PUSH`, `HUU_WORKTREE_BASE`, `HUU_HOST_HOME`, and `TERM` — use this to add custom names. |
 | `HUU_HOST_HOME` | no | Set automatically by the wrapper to the host's home directory. Inside the container, `getHuuHome()` reads it so writes to `~/.huu/` and the default `~/Downloads/` export target land on the host's bind-mounted filesystem (saved pipelines survive `--rm`). Unset outside Docker — falls back to `homedir()`. Override only for testing. |

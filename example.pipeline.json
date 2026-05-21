@@ -2,16 +2,16 @@
   "_format": "huu-pipeline-v1",
   "exportedAt": "2026-04-24T00:00:00.000Z",
   "pipeline": {
-    "name": "exemplo-padronizar-headers",
+    "name": "example-standardize-headers",
     "steps": [
       {
-        "name": "Padronizar headers",
-        "prompt": "Adicione um cabecalho JSDoc no topo de $file com @author huu. Nao mexa em nada alem do header.",
+        "name": "Standardize headers",
+        "prompt": "Add a JSDoc header at the top of $file with @author huu. Do not change anything besides the header.",
         "files": ["src/cli.tsx", "src/app.tsx"]
       },
       {
-        "name": "Gerar CHANGELOG",
-        "prompt": "Crie ou atualize o arquivo CHANGELOG.md na raiz com uma entrada nova listando o trabalho feito acima.",
+        "name": "Generate CHANGELOG",
+        "prompt": "Create or update the CHANGELOG.md at the repo root with a new entry listing the work done above.",
         "files": []
       }
     ]

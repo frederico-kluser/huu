@@ -7,6 +7,12 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
+### Fixed
+
+- Final pass of Portuguese strings the v1.0.1 "English everywhere" commit missed: welcome menu entries (`Assistente de pipeline`, `FAQ — perguntas frequentes`), every Pipeline Assistant stage (`pensando…`, `cancelar`, `enviar`, status line, free-text prompt, error screen), Project Recon header / spinner / progress / error (`Análise do projeto`, `Selecionando o que investigar`, `Falha no seletor`, `processos em paralelo`, `concluídos`), the Pipeline Editor per-card-timeout copy, Model Selector subtitle and legend, model catalog descriptions, Pi backend "model not found" error, and the `agent-env.ts` port-allocation prompt fed into agents.
+- `example.pipeline.json` and `example.conditional.pipeline.json` translated to English so the on-disk samples match the README and `npm install -g huu-pipe` quick-start renders consistently.
+- README touch-ups: Node badge bumped 18 → 20 (matches `engines.node`), `HUU_IMAGE` pin example bumped to `1.0.2`, embedded `example.pipeline.json` snippet retranslated to English.
+
 ## [1.0.2] - 2026-05-21
 
 ### Fixed
