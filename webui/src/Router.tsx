@@ -2,6 +2,7 @@ import { useWsSession } from '@/lib/ws-context';
 import {
   ApiKeyPage,
   BackendSelectorPage,
+  FaqPage,
   ModelSelectorPage,
   PipelineAssistantPage,
   PipelineEditorPage,
@@ -27,6 +28,8 @@ export function Router() {
   switch (screen.kind) {
     case 'welcome':
       return <Frame key="welcome"><WelcomePage /></Frame>;
+    case 'faq':
+      return <Frame key="faq"><FaqPage /></Frame>;
     case 'pipeline-assistant':
       return <Frame key="pipeline-assistant"><PipelineAssistantPage /></Frame>;
     case 'pipeline-editor':

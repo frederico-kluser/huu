@@ -13,7 +13,10 @@ export interface PipelineCardProps {
 /** Pipeline summary card: name, step count, total files. */
 export function PipelineCard({ entry, onLoad, onDelete, className }: PipelineCardProps) {
   const stepCount = entry.pipeline.steps.length;
-  const fileCount = entry.pipeline.steps.reduce((acc, s) => acc + s.files.length, 0);
+  const fileCount = entry.pipeline.steps.reduce(
+    (acc, s) => acc + ('files' in s ? s.files.length : 0),
+    0,
+  );
   return (
     <div
       className={cn(

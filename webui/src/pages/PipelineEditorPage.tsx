@@ -22,7 +22,11 @@ export function PipelineEditorPage() {
     setSaveName(pipeline.name);
   }, [pipeline.name]);
 
-  const updateSteps = (steps: PromptStep[]) => setPipeline((p) => ({ ...p, steps }));
+  const isWorkStep = (s: Pipeline['steps'][number]): s is PromptStep => 'prompt' in s;
+  const workSteps = pipeline.steps.filter(isWorkStep);
+  const checkSteps = pipeline.steps.filter((s) => !isWorkStep(s));
+  const updateSteps = (steps: PromptStep[]) =>
+    setPipeline((p) => ({ ...p, steps: [...steps, ...checkSteps] }));
 
   const onContinue = () => {
     setCurrentPipeline(pipeline);
@@ -74,7 +78,7 @@ export function PipelineEditorPage() {
         </div>
       </div>
 
-      <StepEditor steps={pipeline.steps} onChange={updateSteps} />
+      <StepEditor steps={workSteps} onChange={updateSteps} />
     </div>
   );
 }

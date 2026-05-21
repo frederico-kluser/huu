@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, mkdirSync, copyFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { z } from 'zod';
-import type { Pipeline, PipelineStep, CheckOutcome } from './types.js';
+import type { Pipeline, PipelineStep } from './types.js';
 import { DEFAULT_CHECK_MAX_RUNS } from './types.js';
 import { getHuuHome } from './huu-home.js';
 import {

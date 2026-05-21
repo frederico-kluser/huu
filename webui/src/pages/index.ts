@@ -1,4 +1,5 @@
 export { WelcomePage } from './WelcomePage';
+export { FaqPage } from './FaqPage';
 export { PipelineAssistantPage } from './PipelineAssistantPage';
 export { PipelineEditorPage } from './PipelineEditorPage';
 export { PipelineImportPage } from './PipelineImportPage';
