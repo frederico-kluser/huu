@@ -14,7 +14,7 @@ const DEFAULT_RECOMMENDED_MODELS: readonly ModelEntry[] = [
     inputPrice: 0.134,
     outputPrice: 1.31,
     description:
-      'Rápido e barato — use para steps simples, per-file, fan-out paralelo (lint, rename, JSDoc, traduzir, boilerplate).',
+      'Fast and cheap — use for simple steps, per-file, parallel fan-out (lint, rename, JSDoc, translate, boilerplate).',
     bestFor: ['cheap', 'fast'],
     tier: 'fast',
   },
@@ -24,7 +24,7 @@ const DEFAULT_RECOMMENDED_MODELS: readonly ModelEntry[] = [
     inputPrice: 0.74,
     outputPrice: 4.66,
     description:
-      'Pensamento profundo, agentic, coding pesado — use para steps complexos, multi-arquivo, raciocínio, refactors cross-file.',
+      'Deep thinking, agentic, heavy coding — use for complex steps, multi-file, reasoning, cross-file refactors.',
     bestFor: ['coding', 'reasoning', 'agentic'],
     tier: 'workhorse',
   },

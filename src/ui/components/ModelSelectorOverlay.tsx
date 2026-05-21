@@ -241,10 +241,10 @@ export function ModelSelectorOverlay({
     const items = buildQuickItems(metricsIndex, backend);
     const aaSubtitle =
       aaState.kind === 'loading'
-        ? 'carregando métricas Artificial Analysis...'
+        ? 'loading Artificial Analysis metrics...'
         : metricsIndex && Array.from(metricsIndex.values()).some((m) => m.agentic !== null)
-          ? 'métricas: Artificial Analysis'
-          : 'métricas indisponíveis (defina ARTIFICIAL_ANALYSIS_API_KEY)';
+          ? 'metrics: Artificial Analysis'
+          : 'metrics unavailable (set ARTIFICIAL_ANALYSIS_API_KEY)';
     return (
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
@@ -259,7 +259,7 @@ export function ModelSelectorOverlay({
           <Box marginTop={1}>
             <Text dimColor>
               <Text bold>↑↓</Text> navigate · <Text bold>ENTER</Text> select · <Text bold>ESC</Text> cancel
-              {'  ·  Agnt = agentic · Code = programação · Razn = raciocínio'}
+              {'  ·  Agnt = agentic · Code = coding · Razn = reasoning'}
             </Text>
           </Box>
         </Box>

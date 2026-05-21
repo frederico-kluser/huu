@@ -295,11 +295,11 @@ export function App({
           <Text dimColor>Guided pipeline execution — multi-agent kanban with git worktrees</Text>
 
           <Box marginTop={1} flexDirection="column">
-            <Text>  <Text bold color={theme.ai}>[A]</Text>  Assistente de pipeline</Text>
+            <Text>  <Text bold color={theme.ai}>[A]</Text>  Pipeline Assistant</Text>
             <Text>  <Text bold color="cyan">[N]</Text>  New pipeline</Text>
             <Text>  <Text bold color="cyan">[I]</Text>  Import pipeline from list</Text>
             <Text>  <Text bold color="cyan">[M]</Text>  Saved pipelines</Text>
-            <Text>  <Text bold color="cyan">[?]</Text>  FAQ — perguntas frequentes</Text>
+            <Text>  <Text bold color="cyan">[?]</Text>  FAQ — frequently asked questions</Text>
             <Text>  <Text bold color="cyan">[Q]</Text>  Quit</Text>
           </Box>
 

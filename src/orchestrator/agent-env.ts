@@ -145,18 +145,18 @@ needed and rely on \`PORT\` / \`HUU_PORT_*\` env vars for any new code you write
   return `
 ## Port Allocation${shimNote}
 
-Variáveis disponíveis no shell e em \`.env.huu\` no worktree:
+Variables available in the shell and in \`.env.huu\` inside the worktree:
 - \`PORT\` / \`HUU_PORT_HTTP\` = ${bundle.http}
 - \`HUU_PORT_DB\` = ${bundle.db}
 - \`HUU_PORT_WS\` = ${bundle.ws}
 - \`DATABASE_URL\` = ${bundle.databaseUrl}
 
-Regras:
-1. NUNCA hardcode portas em código novo (3000, 8080, 5173, 5432). Use as variáveis acima.
-2. Frameworks que leem dotenv (Next, Vite, Nest, etc.) carregam \`.env.huu\` automaticamente.
-3. Para binários que ignoram dotenv (python, go, cargo, scripts), prefixe com o shim shell:
-   \`./${AGENT_BIN_DIR}/${AGENT_BIN_SHIM} <comando>\`
-   Exemplo: \`./${AGENT_BIN_DIR}/${AGENT_BIN_SHIM} python -m http.server $HUU_PORT_HTTP\`
-4. Extras disponíveis: \`HUU_PORT_EXTRA_1\` … \`HUU_PORT_EXTRA_${bundle.extras.length}\`.
+Rules:
+1. NEVER hardcode ports in new code (3000, 8080, 5173, 5432). Use the variables above.
+2. Frameworks that read dotenv (Next, Vite, Nest, etc.) load \`.env.huu\` automatically.
+3. For binaries that ignore dotenv (python, go, cargo, scripts), prefix with the shell shim:
+   \`./${AGENT_BIN_DIR}/${AGENT_BIN_SHIM} <command>\`
+   Example: \`./${AGENT_BIN_DIR}/${AGENT_BIN_SHIM} python -m http.server $HUU_PORT_HTTP\`
+4. Extras available: \`HUU_PORT_EXTRA_1\` … \`HUU_PORT_EXTRA_${bundle.extras.length}\`.
 `;
 }

@@ -248,8 +248,8 @@ export function PipelineAssistant({
     return (
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor={theme.ai} paddingX={1} flexDirection="column" width="100%">
-          <Text bold color={theme.ai}>Assistente de pipeline</Text>
-          <Text dimColor>Escolha o modelo que vai conduzir a entrevista (default: {DEFAULT_ASSISTANT_MODEL})</Text>
+          <Text bold color={theme.ai}>Pipeline Assistant</Text>
+          <Text dimColor>Pick the model that will run the interview (default: {DEFAULT_ASSISTANT_MODEL})</Text>
         </Box>
         <Box marginTop={1}>
           <ModelSelectorOverlay
@@ -313,8 +313,8 @@ export function PipelineAssistant({
     return (
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor={theme.ai} paddingX={1} flexDirection="column" width="100%">
-          <Text bold color={theme.ai}>Assistente de pipeline</Text>
-          <Text dimColor>Modelo: {modelId} · Turno {turnsAsked + 1}</Text>
+          <Text bold color={theme.ai}>Pipeline Assistant</Text>
+          <Text dimColor>Model: {modelId} · Turn {turnsAsked + 1}</Text>
 
           {history.length > 0 && (
             <Box marginTop={1} flexDirection="column">
@@ -330,12 +330,12 @@ export function PipelineAssistant({
           )}
 
           <Box marginTop={1}>
-            <Spinner label="pensando..." color={theme.ai} />
+            <Spinner label="thinking..." color={theme.ai} />
           </Box>
 
           <Box marginTop={1}>
             <Text dimColor>
-              <Text bold>ESC</Text> cancelar
+              <Text bold>ESC</Text> cancel
             </Text>
           </Box>
         </Box>
@@ -347,8 +347,8 @@ export function PipelineAssistant({
     return (
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor={theme.ai} paddingX={1} flexDirection="column" width="100%">
-          <Text bold color={theme.ai}>Assistente de pipeline</Text>
-          <Text dimColor>Modelo: {modelId} · Turno {turnsAsked}</Text>
+          <Text bold color={theme.ai}>Pipeline Assistant</Text>
+          <Text dimColor>Model: {modelId} · Turn {turnsAsked}</Text>
 
           <Box marginTop={1} flexDirection="column">
             <Text bold>{stage.turn.question}</Text>
@@ -368,7 +368,7 @@ export function PipelineAssistant({
 
           <Box marginTop={1}>
             <Text dimColor>
-              <Text bold>1-{stage.turn.options.length}</Text> escolher · <Text bold>ESC</Text> cancelar
+              <Text bold>1-{stage.turn.options.length}</Text> select · <Text bold>ESC</Text> cancel
             </Text>
           </Box>
         </Box>
@@ -380,10 +380,10 @@ export function PipelineAssistant({
     return (
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor={theme.ai} paddingX={1} flexDirection="column" width="100%">
-          <Text bold color={theme.ai}>Assistente de pipeline</Text>
+          <Text bold color={theme.ai}>Pipeline Assistant</Text>
           <Box marginTop={1} flexDirection="column">
             <Text bold>{stage.turn.question}</Text>
-            <Text dimColor>Digite sua resposta livre:</Text>
+            <Text dimColor>Type your free-form answer:</Text>
           </Box>
           <Box marginTop={1}>
             <Text color="cyan">› </Text>
@@ -401,7 +401,7 @@ export function PipelineAssistant({
           </Box>
           <Box marginTop={1}>
             <Text dimColor>
-              <Text bold>ENTER</Text> enviar · <Text bold>ESC</Text> cancelar
+              <Text bold>ENTER</Text> send · <Text bold>ESC</Text> cancel
             </Text>
           </Box>
         </Box>
@@ -429,9 +429,9 @@ export function PipelineAssistant({
   return (
     <Box flexDirection="column" width="100%">
       <Box borderStyle="round" borderColor="red" paddingX={1} flexDirection="column" width="100%">
-        <Text bold color="red">Erro no assistente</Text>
+        <Text bold color="red">Assistant error</Text>
         <Box marginTop={1}><Text>{stage.message}</Text></Box>
-        <Box marginTop={1}><Text dimColor>Pressione <Text bold>ESC</Text> para voltar.</Text></Box>
+        <Box marginTop={1}><Text dimColor>Press <Text bold>ESC</Text> to go back.</Text></Box>
       </Box>
     </Box>
   );

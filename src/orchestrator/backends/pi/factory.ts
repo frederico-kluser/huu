@@ -64,8 +64,8 @@ export const piAgentFactory: AgentFactory = async (
   const model = getModel('openrouter', modelId as never);
   if (!model) {
     throw new Error(
-      `Modelo "${modelId}" nao encontrado no Pi SDK registry para provider "openrouter". ` +
-        `Verifique o ID ou a versao instalada de @mariozechner/pi-ai.`,
+      `Model "${modelId}" not found in the Pi SDK registry for provider "openrouter". ` +
+        `Check the ID or the installed version of @mariozechner/pi-ai.`,
     );
   }
 

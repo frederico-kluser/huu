@@ -158,19 +158,19 @@ export function ProjectRecon({
           flexDirection="column"
           width="100%"
         >
-          <Text bold color={theme.ai}>Análise do projeto</Text>
-          <Text dimColor>modelo: {renderedModel}</Text>
+          <Text bold color={theme.ai}>Project analysis</Text>
+          <Text dimColor>model: {renderedModel}</Text>
           <Box marginTop={1}>
-            <Spinner color={theme.ai} label="Selecionando o que investigar..." />
+            <Spinner color={theme.ai} label="Selecting what to investigate..." />
           </Box>
           {selectorError && (
             <Box marginTop={1}>
-              <Text color="red">Falha no seletor: {selectorError.slice(0, 80)}</Text>
+              <Text color="red">Selector failed: {selectorError.slice(0, 80)}</Text>
             </Box>
           )}
           <Box marginTop={1}>
             <Text dimColor>
-              <Text bold>ESC</Text> cancelar
+              <Text bold>ESC</Text> cancel
             </Text>
           </Box>
         </Box>
@@ -194,9 +194,9 @@ export function ProjectRecon({
         flexDirection="column"
         width="100%"
       >
-        <Text bold color={theme.ai}>Análise do projeto</Text>
+        <Text bold color={theme.ai}>Project analysis</Text>
         <Text dimColor>
-          {total} processos em paralelo · modelo: {renderedModel} · {settled}/{total} concluídos
+          {total} processes in parallel · model: {renderedModel} · {settled}/{total} done
         </Text>
 
         <Box marginTop={1} flexDirection="column">
@@ -211,7 +211,7 @@ export function ProjectRecon({
 
         <Box marginTop={1}>
           <Text dimColor>
-            <Text bold>ESC</Text> cancelar
+            <Text bold>ESC</Text> cancel
           </Text>
         </Box>
       </Box>

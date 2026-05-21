@@ -446,7 +446,7 @@ function SettingsEditor({ initial, onSave, onCancel }: SettingsEditorProps): Rea
     <Box flexDirection="column" width="100%">
       <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
         <Text bold color="cyan">Card timeouts &amp; retries</Text>
-        <Text dimColor>Os timeouts são aplicados POR CARD. Não existe limite de tempo para a pipeline inteira.</Text>
+        <Text dimColor>Timeouts are applied PER CARD. There is no time limit on the pipeline as a whole.</Text>
 
         {fieldRow('Whole-project card timeout:', 'min', 'cardTimeout', cardMin, setCardMin, cardMs !== null)}
         {fieldRow('Single-file card timeout:', 'min', 'singleFileTimeout', singleMin, setSingleMin, singleMs !== null)}
