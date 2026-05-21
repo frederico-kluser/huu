@@ -126,6 +126,15 @@ describe('screen-fsm', () => {
       const s = baseState();
       expect(reduce(s, { type: 'welcome.quit' })).toEqual(s);
     });
+    it('welcome.faq → faq', () => {
+      const next = reduce(baseState(), { type: 'welcome.faq' });
+      expect(next.screen).toEqual({ kind: 'faq' });
+    });
+    it('faq.back → welcome', () => {
+      const s = baseState({ screen: { kind: 'faq' } });
+      const next = reduce(s, { type: 'faq.back' });
+      expect(next.screen).toEqual({ kind: 'welcome' });
+    });
   });
 
   describe('assistant transitions', () => {

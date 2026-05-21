@@ -189,6 +189,10 @@ export function App({
           exit();
           return;
         }
+        if (input === '?') {
+          dispatch({ type: 'welcome.faq' });
+          return;
+        }
         if (input === 'a' || input === 'A') {
           dispatch({ type: 'welcome.assistant' });
           return;
@@ -234,6 +238,8 @@ export function App({
             pipeline: availablePipelinesRef.current[num - 1]!.pipeline,
           });
         }
+      } else if (kind === 'faq') {
+        dispatch({ type: 'faq.back' });
       } else if (kind === 'summary') {
         if (input === 'q' || input === 'Q') {
           dispatch({ type: 'summary.quit' });
@@ -247,7 +253,7 @@ export function App({
   );
 
   useInput(handleAppInput, {
-    isActive: screen.kind === 'welcome' || screen.kind === 'summary',
+    isActive: screen.kind === 'welcome' || screen.kind === 'summary' || screen.kind === 'faq',
   });
 
   let body: React.JSX.Element = <Text>?</Text>;
@@ -273,6 +279,7 @@ export function App({
             <Text>  <Text bold color="cyan">[N]</Text>  New pipeline</Text>
             <Text>  <Text bold color="cyan">[I]</Text>  Import pipeline from list</Text>
             <Text>  <Text bold color="cyan">[M]</Text>  Saved pipelines</Text>
+            <Text>  <Text bold color="cyan">[?]</Text>  FAQ — perguntas frequentes</Text>
             <Text>  <Text bold color="cyan">[Q]</Text>  Quit</Text>
           </Box>
 
@@ -300,6 +307,101 @@ export function App({
 
           <Box marginTop={1}>
             <Text dimColor>cwd: {repoRoot}</Text>
+          </Box>
+        </Box>
+      </Box>
+    );
+  } else if (screen.kind === 'faq') {
+    body = (
+      <Box flexDirection="column" width="100%">
+        <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
+          <Text bold color="cyanBright">FAQ — {pkg.name} v{pkg.version}</Text>
+          <Text dimColor>Respostas curtas para as dúvidas mais comuns.</Text>
+
+          <Box marginTop={1} flexDirection="column">
+            <Text bold color="cyan">O que é o huu?</Text>
+            <Text>
+              {'  '}TUI que orquestra pipelines de agentes LLM em paralelo, cada um isolado
+              {'  '}em sua própria git worktree, com merge determinístico ao fim de cada estágio.
+            </Text>
+          </Box>
+
+          <Box marginTop={1} flexDirection="column">
+            <Text bold color="cyan">O que é um pipeline?</Text>
+            <Text>
+              {'  '}Sequência de etapas (steps). Cada step decompõe em N tasks que rodam em
+              {'  '}paralelo; o estágio só avança após o merge das tasks na worktree de integração.
+            </Text>
+          </Box>
+
+          <Box marginTop={1} flexDirection="column">
+            <Text bold color="cyan">Meu repositório é alterado?</Text>
+            <Text>
+              {'  '}Não. Toda execução acontece em git worktrees irmãs do repo. O branch atual
+              {'  '}fica intacto; o resultado vira um branch novo que você decide mergear.
+            </Text>
+          </Box>
+
+          <Box marginTop={1} flexDirection="column">
+            <Text bold color="cyan">Quais backends de LLM são suportados?</Text>
+            <Text>
+              {'  '}<Text bold>pi</Text> (OpenRouter — default), <Text bold>copilot</Text> (assinatura GitHub) e
+              {'  '}<Text bold>stub</Text> (mock sem LLM, para smoke tests).
+            </Text>
+          </Box>
+
+          <Box marginTop={1} flexDirection="column">
+            <Text bold color="cyan">Preciso de API key?</Text>
+            <Text>
+              {'  '}Sim para <Text bold>pi</Text> (OPENROUTER_API_KEY). O <Text bold>copilot</Text> usa sua
+              {'  '}assinatura GitHub. A chave é pedida sob demanda e salva localmente.
+            </Text>
+          </Box>
+
+          <Box marginTop={1} flexDirection="column">
+            <Text bold color="cyan">Por que roda dentro de Docker?</Text>
+            <Text>
+              {'  '}Isolamento: agentes têm shell e tocam o filesystem. O wrapper re-executa o
+              {'  '}binário dentro do container automaticamente. Use <Text bold>--yolo</Text> para rodar no host.
+            </Text>
+          </Box>
+
+          <Box marginTop={1} flexDirection="column">
+            <Text bold color="cyan">Como agentes paralelos não colidem em portas?</Text>
+            <Text>
+              {'  '}Um shim nativo (LD_PRELOAD / DYLD_INSERT_LIBRARIES) intercepta bind() e
+              {'  '}aloca uma porta livre por agente, injetada via <Text bold>.env.huu</Text>.
+            </Text>
+          </Box>
+
+          <Box marginTop={1} flexDirection="column">
+            <Text bold color="cyan">O que é o Assistente de pipeline [A]?</Text>
+            <Text>
+              {'  '}Modo guiado por LLM: você descreve o objetivo em linguagem natural e o
+              {'  '}assistente propõe um pipeline pronto pra editar e rodar.
+            </Text>
+          </Box>
+
+          <Box marginTop={1} flexDirection="column">
+            <Text bold color="cyan">Posso ver execuções anteriores?</Text>
+            <Text>
+              {'  '}Sim. Pipelines salvos em <Text bold>./pipelines</Text> aparecem na tela inicial.
+              {'  '}Use <Text bold>[M]</Text> para abrir o gerenciador de pipelines salvos.
+            </Text>
+          </Box>
+
+          <Box marginTop={1} flexDirection="column">
+            <Text bold color="cyan">Existe modo web?</Text>
+            <Text>
+              {'  '}Sim. Rode <Text bold>huu --web --yolo</Text> e acesse o front-end no navegador.
+              {'  '}Mesma orquestração, UI diferente.
+            </Text>
+          </Box>
+
+          <Box marginTop={1}>
+            <Text dimColor>
+              <Text bold>ENTER</Text> / <Text bold>Esc</Text> / qualquer tecla — voltar
+            </Text>
           </Box>
         </Box>
       </Box>

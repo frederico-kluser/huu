@@ -9,6 +9,7 @@ import type { AgentBackendKind, OrchestratorResult, Pipeline } from './types.js'
 
 export type Screen =
   | { kind: 'welcome' }
+  | { kind: 'faq' }
   | { kind: 'pipeline-assistant' }
   | { kind: 'pipeline-editor' }
   | { kind: 'pipeline-import' }
@@ -40,7 +41,10 @@ export type FsmEvent =
   | { type: 'welcome.import' }
   | { type: 'welcome.saved' }
   | { type: 'welcome.selectPipeline'; pipeline: Pipeline }
+  | { type: 'welcome.faq' }
   | { type: 'welcome.quit' }
+  // faq
+  | { type: 'faq.back' }
   // pipeline-assistant
   | { type: 'assistant.complete'; pipeline: Pipeline }
   | { type: 'assistant.cancel' }
@@ -171,6 +175,12 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
     case 'welcome.quit':
       // Side effect (exit()) handled by caller; state is unchanged.
       return state;
+    case 'welcome.faq':
+      return { ...state, screen: { kind: 'faq' } };
+
+    // ── faq ───────────────────────────────────────────────────────────────
+    case 'faq.back':
+      return { ...state, screen: { kind: 'welcome' } };
 
     // ── pipeline-assistant ────────────────────────────────────────────────
     case 'assistant.complete':
