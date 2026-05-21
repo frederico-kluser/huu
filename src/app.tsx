@@ -21,6 +21,7 @@ import {
 } from './orchestrator/backends/registry.js';
 import { listAllPipelines, savePipelineToMemory, deletePipelineFromMemory } from './lib/pipeline-io.js';
 import { listPipelinesInMemory } from './lib/pipeline-memory.js';
+import { ensureAllDefaultPipelines } from './lib/pipeline-bootstrap.js';
 import {
   findMissingKeysForBackend,
   findSpec,
@@ -138,6 +139,25 @@ export function App({
       prevKindRef.current = screen.kind;
     }
   }, [screen.kind, stdout]);
+
+  // One-shot bootstrap: materialize bundled default pipelines into the
+  // user's `pipelines/` directory on first mount (idempotent — never
+  // overwrites an existing file). Best-effort: failures are logged and
+  // don't block the app.
+  useEffect(() => {
+    try {
+      ensureAllDefaultPipelines(repoRoot, (err, mod) => {
+        dlog('bootstrap', 'default_pipeline_failed', {
+          name: mod.DEFAULT_PIPELINE_NAME,
+          error: err.message,
+        });
+      });
+    } catch (err) {
+      dlog('bootstrap', 'ensureAllDefaultPipelines_threw', {
+        error: (err as Error).message,
+      });
+    }
+  }, [repoRoot]);
 
   useEffect(() => {
     if (screen.kind === 'welcome' || screen.kind === 'pipeline-import') {
@@ -316,91 +336,91 @@ export function App({
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
           <Text bold color="cyanBright">FAQ — {pkg.name} v{pkg.version}</Text>
-          <Text dimColor>Respostas curtas para as dúvidas mais comuns.</Text>
+          <Text dimColor>Short answers to the most common questions.</Text>
 
           <Box marginTop={1} flexDirection="column">
-            <Text bold color="cyan">O que é o huu?</Text>
+            <Text bold color="cyan">What is huu?</Text>
             <Text>
-              {'  '}TUI que orquestra pipelines de agentes LLM em paralelo, cada um isolado
-              {'  '}em sua própria git worktree, com merge determinístico ao fim de cada estágio.
+              {'  '}A TUI that orchestrates pipelines of LLM agents in parallel, each isolated
+              {'  '}in its own git worktree, with deterministic merge at the end of every stage.
             </Text>
           </Box>
 
           <Box marginTop={1} flexDirection="column">
-            <Text bold color="cyan">O que é um pipeline?</Text>
+            <Text bold color="cyan">What is a pipeline?</Text>
             <Text>
-              {'  '}Sequência de etapas (steps). Cada step decompõe em N tasks que rodam em
-              {'  '}paralelo; o estágio só avança após o merge das tasks na worktree de integração.
+              {'  '}A sequence of steps. Each step decomposes into N tasks that run in
+              {'  '}parallel; the stage only advances after merging the tasks into the integration worktree.
             </Text>
           </Box>
 
           <Box marginTop={1} flexDirection="column">
-            <Text bold color="cyan">Meu repositório é alterado?</Text>
+            <Text bold color="cyan">Does huu modify my repository?</Text>
             <Text>
-              {'  '}Não. Toda execução acontece em git worktrees irmãs do repo. O branch atual
-              {'  '}fica intacto; o resultado vira um branch novo que você decide mergear.
+              {'  '}No. Every run happens in sibling git worktrees. The current branch stays
+              {'  '}intact; the result becomes a new branch that you decide whether to merge.
             </Text>
           </Box>
 
           <Box marginTop={1} flexDirection="column">
-            <Text bold color="cyan">Quais backends de LLM são suportados?</Text>
+            <Text bold color="cyan">Which LLM backends are supported?</Text>
             <Text>
-              {'  '}<Text bold>pi</Text> (OpenRouter — default), <Text bold>copilot</Text> (assinatura GitHub) e
-              {'  '}<Text bold>stub</Text> (mock sem LLM, para smoke tests).
+              {'  '}<Text bold>pi</Text> (OpenRouter — default), <Text bold>copilot</Text> (GitHub subscription), and
+              {'  '}<Text bold>stub</Text> (LLM-free mock, for smoke tests).
             </Text>
           </Box>
 
           <Box marginTop={1} flexDirection="column">
-            <Text bold color="cyan">Preciso de API key?</Text>
+            <Text bold color="cyan">Do I need an API key?</Text>
             <Text>
-              {'  '}Sim para <Text bold>pi</Text> (OPENROUTER_API_KEY). O <Text bold>copilot</Text> usa sua
-              {'  '}assinatura GitHub. A chave é pedida sob demanda e salva localmente.
+              {'  '}Yes for <Text bold>pi</Text> (OPENROUTER_API_KEY). <Text bold>copilot</Text> uses your
+              {'  '}GitHub subscription. The key is requested on demand and saved locally.
             </Text>
           </Box>
 
           <Box marginTop={1} flexDirection="column">
-            <Text bold color="cyan">Por que roda dentro de Docker?</Text>
+            <Text bold color="cyan">Why does it run inside Docker?</Text>
             <Text>
-              {'  '}Isolamento: agentes têm shell e tocam o filesystem. O wrapper re-executa o
-              {'  '}binário dentro do container automaticamente. Use <Text bold>--yolo</Text> para rodar no host.
+              {'  '}Isolation: agents have shell access and touch the filesystem. The wrapper
+              {'  '}re-executes the binary inside the container automatically. Use <Text bold>--yolo</Text> to run on the host.
             </Text>
           </Box>
 
           <Box marginTop={1} flexDirection="column">
-            <Text bold color="cyan">Como agentes paralelos não colidem em portas?</Text>
+            <Text bold color="cyan">How do parallel agents avoid port clashes?</Text>
             <Text>
-              {'  '}Um shim nativo (LD_PRELOAD / DYLD_INSERT_LIBRARIES) intercepta bind() e
-              {'  '}aloca uma porta livre por agente, injetada via <Text bold>.env.huu</Text>.
+              {'  '}A native shim (LD_PRELOAD / DYLD_INSERT_LIBRARIES) intercepts bind() and
+              {'  '}allocates a free port per agent, injected via <Text bold>.env.huu</Text>.
             </Text>
           </Box>
 
           <Box marginTop={1} flexDirection="column">
-            <Text bold color="cyan">O que é o Assistente de pipeline [A]?</Text>
+            <Text bold color="cyan">What is the Pipeline Assistant [A]?</Text>
             <Text>
-              {'  '}Modo guiado por LLM: você descreve o objetivo em linguagem natural e o
-              {'  '}assistente propõe um pipeline pronto pra editar e rodar.
+              {'  '}LLM-guided mode: you describe the goal in natural language and the
+              {'  '}assistant proposes a pipeline ready to edit and run.
             </Text>
           </Box>
 
           <Box marginTop={1} flexDirection="column">
-            <Text bold color="cyan">Posso ver execuções anteriores?</Text>
+            <Text bold color="cyan">Can I see prior runs?</Text>
             <Text>
-              {'  '}Sim. Pipelines salvos em <Text bold>./pipelines</Text> aparecem na tela inicial.
-              {'  '}Use <Text bold>[M]</Text> para abrir o gerenciador de pipelines salvos.
+              {'  '}Yes. Pipelines saved in <Text bold>./pipelines</Text> appear on the home screen.
+              {'  '}Use <Text bold>[M]</Text> to open the saved-pipelines manager.
             </Text>
           </Box>
 
           <Box marginTop={1} flexDirection="column">
-            <Text bold color="cyan">Existe modo web?</Text>
+            <Text bold color="cyan">Is there a web mode?</Text>
             <Text>
-              {'  '}Sim. Rode <Text bold>huu --web --yolo</Text> e acesse o front-end no navegador.
-              {'  '}Mesma orquestração, UI diferente.
+              {'  '}Yes. Run <Text bold>huu --web --yolo</Text> and open the front-end in your browser.
+              {'  '}Same orchestration, different UI.
             </Text>
           </Box>
 
           <Box marginTop={1}>
             <Text dimColor>
-              <Text bold>ENTER</Text> / <Text bold>Esc</Text> / qualquer tecla — voltar
+              <Text bold>ENTER</Text> / <Text bold>Esc</Text> / any key — go back
             </Text>
           </Box>
         </Box>

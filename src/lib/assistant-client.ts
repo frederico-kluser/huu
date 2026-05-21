@@ -55,11 +55,11 @@ export function createAssistantChat(opts: CreateAssistantChatOptions): Assistant
   const apiKey = opts.apiKey.trim();
   if (!apiKey) {
     throw new Error(
-      'OpenRouter API key ausente. Defina OPENROUTER_API_KEY ou monte /run/secrets/openrouter_api_key.',
+      'OpenRouter API key missing. Set OPENROUTER_API_KEY or mount /run/secrets/openrouter_api_key.',
     );
   }
   const modelId = (opts.modelId ?? DEFAULT_ASSISTANT_MODEL).trim();
-  if (!modelId) throw new Error('assistant modelId vazio.');
+  if (!modelId) throw new Error('assistant modelId is empty.');
 
   const chat = new ChatOpenAI({
     model: modelId,
@@ -109,35 +109,35 @@ class StubAssistantChat implements AssistantChat {
     if (this.turn === 1) {
       return {
         done: false,
-        question: 'Qual a granularidade da pipeline?',
-        rationale: 'Stub: pergunta 1 fixa.',
+        question: 'What granularity for the pipeline?',
+        rationale: 'Stub: question 1 (fixed).',
         options: [
-          { label: 'Projeto inteiro (1 step, 1 agent)' },
-          { label: 'Por arquivo (N agents em paralelo)' },
-          { label: 'Outra opção (digite)', isFreeText: true },
+          { label: 'Whole project (1 step, 1 agent)' },
+          { label: 'Per file (N parallel agents)' },
+          { label: 'Other (type it)', isFreeText: true },
         ],
       };
     }
     if (this.turn === 2) {
       return {
         done: false,
-        question: 'Quantos steps?',
+        question: 'How many steps?',
         options: [
           { label: '1 step' },
           { label: '2 steps' },
           { label: '3 steps' },
-          { label: 'Outra opção (digite)', isFreeText: true },
+          { label: 'Other (type it)', isFreeText: true },
         ],
       };
     }
     if (this.turn === 3) {
       return {
         done: false,
-        question: 'Modelo principal?',
+        question: 'Main model?',
         options: [
           { label: 'Kimi K2.6 (default)' },
-          { label: 'GPT-5.4 Mini (mais barato)' },
-          { label: 'Outra opção (digite)', isFreeText: true },
+          { label: 'GPT-5.4 Mini (cheaper)' },
+          { label: 'Other (type it)', isFreeText: true },
         ],
       };
     }
@@ -146,7 +146,7 @@ class StubAssistantChat implements AssistantChat {
       steps: [
         {
           name: 'step-1',
-          prompt: 'Stub step prompt — substitua antes de rodar com modelo real.',
+          prompt: 'Stub step prompt — replace before running with a real model.',
           scope: 'project',
         },
       ],

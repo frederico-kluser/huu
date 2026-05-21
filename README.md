@@ -504,6 +504,25 @@ are reserved for the actual run.
 
 ---
 
+## Bundled default pipelines
+
+On first run, huu materializes six framework-agnostic starter pipelines into `pipelines/`. They are idempotent (never overwrite an existing file) so editing one preserves your changes across launches.
+
+| Pipeline | What it does | Methodology |
+|---|---|---|
+| **huu Test Suite** *(highlighted)* | Detects the stack, sets up a test runner, writes unit tests for 3 representative files + the user-selected files, then prunes failing blocks and adds a coverage badge to README. | Unit-test fundamentals |
+| **huu Docs Audit** | Classifies every doc by [Diátaxis](https://diataxis.fr/) quadrant (Tutorial / How-To / Reference / Explanation), scores the README against Awesome-README, flags stale references, measures inline API-doc coverage. | Diátaxis + Awesome-README |
+| **huu Quality Audit** | Sonar-style: cyclomatic / cognitive complexity (>10 warn, >20 critical), function / file size, parameter count, nesting depth, duplication, dead code. | [SonarSource](https://www.sonarsource.com/resources/library/cyclomatic-complexity/) + Fowler smells |
+| **huu Performance Audit** | Static hotspot scan (N+1, big-O, sync I/O, memory leak signals) plus Core Web Vitals (LCP / INP / CLS) for frontends and Brendan Gregg's USE checklist for backends/CLIs. | [USE method](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
+| **huu Refactor Plan** | Characterization-test baseline, per-file Fowler smell catalog, top-5 target ranking, static Mikado-style dependency graph, final Fowler-catalog recommendations. Plan-only — no code rewrites. | [Fowler refactoring catalog](https://refactoring.com/catalog/) + [Mikado method](https://www.manning.com/books/the-mikado-method) |
+| **huu Security Audit** | gitleaks/trufflehog secrets sweep, OWASP Top 10:2021 per-file scan (semgrep when available), dependency CVE scan (npm audit / pip-audit / cargo audit / govulncheck / osv-scanner), CWE Top 25:2024-aligned remediation roadmap. | [OWASP Top 10](https://owasp.org/Top10/2021/) + [CWE Top 25](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) |
+
+**Strict report-only contract for the five audits.** They write ONLY to `.huu/audits/<topic>.md` and `.huu/audits/<topic>-faq.json`. They never modify your README, `package.json`, lockfiles, or any production source. Tools that need to be invoked (semgrep, jscpd, gitleaks, lighthouse-ci, …) are run ephemerally via `npx --yes`, `pipx run`, or vendored binaries under `$HOME/.huu/bin/` — never added to your project's manifests. The only pipeline that touches production files is `huu Test Suite`, which is a setup pipeline (writes `huu-tests.md` and a tests badge in README — that's intentional).
+
+Per-file steps are bounded by `Pipeline.maxNodeExecutions = 50`. On large repos, narrow your file selection with Smart Select; auto-skip rules ignore `node_modules/`, `dist/`, `build/`, `vendor/`, generated files, `*.d.ts`, and lock files.
+
+---
+
 ## Saved pipelines
 
 Pipelines edited in the TUI are automatically persisted to a **global memory store** at `~/.huu/pipeline-memory.json`. This means you can close `huu`, reopen it later, and pick up where you left off without re-importing a JSON file.

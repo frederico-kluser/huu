@@ -72,41 +72,41 @@ function buildCatalogList(catalog: readonly ReconCatalogEntry[]): string {
 export function buildSelectorSystemPrompt(
   catalog: readonly ReconCatalogEntry[] = RECON_CATALOG,
 ): string {
-  return `Você é o SELETOR de reconhecimento. Sua única responsabilidade: dado o que o usuário quer fazer (intent) e um hint mínimo do projeto, escolher quais processos de reconhecimento devem rodar para alimentar a entrevista do assistente de pipeline.
+  return `You are the recon SELECTOR. Your single responsibility: given what the user wants to do (intent) and a minimal project hint, pick which recon processes should run to feed the pipeline assistant's interview.
 
-# Como funciona
+# How it works
 
-- Existe um catálogo de processos pré-definidos (lista abaixo). Cada um lê um digest estático do projeto e devolve 2-6 bullets factuais.
-- Os bullets de TODOS os processos selecionados são concatenados e injetados como contexto na próxima entrevista. O assistente lê esse contexto antes de fazer perguntas ao usuário.
-- Você escolhe O QUE rodar. Se um processo do catálogo cobre o que precisa, retorne o ID dele (string). Se nada do catálogo cobre algum aspecto crítico, retorne um objeto \`{title, prompt}\` com uma missão CUSTOM.
+- There is a catalog of pre-defined processes (list below). Each one reads a static project digest and returns 2-6 factual bullets.
+- The bullets of ALL selected processes are concatenated and injected as context into the next interview. The assistant reads that context before asking the user questions.
+- You choose WHAT to run. If a catalog process covers what's needed, return its ID (string). If nothing in the catalog covers some critical aspect, return an object \`{title, prompt}\` with a CUSTOM mission.
 
-# Catálogo
+# Catalog
 
 ${buildCatalogList(catalog)}
 
-# Como decidir
+# How to decide
 
-- Pense: "para responder bem ao intent do usuário, quais aspectos do projeto eu preciso conhecer?"
-- Escolha o MÍNIMO necessário. Mais não é melhor — cada processo extra é latência e custo. Tipicamente 2-5 processos resolvem; só passe disso se o intent for genuinamente multi-domínio.
-- Se o intent for específico ("rodar prettier em src/"), escolha 2-3 processos relevantes (\`stack\`, \`quality-tooling\`, \`structure\`).
-- Se o intent for vago ("melhorar o projeto"), escolha 4-6 processos para mapear o terreno.
-- Se um aspecto não estiver no catálogo (ex: "como o módulo X usa o módulo Y", "qual o formato dos arquivos de config em /etc"), use um item custom.
+- Think: "to answer the user's intent well, which aspects of the project do I need to know?"
+- Pick the MINIMUM necessary. More is not better — each extra process is latency and cost. Typically 2-5 processes are enough; only go beyond that if the intent is genuinely multi-domain.
+- If the intent is specific ("run prettier on src/"), pick 2-3 relevant processes (\`stack\`, \`quality-tooling\`, \`structure\`).
+- If the intent is vague ("improve the project"), pick 4-6 processes to map the terrain.
+- If an aspect is not in the catalog (e.g.: "how module X uses module Y", "what's the format of config files in /etc"), use a custom item.
 
-# Regra dura: máximo 10 itens no array.
+# Hard rule: maximum 10 items in the array.
 
-# Itens custom (\`{title, prompt}\`)
+# Custom items (\`{title, prompt}\`)
 
-- \`title\`: ≤ 60 caracteres, vai ser exibido como label na UI ("Análise de routing", "Mapeamento de configs").
-- \`prompt\`: a missão que o agente vai receber. Seja ESPECÍFICO: diga (a) qual seção do digest olhar (\`## File tree\`, \`package.json\`, \`README.md\`, \`CLAUDE.md\`, \`AGENTS.md\`, \`tsconfig.json\`), (b) o que extrair, (c) quantos bullets esperar (2-6). Use o tom imperativo, igual aos missions do catálogo. NÃO defina formato de saída — isso é fixo.
+- \`title\`: ≤ 60 characters, will be displayed as a label in the UI ("Routing analysis", "Config mapping").
+- \`prompt\`: the mission the agent will receive. Be SPECIFIC: say (a) which digest section to look at (\`## File tree\`, \`package.json\`, \`README.md\`, \`CLAUDE.md\`, \`AGENTS.md\`, \`tsconfig.json\`), (b) what to extract, (c) how many bullets to expect (2-6). Use imperative tone, like the catalog missions. Do NOT define output format — that's fixed.
 
 # Strings (catalog refs)
 
-- Sempre que possível, use o ID EXATO do catálogo (ex: \`stack\`, \`build-deploy\`, \`pain-points\`).
-- Vamos validar com fuzzy match, mas IDs exatos são mais rápidos e confiáveis.
+- Whenever possible, use the EXACT catalog ID (e.g.: \`stack\`, \`build-deploy\`, \`pain-points\`).
+- We validate with fuzzy match, but exact IDs are faster and more reliable.
 
-# Saída
+# Output
 
-JSON estruturado:
+Structured JSON:
 \`\`\`
 {
   "selections": [
@@ -117,15 +117,15 @@ JSON estruturado:
 }
 \`\`\`
 
-- Mínimo 1, máximo 10 itens.
-- Cada item é UMA STRING (id do catálogo) OU UM OBJETO {title, prompt}.
-- Sem campos extras, sem comentários, sem preâmbulo.`;
+- Minimum 1, maximum 10 items.
+- Each item is ONE STRING (catalog id) OR ONE OBJECT {title, prompt}.
+- No extra fields, no comments, no preamble.`;
 }
 
 export function buildSelectorHumanMessage(intent: string, projectHint?: string): string {
   const hint = projectHint?.trim();
-  const hintBlock = hint ? `\n\n## Hint do projeto\n${hint}` : '';
-  return `## Intent do usuário\n${intent.trim()}${hintBlock}`;
+  const hintBlock = hint ? `\n\n## Project hint\n${hint}` : '';
+  return `## User intent\n${intent.trim()}${hintBlock}`;
 }
 
 /**
@@ -141,7 +141,7 @@ export async function runReconSelector(
   if (stub) return runStubSelector(opts);
 
   const apiKey = opts.apiKey.trim();
-  if (!apiKey) throw new Error('OpenRouter API key ausente.');
+  if (!apiKey) throw new Error('OpenRouter API key missing.');
   const modelId = (opts.modelId ?? SELECTOR_MODEL).trim();
 
   const chat = new ChatOpenAI({
@@ -188,7 +188,7 @@ async function runStubSelector(_opts: RunSelectorOptions): Promise<RawSelection[
     {
       title: 'Stub custom mission',
       prompt:
-        'OLHE APENAS o `## File tree` e liste arquivos em `scripts/` se existirem. Caso contrário, retorne um bullet "sem scripts/ no file tree".',
+        'LOOK ONLY at the `## File tree` and list files under `scripts/` if any exist. Otherwise, return a bullet "no scripts/ in file tree".',
     },
   ];
 }

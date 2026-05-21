@@ -160,7 +160,7 @@ export function PipelineAssistant({
       });
       const seed = buildInitialHumanMessage(userIntent);
       messagesRef.current = [new SystemMessage(systemPrompt), new HumanMessage(seed)];
-      setHistory([{ role: 'user', text: userIntent.trim() || '(sem descrição inicial)' }]);
+      setHistory([{ role: 'user', text: userIntent.trim() || '(no initial description)' }]);
       setStage({ kind: 'asking' });
 
       // First call doesn't go through sendTurn (we already pushed the seed).
@@ -268,12 +268,12 @@ export function PipelineAssistant({
     return (
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor={theme.ai} paddingX={1} flexDirection="column" width="100%">
-          <Text bold color={theme.ai}>Assistente de pipeline</Text>
-          <Text dimColor>Modelo: {modelId}</Text>
+          <Text bold color={theme.ai}>Pipeline assistant</Text>
+          <Text dimColor>Model: {modelId}</Text>
 
           <Box marginTop={1} flexDirection="column">
-            <Text>O que você quer que a pipeline faça?</Text>
-            <Text dimColor>Descreva em uma ou duas frases. Pode ser bem objetivo.</Text>
+            <Text>What do you want the pipeline to do?</Text>
+            <Text dimColor>Describe it in one or two sentences. Keep it concrete.</Text>
           </Box>
 
           <Box marginTop={1}>
@@ -289,7 +289,7 @@ export function PipelineAssistant({
 
           <Box marginTop={1}>
             <Text dimColor>
-              <Text bold>ENTER</Text> começar · <Text bold>ESC</Text> voltar
+              <Text bold>ENTER</Text> start · <Text bold>ESC</Text> back
             </Text>
           </Box>
         </Box>
@@ -321,7 +321,7 @@ export function PipelineAssistant({
               {history.slice(-4).map((t, i) => (
                 <Box key={i}>
                   <Text color={t.role === 'user' ? 'cyan' : 'yellow'} bold>
-                    {t.role === 'user' ? 'Você: ' : 'Assistente: '}
+                    {t.role === 'user' ? 'You: ' : 'Assistant: '}
                   </Text>
                   <Text>{t.text}</Text>
                 </Box>
@@ -413,11 +413,11 @@ export function PipelineAssistant({
     return (
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor="yellow" paddingX={1} flexDirection="column" width="100%">
-          <Text bold color="yellow">Descartar conversa?</Text>
-          <Text dimColor>Você vai perder o contexto coletado até aqui e voltar pra home.</Text>
+          <Text bold color="yellow">Discard conversation?</Text>
+          <Text dimColor>You will lose the context gathered so far and return to home.</Text>
           <Box marginTop={1}>
             <Text>
-              <Text bold color="cyan">[Y]</Text> sim, descartar  ·  <Text bold color="cyan">[N]</Text> continuar
+              <Text bold color="cyan">[Y]</Text> yes, discard  ·  <Text bold color="cyan">[N]</Text> keep going
             </Text>
           </Box>
         </Box>

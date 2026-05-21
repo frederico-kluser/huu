@@ -1,26 +1,26 @@
 # huu
 
-CLI TUI em TypeScript/React (Ink) que executa pipelines de agentes LLM em git worktrees isolados. Cada etapa decompõe em tasks paralelas, mergeadas deterministicamente em worktree central ao fim de cada estágio.
+A TypeScript/React (Ink) CLI TUI that runs LLM-agent pipelines in isolated git worktrees. Each stage decomposes into parallel tasks, deterministically merged into a central worktree at the end of every stage.
 
 ## Build & Run
 
 ```bash
-# Instalar dependências
+# Install dependencies
 npm install
 
-# Rodar em dev (hot reload)
+# Run in dev (hot reload)
 npm run dev
 
-# Rodar direto (sem build)
+# Run directly (no build)
 npm start
 
-# Compilar para produção
+# Compile for production
 npm run build
 
-# Rodar testes
+# Run tests
 npm test
 
-# Type-check apenas
+# Type-check only
 npm run typecheck
 ```
 
@@ -52,7 +52,7 @@ Alternate entry point that swaps Ink (TUI) for a browser front-end while reusing
 - Protocol: `src/web/ws-protocol.ts` (Node-free types; imported via `@shared` path alias from `webui/`).
 - Phase-1 constraint: `--web` requires `--yolo` (Docker port-publishing not yet implemented).
 
-## Arquitetura (Resumo)
+## Architecture (summary)
 
 ```
 [host]   cli.tsx top-level → decideReexec → reexecInDocker
@@ -97,24 +97,50 @@ of the TUI code loads. Inside the container, `HUU_IN_CONTAINER=1` (set by
 the Dockerfile) short-circuits the gate so the same binary runs the TUI
 directly. See the `docker-runtime` skill for the full lifecycle.
 
+## Bundled default pipelines
+
+`pipeline-bootstrap.ts` materializes a small catalog of framework-agnostic
+default pipelines into `pipelines/` on first run. Each one is idempotent
+(it never overwrites an existing file). Source of truth lives in
+`src/lib/default-pipelines/<name>.ts` and is registered in
+`src/lib/default-pipelines/registry.ts`.
+
+| Pipeline | What it does | Methodology |
+|---|---|---|
+| `huu Test Suite` (`_default`) | Stack detection → test runner setup → unit tests for 3 representative files + user-selected files → coverage badge. Includes a CheckStep gate to keep iterating until the suite is green. | Unit-test fundamentals |
+| `huu Docs Audit` | Inventories every doc, classifies by Diátaxis quadrant, scores the README, flags stale references, measures inline API-doc coverage. Report-only. | [Diátaxis](https://diataxis.fr/) + Awesome-README |
+| `huu Quality Audit` | Sonar-style report: cyclomatic / cognitive complexity, function/file size, parameter count, nesting depth, duplication, dead code, composite score + badge. Report-only. | [SonarSource](https://www.sonarsource.com/resources/library/cyclomatic-complexity/) + Fowler smells |
+| `huu Performance Audit` | Static hotspot scan (N+1, big-O, sync I/O, memory leak signals), Core Web Vitals scorecard for frontends, USE-method checklist for backends/CLIs. Report-only. | [USE method](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
+| `huu Refactor Plan` | Characterization-test baseline → per-file smell catalog → top-5 target ranking → Mikado graph per target → final Fowler refactoring recommendations. Report-only. | [Fowler refactoring catalog](https://refactoring.com/catalog/) + [Mikado method](https://www.manning.com/books/the-mikado-method) |
+| `huu Security Audit` | Secrets sweep (gitleaks), OWASP Top 10:2021 per-file scan (semgrep when available), dependency CVE scan, remediation roadmap + severity badge. Report-only. | [OWASP Top 10](https://owasp.org/Top10/2021/) + [CWE Top 25 (2024)](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) |
+
+Only `huu Test Suite` carries `_default: true` — it's the entry the Welcome
+screen highlights. The other five are surfaced in the pipeline picker but
+are not flagged as "the default".
+
+Each default pipeline tries to install its own auxiliary tooling
+(gitleaks, semgrep, eslint, jscpd, depcheck, lighthouse-ci, …) into the
+worktree on demand and falls back to grep/awk reasoning if the install
+fails. No pipeline ever hard-fails because of a missing tool.
+
 ## Commit Rules
 
-- Run `npm run typecheck && npm test` antes de cada commit. **Não há CI
-  automatizada** — convenção é responsabilidade do contribuidor. Para
-  endurecer localmente, ativar o pre-push hook: `git config core.hooksPath .githooks`.
-- Prefer Conventional Commits
-- Never force-push to main
+- Run `npm run typecheck && npm test` before every commit. **There is no
+  automated CI** — convention is the contributor's responsibility. To
+  harden it locally, enable the pre-push hook: `git config core.hooksPath .githooks`.
+- Prefer Conventional Commits.
+- Never force-push to main.
 
-## Release procedure (manual — sem CI)
+## Release procedure (manual — no CI)
 
-Para release v`X.Y.Z` (semver; em 0.x.x, breaking changes vão em minor
-bumps por convenção):
+To cut release v`X.Y.Z` (semver; in 0.x.x, breaking changes go into minor
+bumps by convention):
 
-1. Atualizar `package.json` `version` e `CHANGELOG.md` (mover entradas
-   de `[Unreleased]` para `[X.Y.Z] - YYYY-MM-DD`, seguindo
+1. Update `package.json` `version` and `CHANGELOG.md` (move entries
+   from `[Unreleased]` into `[X.Y.Z] - YYYY-MM-DD`, following
    [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)).
 
-2. Validar local:
+2. Validate locally:
    ```bash
    npm run typecheck
    npm test
@@ -131,15 +157,15 @@ bumps por convenção):
    git push origin main vX.Y.Z
    ```
 
-4. **Opcional** — publicar imagem no GHCR. Pré-requisito: `docker login
-   ghcr.io` com Personal Access Token de escopo `write:packages`.
+4. **Optional** — publish the image to GHCR. Prerequisite: `docker login
+   ghcr.io` with a Personal Access Token having the `write:packages` scope.
 
    ```bash
-   # Garante buildx + QEMU configurados (uma vez por máquina):
+   # Make sure buildx + QEMU are set up (once per machine):
    docker buildx create --use --name huu-builder 2>/dev/null \
        || docker buildx use huu-builder
 
-   # Build multi-arch + push direto pro GHCR
+   # Multi-arch build + push straight to GHCR
    docker buildx build \
        --platform linux/amd64,linux/arm64 \
        --tag ghcr.io/frederico-kluser/huu:X.Y.Z \
@@ -150,42 +176,43 @@ bumps por convenção):
        .
    ```
 
-5. Smoke contra imagem publicada:
+5. Smoke against the published image:
    ```bash
    ./scripts/smoke-image.sh ghcr.io/frederico-kluser/huu:X.Y.Z
    ./scripts/smoke-pipeline.sh ghcr.io/frederico-kluser/huu:X.Y.Z
    ```
 
-Se o passo 4 for pulado, usuários precisam buildar local com
-`docker build -t huu:local .` (caminho default documentado no README).
+If step 4 is skipped, users need to build locally with
+`docker build -t huu:local .` (the default path documented in the README).
 
 ## Smoke tests
 
-Sem CI automatizada, é responsabilidade do mantenedor / contribuidor
-rodar smoke local antes de cada release ou PR não-trivial:
+Without automated CI, it is the maintainer's / contributor's
+responsibility to run the local smoke suite before every release or
+non-trivial PR:
 
 ```bash
 docker build -t huu:local .
-./scripts/smoke-image.sh        # ~10s — sanity da imagem
-./scripts/smoke-pipeline.sh     # ~60s — pipeline fim-a-fim com --stub
-./scripts/smoke-web.sh          # ~5s — sanity do modo `huu --web` (port bind)
+./scripts/smoke-image.sh        # ~10s — image sanity
+./scripts/smoke-pipeline.sh     # ~60s — end-to-end pipeline with --stub
+./scripts/smoke-web.sh          # ~5s — sanity for `huu --web` mode (port bind)
 ```
 
-Todos saem 0 em sucesso, !=0 em falha — encadeáveis em `&&`.
+All exit 0 on success and !=0 on failure — chainable with `&&`.
 
 ### Conditional pipeline steps (v2)
 
-Pipelines podem incluir `CheckStep` (nós de decisão): um agente-juiz com
-shell rodando na worktree de integração emite um verdict JSON e o cursor
-salta para `outcomes[].nextStepName`. A worktree de integração nunca
-retrocede — loops re-executam em cima do HEAD atual, acumulando commits.
-Schema: `huu-pipeline-v2` (v1 ainda aceito, `type` opcional em work
-steps). Salvaguardas: `Pipeline.maxNodeExecutions` (default 50),
-`CheckStep.maxRuns` (default 5), e o outcome `default: true` (exatamente
-um por check) dispara em falha do juiz / label desconhecida / cap. Ver
-`.agents/skills/pipeline-agents/SKILL.md` e
+Pipelines can include `CheckStep` (decision nodes): a judge agent with
+shell access running in the integration worktree emits a verdict JSON
+and the cursor jumps to `outcomes[].nextStepName`. The integration
+worktree never rewinds — loops re-execute on top of the current HEAD,
+accumulating commits. Schema: `huu-pipeline-v2` (v1 still accepted,
+`type` is optional on work steps). Safeguards:
+`Pipeline.maxNodeExecutions` (default 50), `CheckStep.maxRuns`
+(default 5), and the `default: true` outcome (exactly one per check)
+fires on judge failure / unknown label / cap. See
+`.agents/skills/pipeline-agents/SKILL.md` and
 `docs/pipeline-json-guide.md` (`#conditional-steps-check-nodes`).
 
-## References (carregue sob demanda)
+## References (load on demand)
 - Skill catalog: `agent-skills.md`
-

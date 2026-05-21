@@ -233,31 +233,31 @@ export async function selectAndRunRecon(
  */
 const STUB_BULLETS: Partial<Record<ReconCatalogId, string[]>> = {
   stack: [
-    'TypeScript + React (Ink) — CLI/TUI rodando em Node 20+.',
-    'Build via tsc; testes com Vitest; lint não detectado.',
+    'TypeScript + React (Ink) — CLI/TUI running on Node 20+.',
+    'Build via tsc; tests with Vitest; lint not detected.',
     'Scripts: npm run dev / build / test / typecheck.',
   ],
   structure: [
-    'Top-level em src/: ui, lib, orchestrator, git, models, contracts.',
-    'Camadas fluem para baixo (UI → orchestrator → git → lib).',
-    'Testes co-localizados (*.test.ts ao lado do módulo).',
+    'src/ top-level: ui, lib, orchestrator, git, models, contracts.',
+    'Layers flow downward (UI → orchestrator → git → lib).',
+    'Co-located tests (*.test.ts next to the module).',
   ],
   libraries: [
-    'ink — render React no terminal.',
-    'langchain + @langchain/openai — chamadas a LLMs via OpenRouter.',
-    'zod — validação de schemas estruturados.',
-    'commander — parsing de CLI flags.',
+    'ink — React rendering in the terminal.',
+    'langchain + @langchain/openai — LLM calls via OpenRouter.',
+    'zod — structured schema validation.',
+    'commander — CLI flag parsing.',
   ],
   conventions: [
-    'Skills domain-specific em .agents/skills/.',
-    'CLAUDE.md raiz documenta arquitetura, build, e regras de commit.',
-    'Conventional commits + sem CI automatizada (typecheck/test manual).',
+    'Domain-specific skills in .agents/skills/.',
+    'Root CLAUDE.md documents architecture, build, and commit rules.',
+    'Conventional commits + no automated CI (typecheck/test manual).',
   ],
 };
 
 const CUSTOM_STUB_BULLETS = [
-  'Stub custom — bullet 1 (substitua quando rodar com modelo real).',
-  'Stub custom — bullet 2 (substitua quando rodar com modelo real).',
+  'Stub custom — bullet 1 (replace when running with a real model).',
+  'Stub custom — bullet 2 (replace when running with a real model).',
 ];
 
 async function runStubRecon(
@@ -269,7 +269,7 @@ async function runStubRecon(
     let bullets: readonly string[];
     if (item.source === 'catalog') {
       bullets = STUB_BULLETS[item.tag as ReconCatalogId] ?? [
-        `Stub bullet para ${item.tag}.`,
+        `Stub bullet for ${item.tag}.`,
       ];
     } else {
       bullets = CUSTOM_STUB_BULLETS;

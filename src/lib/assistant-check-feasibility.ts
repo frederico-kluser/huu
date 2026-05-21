@@ -86,12 +86,12 @@ export async function analyzeCheckFeasibility(
 
 function buildSystem(): string {
   return [
-    'Você é um assistente que analisa a viabilidade de uma condição em uma etapa de decisão de pipeline.',
-    'Sua resposta DEVE ser JSON estrito.',
-    '- feasible: true se o juiz LLM consegue, em runtime, com acesso a shell no worktree, decidir entre os labels declarados.',
-    '- reason: breve justificativa (≤ 200 chars).',
-    '- instructionDraft: 2-5 frases concretas dizendo COMO o juiz deve verificar (ex: "rode `npm test -- --coverage`, leia `coverage/coverage-summary.json`, compare total.lines.pct com 60").',
-    '- warnings: lista de avisos (ex: comando ausente em package.json, ferramenta não instalada).',
+    'You are an assistant that analyzes the feasibility of a condition for a pipeline decision step.',
+    'Your response MUST be strict JSON.',
+    '- feasible: true if the judge LLM can, at runtime, with shell access in the worktree, decide between the declared labels.',
+    '- reason: brief justification (≤ 200 chars).',
+    '- instructionDraft: 2-5 concrete sentences saying HOW the judge should verify (e.g.: "run `npm test -- --coverage`, read `coverage/coverage-summary.json`, compare total.lines.pct against 60").',
+    '- warnings: list of warnings (e.g.: command missing in package.json, tool not installed).',
   ].join('\n');
 }
 
@@ -128,7 +128,7 @@ function stubFeasibility(step: CheckStep): FeasibilityResult {
   return {
     feasible: true,
     reason: 'stub: feasibility analyzer unavailable; assuming runnable.',
-    instructionDraft: `Stub draft — substitua antes de rodar com modelo real. Avalie a condição "${step.condition.slice(0, 80)}" e retorne uma label entre {${labels}}.`,
-    warnings: ['stub mode — análise real só roda com OPENROUTER_API_KEY'],
+    instructionDraft: `Stub draft — replace before running with a real model. Evaluate the condition "${step.condition.slice(0, 80)}" and return a label from {${labels}}.`,
+    warnings: ['stub mode — real analysis requires OPENROUTER_API_KEY'],
   };
 }

@@ -185,7 +185,7 @@ export function exportPipeline(pipeline: Pipeline, filePath: string): void {
 }
 
 export function importPipeline(filePath: string): Pipeline {
-  if (!existsSync(filePath)) throw new Error(`Arquivo nao encontrado: ${filePath}`);
+  if (!existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
   const raw = JSON.parse(readFileSync(filePath, 'utf8'));
   const parsed = PipelineFileSchema.parse(raw);
   if ('pipeline' in parsed) return withDefaults(parsed.pipeline as Pipeline);

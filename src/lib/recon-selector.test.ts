@@ -57,13 +57,16 @@ describe('buildSelectorSystemPrompt', () => {
 
   it('describes the mixed-array output shape (string OR object)', () => {
     const p = buildSelectorSystemPrompt();
-    expect(p).toMatch(/STRING.*ID do catálogo/i);
-    expect(p).toMatch(/OBJETO.*title.*prompt/i);
+    // Schema is the stable surface — assert presence of the literal
+    // schema sketch (independent of surrounding prose copy-edits).
+    expect(p).toContain('"selections"');
+    expect(p).toContain('{ "title": "...", "prompt": "..." }');
   });
 
-  it('caps at 10 items in the rules', () => {
+  it('caps at MAX_SELECTIONS items in the rules', () => {
     const p = buildSelectorSystemPrompt();
-    expect(p).toMatch(/máximo 10/i);
+    // MAX_SELECTIONS (10) is the structural cap; assert it's mentioned.
+    expect(p).toMatch(/\bmaximum\s+10\b/i);
   });
 });
 
@@ -80,7 +83,7 @@ describe('buildSelectorHumanMessage', () => {
 
   it('omits the hint section when no hint is given', () => {
     const m = buildSelectorHumanMessage('intent');
-    expect(m).not.toMatch(/Hint do projeto/);
+    expect(m).not.toMatch(/Project hint/);
   });
 });
 

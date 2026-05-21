@@ -149,21 +149,21 @@ function buildPrompt(
   const scope = currentStep.scope ?? 'flexible';
 
   const system = [
-    'Você é um assistente que sugere arquivos relevantes para uma etapa de pipeline huu.',
-    'Sua resposta DEVE ser JSON estrito conforme o schema solicitado.',
-    'Não invente caminhos: TODOS os paths em "files" precisam estar EXATAMENTE na lista "Available files in repo" abaixo.',
-    'Pense no que o STEP ATUAL precisa, considerando o que steps anteriores já tocaram.',
-    'Seja seletivo: 3 a 30 arquivos é geralmente o ideal. Não sugira o repo inteiro.',
+    'You are an assistant that suggests relevant files for a huu pipeline step.',
+    'Your response MUST be strict JSON matching the requested schema.',
+    'Do not invent paths: EVERY path in "files" MUST appear EXACTLY in the "Available files in repo" list below.',
+    'Think about what the CURRENT STEP needs, considering what earlier steps already touched.',
+    'Be selective: 3 to 30 files is usually ideal. Do not suggest the entire repo.',
   ].join(' ');
 
   const user = [
     `## Pipeline: ${pipeline.name}`,
     `Total steps: ${pipeline.steps.length}`,
     '',
-    '## Steps anteriores',
-    previousLines || '(nenhum step anterior)',
+    '## Previous steps',
+    previousLines || '(no previous step)',
     '',
-    `## Step atual #${currentStepIndex + 1} — FOCO`,
+    `## Current step #${currentStepIndex + 1} — FOCUS`,
     `Name: ${currentStep.name}`,
     `Scope: ${scope}`,
     'Prompt:',
@@ -173,7 +173,7 @@ function buildPrompt(
     `## Available files in repo (${filesForPrompt.length} of ${input.availableFiles.length})`,
     filesForPrompt.join('\n'),
     '',
-    'Retorne JSON: {"files": ["path/relative", ...], "reasoning": "1-2 frases"}',
+    'Return JSON: {"files": ["path/relative", ...], "reasoning": "1-2 sentences"}',
   ].join('\n');
 
   return { system, user };

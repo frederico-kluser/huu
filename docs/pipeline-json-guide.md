@@ -649,6 +649,37 @@ The simplest valid pipeline (bare format, no wrapper):
 
 ---
 
+## Bundled Default Pipelines
+
+On first app mount, `pipeline-bootstrap.ts` materializes a catalog of framework-agnostic default pipelines into the user's `pipelines/` directory. Each is idempotent (never overwrites an existing file). Source of truth lives in `src/lib/default-pipelines/<name>.ts` and is registered in `src/lib/default-pipelines/registry.ts`.
+
+| Filename | Pipeline name | Steps | Scope mix | Purpose |
+|---|---|---|---|---|
+| `huu-test-suite.pipeline.json` | huu Test Suite (`_default`) | 4 | project · project · per-file · project | Set up a test runner, write unit tests, prune failures, add a coverage badge. |
+| `huu-docs-audit.pipeline.json` | huu Docs Audit | 6 | 4× project + 1 per-file + 1 project | Diátaxis classification, README scorecard, staleness scan, API-doc coverage. |
+| `huu-quality-audit.pipeline.json` | huu Quality Audit | 5 | project · per-file · 3× project | Sonar-style complexity, duplication, dead code, composite score. |
+| `huu-performance-audit.pipeline.json` | huu Performance Audit | 5 | project · per-file · 3× project | N+1 / big-O / sync-I/O / Core Web Vitals / USE checklist. |
+| `huu-refactor.pipeline.json` | huu Refactor Plan | 5 | project · per-file · 3× project | Fowler smell catalog + static Mikado-style dependency graph. |
+| `huu-security-audit.pipeline.json` | huu Security Audit | 5 | 2× project · per-file · 2× project | gitleaks secrets sweep + OWASP Top 10 per-file + dep CVE scan + remediation. |
+
+### Strict report-only contract
+
+The five audit pipelines write **only** under `.huu/audits/<topic>.md` and `.huu/audits/<topic>-faq.json` (working files under `.huu/audits/.tmp/`). They never touch `README.md`, `package.json`, `requirements.txt`, `pyproject.toml`, `Cargo.toml`, `go.mod`, lockfiles, or any production source. Tools that need to be present (semgrep, jscpd, gitleaks, lighthouse-ci, …) are invoked ephemerally via `npx --yes`, `pipx run`, or vendored binaries under `$HOME/.huu/bin/`.
+
+Only `huu Test Suite` mutates production state — by design: it writes `huu-tests.md` to repo root and inserts a tests-coverage badge into `README.md`. That's a setup pipeline, not an audit.
+
+### Fan-out cap
+
+Every per-file step in the bundled catalog runs under `Pipeline.maxNodeExecutions = 50`. On a large repo, narrow your file selection at runtime; auto-skip rules ignore `node_modules/`, `dist/`, `build/`, `vendor/`, generated files (`*.generated.*`, `*.min.js`), type declarations (`*.d.ts`), and lock/snapshot files.
+
+### Adding a new bundled default
+
+1. Create `src/lib/default-pipelines/huu-<topic>.ts` exporting `DEFAULT_PIPELINE_FILENAME`, `DEFAULT_PIPELINE_NAME`, `getDefaultPipeline(): Pipeline`, and `getDefaultPipelineFileContent(): string`.
+2. Import the module and append it to the `DEFAULT_PIPELINES` array in `src/lib/default-pipelines/registry.ts`.
+3. The registry-iterating tests in `src/lib/pipeline-bootstrap.test.ts` automatically cover topology, JSON drift, CheckStep defaults, and `$file`-only-in-per-file invariants — no need to copy-paste them per default.
+
+---
+
 ## Quick Validation Checklist
 
 Before using your pipeline JSON, verify:
