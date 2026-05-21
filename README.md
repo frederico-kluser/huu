@@ -304,6 +304,43 @@ The front-end (`webui/`) is a Vite + React + TypeScript workspace using Tailwind
 
 ---
 
+## Headless / one-command mode (`huu auto`)
+
+For CI, cron, demos, or any unattended invocation where you cannot babysit the TUI:
+
+```bash
+huu auto <pipeline.json> --config <config.json>
+```
+
+The config JSON supplies everything the interactive TUI would normally collect — model, backend, per-step file overrides, timeouts:
+
+```json
+{
+  "modelId": "minimax/minimax-m2.7",
+  "backend": "pi",
+  "files": {
+    "3. Test $file (user-selected)": ["src/index.ts"]
+  },
+  "singleFileCardTimeoutMs": 300000,
+  "maxRetries": 1,
+  "concurrency": 4
+}
+```
+
+`files` is a map keyed by **`step.name`** (exact match — typos surface as warnings on stderr, not silent failures). The mapped array overrides that step's `files`. Steps not mentioned keep their pipeline-defined files.
+
+The API key resolves through the same chain as the TUI: `/run/secrets/openrouter_api_key` → `OPENROUTER_API_KEY_FILE` → `OPENROUTER_API_KEY` → persisted global store. So `OPENROUTER_API_KEY=sk-or-... huu auto …` just works.
+
+### Output
+
+- **stderr** — line-delimited JSON progress events (NDJSON), one per state change, throttled to ~250 ms. Pipe through `jq -c` if you want them human-readable.
+- **stdout** — ONE final JSON object on completion: `{ ok, runId, integrationBranch, status, totalCost, durationMs, filesModified, agents[] }`. Build pipes on top: `huu auto … | jq .runId`, or `git show "huu/$(jq -r .runId)/integration:huu-tests.md"` to verify the integration branch shipped what you expected.
+- **Exit code** — `0` if `manifest.status === 'done'`, `1` otherwise.
+
+Like `huu run …`, `huu auto …` re-execs into the Docker image by default — auto-MTU network applies, port-isolation shim applies, secrets mount applies. Use `--yolo` to skip Docker.
+
+---
+
 ## Quick start (native install)
 
 ```bash

@@ -61,6 +61,9 @@ import { importPipeline } from './lib/pipeline-io.js';
 import { runInitDockerCli } from './lib/init-docker.js';
 import { runStatusCli } from './lib/status.js';
 import { runPruneCli } from './lib/prune.js';
+import { loadRunConfig, applyRunConfig } from './lib/run-config.js';
+import { runHeadless } from './lib/headless-run.js';
+import { findSpec, resolveApiKey } from './lib/api-key.js';
 import {
   clearActiveRunSentinel,
   writeActiveRunSentinel,
@@ -71,7 +74,7 @@ import {
   ALL_BACKENDS,
   type AgentBackendKind,
 } from './orchestrator/backends/registry.js';
-import type { Pipeline } from './lib/types.js';
+import type { AppConfig, Pipeline } from './lib/types.js';
 import { installSafeTerminal } from './ui/safe-terminal.js';
 import { initDebugLogger, log as dlog } from './lib/debug-logger.js';
 import { runWebMode } from './cli-web.js';
@@ -148,6 +151,9 @@ function printUsage(): void {
 Usage:
   huu                       Open the TUI at the welcome screen
   huu run <pipeline.json>   Load pipeline and jump to the model picker
+  huu auto <p.json> --config <c.json>
+                            Headless run — no TUI. Config JSON supplies
+                            model, backend, per-step file selection.
   huu init-docker [...]     Scaffold compose.huu.yaml into the current repo
   huu status [...]          Inspect the latest run via .huu/debug-*.log
   huu prune [...]           List/kill orphan huu containers + stale cidfiles
@@ -340,6 +346,87 @@ async function main(): Promise<void> {
   // Doing it here means the user sees the error before any pipeline work.
   // Runs both for `huu` (welcome) and `huu run <pipeline>` (auto-start).
   ensureGitRepoOrExit(process.cwd());
+
+  // `huu auto <pipeline> --config <config>` — headless one-command run.
+  // Bypasses Ink entirely; drives the same Orchestrator the TUI uses,
+  // with file selection and model/backend supplied via the config JSON.
+  if (filtered[0] === 'auto') {
+    const pipelinePath = filtered[1];
+    if (!pipelinePath) {
+      console.error('Usage: huu auto <pipeline.json> --config <config.json>');
+      process.exit(1);
+    }
+    let configPath: string | undefined;
+    const eqFlag = filtered.find((a) => a.startsWith('--config='));
+    if (eqFlag) {
+      configPath = eqFlag.slice('--config='.length);
+    } else {
+      const spaceIdx = filtered.indexOf('--config');
+      if (spaceIdx >= 0) configPath = filtered[spaceIdx + 1];
+    }
+    if (!configPath) {
+      console.error('Usage: huu auto <pipeline.json> --config <config.json>');
+      process.exit(1);
+    }
+
+    let pipelineForAuto: Pipeline;
+    try {
+      pipelineForAuto = importPipeline(pipelinePath);
+    } catch (err) {
+      console.error(
+        `Failed to import pipeline: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(1);
+    }
+
+    let runConfig;
+    try {
+      runConfig = loadRunConfig(configPath);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+
+    const { pipeline: mergedPipeline, warnings } = applyRunConfig(
+      pipelineForAuto,
+      runConfig,
+    );
+    for (const w of warnings) process.stderr.write(`[warn] ${w}\n`);
+
+    const bundle = selectBackend(runConfig.backend);
+    let apiKey = '';
+    if (bundle.requiresApiKey) {
+      const specName = runConfig.backend === 'copilot' ? 'copilot' : 'openrouter';
+      const spec = findSpec(specName);
+      if (spec) apiKey = resolveApiKey(spec);
+      if (!apiKey) {
+        console.error(
+          `huu auto: ${runConfig.backend} backend requires an API key but ` +
+            `${spec?.envVar ?? specName} is not set. Either export the env ` +
+            'var, mount a secret at ' +
+            (spec?.secretMountPath ?? '/run/secrets/<key>') +
+            ', or persist it via the TUI first.',
+        );
+        process.exit(1);
+      }
+    }
+
+    const appConfig: AppConfig = {
+      apiKey: apiKey || 'stub',
+      modelId: runConfig.modelId,
+      backend: runConfig.backend,
+    };
+
+    const code = await runHeadless({
+      pipeline: mergedPipeline,
+      config: appConfig,
+      cwd: process.cwd(),
+      agentFactory: bundle.agentFactory,
+      conflictResolverFactory: bundle.conflictResolverFactory,
+      concurrency: runConfig.concurrency,
+    });
+    process.exit(code);
+  }
 
   let initialPipeline: Pipeline | undefined;
   let autoStart = false;

@@ -7,7 +7,17 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
-## [1.1.0] - 2026-05-21
+## [1.2.0] - 2026-05-21
+
+### Added
+
+- **`huu auto <pipeline.json> --config <config.json>`** — ONE-COMMAND headless pipeline run. Drives the same `Orchestrator` the TUI uses but without Ink: parses the pipeline + a small config JSON (`modelId`, `backend`, per-step `files` override, optional timeouts/retries/concurrency), resolves the API key via the existing `resolveApiKey` chain, runs `await orch.start()` and exits 0 / 1 based on `manifest.status`. NDJSON progress events stream to stderr (throttled ~250 ms); ONE final JSON object lands on stdout (`{ ok, runId, integrationBranch, status, totalCost, durationMs, filesModified, agents[] }`) so `huu auto … | jq .runId` works. Inherits the auto-MTU docker network from 1.1.0 — works in VPN out of the box. Unblocks CI/cron use cases, demos, and unattended overnight runs.
+- `src/lib/run-config.ts` — zod-validated `RunConfig` schema + `loadRunConfig(path)` + `applyRunConfig(pipeline, config) → { pipeline, warnings }`. The `files` map matches step names; mismatched keys emit warnings instead of failing so typos are surfaced without blocking.
+- `src/lib/headless-run.ts` — `runHeadless({ pipeline, config, cwd, agentFactory, conflictResolverFactory, concurrency, emitIntervalMs })`. Reusable from scripts and the new CLI subcommand.
+
+### Verification
+
+End-to-end smoke against `/home/ondokai/Projects/integracao-vael` with `huu Test Suite` pipeline + config injecting one file into step 3: real `minimax/minimax-m2.7` agent ran inside the auto-MTU docker network, committed `huu-tests.md` to the integration branch — deterministic success marker (per step 1's prompt: "always writes huu-tests.md at repo root").
 
 ### Added
 
