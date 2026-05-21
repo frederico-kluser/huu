@@ -256,13 +256,13 @@ export function App({
     body = (
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
-          <Text bold color="cyanBright">{`  ██╗  ██╗ ██╗   ██╗ ██╗   ██╗`}</Text>
-          <Text bold color="cyanBright">{`  ██║  ██║ ██║   ██║ ██║   ██║`}</Text>
-          <Text bold color="cyanBright">{`  ███████║ ██║   ██║ ██║   ██║`}</Text>
-          <Text bold color="cyanBright">{`  ██╔══██║ ██║   ██║ ██║   ██║`}</Text>
-          <Text bold color="cyanBright">{`  ██║  ██║ ╚██████╔╝ ╚██████╔╝`}</Text>
-          <Text bold color="cyan">{`  ╚═╝  ╚═╝  ╚═════╝   ╚═════╝ `}</Text>
-          <Text dimColor color="cyan">{`   ▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀`}</Text>
+          <Text bold color="cyanBright">{' __                        '}</Text>
+          <Text bold color="cyanBright">{'/\\ \\                       '}</Text>
+          <Text bold color="cyanBright">{'\\ \\ \\___   __  __  __  __  '}</Text>
+          <Text bold color="cyanBright">{' \\ \\  _ `\\/\\ \\/\\ \\/\\ \\/\\ \\ '}</Text>
+          <Text bold color="cyanBright">{'  \\ \\ \\ \\ \\ \\ \\_\\ \\ \\ \\_\\ \\'}</Text>
+          <Text bold color="cyan">{'   \\ \\_\\ \\_\\ \\____/\\ \\____/'}</Text>
+          <Text dimColor color="cyan">{'    \\/_/\\/_/\\/___/  \\/___/ '}</Text>
           <Box marginTop={1}>
             <Text bold color="cyan">{pkg.name} v{pkg.version}</Text>
           </Box>
