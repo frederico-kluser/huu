@@ -118,6 +118,15 @@ export interface DockerCommandOptions {
    * mount is rw, not ro.
    */
   extraMounts?: string[];
+  /**
+   * `docker run --network=<value>`. Opt-in via `HUU_DOCKER_NETWORK`.
+   * Use case: VPN users (WireGuard/OpenVPN) whose tunnel MTU is below
+   * 1500 — the default `docker0` bridge silently drops large TLS
+   * ClientHello packets, manifesting as "Request timed out" on every
+   * agent. Setting `host` makes the container share the host netns and
+   * inherit MSS-clamping. Omitted → docker default (bridge).
+   */
+  network?: string;
 }
 
 /**
@@ -130,6 +139,7 @@ export function buildDockerArgv(opts: DockerCommandOptions): string[] {
   // -t requires a real terminal; passing it without one makes docker
   // error out with "the input device is not a TTY".
   if (opts.hasTTY) argv.push('-t');
+  if (opts.network) argv.push('--network', opts.network);
   argv.push(
     '--cidfile', opts.cidfile,
     '--user', `${opts.uid}:${opts.gid}`,
@@ -470,6 +480,7 @@ export async function reexecInDocker(
     secretMounts,
     excludeFromEnv,
     extraMounts: [...(opts.extraMounts ?? []), ...hostHomeMounts],
+    network: process.env.HUU_DOCKER_NETWORK?.trim() || undefined,
   });
 
   const child = spawn('docker', argv, { stdio: 'inherit' });

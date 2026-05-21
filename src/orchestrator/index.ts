@@ -48,6 +48,7 @@ import { getSystemMetrics } from '../lib/resource-monitor.js';
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { log as dlog } from '../lib/debug-logger.js';
+import { checkOpenRouterReachable } from '../lib/openrouter.js';
 
 function ensureGitignored(repoRoot: string, line: string): void {
   const gitignorePath = join(repoRoot, '.gitignore');
@@ -392,6 +393,34 @@ export class Orchestrator {
       });
       if (!this.preflight.valid) {
         throw new Error(`Preflight failed: ${this.preflight.errors.join('; ')}`);
+      }
+      // Fast network probe — fail loudly in <8s instead of letting every
+      // agent burn 32s × 8 retries on an unreachable OpenRouter. Common
+      // failure: Docker bridge MTU (1500) > VPN tunnel MTU (~1420) drops
+      // TLS ClientHello packets silently.
+      if ((this.config.backend ?? 'pi') === 'pi') {
+        dlog('orch', 'network_probe_start');
+        const probeStartedAt = Date.now();
+        const reach = await checkOpenRouterReachable(this.config.apiKey);
+        dlog('orch', 'network_probe_end', {
+          durationMs: Date.now() - probeStartedAt,
+          kind: reach.kind,
+        });
+        if (reach.kind === 'unauthorized') {
+          throw new Error(
+            `OpenRouter rejected the API key (HTTP ${reach.status}). ` +
+              `Check OPENROUTER_API_KEY at ~/.huu/api-key or in your shell.`,
+          );
+        }
+        if (reach.kind === 'unreachable') {
+          const inContainer = process.env.HUU_IN_CONTAINER === '1';
+          const hint = inContainer
+            ? ' Hint: if you are on a VPN (WireGuard/OpenVPN), the docker bridge MTU (1500) is likely larger than your tunnel MTU (~1420), silently dropping TLS handshake packets. Workaround: `export HUU_DOCKER_NETWORK=host` and rerun. Permanent fix: edit /etc/docker/daemon.json with `{"mtu": 1420}` and restart dockerd.'
+            : '';
+          throw new Error(
+            `Cannot reach openrouter.ai (${reach.reason}). Aborting before agents spawn so you don't waste 30 minutes on retries.${hint}`,
+          );
+        }
       }
       const runId = generateRunId();
       this.runLogger = new RunLogger({

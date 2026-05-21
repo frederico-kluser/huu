@@ -272,6 +272,20 @@ describe('buildDockerArgv', () => {
     expect(countV(argvA)).toBe(1);
     expect(countV(argvB)).toBe(1);
   });
+
+  it('omits --network when opts.network is undefined', () => {
+    const argv = buildDockerArgv(baseOpts);
+    expect(argv).not.toContain('--network');
+  });
+
+  it('emits --network=host when opts.network is "host" (VPN/MTU workaround)', () => {
+    const argv = buildDockerArgv({ ...baseOpts, network: 'host' });
+    const idx = argv.indexOf('--network');
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(argv[idx + 1]).toBe('host');
+    // Must appear BEFORE the image name so docker parses it as a run flag.
+    expect(idx).toBeLessThan(argv.indexOf(baseOpts.image));
+  });
 });
 
 describe('imageIsLocal', () => {

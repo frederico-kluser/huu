@@ -50,7 +50,7 @@ describe('pipeline integration', () => {
       };
 
       const orch = new Orchestrator(
-        { apiKey: 'stub', modelId: 'stub-model' },
+        { apiKey: 'stub', modelId: 'stub-model', backend: 'stub' },
         pipeline,
         scratch,
         disposeErrorFactory,
@@ -115,7 +115,7 @@ describe('pipeline integration', () => {
       };
 
       const orch = new Orchestrator(
-        { apiKey: 'stub', modelId: 'stub-model' },
+        { apiKey: 'stub', modelId: 'stub-model', backend: 'stub' },
         pipeline,
         scratch,
         okFactory,

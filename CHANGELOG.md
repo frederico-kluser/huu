@@ -7,6 +7,11 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
+### Added
+
+- `HUU_DOCKER_NETWORK` env var, forwarded as `docker run --network=<value>`. Use case: VPN users whose tunnel MTU is below the docker bridge MTU of 1500. Without it, TLS ClientHello packets to Cloudflare-fronted APIs (including OpenRouter) are silently dropped, manifesting as "Request timed out" on every agent. Recommended value on a VPN: `host`.
+- Run-start network reachability probe (`checkOpenRouterReachable` in `src/lib/openrouter.ts`) that hits `/auth/key` with an 8s AbortController before any agent spawns. Fails the run loudly in <8s with a copy-paste-friendly remediation hint (mentioning `HUU_DOCKER_NETWORK=host` when inside a container) instead of letting 43 agents each burn 32s × 8 retries on an unreachable upstream. Wired into `Orchestrator.start()` and gated on `config.backend === 'pi'` so stub/copilot runs aren't affected.
+
 ### Fixed
 
 - Final pass of Portuguese strings the v1.0.1 "English everywhere" commit missed: welcome menu entries (`Assistente de pipeline`, `FAQ — perguntas frequentes`), every Pipeline Assistant stage (`pensando…`, `cancelar`, `enviar`, status line, free-text prompt, error screen), Project Recon header / spinner / progress / error (`Análise do projeto`, `Selecionando o que investigar`, `Falha no seletor`, `processos em paralelo`, `concluídos`), the Pipeline Editor per-card-timeout copy, Model Selector subtitle and legend, model catalog descriptions, Pi backend "model not found" error, and the `agent-env.ts` port-allocation prompt fed into agents.

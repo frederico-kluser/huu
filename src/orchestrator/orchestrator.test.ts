@@ -60,7 +60,7 @@ describe('multi-stage pipeline', () => {
     };
 
     const orch = new Orchestrator(
-      { apiKey: 'stub', modelId: 'stub-model' },
+      { apiKey: 'stub', modelId: 'stub-model', backend: 'stub' },
       pipeline,
       scratch,
       okFactory,
@@ -132,7 +132,7 @@ describe('multi-stage pipeline', () => {
     };
 
     const orch = new Orchestrator(
-      { apiKey: 'stub', modelId: 'stub-model' },
+      { apiKey: 'stub', modelId: 'stub-model', backend: 'stub' },
       pipeline,
       scratch,
       okFactory,
