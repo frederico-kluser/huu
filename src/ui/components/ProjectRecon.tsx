@@ -16,7 +16,7 @@ import { theme } from '../theme.js';
 interface Props {
   apiKey: string;
   repoRoot: string;
-  /** What the user typed when asked "o que você quer que a pipeline faça?" —
+  /** What the user typed when asked "what do you want the pipeline to do?" —
    *  feeds the selector that picks which recon processes to run. */
   intent: string;
   modelId?: string;

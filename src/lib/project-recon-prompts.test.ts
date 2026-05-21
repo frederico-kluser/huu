@@ -52,27 +52,27 @@ describe('buildReconSystemPrompt', () => {
     expect(p).toContain('do stuff with X');
   });
 
-  it('declares Portuguese as the response language', () => {
+  it('declares English as the response language', () => {
     const p = buildReconSystemPrompt({ id: stack.id, mission: stack.mission });
-    expect(p).toMatch(/português/i);
+    expect(p).toMatch(/Plain English/i);
   });
 
   it('mentions the bullets[] JSON output format', () => {
     const p = buildReconSystemPrompt({ id: stack.id, mission: stack.mission });
     expect(p).toMatch(/"bullets"/);
-    expect(p).toMatch(/Mínimo 2, máximo 6/);
+    expect(p).toMatch(/Minimum 2, maximum 6/);
   });
 
   it('frames the agent in fast / focused mode', () => {
     const p = buildReconSystemPrompt({ id: stack.id, mission: stack.mission });
-    expect(p).toMatch(/RÁPIDO|VARREDURA FOCADA/);
-    expect(p).toMatch(/direto ao ponto|conciso/i);
+    expect(p).toMatch(/FAST|FOCUSED SWEEP/);
+    expect(p).toMatch(/get to the point|concise/i);
   });
 
   it('forbids exploring beyond the digest (no node_modules / no fs)', () => {
     const p = buildReconSystemPrompt({ id: stack.id, mission: stack.mission });
     expect(p).toMatch(/node_modules/);
-    expect(p).toMatch(/digest é tudo/i);
+    expect(p).toMatch(/digest is everything/i);
   });
 
   it('includes the project name when provided', () => {
@@ -88,8 +88,8 @@ describe('buildReconSystemPrompt', () => {
     expect(p).not.toMatch(/"undefined"/);
   });
 
-  it('forbids preâmbulo / comentários fora do JSON', () => {
+  it('forbids preamble / comments outside the JSON', () => {
     const p = buildReconSystemPrompt({ id: stack.id, mission: stack.mission });
-    expect(p).toMatch(/preâmbulo/);
+    expect(p).toMatch(/preamble/i);
   });
 });

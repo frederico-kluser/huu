@@ -1,8 +1,6 @@
-// Default test pipeline shipped with huu. The same constant is used both by
-// the first-run bootstrap (lib/pipeline-bootstrap.ts) — which materializes
-// `pipelines/huu-test-suite.pipeline.json` in the user's repo — and by the
-// checked-in copy at `pipelines/huu-test-suite.pipeline.json` (kept in sync
-// manually; see scripts/sync-default-pipeline.ts if/when one is added).
+// Default test pipeline shipped with huu. The single source of truth lives
+// here; `lib/pipeline-bootstrap.ts` materializes it into the user's repo at
+// `pipelines/huu-test-suite.pipeline.json` on first run.
 //
 // IMPORTANT: keep this file pure (no fs / no env). It is imported on the
 // hot path of `App` mount, before any side effects.
@@ -12,290 +10,311 @@ import type { Pipeline } from '../types.js';
 export const DEFAULT_PIPELINE_FILENAME = 'huu-test-suite.pipeline.json';
 export const DEFAULT_PIPELINE_NAME = 'huu Test Suite';
 
-const STEP1_PROMPT = `Voce eh o agente de bootstrap de testes do huu. Objetivo: deixar o projeto com infra de teste funcionando, escrever \`huu-tests.md\` na raiz com instrucoes operacionais, e inicializar \`huu-tests-faq.json\` como base de conhecimento incremental.
+const STEP1_PROMPT = `You are huu's test-bootstrap agent. Goal: leave the project with a working test runner, write \`huu-tests.md\` at the repo root with operational instructions, and initialize \`huu-tests-faq.json\` as an incremental knowledge base.
 
-=== PASSO 1 — Detectar a stack ===
-Inspecione a raiz e principais subpastas para identificar a linguagem e (se houver) o runner de teste ja configurado:
+=== STEP 1 — Detect the stack ===
+Inspect the root and key sub-folders to identify the language and (if any) the already-configured test runner:
 - Node.js / TypeScript / JavaScript: package.json, tsconfig.json, vitest.config.*, jest.config.*, *.test.*, *.spec.*.
 - React/Vue/Svelte: package.json + framework deps, *.tsx/*.jsx.
 - Python: pyproject.toml, setup.py, requirements*.txt, pytest.ini, conftest.py, test_*.py.
 - Go: go.mod, *_test.go.
 - Rust: Cargo.toml, #[cfg(test)] modules, tests/ folder.
 - Ruby: Gemfile + rspec/minitest, *_spec.rb, test/test_*.rb.
-- Java: pom.xml (Maven) ou build.gradle (Gradle), src/test/java/**.
+- Java: pom.xml (Maven) or build.gradle (Gradle), src/test/java/**.
 - .NET: *.csproj + xunit/nunit/mstest.
 
-Se o projeto for poliglota, escolha a stack MAJORITARIA por numero de arquivos fonte e mencione no huu-tests.md.
+If the project is polyglot, pick the MAJORITY stack by source-file count and mention it in huu-tests.md.
 
-=== PASSO 2 — Garantir um runner funcional ===
-Caso ja exista runner configurado: rode um teste minimo (cria um sample efemero se necessario) para confirmar que a infra responde. Se a config estiver quebrada, conserte ate o sample passar.
+=== STEP 2 — Ensure a working runner ===
+If a runner is already configured: run a minimal test (create an ephemeral sample if needed) to confirm the infra responds. If the config is broken, fix it until the sample passes.
 
-Caso NAO exista runner configurado: instale o padrao recomendado da stack detectada (NUNCA escolha um runner exotico):
-- Node puro: Vitest (npm i -D vitest; scripts: "test": "vitest run").
+If NO runner is configured: install the canonical default for the detected stack (NEVER pick an exotic runner):
+- Plain Node: Vitest (npm i -D vitest; scripts: "test": "vitest run").
 - React (Vite/Next/CRA): Vitest + @testing-library/react + jsdom.
-- Python: pytest (pip install pytest, ou pyproject [project.optional-dependencies]).
-- Go: \`go test ./...\` (ja vem com a toolchain).
-- Rust: \`cargo test\` (ja vem com cargo).
-- Ruby: RSpec se o projeto ja indicar inclinacao, senao Minitest.
+- Python: pytest (pip install pytest, or pyproject [project.optional-dependencies]).
+- Go: \`go test ./...\` (already in the toolchain).
+- Rust: \`cargo test\` (already in cargo).
+- Ruby: RSpec if the project already leans that way; otherwise Minitest.
 - Java + Maven: JUnit 5 (Jupiter) + Mockito + maven-surefire >= 3.
 - Java + Gradle: JUnit 5 + Mockito (test { useJUnitPlatform() }).
 - .NET: xUnit (dotnet add package xunit).
 
-Adicione a config minima e descubra empiricamente os comandos exatos.
+Add the minimum config and discover the exact commands empirically.
 
-=== PASSO 3 — Escrever huu-tests.md NA RAIZ ===
-Caminho: ./huu-tests.md
-Conteudo OBRIGATORIO (em portugues, conciso, sem floreio):
+=== STEP 3 — Write huu-tests.md AT THE ROOT ===
+Path: ./huu-tests.md
+Required content (English, concise, no fluff):
 
 # huu-tests.md
 
 ## Stack
-- Linguagem: <detectada>
-- Runner: <escolhido/detectado> (1 linha de justificativa)
+- Language: <detected>
+- Runner: <chosen/detected> (1-line rationale)
 
-## Como rodar todos os testes
+## How to run the full test suite
 \`\`\`bash
-<comando exato>
+<exact command>
 \`\`\`
 
-## Como rodar UM unico arquivo de teste
+## How to run a SINGLE test file
 \`\`\`bash
-<comando exato com placeholder de path>
+<exact command with path placeholder>
 \`\`\`
-(CRITICO — as etapas seguintes da pipeline dependem disto.)
+(CRITICAL — the following pipeline steps depend on this.)
 
-## Como rodar UM unico teste por nome (se suportado)
+## How to run a SINGLE test by name (if supported)
 \`\`\`bash
-<comando exato ou "nao suportado pelo runner">
-\`\`\`
-
-## Como escrever testes neste projeto
-- Convencao de nome/path: <ex: foo.ts -> foo.test.ts ao lado; ou tests/test_modulo.py>
-- Helpers/mocks usados no projeto: <listar imports comuns ou "nenhum">
-- Setup files / fixtures: <ex: vitest.config.ts setupFiles, conftest.py>
-- O que evitar: <ex: I/O real, internet, hora do sistema, estado global>
-
-## Como medir cobertura
-\`\`\`bash
-<comando exato — ex: npx vitest run --coverage; pytest --cov; go test -cover; cargo tarpaulin; mvn jacoco:report>
+<exact command or "not supported by this runner">
 \`\`\`
 
-## FAQ acumulado
-Veja \`huu-tests-faq.json\` — base de conhecimento incremental alimentada pelas proximas etapas da pipeline. Schema de cada item:
+## How to write tests in this project
+- Naming/path convention: <e.g.: foo.ts -> foo.test.ts alongside; or tests/test_module.py>
+- Helpers/mocks used: <list common imports or "none">
+- Setup files / fixtures: <e.g.: vitest.config.ts setupFiles, conftest.py>
+- What to avoid: <e.g.: real I/O, network, system time, global state>
+
+## How to measure coverage
+\`\`\`bash
+<exact command — e.g.: npx vitest run --coverage; pytest --cov; go test -cover; cargo tarpaulin; mvn jacoco:report>
+\`\`\`
+
+## Accumulated FAQ
+See \`huu-tests-faq.json\` — incremental knowledge base populated by the next pipeline steps. Schema per item:
 \`\`\`json
-{ "summary": "string ate 256 chars", "knowledge": "string ate 5000 chars" }
+{ "summary": "string up to 256 chars", "knowledge": "string up to 5000 chars" }
 \`\`\`
 
-=== PASSO 4 — Inicializar huu-tests-faq.json NA RAIZ ===
-Caminho: ./huu-tests-faq.json
-Se NAO existe: crie com o conteudo exato \`[]\` (array vazio + newline final).
-Se JA existe e eh um array JSON valido: NAO toque (preserve o conhecimento acumulado).
-Se existe mas esta corrompido / nao eh array: substitua por \`[]\` e mencione no commit message.
+=== STEP 4 — Initialize huu-tests-faq.json AT THE ROOT ===
+Path: ./huu-tests-faq.json
+If it does NOT exist: create it with the exact content \`[]\` (empty array + trailing newline).
+If it EXISTS and is a valid JSON array: DO NOT touch it (preserve accumulated knowledge).
+If it exists but is corrupted / not an array: replace with \`[]\` and mention it in the commit message.
 
-=== REGRAS DUROS ===
-- NAO escreva testes para arquivos do projeto nesta etapa — eh trabalho das etapas 2 e 3.
-- NAO modifique fonte alem do necessario para a infra de teste subir.
-- A unica nova saida desta etapa eh huu-tests.md + huu-tests-faq.json + config minima do runner.
-- Garanta que o comando "rodar todos os testes" documentado em huu-tests.md sai com exit 0 (mesmo que seja so o sample).`;
+=== HARD RULES ===
+- DO NOT write tests for project files in this step — that's the job of steps 2 and 3.
+- DO NOT modify production source beyond what's needed to get the test infra up.
+- The ONLY new output of this step is huu-tests.md + huu-tests-faq.json + minimal runner config.
+- Ensure the "run the full test suite" command documented in huu-tests.md exits 0 (even if it's just the sample).`;
 
-const STEP2_PROMPT = `Voce esta na etapa 2 — escrever testes para 3 arquivos representativos do projeto. Objetivo: ao final, esses 3 arquivos tem testes verdes e o conhecimento adquirido foi destilado em \`huu-tests-faq.json\`.
+const STEP2_PROMPT = `You are at step 2 — write tests for 3 representative project files. Goal: by the end, those 3 files have green tests and the lessons learned are distilled into \`huu-tests-faq.json\`.
 
-=== PASSO 1 — OBRIGATORIO: leia huu-tests.md na raiz ANTES de qualquer outra coisa ===
-Ele te diz:
-- Qual runner usar.
-- Comando exato de "rodar UM unico arquivo de teste".
-- Convencao de path/nome de arquivos de teste.
-- Helpers/mocks/setup do projeto.
+=== STEP 1 — REQUIRED: read huu-tests.md at the root BEFORE anything else ===
+It tells you:
+- Which runner to use.
+- Exact "run a SINGLE test file" command.
+- Test path/name convention.
+- Project helpers/mocks/setup.
 
-Se huu-tests.md NAO existir: aborte com erro claro. A etapa 1 da pipeline eh pre-requisito.
+If huu-tests.md does NOT exist: abort with a clear error. Step 1 of the pipeline is a prerequisite.
 
-=== PASSO 2 — Leia huu-tests-faq.json (pode estar vazio) ===
-Eh um array de \`{ summary, knowledge }\`. Use o conteudo como contexto adicional.
+=== STEP 2 — Read huu-tests-faq.json (may be empty) ===
+It's an array of \`{ summary, knowledge }\`. Use the content as additional context.
 
-=== PASSO 3 — Escolher 3 arquivos representativos ===
-Heuristica de selecao (NAO escolha arquivos triviais):
-- Prefira modulos com logica de negocio real (transformacoes, validacoes, calculos, parsers, handlers).
-- Prefira arquivos com superficie publica clara (varias funcoes/metodos exportados).
-- Cubra DIVERSIDADE: tente pegar 3 areas distintas (ex: 1 util puro, 1 com I/O abstraivel, 1 stateful/orquestrador).
-- IGNORE: arquivos puramente declarativos (constantes, types), entry points (index/main), gerados (dist/, build/, *.generated.*), config (eslint/prettier/tsconfig), arquivos < 30 linhas uteis.
+=== STEP 3 — Pick 3 representative files ===
+Selection heuristic (do NOT pick trivial files):
+- Prefer modules with real business logic (transforms, validations, calculations, parsers, handlers).
+- Prefer files with a clear public surface (multiple exported functions/methods).
+- Cover DIVERSITY: try to take 3 distinct areas (e.g.: 1 pure util, 1 with abstractable I/O, 1 stateful/orchestrator).
+- IGNORE: purely declarative files (constants, types), entry points (index/main), generated files (dist/, build/, *.generated.*), config (eslint/prettier/tsconfig), files < 30 useful lines.
 
-Liste os 3 escolhidos antes de comecar a escrever (deixa no log).
+List the 3 picks before you start writing (leave them in the log).
 
-=== PASSO 4 — Para CADA um dos 3 arquivos ===
-a) Identifique a superficie publica (exports, classes, funcoes, componentes).
-b) Crie/atualize o arquivo de teste correspondente seguindo a convencao do huu-tests.md.
-c) Escreva testes cobrindo:
-   - Comportamento principal de cada export publico.
-   - Pelo menos 1 edge case (vazio, null/undefined/None, limite).
-   - Pelo menos 1 path de erro (excecao esperada).
-d) MOCK dependencias externas (rede, fs, db, time). Testes precisam ser rapidos, isolados e deterministicos.
-e) Rode o arquivo de teste usando o comando de single-file do huu-tests.md.
+=== STEP 4 — For EACH of the 3 files ===
+a) Identify the public surface (exports, classes, functions, components).
+b) Create/update the corresponding test file following the huu-tests.md convention.
+c) Write tests covering:
+   - Main behavior of each public export.
+   - At least 1 edge case (empty, null/undefined/None, limit).
+   - At least 1 error path (expected exception).
+d) MOCK external dependencies (network, fs, db, time). Tests must be fast, isolated, and deterministic.
+e) Run the test file with the single-file command from huu-tests.md.
 
-=== PASSO 5 — Recuperacao de erros + alimentar o FAQ ===
-Para CADA falha encontrada:
-1. Investigue o motivo. Categorize:
-   - Bug real no codigo de producao -> CORRIJA o codigo (mudanca minima, sem refactor).
-   - Teste mal escrito (assertion errada, mock fraco, expectativa incorreta) -> CORRIJA o teste.
-   - Falta de infra/helper (ex: precisa de fake timer, de fixture) -> ADICIONE no arquivo de teste ou em um helper local; NUNCA mexa em huu-tests.md ou na config global sem necessidade absoluta.
-2. Rode novamente. Repita ate verde OU ate 3 tentativas por teste (depois disso, deixe a funcao marcada com TODO claro — a etapa 4 vai deletar funcoes que continuarem falhando).
-3. Se conseguiu resolver: faca APPEND em huu-tests-faq.json com um novo objeto:
+=== STEP 5 — Error recovery + feed the FAQ ===
+For EACH failure found:
+1. Investigate the cause. Categorize:
+   - Real bug in production code -> FIX the code (minimal change, no refactor).
+   - Poorly written test (wrong assertion, weak mock, wrong expectation) -> FIX the test.
+   - Missing infra/helper (e.g.: needs fake timer, fixture) -> ADD it in the test file or in a local helper; NEVER touch huu-tests.md or the global config without absolute necessity.
+2. Re-run. Repeat until green OR up to 3 attempts per test (after that, mark the function with a clear TODO — step 4 will delete functions that keep failing).
+3. If you resolved it: APPEND a new object to huu-tests-faq.json:
    \`\`\`json
-   { "summary": "<ate 256 chars: descreve o problema em 1 frase>", "knowledge": "<ate 5000 chars: contexto, sintoma, causa raiz, fix aplicado, padrao a reusar nos proximos testes>" }
+   { "summary": "<up to 256 chars: describes the problem in 1 sentence>", "knowledge": "<up to 5000 chars: context, symptom, root cause, applied fix, pattern to reuse in next tests>" }
    \`\`\`
-   - Re-leia huu-tests-faq.json antes do append (preserve o array anterior).
-   - NAO duplique entradas: se ja existe summary semanticamente equivalente, pule.
+   - Re-read huu-tests-faq.json before the append (preserve the prior array).
+   - DO NOT duplicate entries: if a semantically equivalent summary already exists, skip.
 
-=== PASSO 6 — Validacao final ===
-- Rode os 3 arquivos de teste (single-file cada). Idealmente todos verdes.
-- huu-tests-faq.json continua sendo array JSON valido (\`jq . huu-tests-faq.json\` ou equivalente).
-- NAO mexeu em huu-tests.md.
-- NAO mexeu em arquivos fora dos 3 escolhidos + seus testes + (eventual) helper de teste compartilhado.`;
+=== STEP 6 — Final validation ===
+- Run the 3 test files (single-file each). Ideally all green.
+- huu-tests-faq.json is still a valid JSON array (\`jq . huu-tests-faq.json\` or equivalent).
+- Did NOT touch huu-tests.md.
+- Did NOT touch files outside the 3 picks + their tests + (eventual) shared test helper.`;
 
-const STEP3_PROMPT = `Voce esta na etapa 3 — escrever testes para UM unico arquivo fonte: \`$file\`. Objetivo: \`$file\` termina com testes verdes E o aprendizado vai para \`huu-tests-faq.json\`.
+const STEP3_PROMPT = `You are at step 3 — write tests for ONE source file: \`$file\`. Goal: \`$file\` ends with green tests AND the learning is propagated to \`huu-tests-faq.json\`.
 
-=== PASSO 1 — OBRIGATORIO: leia ANTES de qualquer acao ===
-a) \`huu-tests.md\` na raiz (runner, comandos, convencoes).
-b) \`huu-tests-faq.json\` na raiz (array de \`{ summary, knowledge }\` — base de conhecimento acumulada nas etapas anteriores; use isso para nao repetir erros que outros agentes ja resolveram).
+=== STEP 1 — REQUIRED: read BEFORE any action ===
+a) \`huu-tests.md\` at the root (runner, commands, conventions).
+b) \`huu-tests-faq.json\` at the root (array of \`{ summary, knowledge }\` — knowledge base accumulated by the previous steps; use it to avoid repeating errors other agents already solved).
 
-Se qualquer um dos dois nao existir: aborte com erro. As etapas 1 e 2 da pipeline sao pre-requisito.
+If either is missing: abort with a clear error. Steps 1 and 2 of the pipeline are prerequisites.
 
-=== PASSO 2 — Localizar / criar o arquivo de teste de $file ===
-Siga a convencao documentada em huu-tests.md. Exemplos:
-- foo.ts -> foo.test.ts ao lado.
-- modulo.py -> tests/test_modulo.py.
-- Foo.java -> src/test/java/<mesmo pacote>/FooTest.java.
-- foo.go -> foo_test.go ao lado.
+=== STEP 2 — Locate / create the test file for $file ===
+Follow the convention documented in huu-tests.md. Examples:
+- foo.ts -> foo.test.ts alongside.
+- module.py -> tests/test_module.py.
+- Foo.java -> src/test/java/<same package>/FooTest.java.
+- foo.go -> foo_test.go alongside.
 
-=== PASSO 3 — Caso A: $file JA tem testes ===
-1. Rode-os com o comando de single-file do huu-tests.md.
-2. Se TODOS passam: leia \`$file\` e ADICIONE testes para branches/edge-cases/paths-de-erro nao cobertos. Rode novamente — todos tem que continuar verdes.
-3. Se ALGUM falha: vai para PASSO 5.
+=== STEP 3 — Case A: $file ALREADY has tests ===
+1. Run them with the single-file command from huu-tests.md.
+2. If ALL pass: read \`$file\` and ADD tests for uncovered branches/edge-cases/error-paths. Re-run — all must stay green.
+3. If ANY fails: jump to STEP 5.
 
-=== PASSO 4 — Caso B: $file NAO tem testes ===
-1. Leia \`$file\` e identifique a superficie publica (exports, funcoes, classes, componentes).
-2. Crie o arquivo de teste conforme convencao.
-3. Cubra:
-   - Comportamento principal de cada export publico.
-   - Pelo menos 1 edge case por export publico (vazio, null/undefined/None, limite).
-   - Paths de erro (excecoes esperadas).
-4. MOCK dependencias externas (rede, fs, db, time, APIs). Testes unitarios — rapidos, isolados, deterministicos.
-5. Rode com single-file do huu-tests.md.
+=== STEP 4 — Case B: $file has NO tests ===
+1. Read \`$file\` and identify the public surface (exports, functions, classes, components).
+2. Create the test file per convention.
+3. Cover:
+   - Main behavior of each public export.
+   - At least 1 edge case per public export (empty, null/undefined/None, limit).
+   - Error paths (expected exceptions).
+4. MOCK external dependencies (network, fs, db, time, APIs). Unit tests — fast, isolated, deterministic.
+5. Run with single-file command from huu-tests.md.
 
-=== PASSO 5 — Recuperacao de erros + APPEND no FAQ ===
-Para cada falha:
+=== STEP 5 — Error recovery + APPEND to FAQ ===
+For each failure:
 1. Categorize:
-   - Bug real em \`$file\` -> conserte \`$file\` (mudanca minima, sem refactor).
-   - Teste errado -> conserte o teste.
-   - Falta de helper/mock -> adicione no proprio arquivo de teste ou em helper local.
-2. Re-rode. Ate 3 tentativas por teste; depois disso, deixe-o (etapa 4 limpa).
-3. Se resolveu: APPEND em \`huu-tests-faq.json\`:
-   - Re-leia o arquivo (outros agentes paralelos podem ter feito append).
-   - Adicione \`{ "summary": "<=256>", "knowledge": "<=5000>" }\`.
-   - NAO duplique: se ja existe summary semanticamente equivalente, pule.
+   - Real bug in \`$file\` -> fix \`$file\` (minimal change, no refactor).
+   - Wrong test -> fix the test.
+   - Missing helper/mock -> add it inside the test file or in a local helper.
+2. Re-run. Up to 3 attempts per test; after that, leave it (step 4 cleans up).
+3. If resolved: APPEND to \`huu-tests-faq.json\`:
+   - Re-read the file (other parallel agents may have appended).
+   - Add \`{ "summary": "<=256>", "knowledge": "<=5000>" }\`.
+   - DO NOT duplicate: if a semantically equivalent summary exists, skip.
 
-=== REQUISITOS DUROS ===
-- Comando de single-file aplicado ao teste de \`$file\` PRECISA sair com exit 0 (com excecao das funcoes que voce nao conseguiu corrigir em 3 tentativas — deixe falhando com TODO; a etapa 4 deleta).
-- ZERO testes com .skip / xit / @Disabled / @pytest.mark.skip sem justificativa.
-- NAO mexa em huu-tests.md.
-- NAO mexa em config global (package.json scripts, pyproject.toml [tool.X], pom.xml, build.gradle) sem necessidade absoluta.
-- As unicas mudancas permitidas alem do teste sao:
-  a) \`$file\` (apenas se houver bug REAL exposto pelo teste).
+=== HARD REQUIREMENTS ===
+- Single-file command for \`$file\`'s test MUST exit 0 (except for functions you couldn't fix in 3 attempts — leave them failing with a TODO; step 4 deletes).
+- ZERO tests with .skip / xit / @Disabled / @pytest.mark.skip without justification.
+- DO NOT touch huu-tests.md.
+- DO NOT touch global config (package.json scripts, pyproject.toml [tool.X], pom.xml, build.gradle) without absolute necessity.
+- The only changes allowed beyond the test are:
+  a) \`$file\` (only if a REAL bug is exposed by the test).
   b) \`huu-tests-faq.json\` (append-only).
-  c) helper de teste local pequeno (ao lado do arquivo de teste).
+  c) A small local test helper (next to the test file).
 
-TODA esta pipeline eh sobre testes UNITARIOS. Nada de integracao, nada de e2e.`;
+This WHOLE pipeline is about UNIT tests. No integration, no e2e.`;
 
-const STEP4_PROMPT = `Voce eh o agente final — etapa 4. Objetivo: deixar a suite de testes 100% verde DELETANDO apenas as funcoes/blocos de teste que continuam falhando, coletar cobertura e atualizar o badge no README.md.
+const STEP4_PROMPT = `You are the final agent — step 4. Goal: leave the test suite 100% green by DELETING only the test functions/blocks that keep failing, collect coverage, and update the badge in README.md.
 
-=== PASSO 1 — Leia huu-tests.md na raiz ===
-Pegue os comandos exatos de:
-- Rodar TODOS os testes.
-- Medir cobertura.
+=== STEP 1 — Read huu-tests.md at the root ===
+Grab the exact commands for:
+- Running ALL tests.
+- Measuring coverage.
 
-=== PASSO 2 — Rodar a suite completa e identificar falhas ===
-Execute o comando de "rodar todos os testes" do huu-tests.md.
-Capture a lista de testes FALHANDO no formato \`<arquivo de teste>::<nome do teste>\` (ou equivalente do runner). Se o output do runner nao for parseavel diretamente, re-rode com flag verbose / reporter detalhado.
+=== STEP 2 — Run the full suite and identify failures ===
+Execute the "run all tests" command from huu-tests.md.
+Capture the list of FAILING tests in the format \`<test file>::<test name>\` (or the runner's equivalent). If the runner output is not directly parseable, re-run with verbose / detailed reporter.
 
-=== PASSO 3 — Deletar APENAS as funcoes de teste que falham ===
-REGRA SAGRADA: voce NUNCA deleta um arquivo de teste inteiro. Voce deleta apenas o BLOCO da funcao/teste que falhou.
+=== STEP 3 — Delete ONLY the test functions that fail ===
+SACRED RULE: you NEVER delete an entire test file. You only delete the BLOCK of the function/test that failed.
 
-Por linguagem/runner, o que constitui "um bloco":
-- Vitest/Jest: chamada \`it('name', () => { ... })\` ou \`test('name', () => { ... })\` inteira. Se estiver dentro de um \`describe\` que ficar vazio, pode deixar o \`describe\` vazio mesmo OU removelo. NAO remova o arquivo.
-- Mocha: idem (\`it(...)\` / \`describe(...)\`).
-- pytest: a \`def test_<nome>(...)\` inteira (incluindo decoradores acima).
-- Go: a \`func Test<Nome>(t *testing.T) { ... }\` inteira.
-- Rust: a funcao \`#[test] fn <nome>() { ... }\` inteira.
-- JUnit: o metodo \`@Test ... void <nome>() { ... }\` inteiro.
-- RSpec: o bloco \`it "..." do ... end\` inteiro.
-- xUnit/.NET: o metodo \`[Fact] / [Theory] public void <Nome>() { ... }\` inteiro.
+By language/runner, what constitutes "a block":
+- Vitest/Jest: the entire \`it('name', () => { ... })\` or \`test('name', () => { ... })\` call. If it sits inside a \`describe\` that becomes empty, you can leave the \`describe\` empty OR remove it. DO NOT remove the file.
+- Mocha: same (\`it(...)\` / \`describe(...)\`).
+- pytest: the entire \`def test_<name>(...)\` (including decorators above).
+- Go: the entire \`func Test<Name>(t *testing.T) { ... }\`.
+- Rust: the entire \`#[test] fn <name>() { ... }\` function.
+- JUnit: the entire \`@Test ... void <name>() { ... }\` method.
+- RSpec: the entire \`it "..." do ... end\` block.
+- xUnit/.NET: the entire \`[Fact] / [Theory] public void <Name>() { ... }\` method.
 
-Se um arquivo de teste ficar SEM nenhuma funcao de teste depois das remocoes:
-- NAO delete o arquivo.
-- Deixe um comentario no topo: \`// huu: todos os testes deste arquivo foram removidos pela etapa 4 da pipeline padrao. Reescreva-os antes de re-rodar.\` (use o estilo de comentario da linguagem).
+If a test file ends up with NO test functions after removals:
+- DO NOT delete the file.
+- Leave a comment at the top: \`// huu: every test in this file was removed by step 4 of the default pipeline. Rewrite them before re-running.\` (use the language's comment style).
 
-=== PASSO 4 — Re-rodar e confirmar verde ===
-Rode \`rodar todos os testes\` de novo. Precisa sair com exit 0 (ou equivalente do runner).
-Se ainda houver falhas, repita PASSO 2-3 ate verde OU ate 3 iteracoes; se na 3a iteracao ainda houver falha, registre no log e prossiga (badge vai refletir a realidade).
+=== STEP 4 — Re-run and confirm green ===
+Run "run all tests" again. It must exit 0 (or runner equivalent).
+If failures remain, repeat STEPS 2-3 until green OR up to 3 iterations; if iteration 3 still has failures, log it and proceed (the badge will reflect reality).
 
-=== PASSO 5 — Coletar cobertura ===
-Use o comando documentado em huu-tests.md. Extraia a porcentagem de LINHAS cobertas (lines / line coverage) — eh a metrica padrao para o badge.
-Se o runner reportar apenas statements/branches, use statements como fallback.
-Arredonde para inteiro mais proximo. Se o comando de cobertura falhar, use cobertura = 0 e prossiga (nao bloqueie a pipeline).
+=== STEP 5 — Collect coverage ===
+Use the command documented in huu-tests.md. Extract the LINE coverage percentage — it's the standard metric for the badge.
+If the runner only reports statements/branches, use statements as fallback.
+Round to the nearest integer. If the coverage command fails, use coverage = 0 and proceed (don't block the pipeline).
 
-=== PASSO 6 — Atualizar o badge no README.md ===
-Caminho: ./README.md (raiz). Se nao existe, crie-o com \`# <nome do projeto detectado>\\n\\n\` como base.
+=== STEP 6 — Update the README.md badge ===
+Path: ./README.md (root). If it does not exist, create it with \`# <detected project name>\\n\\n\` as a base.
 
-Formato do badge:
-\`![tests](https://img.shields.io/badge/tests-XX%25-<cor>)\`
+Badge format:
+\`![tests](https://img.shields.io/badge/tests-XX%25-<color>)\`
 
-Cor por threshold:
+Color by threshold:
 - \`<\` 50  -> red
-- 50 a 79  -> yellow
-- \`>=\` 80 -> brightgreen (use exatamente esta string — eh o nome canonico do shields.io)
+- 50 to 79 -> yellow
+- \`>=\` 80 -> brightgreen (use exactly this string — it's the canonical shields.io name)
 
-Regra de insercao idempotente:
-1. Se ja existir uma linha contendo \`img.shields.io/badge/tests-\` no README, SUBSTITUA-A pela nova (preserve indentacao). NAO duplique.
-2. Senao, insira a linha logo apos o primeiro heading H1 (\`# Titulo\`), com uma linha em branco antes e outra depois.
-3. Se nao houver H1, insira no topo absoluto do arquivo.
+Idempotent insertion rule:
+1. If a line containing \`img.shields.io/badge/tests-\` already exists in the README, REPLACE it with the new one (preserve indentation). DO NOT duplicate.
+2. Otherwise, insert the line right after the first H1 heading (\`# Title\`), with one blank line before and after.
+3. If there is no H1, insert it at the absolute top of the file.
 
-NAO mexa em outras partes do README. NAO toque em huu-tests.md, huu-tests-faq.json, ou em codigo de producao.
+DO NOT touch other parts of the README. DO NOT touch huu-tests.md, huu-tests-faq.json, or production code.
 
-=== PASSO 7 — Verificacao final ===
-- \`rodar todos os testes\` continua passando.
-- README.md contem exatamente UMA linha com \`img.shields.io/badge/tests-\`.
-- Nenhum arquivo de teste foi DELETADO (apenas blocos internos).
-- huu-tests-faq.json continua sendo array JSON valido (nao deve ter sido tocado nesta etapa).`;
+=== STEP 7 — Final verification ===
+- "run all tests" still passes.
+- README.md contains exactly ONE line with \`img.shields.io/badge/tests-\`.
+- No test file was DELETED (only internal blocks).
+- huu-tests-faq.json is still a valid JSON array (should NOT have been touched in this step).`;
+
+const CHECK_TESTS_GREEN_CONDITION = `Read \`huu-tests.md\` and run the "run all tests" command exactly as documented there. The runner's exit code is the source of truth.
+
+Verdict labels:
+- \`green\` — runner exits 0 with no failing tests reported.
+- \`failing\` — runner exits non-zero OR reports at least one failing/errored test.
+
+If you cannot read huu-tests.md or cannot execute the command at all, emit \`failing\`.
+
+You are on attempt $runs (max 3). If $runs >= 3, emit \`green\` regardless — step 4 will delete the residual failing blocks.`;
 
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
     _default: true,
     maxRetries: 1,
+    maxNodeExecutions: 30,
     steps: [
       {
         type: 'work',
-        name: '1. Analisar stack e gerar huu-tests.md',
+        name: '1. Analyze stack and write huu-tests.md',
         prompt: STEP1_PROMPT,
         files: [],
         scope: 'project',
       },
       {
         type: 'work',
-        name: '2. Testar 3 arquivos representativos',
+        name: '2. Test 3 representative files',
         prompt: STEP2_PROMPT,
         files: [],
         scope: 'project',
       },
       {
         type: 'work',
-        name: '3. Testar $file (selecionado pelo usuario)',
+        name: '3. Test $file (user-selected)',
         prompt: STEP3_PROMPT,
         files: [],
         scope: 'per-file',
       },
       {
+        type: 'check',
+        name: '3.5 All tests green?',
+        condition: CHECK_TESTS_GREEN_CONDITION,
+        maxRuns: 3,
+        outcomes: [
+          { label: 'green', nextStepName: '4. Final cleanup + coverage badge', default: true },
+          { label: 'failing', nextStepName: '2. Test 3 representative files' },
+        ],
+      },
+      {
         type: 'work',
-        name: '4. Limpeza final + badge de cobertura',
+        name: '4. Final cleanup + coverage badge',
         prompt: STEP4_PROMPT,
         files: [],
         scope: 'project',

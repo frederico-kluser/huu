@@ -11,7 +11,7 @@
  *   - description one-liner shown to the selector LLM (drives its picks)
  *   - mission     verbatim body injected into the agent's system prompt
  *
- * Missions all follow the same contract: "OLHE APENAS <bloco>" so each
+ * Missions all follow the same contract: "LOOK ONLY at <block>" so each
  * agent stays in its lane and doesn't redo what another covers.
  */
 
@@ -57,123 +57,123 @@ export interface ReconRunItem {
 export const RECON_CATALOG: readonly ReconCatalogEntry[] = [
   {
     id: 'stack',
-    label: 'Stack & ferramentas',
+    label: 'Stack & tooling',
     description:
-      'Linguagem primária, runtime alvo, package manager e scripts npm/yarn disponíveis.',
+      'Primary language, target runtime, package manager and the available npm/yarn scripts.',
     mission:
-      'OLHE APENAS o bloco `package.json` e `tsconfig.json` do digest. Liste: linguagem primária, runtime alvo, gerenciador de pacote, e os scripts disponíveis (nomes literais, p.ex. `npm run build`). NÃO infira nada do file tree nem de código-fonte. Se um item não estiver nos blocos citados, não invente.',
+      'LOOK ONLY at the `package.json` and `tsconfig.json` blocks of the digest. List: primary language, target runtime, package manager, and the available scripts (literal names, e.g. `npm run build`). Do NOT infer anything from the file tree or source code. If an item is not in the cited blocks, do not invent it.',
   },
   {
     id: 'structure',
-    label: 'Estrutura & módulos',
+    label: 'Structure & modules',
     description:
-      'Diretórios top-level de src/ e camadas arquiteturais documentadas.',
+      'Top-level directories of src/ and any layered architecture documented in the project.',
     mission:
-      'OLHE APENAS o `## File tree` do digest e liste os diretórios TOP-LEVEL de `src/` (1 nível, não recurse). Se README/CLAUDE.md mencionar arquitetura em camadas explicitamente, cite UMA frase. NÃO descreva o conteúdo de cada módulo, NÃO infira responsabilidades a partir de nomes.',
+      'LOOK ONLY at the `## File tree` of the digest and list the TOP-LEVEL directories of `src/` (1 level, no recursion). If README/CLAUDE.md explicitly mentions a layered architecture, cite ONE sentence. Do NOT describe the contents of each module, do NOT infer responsibilities from names.',
   },
   {
     id: 'libraries',
-    label: 'Bibliotecas-chave',
+    label: 'Key libraries',
     description:
-      'Bibliotecas runtime principais (de package.json dependencies) e seus papéis.',
+      'Main runtime libraries (from package.json dependencies) and their roles.',
     mission:
-      'OLHE APENAS o objeto `dependencies` do bloco `package.json` (IGNORE `devDependencies`, IGNORE node_modules, IGNORE imports do source). Liste as 4-6 deps mais óbvias e atribua um papel curto (≤8 palavras) baseado APENAS no nome conhecido do pacote. Se não reconhece uma dep, escreva o nome com "uso não inferido".',
+      'LOOK ONLY at the `dependencies` object inside the `package.json` block (IGNORE `devDependencies`, IGNORE node_modules, IGNORE imports from source). List the 4-6 most obvious deps and assign each a short role (≤8 words) based ONLY on the package\'s well-known name. If you do not recognize a dep, write its name with "role not inferred".',
   },
   {
     id: 'conventions',
-    label: 'Convenções & padrões',
+    label: 'Conventions & rules',
     description:
-      'Regras explícitas de commit, testes, lint e processos documentados em README/CLAUDE.md/AGENTS.md.',
+      'Explicit commit, test, lint and process rules documented in README/CLAUDE.md/AGENTS.md.',
     mission:
-      'OLHE APENAS os blocos `README.md`, `CLAUDE.md` e `AGENTS.md` do digest. Extraia regras EXPLÍCITAS já escritas (commit, testes, agents docs, lint). Cite frases curtas literais quando possível. NÃO leia código, NÃO infira convenções a partir de nomes de arquivos.',
+      'LOOK ONLY at the `README.md`, `CLAUDE.md` and `AGENTS.md` blocks of the digest. Extract EXPLICIT rules already written (commit, tests, agents docs, lint). Cite short literal phrases when possible. Do NOT read code, do NOT infer conventions from file names.',
   },
   {
     id: 'entry-points',
     label: 'Entry points',
     description:
-      'Bin, main, exports do package.json + arquivos cli/index/app na raiz de src/.',
+      'package.json bin/main/exports + cli/index/app files at the src/ root.',
     mission:
-      'OLHE APENAS os campos `bin`, `main`, `module`, `exports` do `package.json` E o `## File tree` para arquivos como `cli.*`, `index.*`, `app.*` na raiz de `src/`. Liste cada entry point e o caminho relativo. Se nenhum entry point estiver explícito, retorne UM bullet "sem entry point declarado em package.json/file tree".',
+      'LOOK ONLY at the `bin`, `main`, `module`, `exports` fields of the `package.json` AND at the `## File tree` for files like `cli.*`, `index.*`, `app.*` at the root of `src/`. List each entry point and its relative path. If no entry point is explicit, return ONE bullet "no entry point declared in package.json/file tree".',
   },
   {
     id: 'test-strategy',
-    label: 'Estratégia de testes',
+    label: 'Test strategy',
     description:
-      'Framework de testes, localização (co-localizada vs separada) e comando de execução.',
+      'Test framework, location (co-located vs separate) and the execution command.',
     mission:
-      'OLHE APENAS o `package.json` (devDependencies para frameworks como `vitest`, `jest`, `mocha`, `playwright`, `cypress` + scripts cujo nome contenha `test`) E o `## File tree` para padrões `*.test.*`, `*.spec.*`, `tests/`, `__tests__/`. Indique: framework usado, localização (co-localizado vs diretório separado), e o comando de execução literal. NÃO leia código de teste.',
+      'LOOK ONLY at the `package.json` (devDependencies for frameworks like `vitest`, `jest`, `mocha`, `playwright`, `cypress` + scripts whose name contains `test`) AND at the `## File tree` for patterns like `*.test.*`, `*.spec.*`, `tests/`, `__tests__/`. Report: framework used, location (co-located vs separate directory), and the literal execution command. Do NOT read test code.',
   },
   {
     id: 'build-deploy',
     label: 'Build & deploy',
     description:
-      'Scripts e procedimentos de build, release e deploy (incluindo Docker quando presente).',
+      'Build, release and deploy scripts and procedures (including Docker when present).',
     mission:
-      'OLHE APENAS os scripts do `package.json` cujo nome contenha `build`, `release`, `deploy`, `bundle`, `dist`, `compile` E os blocos `README.md`/`CLAUDE.md` para instruções de release/deploy. Cite scripts e procedimentos LITERAIS. Mencione `Dockerfile`, `compose.yaml` ou similares APENAS se aparecerem no file tree. NÃO infira pipelines de CI a partir de nomes de arquivo isolados.',
+      'LOOK ONLY at the `package.json` scripts whose name contains `build`, `release`, `deploy`, `bundle`, `dist`, `compile` AND at `README.md`/`CLAUDE.md` for release/deploy instructions. Cite LITERAL scripts and procedures. Mention `Dockerfile`, `compose.yaml` or similar ONLY if they appear in the file tree. Do NOT infer CI pipelines from isolated file names.',
   },
   {
     id: 'domain-model',
-    label: 'Modelo de domínio',
+    label: 'Domain model',
     description:
-      'Tipos, entidades e contratos centrais (contracts/, models/, types/, domain/, entities/).',
+      'Core types, entities and contracts (contracts/, models/, types/, domain/, entities/).',
     mission:
-      'OLHE APENAS o `## File tree` para diretórios `contracts/`, `models/`, `types/`, `domain/`, `entities/`, `schema*` dentro de `src/` e liste os arquivos visíveis (1 bullet por diretório com até 3 arquivos cada). Se nenhum desses diretórios existir, retorne UM bullet "sem diretório de domínio dedicado em src/". NÃO leia código-fonte, NÃO invente entidades.',
+      'LOOK ONLY at the `## File tree` for directories `contracts/`, `models/`, `types/`, `domain/`, `entities/`, `schema*` inside `src/` and list the visible files (1 bullet per directory with up to 3 files each). If none of those directories exist, return ONE bullet "no dedicated domain directory under src/". Do NOT read source code, do NOT invent entities.',
   },
   {
     id: 'external-integrations',
-    label: 'Integrações externas',
+    label: 'External integrations',
     description:
-      'SDKs e clients de serviços externos: APIs HTTP, DBs, message brokers, LLMs.',
+      'SDKs and clients for external services: HTTP APIs, databases, message brokers, LLMs.',
     mission:
-      'OLHE APENAS o `dependencies` do `package.json` para SDKs de APIs (axios, got, ofetch, openai, anthropic, langchain, stripe, twilio, etc.), bancos (pg, mysql2, mongodb, redis, sqlite), brokers (kafka, amqplib, nats), ou storage (aws-sdk, @google-cloud/*) E menções EXPLÍCITAS em README/CLAUDE.md a serviços externos. Liste cada integração em UM bullet (nome + papel). Se nada for evidente, retorne UM bullet "sem integrações externas detectadas".',
+      'LOOK ONLY at the `dependencies` of `package.json` for API SDKs (axios, got, ofetch, openai, anthropic, langchain, stripe, twilio, etc.), databases (pg, mysql2, mongodb, redis, sqlite), brokers (kafka, amqplib, nats), or storage (aws-sdk, @google-cloud/*) AND EXPLICIT mentions of external services in README/CLAUDE.md. List each integration in ONE bullet (name + role). If nothing is evident, return ONE bullet "no external integrations detected".',
   },
   {
     id: 'ui-surface',
-    label: 'Superfície UI',
+    label: 'UI surface',
     description:
-      'Framework UI (web ou TUI), diretórios de componentes/screens e padrão de roteamento.',
+      'UI framework (web or TUI), component/screen directories and routing pattern.',
     mission:
-      'OLHE APENAS o `dependencies` para frameworks UI (`react`, `vue`, `svelte`, `solid-js`, `ink`, `htmx`, `next`, `nuxt`, `astro`, `remix`) E o `## File tree` para diretórios `ui/`, `components/`, `screens/`, `views/`, `pages/`, `routes/` em `src/`. Liste o framework detectado, top-level UI dirs visíveis, e padrão de roteamento se evidente. Se o projeto não tiver UI aparente, retorne UM bullet "sem framework de UI detectado".',
+      'LOOK ONLY at the `dependencies` for UI frameworks (`react`, `vue`, `svelte`, `solid-js`, `ink`, `htmx`, `next`, `nuxt`, `astro`, `remix`) AND at the `## File tree` for directories `ui/`, `components/`, `screens/`, `views/`, `pages/`, `routes/` inside `src/`. List the detected framework, visible top-level UI dirs, and the routing pattern if evident. If the project has no apparent UI, return ONE bullet "no UI framework detected".',
   },
   {
     id: 'cli-surface',
-    label: 'Superfície CLI',
+    label: 'CLI surface',
     description:
-      'Comandos, flags e subcomandos da CLI (se o projeto for uma CLI).',
+      'Commands, flags and subcommands of the CLI (if the project is a CLI).',
     mission:
-      'OLHE APENAS o campo `bin` do `package.json` E o `dependencies` para libs de CLI (`commander`, `yargs`, `oclif`, `meow`, `cac`, `ink`) E qualquer bloco em README.md descrevendo flags/subcomandos. Liste comandos top-level e principais flags COM citação literal quando possível. Se o projeto não for CLI, retorne UM bullet "sem evidência clara em package.json bin/deps".',
+      'LOOK ONLY at the `bin` field of `package.json` AND at the `dependencies` for CLI libs (`commander`, `yargs`, `oclif`, `meow`, `cac`, `ink`) AND any README.md block describing flags/subcommands. List top-level commands and key flags WITH literal quotation when possible. If the project is not a CLI, return ONE bullet "no clear evidence in package.json bin/deps".',
   },
   {
     id: 'auth-security',
     label: 'Auth & secrets',
     description:
-      'Auth, gerenciamento de secrets e tratamento de credenciais.',
+      'Authentication, secret management and credential handling.',
     mission:
-      'OLHE APENAS o `dependencies` para libs de auth (`jsonwebtoken`, `passport*`, `oauth*`, `bcrypt*`, `argon2`, `firebase-auth`, `next-auth`, `lucia`) E menções EXPLÍCITAS em README/CLAUDE.md a credenciais, secrets, API keys, ou variáveis de ambiente sensíveis. Liste pistas concretas em até 4 bullets. Se nada for evidente, retorne UM bullet "sem evidência clara em deps/docs".',
+      'LOOK ONLY at the `dependencies` for auth libs (`jsonwebtoken`, `passport*`, `oauth*`, `bcrypt*`, `argon2`, `firebase-auth`, `next-auth`, `lucia`) AND EXPLICIT mentions in README/CLAUDE.md of credentials, secrets, API keys, or sensitive environment variables. List concrete signals in up to 4 bullets. If nothing is evident, return ONE bullet "no clear evidence in deps/docs".',
   },
   {
     id: 'git-workflow',
-    label: 'Workflow git',
+    label: 'Git workflow',
     description:
-      'Regras de git documentadas: branch naming, commit style, hooks, tag policy.',
+      'Documented git rules: branch naming, commit style, hooks, tag policy.',
     mission:
-      'OLHE APENAS os blocos `README.md`, `CLAUDE.md`, `AGENTS.md` para regras EXPLÍCITAS de git: branch naming, commit style (Conventional Commits etc.), hooks (`.githooks`, husky), tag policy, force-push rules, release flow. Cite frases literais quando possível. NÃO infira regras a partir do file tree.',
+      'LOOK ONLY at the `README.md`, `CLAUDE.md`, `AGENTS.md` blocks for EXPLICIT git rules: branch naming, commit style (Conventional Commits etc.), hooks (`.githooks`, husky), tag policy, force-push rules, release flow. Cite literal phrases when possible. Do NOT infer rules from the file tree.',
   },
   {
     id: 'quality-tooling',
-    label: 'Qualidade & tooling',
+    label: 'Quality & tooling',
     description:
-      'Linting, formatting, type-checking, hooks e CI/CD.',
+      'Linting, formatting, type-checking, hooks and CI/CD.',
     mission:
-      'OLHE APENAS o `package.json` para devDependencies de qualidade (`eslint*`, `prettier`, `biome`, `typescript`, `husky`, `lint-staged`) e scripts cujo nome contenha `lint`, `format`, `typecheck`, `check`. Mencione CI APENAS se README/CLAUDE.md citar explicitamente. Liste tooling + comando literal de cada um.',
+      'LOOK ONLY at the `package.json` for quality-related devDependencies (`eslint*`, `prettier`, `biome`, `typescript`, `husky`, `lint-staged`) and scripts whose name contains `lint`, `format`, `typecheck`, `check`. Mention CI ONLY if README/CLAUDE.md cites it explicitly. List the tooling + literal command for each.',
   },
   {
     id: 'pain-points',
-    label: 'Pontos de atenção',
+    label: 'Pain points',
     description:
-      'Limitações conhecidas, TODOs, roadmap de melhorias e dívida técnica documentada.',
+      'Known limitations, TODOs, roadmap items and documented technical debt.',
     mission:
-      'OLHE APENAS o `## File tree` para arquivos como `TODO.md`, `ROADMAP.md`, `*roadmap*`, `hardening*`, `CHANGELOG.md` E qualquer bloco `README.md`/`CLAUDE.md` com seções "limitações", "TODO", "futuras melhorias", "known issues". Liste pistas concretas (nome do arquivo OU citação curta). Se nada for evidente, retorne UM bullet "sem pontos de atenção documentados".',
+      'LOOK ONLY at the `## File tree` for files like `TODO.md`, `ROADMAP.md`, `*roadmap*`, `hardening*`, `CHANGELOG.md` AND any `README.md`/`CLAUDE.md` block with "limitations", "TODO", "future improvements", or "known issues" sections. List concrete signals (file name OR short citation). If nothing is evident, return ONE bullet "no documented pain points".',
   },
 ];
 
@@ -197,36 +197,36 @@ export function buildReconSystemPrompt(
 ): string {
   const projectRef = projectName ? ` "${projectName}"` : '';
   const idForHeader = item.id ?? item.tag ?? 'recon';
-  return `Você é um agente de reconhecimento RÁPIDO chamado "${idForHeader}". Sua única missão:
+  return `You are a FAST reconnaissance agent named "${idForHeader}". Your single mission:
 
 ${item.mission}
 
-Modo de operação: VARREDURA FOCADA. Você recebe a seguir UM digest pronto do projeto${projectRef} (file tree truncado, package.json, README, CLAUDE.md, AGENTS.md, tsconfig). NÃO há ferramentas, NÃO há sistema de arquivos, NÃO há node_modules para explorar — o digest é tudo o que existe e tudo o que você precisa. Pense brevemente, mas vá direto ao ponto.
+Mode of operation: FOCUSED SWEEP. You receive ONE ready-made digest of the project${projectRef} below (truncated file tree, package.json, README, CLAUDE.md, AGENTS.md, tsconfig). There are NO tools, NO filesystem, NO node_modules to explore — the digest is everything that exists and everything you need. Think briefly, then get to the point.
 
-# Como trabalhar
+# How to work
 
-- Leia com atenção os blocos citados na sua missão e extraia fatos verificáveis. Pode raciocinar internamente, mas seja conciso na saída.
-- Use APENAS os blocos citados na missão. Os demais blocos do digest existem como contexto, mas não embase bullets neles.
-- Se realmente não houver evidência clara para a missão, escreva UM bullet "sem evidência clara em <bloco>" e pare — não invente.
-- Português brasileiro, direto. Sem adjetivos vazios ("robusto", "moderno", "completo").
+- Read the blocks cited by your mission carefully and extract verifiable facts. You may reason internally, but be concise in the output.
+- Use ONLY the blocks cited by the mission. The other blocks of the digest exist as context, but do not ground bullets in them.
+- If there really is no clear evidence for the mission, write ONE bullet "no clear evidence in <block>" and stop — do not invent.
+- Plain English, direct. No empty adjectives ("robust", "modern", "complete").
 
-# Formato de saída (obrigatório)
+# Output format (mandatory)
 
-Retorne JSON estruturado:
+Return structured JSON:
 {
   "bullets": [
-    "<bullet 1 — fato concreto, ≤ 220 chars>",
-    "<bullet 2 — fato concreto, ≤ 220 chars>",
+    "<bullet 1 — concrete fact, ≤ 220 chars>",
+    "<bullet 2 — concrete fact, ≤ 220 chars>",
     ...
   ]
 }
 
-# Regras
+# Rules
 
-- Mínimo 2, máximo 6 bullets.
-- Cada bullet ≤ 220 caracteres.
-- Cada bullet é um FATO citável — script, dep, dir top-level, frase do doc. Sem opinião, sem síntese vazia, sem "provavelmente".
-- NÃO repita o texto da missão como bullet.
-- NÃO faça suposições sobre o que o usuário quer fazer — só liste o que existe no digest.
-- NÃO adicione preâmbulo, NÃO adicione comentários fora do JSON, NÃO peça mais contexto.`;
+- Minimum 2, maximum 6 bullets.
+- Each bullet ≤ 220 characters.
+- Each bullet is a citable FACT — script, dep, top-level dir, doc phrase. No opinions, no empty synthesis, no "probably".
+- Do NOT repeat the mission text as a bullet.
+- Do NOT make assumptions about what the user wants to do — only list what exists in the digest.
+- Do NOT add preamble, Do NOT add comments outside the JSON, Do NOT ask for more context.`;
 }

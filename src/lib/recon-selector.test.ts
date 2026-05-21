@@ -57,13 +57,13 @@ describe('buildSelectorSystemPrompt', () => {
 
   it('describes the mixed-array output shape (string OR object)', () => {
     const p = buildSelectorSystemPrompt();
-    expect(p).toMatch(/STRING.*ID do catálogo/i);
-    expect(p).toMatch(/OBJETO.*title.*prompt/i);
+    expect(p).toMatch(/STRING.*catalog id/i);
+    expect(p).toMatch(/OBJECT.*title.*prompt/i);
   });
 
   it('caps at 10 items in the rules', () => {
     const p = buildSelectorSystemPrompt();
-    expect(p).toMatch(/máximo 10/i);
+    expect(p).toMatch(/maximum 10/i);
   });
 });
 
@@ -80,7 +80,7 @@ describe('buildSelectorHumanMessage', () => {
 
   it('omits the hint section when no hint is given', () => {
     const m = buildSelectorHumanMessage('intent');
-    expect(m).not.toMatch(/Hint do projeto/);
+    expect(m).not.toMatch(/Project hint/);
   });
 });
 

@@ -16,8 +16,8 @@ export interface SpinnerProps {
 }
 
 /**
- * Animated spinner — shared loader for any "modelo está pensando" or
- * "carregando…" state. Uses Braille frames by default; falls back to plain
+ * Animated spinner — shared loader for any "model is thinking" or
+ * "loading…" state. Uses Braille frames by default; falls back to plain
  * text via the `frames` prop if the terminal can't render them.
  */
 export function Spinner({

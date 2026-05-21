@@ -59,7 +59,7 @@ describe('pipeline-io', () => {
   });
 
   it('throws on missing file', () => {
-    expect(() => importPipeline(join(tmp, 'nope.json'))).toThrow(/nao encontrado/);
+    expect(() => importPipeline(join(tmp, 'nope.json'))).toThrow(/not found/);
   });
 
   it('throws on invalid schema', () => {
