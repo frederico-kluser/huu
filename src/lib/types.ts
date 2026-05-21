@@ -127,6 +127,13 @@ export interface Pipeline {
   name: string;
   steps: PipelineStep[];
   /**
+   * Marker for the bundled default test pipeline (see
+   * `src/lib/default-pipelines/huu-test-suite.ts`). When true, the Welcome
+   * screen surfaces this pipeline as the prominent "▶ default" entry.
+   * Purely advisory — the orchestrator ignores it.
+   */
+  _default?: boolean;
+  /**
    * Per-card timeout (ms) for whole-project cards (files.length === 0) and
    * multi-file cards. Default 600_000 = 10min.
    * NOTE: this is applied PER CARD, not to the pipeline as a whole. There is
