@@ -64,6 +64,7 @@ export const PipelineSchema = z.object({
   singleFileCardTimeoutMs: z.number().int().positive().optional(),
   maxRetries: z.number().int().min(0).max(3).optional(),
   maxNodeExecutions: z.number().int().positive().max(1000).optional(),
+  _default: z.boolean().optional(),
 }).superRefine((pipeline, ctx) => {
   validateTopology(pipeline as Pipeline, ctx);
 });
