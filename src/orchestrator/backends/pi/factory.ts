@@ -54,9 +54,9 @@ export const piAgentFactory: AgentFactory = async (
   runtimeContext,
 ) => {
   const apiKey = config.apiKey.trim();
-  if (!apiKey) throw new Error('OpenRouter API key ausente. Defina OPENROUTER_API_KEY.');
+  if (!apiKey) throw new Error('OpenRouter API key missing. Set OPENROUTER_API_KEY.');
   const modelId = config.modelId.trim();
-  if (!modelId) throw new Error('Model ID ausente.');
+  if (!modelId) throw new Error('Model ID missing.');
 
   const authStorage = AuthStorage.create();
   authStorage.setRuntimeApiKey('openrouter', apiKey);

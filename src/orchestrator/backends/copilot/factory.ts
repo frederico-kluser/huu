@@ -198,7 +198,7 @@ export const copilotAgentFactory: AgentFactory = async (
   runtimeContext,
 ) => {
   const modelId = config.modelId.trim();
-  if (!modelId) throw new Error('Model ID ausente.');
+  if (!modelId) throw new Error('Model ID missing.');
 
   if (!looksLikeCopilotModel(modelId)) {
     onEvent({

@@ -126,7 +126,7 @@ export async function runProjectRecon(
 
   const apiKey = opts.apiKey.trim();
   if (!apiKey) {
-    const message = 'OpenRouter API key ausente.';
+    const message = 'OpenRouter API key missing.';
     for (const item of items) {
       opts.onUpdate({ agentId: item.tag, status: 'error', error: message });
     }
