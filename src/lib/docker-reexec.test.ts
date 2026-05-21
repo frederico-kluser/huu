@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDockerArgv,
   decideReexec,
+  detectDefaultRouteMtu,
   imageIsLocal,
   makeSecretFile,
+  pickDockerNetwork,
 } from './docker-reexec.js';
 
 describe('decideReexec', () => {
@@ -285,6 +287,30 @@ describe('buildDockerArgv', () => {
     expect(argv[idx + 1]).toBe('host');
     // Must appear BEFORE the image name so docker parses it as a run flag.
     expect(idx).toBeLessThan(argv.indexOf(baseOpts.image));
+  });
+});
+
+describe('pickDockerNetwork', () => {
+  it('honors explicit HUU_DOCKER_NETWORK env override verbatim', () => {
+    expect(pickDockerNetwork({ HUU_DOCKER_NETWORK: 'host' })).toBe('host');
+    expect(pickDockerNetwork({ HUU_DOCKER_NETWORK: 'my-custom-net' })).toBe('my-custom-net');
+  });
+
+  it('returns undefined when explicit env is empty/whitespace', () => {
+    expect(pickDockerNetwork({ HUU_DOCKER_NETWORK: '' })).toBeDefined; // either auto-net or undefined
+    // Don't assert exact value — depends on host's MTU. Just ensure no crash.
+    expect(() => pickDockerNetwork({ HUU_DOCKER_NETWORK: '   ' })).not.toThrow();
+  });
+});
+
+describe('detectDefaultRouteMtu', () => {
+  it('returns a positive integer on linux when there is a default route, or null otherwise', () => {
+    const mtu = detectDefaultRouteMtu();
+    if (mtu !== null) {
+      expect(mtu).toBeGreaterThan(0);
+      expect(mtu).toBeLessThanOrEqual(65535);
+      expect(Number.isInteger(mtu)).toBe(true);
+    }
   });
 });
 

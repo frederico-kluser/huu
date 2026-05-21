@@ -9,8 +9,9 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Added
 
-- `HUU_DOCKER_NETWORK` env var, forwarded as `docker run --network=<value>`. Use case: VPN users whose tunnel MTU is below the docker bridge MTU of 1500. Without it, TLS ClientHello packets to Cloudflare-fronted APIs (including OpenRouter) are silently dropped, manifesting as "Request timed out" on every agent. Recommended value on a VPN: `host`.
-- Run-start network reachability probe (`checkOpenRouterReachable` in `src/lib/openrouter.ts`) that hits `/auth/key` with an 8s AbortController before any agent spawns. Fails the run loudly in <8s with a copy-paste-friendly remediation hint (mentioning `HUU_DOCKER_NETWORK=host` when inside a container) instead of letting 43 agents each burn 32s × 8 retries on an unreachable upstream. Wired into `Orchestrator.start()` and gated on `config.backend === 'pi'` so stub/copilot runs aren't affected.
+- **Auto MTU-aware docker network** (`detectDefaultRouteMtu` + `ensureHuuDockerNetwork` + `pickDockerNetwork` in `src/lib/docker-reexec.ts`). At wrapper start huu reads the MTU of the host's default-route interface on Linux; when it's below 1500 (VPN tunnels — WireGuard 1420, Tailscale 1280, OpenVPN ~1500-overhead), huu idempotently creates a docker bridge `huu-net-mtu<N>` with that MTU and pins the container to it. No env var, no daemon.json edit, no `--network=host` (which would break the port-isolation netns). Works whether the user is on a VPN or not — falls back cleanly to the default bridge when the route MTU is 1500 or detection isn't possible (macOS/Windows).
+- `HUU_DOCKER_NETWORK` env var, forwarded verbatim as `docker run --network=<value>`. Use case: explicit override of the auto-detection (e.g., force `host` networking, or use a pre-existing user-managed network).
+- Run-start network reachability probe (`checkOpenRouterReachable` in `src/lib/openrouter.ts`) that hits `/auth/key` with an 8s AbortController before any agent spawns. Defense-in-depth backstop: if the auto-network logic ever fails to clamp MTU on an exotic setup, the run aborts loudly in <8s with a copy-paste-friendly remediation hint instead of letting 43 agents each burn 32s × 8 retries on an unreachable upstream. Wired into `Orchestrator.start()` and gated on `config.backend === 'pi'` so stub/copilot runs aren't affected.
 
 ### Fixed
 

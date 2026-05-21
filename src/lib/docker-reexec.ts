@@ -46,6 +46,85 @@ const DEFAULT_IMAGE = 'ghcr.io/frederico-kluser/huu:latest';
 export const CIDFILE_DIR = join(tmpdir(), 'huu-cids');
 export const ORPHAN_LABEL = 'org.opencontainers.image.source=huu-wrapper';
 
+/**
+ * Standard docker bridge MTU. If the host's default-route MTU is
+ * smaller (typical of VPN tunnels: WireGuard ~1420, OpenVPN ~1500-overhead,
+ * Tailscale ~1280), the bridge silently drops TLS ClientHello packets
+ * larger than the tunnel and every HTTPS handshake hangs. We
+ * auto-create a per-MTU docker network when this is the case.
+ */
+const DOCKER_BRIDGE_DEFAULT_MTU = 1500;
+/** Floor — below this we don't bother creating a network and just refuse politely. */
+const MIN_USABLE_MTU = 576;
+
+/**
+ * Detect the MTU of the host interface carrying the default IPv4 route.
+ * Linux-only (parses `ip route get` + `/sys/class/net/<iface>/mtu`).
+ * Returns null on any platform where we can't determine it cheaply —
+ * caller falls back to the docker default bridge in that case.
+ */
+export function detectDefaultRouteMtu(): number | null {
+  // `ip` only ships on Linux distros by default; macOS/Windows Docker
+  // Desktop runs on top of a VM that hides the host's networking, so
+  // probing host MTU there is meaningless anyway.
+  if (process.platform !== 'linux') return null;
+  const r = spawnSync('ip', ['route', 'get', '1.1.1.1'], { encoding: 'utf8', timeout: 2000 });
+  if (r.status !== 0 || !r.stdout) return null;
+  // Sample output: "1.1.1.1 dev surfshark_wg table 300000 src 10.14.0.2 uid 1000"
+  // or:           "1.1.1.1 via 192.168.1.1 dev wlp0s20f3 src 192.168.1.42 uid 1000"
+  const m = /\bdev\s+(\S+)/.exec(r.stdout);
+  if (!m) return null;
+  const iface = m[1]!;
+  try {
+    const mtu = Number(readFileSync(`/sys/class/net/${iface}/mtu`, 'utf8').trim());
+    return Number.isFinite(mtu) && mtu >= MIN_USABLE_MTU ? mtu : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ensure a docker bridge network exists with the requested MTU and
+ * return its name. Idempotent — networks are named by MTU so multiple
+ * concurrent VPN configurations don't collide and old networks linger
+ * harmlessly. Returns null if the docker command fails (no daemon
+ * permission, etc.) — caller falls back to the default bridge.
+ */
+export function ensureHuuDockerNetwork(mtu: number): string | null {
+  const name = `huu-net-mtu${mtu}`;
+  // Cheap fast-path: if it already exists, reuse.
+  const inspect = spawnSync('docker', ['network', 'inspect', name], { stdio: 'ignore' });
+  if (inspect.status === 0) return name;
+  const create = spawnSync('docker', [
+    'network', 'create',
+    '--driver', 'bridge',
+    '--opt', `com.docker.network.driver.mtu=${mtu}`,
+    '--label', ORPHAN_LABEL,
+    name,
+  ], { stdio: 'ignore' });
+  return create.status === 0 ? name : null;
+}
+
+/**
+ * Decide the value for `docker run --network=…`. Resolution order:
+ *   1. `HUU_DOCKER_NETWORK` env (explicit override, any value passed verbatim).
+ *   2. Linux + default-route MTU < 1500 → auto-create / reuse `huu-net-mtu<N>`.
+ *   3. Otherwise undefined → docker default bridge.
+ *
+ * Step 2 is what makes huu "just work" on VPN without the user opting in.
+ * Exposed for testing.
+ */
+export function pickDockerNetwork(
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const explicit = env.HUU_DOCKER_NETWORK?.trim();
+  if (explicit) return explicit;
+  const mtu = detectDefaultRouteMtu();
+  if (mtu === null || mtu >= DOCKER_BRIDGE_DEFAULT_MTU) return undefined;
+  const name = ensureHuuDockerNetwork(mtu);
+  return name ?? undefined;
+}
+
 /** Subcommands that run native — no docker pull, no bind mount needed. */
 const NATIVE_ONLY_SUBCOMMANDS = new Set(['init-docker', 'status', 'prune']);
 
@@ -480,7 +559,7 @@ export async function reexecInDocker(
     secretMounts,
     excludeFromEnv,
     extraMounts: [...(opts.extraMounts ?? []), ...hostHomeMounts],
-    network: process.env.HUU_DOCKER_NETWORK?.trim() || undefined,
+    network: pickDockerNetwork(),
   });
 
   const child = spawn('docker', argv, { stdio: 'inherit' });
