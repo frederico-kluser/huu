@@ -77,7 +77,9 @@ import {
 import type { AppConfig, Pipeline } from './lib/types.js';
 import { installSafeTerminal } from './ui/safe-terminal.js';
 import { initDebugLogger, log as dlog } from './lib/debug-logger.js';
+import { enqueueProcessLog } from './lib/process-log-bridge.js';
 import { runWebMode } from './cli-web.js';
+import { EventEmitter } from 'node:events';
 
 // Subcommands that don't render the TUI shouldn't pay the side-effects
 // of the lifecycle logger (creating .huu/) or terminal restorers. We
@@ -245,16 +247,97 @@ process.on('SIGHUP', () => {
 });
 process.on('uncaughtException', (err) => {
   restoreTerminal();
-  // eslint-disable-next-line no-console
-  console.error('uncaughtException:', err);
+  // Bypass any console patch: fatal errors must reach the terminal even
+  // after installLogCaptures() has redirected console.* into the LogArea.
+  process.stderr.write(`uncaughtException: ${err?.stack ?? String(err)}\n`);
   process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
   restoreTerminal();
-  // eslint-disable-next-line no-console
-  console.error('unhandledRejection:', reason);
+  process.stderr.write(`unhandledRejection: ${String(reason)}\n`);
   process.exit(1);
 });
+
+// Installed exactly once. Idempotent so accidental re-entry is harmless.
+let logCapturesInstalled = false;
+
+/**
+ * Redirect Node `warning` events and every `console.*` call into the
+ * process log bridge so they surface inside LogArea (the "Logs (all)"
+ * panel) instead of bleeding above the Ink frame and corrupting the
+ * rendered kanban.
+ *
+ * Must run BEFORE `render(<App />, { patchConsole: false })` — flipping
+ * Ink's patchConsole off without our own console patch in place would
+ * let any stray `console.log` mangle the rendered frame directly.
+ */
+function installLogCaptures(): void {
+  if (logCapturesInstalled) return;
+  logCapturesInstalled = true;
+
+  // Most MaxListenersExceededWarning hits in this codebase are benign:
+  // workers + integrators all subscribe to the same abort/signal emitter
+  // for the duration of a stage. Bump the default cap so the warning
+  // stops firing in the common case; a real leak (>32) still surfaces
+  // through the warning hook below.
+  EventEmitter.defaultMaxListeners = 32;
+
+  // Node attaches a default 'warning' listener that prints to stderr;
+  // that print is exactly what bleeds above the kanban. Drop it before
+  // adding ours so the warning surfaces ONLY in LogArea + debug log.
+  // (Setting NODE_NO_WARNINGS at runtime is a no-op — Node caches it at
+  // process start, so we have to take ownership of the listener instead.)
+  process.removeAllListeners('warning');
+  process.on('warning', (w) => {
+    const msg = w.stack ? `${w.name}: ${w.message}\n${w.stack}` : `${w.name}: ${w.message}`;
+    enqueueProcessLog({ level: 'warn', source: 'node-warning', message: msg });
+    try {
+      dlog('warning', w.name, { msg: w.message, stack: w.stack });
+    } catch {
+      /* debug-logger may not be initialized yet (unlikely on this path) */
+    }
+  });
+
+  // Patch every console method. Originals are captured for *this scope
+  // only* — we deliberately don't re-export them. Any code path that
+  // legitimately needs to write to the terminal after this point should
+  // use process.stderr.write/process.stdout.write directly (see the
+  // fatal-path handlers at the top of this file).
+  const LEVEL_MAP: Record<string, 'info' | 'warn' | 'error' | 'debug'> = {
+    log: 'info',
+    info: 'info',
+    warn: 'warn',
+    error: 'error',
+    debug: 'debug',
+  };
+  const format = (args: unknown[]): string =>
+    args
+      .map((a) => {
+        if (typeof a === 'string') return a;
+        if (a instanceof Error) return a.stack ?? a.message;
+        try {
+          return JSON.stringify(a);
+        } catch {
+          return String(a);
+        }
+      })
+      .join(' ');
+
+  for (const method of Object.keys(LEVEL_MAP) as Array<keyof typeof LEVEL_MAP>) {
+    const level = LEVEL_MAP[method];
+    (console as unknown as Record<string, (...a: unknown[]) => void>)[method] = (
+      ...args: unknown[]
+    ): void => {
+      const msg = format(args);
+      enqueueProcessLog({ level, source: 'console', message: msg });
+      try {
+        dlog('console', method, { msg });
+      } catch {
+        /* same */
+      }
+    };
+  }
+}
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -473,6 +556,13 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Capture stray console.* + Node `warning` events into the process log
+  // bridge BEFORE Ink mounts. With patchConsole:false below, Ink stops
+  // intercepting console.* — left alone, those would corrupt the rendered
+  // frame. With the bridge, they land in LogArea (and .huu/debug-*.log)
+  // instead of bleeding above the kanban.
+  installLogCaptures();
+
   const { waitUntilExit } = render(
     <App
       initialPipeline={initialPipeline}
@@ -483,12 +573,13 @@ async function main(): Promise<void> {
       autoStart={autoStart}
       autoScale={autoScale}
     />,
+    { patchConsole: false },
   );
   await waitUntilExit();
   dlog('lifecycle', 'wait_until_exit_resolved');
 }
 
 main().catch((err) => {
-  console.error('fatal:', err);
+  process.stderr.write(`fatal: ${err?.stack ?? String(err)}\n`);
   process.exit(1);
 });

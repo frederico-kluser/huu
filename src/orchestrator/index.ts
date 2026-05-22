@@ -48,6 +48,7 @@ import { getSystemMetrics } from '../lib/resource-monitor.js';
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { log as dlog } from '../lib/debug-logger.js';
+import { attachProcessLogSink } from '../lib/process-log-bridge.js';
 import { checkOpenRouterReachable } from '../lib/openrouter.js';
 
 function ensureGitignored(repoRoot: string, line: string): void {
@@ -192,6 +193,14 @@ export class Orchestrator {
    * repeated step names with monotonically increasing visitIndex/runs.
    */
   private executionTrace: ExecutionTraceEntry[] = [];
+  /**
+   * Detach handle for the process-log bridge (console.* + node warnings).
+   * Set in start(), called in the finally block so we never leak the
+   * sink across runs — each new run gets a fresh attach and re-drains
+   * the same in-memory backlog (intentional: the user sees the same
+   * pre-run warnings on every subsequent run within the session).
+   */
+  private processLogUnsubscribe: (() => void) | null = null;
 
   constructor(
     private config: AppConfig,
@@ -380,6 +389,16 @@ export class Orchestrator {
     this.startedAt = Date.now();
     this.status = 'starting';
     this.emit();
+
+    // Drain captured console.* + node warnings into this.logs so the
+    // LogArea ("Logs (all)" panel) surfaces them as orchestrator
+    // entries (agentId = -1). Detached in the finally block.
+    this.processLogUnsubscribe = attachProcessLogSink((entry) => {
+      this.log({
+        level: entry.level,
+        message: `[${entry.source}] ${entry.message}`,
+      });
+    });
 
     try {
       dlog('orch', 'preflight_start', { cwd: this.cwd });
@@ -727,6 +746,11 @@ export class Orchestrator {
       this.emit();
       throw err;
     } finally {
+      if (this.processLogUnsubscribe) {
+        this.processLogUnsubscribe();
+        this.processLogUnsubscribe = null;
+      }
+
       if (this.autoScaler) {
         this.autoScaler.stop();
       }
