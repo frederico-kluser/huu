@@ -78,6 +78,8 @@ export function App({
 
   const openrouterSpec = findSpec('openrouter');
   const copilotSpec = findSpec('copilot');
+  const azureApiKeySpec = findSpec('azureApiKey');
+  const azureEndpointSpec = findSpec('azureEndpoint');
 
   const [fsm, setFsm] = useState<FsmState>(() =>
     initialState({
@@ -127,7 +129,11 @@ export function App({
   // entry of API_KEY_REGISTRY is "the required one"; the others stay
   // optional regardless of their `required` flag.
   const activeSpec: ApiKeySpec | undefined =
-    backendKind === 'copilot' ? copilotSpec : openrouterSpec;
+    backendKind === 'copilot'
+      ? copilotSpec
+      : backendKind === 'azure'
+        ? azureApiKeySpec
+        : openrouterSpec;
 
   // Side effects mirroring the legacy navigate() callback: full-screen
   // clear and dlog when screen.kind changes.
@@ -365,8 +371,8 @@ export function App({
           <Box marginTop={1} flexDirection="column">
             <Text bold color="cyan">Which LLM backends are supported?</Text>
             <Text>
-              {'  '}<Text bold>pi</Text> (OpenRouter — default), <Text bold>copilot</Text> (GitHub subscription), and
-              {'  '}<Text bold>stub</Text> (LLM-free mock, for smoke tests).
+              {'  '}<Text bold>pi</Text> (OpenRouter — default), <Text bold>copilot</Text> (GitHub subscription),
+              {'  '}<Text bold>azure</Text> (Azure AI Foundry), and <Text bold>stub</Text> (LLM-free mock, for smoke tests).
             </Text>
           </Box>
 
@@ -374,7 +380,8 @@ export function App({
             <Text bold color="cyan">Do I need an API key?</Text>
             <Text>
               {'  '}Yes for <Text bold>pi</Text> (OPENROUTER_API_KEY). <Text bold>copilot</Text> uses your
-              {'  '}GitHub subscription. The key is requested on demand and saved locally.
+              {'  '}GitHub subscription. <Text bold>azure</Text> needs AZURE_OPENAI_API_KEY + AZURE_OPENAI_BASE_URL.
+              {'  '}Keys are requested on demand and saved locally.
             </Text>
           </Box>
 
@@ -485,7 +492,12 @@ export function App({
           // Skip model selector when every step already has its own model.
           if (allStepsHaveModel(pipeline)) {
             const missing = kind === 'stub' ? [] : findMissingKeysForBackend(kind);
-            const spec = kind === 'copilot' ? copilotSpec : openrouterSpec;
+            const spec =
+              kind === 'copilot'
+                ? copilotSpec
+                : kind === 'azure'
+                  ? azureApiKeySpec
+                  : openrouterSpec;
             const resolved = spec ? resolveApiKey(spec) : apiKey;
             dispatch({
               type: 'runDirect',
@@ -626,6 +638,13 @@ export function App({
           apiKey: screen.apiKey || 'stub',
           modelId: screen.modelId,
           backend: backendKind,
+          // For Azure backend, resolve the endpoint from the registry.
+          // process.env was updated by the ApiKeyPrompt submit handler,
+          // so resolveApiKey picks it up without additional plumbing.
+          endpoint:
+            backendKind === 'azure' && azureEndpointSpec
+              ? resolveApiKey(azureEndpointSpec) || undefined
+              : undefined,
         }}
         pipeline={pipeline}
         cwd={repoRoot}

@@ -62,7 +62,7 @@ export interface ApiKeySpec {
    * Specs without `backendBound` are universal — when `required: true`
    * they're enforced regardless of backend.
    */
-  backendBound?: 'pi' | 'copilot';
+  backendBound?: 'pi' | 'copilot' | 'azure';
 }
 
 export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
@@ -109,6 +109,36 @@ export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
     hint: 'GitHub fine-grained PAT with "Copilot Requests" scope, or COPILOT_GITHUB_TOKEN/GH_TOKEN',
     required: false,
     backendBound: 'copilot',
+  },
+  {
+    // Azure API key — used when --backend=azure.
+    // The value is the API key shown in "Keys and Endpoints" in the
+    // Azure AI Foundry portal. `required: false` keeps pi/copilot runs
+    // unblocked. `backendBound: 'azure'` makes findMissingKeysForBackend
+    // enforce it whenever the azure backend is active.
+    name: 'azureApiKey',
+    envVar: 'AZURE_OPENAI_API_KEY',
+    envFileVar: 'AZURE_OPENAI_API_KEY_FILE',
+    secretMountPath: '/run/secrets/azure_openai_api_key',
+    hostSecretScope: 'huu-azure-api-key',
+    label: 'Azure OpenAI',
+    hint: 'API key do portal Azure AI Foundry (Chaves e Endpoints)',
+    required: false,
+    backendBound: 'azure',
+  },
+  {
+    // Azure endpoint URL — the full URL copied from the Azure AI Foundry
+    // portal overview (e.g. https://my-resource.openai.azure.com/openai/v1/).
+    // Stored alongside the API key so the user only enters it once.
+    name: 'azureEndpoint',
+    envVar: 'AZURE_OPENAI_BASE_URL',
+    envFileVar: 'AZURE_OPENAI_BASE_URL_FILE',
+    secretMountPath: '/run/secrets/azure_openai_base_url',
+    hostSecretScope: 'huu-azure-endpoint',
+    label: 'Azure Endpoint URL',
+    hint: 'ex: https://my-resource.openai.azure.com/openai/v1/',
+    required: false,
+    backendBound: 'azure',
   },
 ];
 

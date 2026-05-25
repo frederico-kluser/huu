@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import type { Pipeline, PipelineStep } from './types.js';
 
-const AgentBackendKindSchema = z.enum(['pi', 'copilot', 'stub']);
+const AgentBackendKindSchema = z.enum(['pi', 'copilot', 'azure', 'stub']);
 
 export const RunConfigSchema = z.object({
   modelId: z.string().min(1),

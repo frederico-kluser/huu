@@ -8,12 +8,19 @@
  * factory dispatch. This local alias avoids a `lib/` → `orchestrator/`
  * import cycle (lib imports must stay backend-agnostic).
  */
-export type AgentBackendKind = 'pi' | 'copilot' | 'stub';
+export type AgentBackendKind = 'pi' | 'copilot' | 'azure' | 'stub';
 
 export interface AppConfig {
   apiKey: string;
   modelId: string;
   budgetUsd?: number;
+  /**
+   * Optional backend-specific endpoint URL. Currently used by the `azure`
+   * backend to pass the Azure AI Foundry endpoint (e.g.
+   * `https://my.openai.azure.com/openai/v1/`) to the agent factory.
+   * Pi and Copilot backends ignore this field.
+   */
+  endpoint?: string;
   /**
    * Optional. Default `'pi'`. Set by the CLI flag `--backend=` or the
    * TUI BackendSelector. Used by the api-key resolver to know which

@@ -78,7 +78,7 @@ export function findMissingRequiredKeys(): ApiKeySpec[] {
  * doesn't ask for an OpenRouter key the user will never use.
  */
 export function findMissingKeysForBackend(
-  backend: 'pi' | 'copilot',
+  backend: 'pi' | 'copilot' | 'azure',
 ): ApiKeySpec[] {
   const out: ApiKeySpec[] = [];
   for (const spec of API_KEY_REGISTRY) {

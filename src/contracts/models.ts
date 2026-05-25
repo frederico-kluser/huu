@@ -39,7 +39,7 @@ export type ModelTier = z.infer<typeof ModelTierSchema>;
  * gemini-3-pro, etc.). The model selector filters the catalog by this
  * field according to the active `AppConfig.backend`.
  */
-export const ModelProviderSchema = z.enum(['openrouter', 'copilot']);
+export const ModelProviderSchema = z.enum(['openrouter', 'copilot', 'azure']);
 export type ModelProvider = z.infer<typeof ModelProviderSchema>;
 
 export const ModelEntrySchema = z.object({
