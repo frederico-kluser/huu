@@ -66,6 +66,8 @@ interface Props {
   apiKey: string;
   /** Optional model override; defaults to the assistant default in the helper. */
   modelId?: string;
+  /** Backend-aware context. Required for `--backend=azure`. */
+  llmContext?: import('../../lib/llm-client-factory.js').LlmClientContext;
 }
 
 const PAGE_SIZE = 18;
@@ -88,6 +90,7 @@ export function FileMultiSelect({
   currentStep,
   apiKey,
   modelId,
+  llmContext,
 }: Props): React.JSX.Element {
   const [tree, setTree] = useState<FileNode>(() => {
     const scanned = scanDirectory(repoRoot);
@@ -136,6 +139,7 @@ export function FileMultiSelect({
       apiKey,
       modelId: effectiveModelId,
       signal: abort.signal,
+      llmContext,
       onProgress: (message) => {
         setSmart((prev) => {
           if (prev.kind !== 'loading') return prev;

@@ -22,6 +22,8 @@ interface Props {
   modelId?: string;
   onComplete: (payload: { markdown: string; results: ReconAgentResult[] }) => void;
   onCancel: () => void;
+  /** Backend-aware context. Required for `--backend=azure`. */
+  llmContext?: import('../../lib/llm-client-factory.js').LlmClientContext;
 }
 
 interface AgentState {
@@ -88,6 +90,7 @@ export function ProjectRecon({
   modelId,
   onComplete,
   onCancel,
+  llmContext,
 }: Props): React.JSX.Element {
   const [state, dispatch] = useReducer(reduce, INITIAL_STATE);
   const [selectorError, setSelectorError] = useState<string | null>(null);
@@ -104,6 +107,7 @@ export function ProjectRecon({
           intent,
           modelId,
           signal: abortRef.current!.signal,
+          llmContext,
           onItemsResolved: (items) => {
             if (!cancelledRef.current) {
               dispatch({ type: 'items-resolved', items });
@@ -136,7 +140,7 @@ export function ProjectRecon({
       cancelledRef.current = true;
       abortRef.current?.abort();
     };
-  }, [apiKey, repoRoot, intent, modelId, onComplete]);
+  }, [apiKey, repoRoot, intent, modelId, onComplete, llmContext]);
 
   useInput((_, key) => {
     if (key.escape) {

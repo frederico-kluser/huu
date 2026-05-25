@@ -22,6 +22,7 @@ import {
 import { buildAssistantSystemPrompt } from '../../lib/assistant-prompts.js';
 import { loadRecommendedModels } from '../../models/catalog.js';
 import type { Pipeline } from '../../lib/types.js';
+import type { LlmClientContext } from '../../lib/llm-client-factory.js';
 
 export interface StreamAssistantOptions {
   apiKey: string;
@@ -29,6 +30,8 @@ export interface StreamAssistantOptions {
   cwd: string;
   /** Called with the rationale / question text before resolve/reject. */
   onChunk: (chunk: string) => void;
+  /** Backend-aware context. Required for `--backend=azure`. */
+  llmContext?: LlmClientContext;
 }
 
 /**
@@ -60,7 +63,7 @@ function draftToPipeline(draft: {
 export async function streamAssistant(
   opts: StreamAssistantOptions,
 ): Promise<Pipeline> {
-  const chat = createAssistantChat({ apiKey: opts.apiKey });
+  const chat = createAssistantChat({ apiKey: opts.apiKey, llmContext: opts.llmContext });
   const system = buildAssistantSystemPrompt({
     models: loadRecommendedModels(opts.cwd),
   });

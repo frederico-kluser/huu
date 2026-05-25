@@ -1,4 +1,3 @@
-import { ChatOpenAI } from '@langchain/openai';
 import {
   AIMessage,
   HumanMessage,
@@ -12,13 +11,11 @@ import {
   type AssistantTurn,
   type PipelineDraft,
 } from './assistant-schema.js';
-
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-
-const OPENROUTER_HEADERS = {
-  'HTTP-Referer': 'https://github.com/frederico-kluser/huu',
-  'X-OpenRouter-Title': 'huu',
-};
+import {
+  buildChatClient,
+  defaultHelperModel,
+  type LlmClientContext,
+} from './llm-client-factory.js';
 
 export const DEFAULT_ASSISTANT_MODEL = 'moonshotai/kimi-k2.6';
 
@@ -33,42 +30,58 @@ export interface AssistantChat {
 }
 
 export interface CreateAssistantChatOptions {
+  /**
+   * Legacy: OpenRouter API key. Used when `llmContext` is not provided
+   * (back-compat for older call sites).
+   */
   apiKey: string;
   modelId?: string;
   temperature?: number;
+  /**
+   * Backend-aware context. When provided, routes through the user's chosen
+   * backend (Azure/OpenRouter) instead of always hitting OpenRouter.
+   * REQUIRED for correctness when `--backend=azure` is in use, otherwise
+   * helper calls leak charges to OpenRouter.
+   */
+  llmContext?: LlmClientContext;
 }
 
 export { AIMessage, HumanMessage, SystemMessage };
 export type { BaseMessage };
 
 /**
- * Bind LangChain's ChatOpenAI to OpenRouter and wrap it with structured-output
- * enforcement against `AssistantTurnSchema`. Returns a stub that emits a
- * deterministic 3-turn-then-pipeline sequence when running with `--stub` (or
- * `HUU_LANGCHAIN_STUB=1`) so smoke tests never touch the network.
+ * Bind LangChain's ChatOpenAI to the chosen backend and wrap it with
+ * structured-output enforcement against `AssistantTurnSchema`. Returns a
+ * stub that emits a deterministic 3-turn-then-pipeline sequence when running
+ * with `--stub` (or `HUU_LANGCHAIN_STUB=1`) so smoke tests never touch the
+ * network.
  */
 export function createAssistantChat(opts: CreateAssistantChatOptions): AssistantChat {
-  if (process.env.HUU_LANGCHAIN_STUB === '1' || opts.apiKey.trim() === 'stub') {
+  const stubTrigger =
+    process.env.HUU_LANGCHAIN_STUB === '1' ||
+    opts.apiKey.trim() === 'stub' ||
+    opts.llmContext?.backend === 'stub';
+  if (stubTrigger) {
     return new StubAssistantChat();
   }
 
-  const apiKey = opts.apiKey.trim();
-  if (!apiKey) {
-    throw new Error(
-      'OpenRouter API key missing. Set OPENROUTER_API_KEY or mount /run/secrets/openrouter_api_key.',
-    );
-  }
-  const modelId = (opts.modelId ?? DEFAULT_ASSISTANT_MODEL).trim();
+  // Pick the right default model for the backend.
+  const ctxBackend = opts.llmContext?.backend ?? 'pi';
+  const fallbackModel =
+    ctxBackend === 'azure' ? defaultHelperModel('azure') : DEFAULT_ASSISTANT_MODEL;
+  const modelId = (opts.modelId ?? fallbackModel).trim();
   if (!modelId) throw new Error('assistant modelId is empty.');
 
-  const chat = new ChatOpenAI({
-    model: modelId,
+  // Build a backend-aware ChatOpenAI client. If a context was passed, use it
+  // — that's the correctness path. Otherwise, fall back to OpenRouter with
+  // the legacy apiKey field (back-compat for call sites we haven't migrated).
+  const ctx: LlmClientContext = opts.llmContext ?? {
+    backend: 'pi',
+    openrouterApiKey: opts.apiKey,
+  };
+  const chat = buildChatClient(ctx, {
+    modelId,
     temperature: opts.temperature ?? 0.4,
-    configuration: {
-      baseURL: OPENROUTER_BASE_URL,
-      apiKey,
-      defaultHeaders: OPENROUTER_HEADERS,
-    },
   });
 
   const structured = chat.withStructuredOutput(AssistantTurnSchema, {

@@ -135,6 +135,27 @@ export function App({
         ? azureApiKeySpec
         : openrouterSpec;
 
+  // Backend-aware context passed to TUI helpers (Pipeline Assistant, Smart
+  // File Select, Project Recon). Without this, helpers used to hard-code
+  // OpenRouter even when the agent backend was Azure/Copilot — leaking
+  // charges to the wrong account.
+  const helperLlmContext: import('./lib/llm-client-factory.js').LlmClientContext = useMemo(() => {
+    if (backendKind === 'azure') {
+      return {
+        backend: 'azure',
+        azureApiKey: azureApiKeySpec ? resolveApiKey(azureApiKeySpec) : '',
+        azureEndpoint: azureEndpointSpec ? resolveApiKey(azureEndpointSpec) : '',
+      };
+    }
+    // pi, copilot, stub — helpers fall back to OpenRouter (copilot's agent
+    // path uses GitHub subscription, but it has no generic-completion API
+    // for the helpers, so they continue on OpenRouter).
+    return {
+      backend: backendKind,
+      openrouterApiKey: openrouterSpec ? resolveApiKey(openrouterSpec) : '',
+    };
+  }, [backendKind, openrouterSpec, azureApiKeySpec, azureEndpointSpec]);
+
   // Side effects mirroring the legacy navigate() callback: full-screen
   // clear and dlog when screen.kind changes.
   const prevKindRef = useRef(screen.kind);
@@ -437,6 +458,7 @@ export function App({
     body = (
       <PipelineAssistant
         apiKey={apiKey || 'stub'}
+        llmContext={helperLlmContext}
         onComplete={(p) => dispatch({ type: 'assistant.complete', pipeline: p })}
         onCancel={() => dispatch({ type: 'assistant.cancel' })}
       />
@@ -448,6 +470,7 @@ export function App({
         sourceName={pipelineSourceName ?? undefined}
         repoRoot={repoRoot}
         apiKey={apiKey || 'stub'}
+        llmContext={helperLlmContext}
         onComplete={(p) => {
           // When every step already specifies its own model, skip the
           // global model selector — it would never be used as a fallback.

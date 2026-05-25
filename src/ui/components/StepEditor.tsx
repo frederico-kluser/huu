@@ -20,6 +20,8 @@ interface Props {
   pipeline: Pipeline;
   /** OpenRouter key for Smart Select. '' or 'stub' triggers the deterministic stub. */
   apiKey: string;
+  /** Backend-aware context for Smart Select (Azure routing). */
+  llmContext?: import('../../lib/llm-client-factory.js').LlmClientContext;
 }
 
 const FULL_CLEAR = '\x1b[3J';
@@ -38,7 +40,7 @@ function scopeLabel(scope: StepScope): string {
   }
 }
 
-export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave, onCancel, pipeline, apiKey }: Props): React.JSX.Element {
+export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave, onCancel, pipeline, apiKey, llmContext }: Props): React.JSX.Element {
   const { stdout } = useStdout();
   const [step, setStep] = useState<PromptStep>(initialStep);
   const [field, setField] = useState<Field>('name');
@@ -191,6 +193,7 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
         currentStep={step}
         apiKey={apiKey}
         modelId={step.modelId}
+        llmContext={llmContext}
       />
     );
   }

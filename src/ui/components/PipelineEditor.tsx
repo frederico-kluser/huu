@@ -26,6 +26,8 @@ interface Props {
   onCancel: () => void;
   /** OpenRouter key drilled to StepEditor → FileMultiSelect for Smart Select. */
   apiKey: string;
+  /** Backend-aware context for Smart Select (Azure routing). */
+  llmContext?: import('../../lib/llm-client-factory.js').LlmClientContext;
 }
 
 const EMPTY_STEP: WorkStep = { type: 'work', name: 'New step', prompt: '', files: [] };
@@ -89,6 +91,7 @@ export function PipelineEditor({
   onExport,
   onCancel,
   apiKey,
+  llmContext,
 }: Props): React.JSX.Element {
   const { stdout } = useStdout();
   const [pipeline, setPipeline] = useState<Pipeline>(
@@ -204,6 +207,7 @@ export function PipelineEditor({
           allSteps={pipeline.steps}
           pipeline={pipeline}
           apiKey={apiKey}
+          llmContext={llmContext}
           repoRoot={repoRoot}
           onSave={(step) => {
             setPipeline((p) => ({
@@ -232,6 +236,7 @@ export function PipelineEditor({
         onCancel={() => setMode({ kind: 'list' })}
         pipeline={pipeline}
         apiKey={apiKey}
+        llmContext={llmContext}
       />
     );
   }

@@ -39,6 +39,8 @@ interface Props {
   apiKey: string;
   onComplete: (pipeline: Pipeline) => void;
   onCancel: () => void;
+  /** Backend-aware context. Required for `--backend=azure` to avoid OpenRouter charges. */
+  llmContext?: import('../../lib/llm-client-factory.js').LlmClientContext;
 }
 
 type Stage =
@@ -75,6 +77,7 @@ export function PipelineAssistant({
   apiKey,
   onComplete,
   onCancel,
+  llmContext,
 }: Props): React.JSX.Element {
   const { stdout } = useStdout();
   const repoRoot = process.cwd();
@@ -147,7 +150,7 @@ export function PipelineAssistant({
   const startConversation = useCallback(
     (chosenModelId: string, userIntent: string, reconContext: string): void => {
       try {
-        chatRef.current = createAssistantChat({ apiKey, modelId: chosenModelId });
+        chatRef.current = createAssistantChat({ apiKey, modelId: chosenModelId, llmContext });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         setStage({ kind: 'error', message });
@@ -305,6 +308,7 @@ export function PipelineAssistant({
         intent={intent}
         onComplete={handleReconComplete}
         onCancel={handleReconCancel}
+        llmContext={llmContext}
       />
     );
   }

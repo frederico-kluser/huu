@@ -12,7 +12,6 @@
  */
 
 import { z } from 'zod';
-import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import {
   RECON_CATALOG,
@@ -20,12 +19,11 @@ import {
 } from './project-recon-prompts.js';
 import { MAX_SELECTIONS, type RawSelection } from './recon-resolve.js';
 import { log as dlog } from './debug-logger.js';
-
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const OPENROUTER_HEADERS = {
-  'HTTP-Referer': 'https://github.com/frederico-kluser/huu',
-  'X-OpenRouter-Title': 'huu',
-};
+import {
+  buildChatClient,
+  defaultHelperModel,
+  type LlmClientContext,
+} from './llm-client-factory.js';
 
 /**
  * Default selector model — same family/tier as the recon agents themselves,
@@ -63,6 +61,12 @@ export interface RunSelectorOptions {
   projectHint?: string;
   modelId?: string;
   signal?: AbortSignal;
+  /**
+   * Backend-aware context. When provided, routes through the user's chosen
+   * backend (e.g. Azure). Required when `--backend=azure` is in use,
+   * otherwise selector calls leak charges to OpenRouter.
+   */
+  llmContext?: LlmClientContext;
 }
 
 function buildCatalogList(catalog: readonly ReconCatalogEntry[]): string {
@@ -137,23 +141,22 @@ export async function runReconSelector(
   opts: RunSelectorOptions,
 ): Promise<RawSelection[]> {
   const stub =
-    process.env.HUU_LANGCHAIN_STUB === '1' || opts.apiKey.trim() === 'stub';
+    process.env.HUU_LANGCHAIN_STUB === '1' ||
+    opts.apiKey.trim() === 'stub' ||
+    opts.llmContext?.backend === 'stub';
   if (stub) return runStubSelector(opts);
 
   const apiKey = opts.apiKey.trim();
-  if (!apiKey) throw new Error('OpenRouter API key missing.');
-  const modelId = (opts.modelId ?? SELECTOR_MODEL).trim();
+  const ctxBackend = opts.llmContext?.backend ?? 'pi';
+  const fallbackModel =
+    ctxBackend === 'azure' ? defaultHelperModel('azure') : SELECTOR_MODEL;
+  const modelId = (opts.modelId ?? fallbackModel).trim();
 
-  const chat = new ChatOpenAI({
-    model: modelId,
-    temperature: 0,
-    maxTokens: 800,
-    configuration: {
-      baseURL: OPENROUTER_BASE_URL,
-      apiKey,
-      defaultHeaders: OPENROUTER_HEADERS,
-    },
-  });
+  const ctx: LlmClientContext = opts.llmContext ?? {
+    backend: 'pi',
+    openrouterApiKey: apiKey,
+  };
+  const chat = buildChatClient(ctx, { modelId, temperature: 0, maxTokens: 800 });
   const structured = chat.withStructuredOutput(SelectorOutputSchema, {
     name: 'ReconSelector',
     method: 'functionCalling',

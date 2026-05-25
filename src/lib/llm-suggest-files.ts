@@ -1,15 +1,13 @@
-import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 import { DEFAULT_ASSISTANT_MODEL } from './assistant-client.js';
 import type { Pipeline, PromptStep } from './types.js';
 import { log as dlog } from './debug-logger.js';
-
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const OPENROUTER_HEADERS = {
-  'HTTP-Referer': 'https://github.com/frederico-kluser/huu',
-  'X-OpenRouter-Title': 'huu',
-};
+import {
+  buildChatClient,
+  defaultHelperModel,
+  type LlmClientContext,
+} from './llm-client-factory.js';
 
 /** Hard cap on how many paths we send to the LLM. Bigger prompts blow up
  * cost and quickly bump into context limits without improving suggestion
@@ -36,6 +34,12 @@ export interface SuggestFilesInput {
   signal?: AbortSignal;
   /** Optional callback for progress updates during the suggestion flow. */
   onProgress?: (message: string) => void;
+  /**
+   * Backend-aware context. When provided, routes through the user's chosen
+   * backend (e.g. Azure) instead of OpenRouter. Required when `--backend=azure`
+   * is in use, otherwise file-suggestion calls leak charges to OpenRouter.
+   */
+  llmContext?: LlmClientContext;
 }
 
 export interface SuggestFilesResult {
@@ -192,7 +196,8 @@ export async function suggestFilesForStep(
   if (
     process.env.HUU_LANGCHAIN_STUB === '1' ||
     apiKey === '' ||
-    apiKey === 'stub'
+    apiKey === 'stub' ||
+    input.llmContext?.backend === 'stub'
   ) {
     progress('Using stub suggester (no API key)');
     return stubSuggest(input);
@@ -206,17 +211,16 @@ export async function suggestFilesForStep(
   );
   const { system, user } = buildPrompt(input, filesForPrompt);
 
-  const modelId = (input.modelId ?? DEFAULT_ASSISTANT_MODEL).trim();
+  const ctxBackend = input.llmContext?.backend ?? 'pi';
+  const fallbackModel =
+    ctxBackend === 'azure' ? defaultHelperModel('azure') : DEFAULT_ASSISTANT_MODEL;
+  const modelId = (input.modelId ?? fallbackModel).trim();
   progress(`Sending request to ${modelId.replace(/^.*\//, '')}…`);
-  const chat = new ChatOpenAI({
-    model: modelId,
-    temperature: 0.2,
-    configuration: {
-      baseURL: OPENROUTER_BASE_URL,
-      apiKey,
-      defaultHeaders: OPENROUTER_HEADERS,
-    },
-  });
+  const ctx: LlmClientContext = input.llmContext ?? {
+    backend: 'pi',
+    openrouterApiKey: apiKey,
+  };
+  const chat = buildChatClient(ctx, { modelId, temperature: 0.2 });
   const structured = chat.withStructuredOutput(SuggestFilesResponseSchema, {
     name: 'SuggestFiles',
     method: 'functionCalling',

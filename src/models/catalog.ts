@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import {
   RecommendedModelsFileSchema,
   type ModelEntry,
@@ -216,7 +217,7 @@ export function loadRecommendedModels(
     }
   }
 
-  const all: ModelEntry[] = [...openrouterEntries, ...DEFAULT_COPILOT_MODELS, ...DEFAULT_AZURE_MODELS];
+  const all: ModelEntry[] = [...openrouterEntries, ...DEFAULT_COPILOT_MODELS, ...loadAzureModels(projectRoot)];
 
   // No filter when backend is undefined OR 'stub'. Stub never calls a
   // provider, so picking a Copilot model under --stub --copilot
@@ -235,6 +236,41 @@ function backendToProvider(backend: 'pi' | 'copilot' | 'azure'): ModelProvider {
   if (backend === 'copilot') return 'copilot';
   if (backend === 'azure') return 'azure';
   return 'openrouter';
+}
+
+/**
+ * Azure deployments are user-specific: the catalog is just a fallback.
+ * Users can fully customize the model picker by editing either:
+ *   - `<projectRoot>/azure-models.json` (per-project)
+ *   - `~/.huu/azure-models.json`        (global)
+ *
+ * Both files use the same shape as `recommended-models.json` (the schema
+ * already accepts `provider: "azure"`). The per-project file wins if both
+ * exist. When no override file is present, `DEFAULT_AZURE_MODELS` is used.
+ *
+ * Each entry's `id` MUST match the deployment name in your Azure resource —
+ * NOT the underlying model name. E.g. if you named your deployment
+ * "my-gpt4o", set `id: "my-gpt4o"`.
+ */
+export function loadAzureModels(projectRoot: string): readonly ModelEntry[] {
+  const candidates = [
+    join(projectRoot, 'azure-models.json'),
+    join(homedir(), '.huu', 'azure-models.json'),
+  ];
+  for (const filePath of candidates) {
+    if (!existsSync(filePath)) continue;
+    try {
+      const raw = readFileSync(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      const models = RecommendedModelsFileSchema.parse(parsed).models;
+      // Force provider=azure regardless of what the file declares, so a
+      // misfiled openrouter entry doesn't bleed into the Azure picker.
+      return models.map((m) => ({ ...m, provider: 'azure' as const }));
+    } catch {
+      // fall through to next candidate / defaults
+    }
+  }
+  return DEFAULT_AZURE_MODELS;
 }
 
 export function formatPrice(price: number | undefined | null): string {

@@ -5,12 +5,15 @@
 // result so we ship the final array of agent results as-is.
 
 import { runProjectRecon, type ReconUpdate, type ReconAgentResult } from '../../lib/project-recon.js';
+import type { LlmClientContext } from '../../lib/llm-client-factory.js';
 
 export interface StreamReconOptions {
   apiKey: string;
   repoRoot: string;
   onChunk: (chunk: string) => void;
   signal?: AbortSignal;
+  /** Backend-aware context. Required for `--backend=azure`. */
+  llmContext?: LlmClientContext;
 }
 
 export async function streamRecon(
@@ -20,6 +23,7 @@ export async function streamRecon(
   return runProjectRecon({
     apiKey: opts.apiKey,
     repoRoot: opts.repoRoot,
+    llmContext: opts.llmContext,
     onUpdate: (u: ReconUpdate) => {
       // Serialize the update so the wire side can stay schema-agnostic.
       // The front-end can JSON.parse and inspect `status` / `bullets`.
