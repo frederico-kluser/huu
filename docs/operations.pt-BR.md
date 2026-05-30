@@ -206,6 +206,21 @@ deps do huu, e o agente LLM vai ver suas credenciais de shell
 a cada vez. Os subcomandos não-TUI (`huu --help`, `huu init-docker`,
 `huu status`) sempre rodam nativo de qualquer forma.
 
+### Solução de problemas: erro `denied: denied` no pull
+
+`docker: ... error from registry: denied` significa que o Docker não
+conseguiu puxar a imagem do GHCR — em geral porque a tag não está
+publicada/é privada, ou porque há credenciais cacheadas inválidas em
+`~/.docker/config.json` (o GHCR não cai pra acesso anônimo nesse caso).
+Três saídas, da mais simples à mais completa:
+
+| Caminho | Comando | Quando usar |
+|---|---|---|
+| Limpar credencial | `docker logout ghcr.io` | Resolve rápido um one-off |
+| **Build local** | `docker build -t huu:local .` então `HUU_IMAGE=huu:local huu run …` | **Recomendado** — reprodutível, sem registry |
+| Rodar nativo | `huu --yolo run …` (== `HUU_NO_DOCKER=1`) | Dev/teste; ⚠️ expõe `~/.ssh`/`~/.aws` ao agente |
+| Re-autenticar | `echo "$PAT" \| docker login ghcr.io -u <user> --password-stdin` | Precisa de imagens privadas (PAT com escopo `read:packages`) |
+
 ---
 
 ## Web UI (`huu --web`)
@@ -424,7 +439,7 @@ gastam tokens "consertando" um não-bug.
    `./.huu-bin/with-ports <command>`.
 
 **Matriz de cobertura, exclusões, como desabilitar e o design
-completo:** [`PORT-SHIM.md`](../PORT-SHIM.md).
+completo:** [`PORT-SHIM.md`](PORT-SHIM.md).
 
 Pra optar por desabilitar em refatorações puras / análise estática /
 geração de doc, adicione `"portAllocation": { "enabled": false }` no

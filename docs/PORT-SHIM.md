@@ -4,7 +4,7 @@
 > de uma biblioteca compartilhada nativa que interpõe `bind(2)` da libc,
 > rewriting a porta solicitada na fronteira da syscall, antes de chegar ao kernel.
 
-> **Codename.** `huu-port-shim`. Fonte em [`native/port-shim/port-shim.c`](native/port-shim/port-shim.c).
+> **Codename.** `huu-port-shim`. Fonte em [`native/port-shim/port-shim.c`](../native/port-shim/port-shim.c).
 
 ---
 
@@ -76,7 +76,7 @@ quebrado**, e gastam tokens em loops de "correção" que nunca convergem
 porque o problema é externo ao código.
 
 Isso é exatamente o **"blind testing problem"** descrito na
-[`ANALISE-CRITICA.md`](ANALISE-CRITICA.md), seção 5.1:
+a análise crítica original (documento histórico removido), seção 5.1:
 
 > Quando um teste falha no painel da TUI do huu, o agente subjacente
 > inevitavelmente assume falsamente que seu código estava com defeito e
@@ -173,7 +173,7 @@ duas entidades diferentes para o kernel.
 **Veredicto.** Descartado pelo princípio do produto.
 
 > **Não confundir** com o `huu` rodando em Docker (introduzido por
-> [`Dockerfile`](Dockerfile) + [`src/lib/docker-reexec.ts`](src/lib/docker-reexec.ts)).
+> [`Dockerfile`](../Dockerfile) + [`src/lib/docker-reexec.ts`](../src/lib/docker-reexec.ts)).
 > Esse modo põe o **orquestrador inteiro** em um único container — os
 > agentes paralelos continuam sendo processos do mesmo container,
 > compartilhando network namespace. Logo, o port-shim continua
@@ -293,7 +293,7 @@ disponível.
 
 ### 4.1 Camada 1 — `PortAllocator`
 
-**Arquivo.** [`src/orchestrator/port-allocator.ts`](src/orchestrator/port-allocator.ts).
+**Arquivo.** [`src/orchestrator/port-allocator.ts`](../src/orchestrator/port-allocator.ts).
 
 Cada agente recebe uma janela contígua de portas. Algoritmo:
 
@@ -328,7 +328,7 @@ do alocador vaza entre runs.
 
 ### 4.2 Camada 2 — `.env.huu` por worktree
 
-**Arquivo.** [`src/orchestrator/agent-env.ts`](src/orchestrator/agent-env.ts).
+**Arquivo.** [`src/orchestrator/agent-env.ts`](../src/orchestrator/agent-env.ts).
 
 Após criar o worktree, o `huu` escreve um arquivo dedicado
 `<worktree>/.env.huu` com:
@@ -368,7 +368,7 @@ vai colidir com convenções existentes.
 
 ### 4.3 Camada 3 — `bind()` interceptor (núcleo)
 
-**Arquivo.** [`native/port-shim/port-shim.c`](native/port-shim/port-shim.c) (~150 linhas).
+**Arquivo.** [`native/port-shim/port-shim.c`](../native/port-shim/port-shim.c) (~150 linhas).
 Compilado para `.huu-cache/native-shim/<os>-<arch>/huu-port-shim.{so,dylib}`.
 
 Compilação:
@@ -439,7 +439,7 @@ Pontos importantes:
 
 #### Compilação on-demand
 
-**Arquivo.** [`src/orchestrator/native-shim.ts`](src/orchestrator/native-shim.ts).
+**Arquivo.** [`src/orchestrator/native-shim.ts`](../src/orchestrator/native-shim.ts).
 
 Na primeira execução em um repo:
 
@@ -461,7 +461,7 @@ elimina coordenação.
 
 ### 4.4 Camada 4 — System prompt
 
-**Arquivos.** [`src/orchestrator/agent-env.ts`](src/orchestrator/agent-env.ts) (gera bloco markdown), [`src/orchestrator/agents-md-generator.ts`](src/orchestrator/agents-md-generator.ts) (injeta no system prompt).
+**Arquivos.** [`src/orchestrator/agent-env.ts`](../src/orchestrator/agent-env.ts) (gera bloco markdown), [`src/orchestrator/agents-md-generator.ts`](../src/orchestrator/agents-md-generator.ts) (injeta no system prompt).
 
 O agente recebe, no system prompt, um bloco que diz:
 
@@ -518,7 +518,7 @@ projeto Vite com `port: 5173` literal em `vite.config.ts`.
 
 ## 5. Validação empírica
 
-A prova de conceito está em [`src/orchestrator/native-shim.test.ts`](src/orchestrator/native-shim.test.ts).
+A prova de conceito está em [`src/orchestrator/native-shim.test.ts`](../src/orchestrator/native-shim.test.ts).
 Três asserções end-to-end, executadas por Vitest em CI:
 
 ### 5.1 O shim compila no host atual
@@ -613,7 +613,7 @@ Se um pipeline falha com EADDRINUSE apesar do shim, debug em ordem:
 ### 6.4 Cenário Docker — `huu` em container
 
 `huu` agora pode rodar em um container oficial (`ghcr.io/.../huu:latest`)
-via o wrapper auto-reexec em [`src/lib/docker-reexec.ts`](src/lib/docker-reexec.ts).
+via o wrapper auto-reexec em [`src/lib/docker-reexec.ts`](../src/lib/docker-reexec.ts).
 **Importante:** esse modelo é "todo o orquestrador em UM container", **não**
 "um container por agente". Os N agentes paralelos rodam como processos
 filhos dentro do mesmo container e portanto **compartilham o network
@@ -631,7 +631,7 @@ Diferenças operacionais em Docker:
 | Custo do primeiro run | ~50ms de compile | zero (já compilado) |
 | Multi-arch | Compila pro arch local | Buildx compila amd64+arm64 separados |
 
-A [resolução em `ensureNativeShim()`](src/orchestrator/native-shim.ts) é:
+A [resolução em `ensureNativeShim()`](../src/orchestrator/native-shim.ts) é:
 
 1. `HUU_NATIVE_SHIM_PATH` aponta pra um arquivo existente → usa direto.
 2. Cache local `<repoRoot>/.huu-cache/...` está fresh → reusa.
@@ -845,19 +845,19 @@ Se algum desses se tornar dor recorrente:
 
 | Arquivo | Papel |
 |---|---|
-| [`native/port-shim/port-shim.c`](native/port-shim/port-shim.c) | Implementação do interceptor de `bind()` (Linux + macOS) |
-| [`native/port-shim/Makefile`](native/port-shim/Makefile) | Build local do shim |
-| [`src/orchestrator/native-shim.ts`](src/orchestrator/native-shim.ts) | Compilação on-demand, cache em `.huu-cache/`, honra `HUU_NATIVE_SHIM_PATH`, fallback gracioso |
-| [`src/orchestrator/native-shim.test.ts`](src/orchestrator/native-shim.test.ts) | Testes end-to-end provando que o shim remappeia bind() real + cobertura do prebuilt path |
-| [`Dockerfile`](Dockerfile) | Pré-compila `huu-port-shim.so` no builder e exporta `HUU_NATIVE_SHIM_PATH` no runtime — preserva camada 3 sem `cc` no container |
-| [`src/orchestrator/port-allocator.ts`](src/orchestrator/port-allocator.ts) | Camada 1 — janelas únicas por agente, com probe TCP |
-| [`src/orchestrator/port-allocator.test.ts`](src/orchestrator/port-allocator.test.ts) | Testes do alocador |
-| [`src/orchestrator/agent-env.ts`](src/orchestrator/agent-env.ts) | Camada 2+4 — escreve `.env.huu` com `LD_PRELOAD` + `HUU_PORT_REMAP`, gera bloco markdown para o prompt |
-| [`src/orchestrator/agents-md-generator.ts`](src/orchestrator/agents-md-generator.ts) | Injeta o bloco de port allocation no system prompt |
-| [`src/orchestrator/index.ts`](src/orchestrator/index.ts) | Orquestrador — chama `ensureNativeShim` no start, aloca porta após criar worktree, libera em todos os exit paths, gitignore artifacts |
-| [`src/lib/types.ts`](src/lib/types.ts) | Schema `Pipeline.portAllocation: { basePort?, windowSize?, enabled? }` |
-| [`README.md`](README.md), [`README.pt-BR.md`](README.pt-BR.md) | Seção "Parallel safety: per-agent port isolation" / "Segurança em paralelo: isolamento de portas por agente" |
-| [`ANALISE-CRITICA.md`](ANALISE-CRITICA.md), §5.1 | Definição original do "blind testing problem" que motivou esta técnica |
+| [`native/port-shim/port-shim.c`](../native/port-shim/port-shim.c) | Implementação do interceptor de `bind()` (Linux + macOS) |
+| [`native/port-shim/Makefile`](../native/port-shim/Makefile) | Build local do shim |
+| [`src/orchestrator/native-shim.ts`](../src/orchestrator/native-shim.ts) | Compilação on-demand, cache em `.huu-cache/`, honra `HUU_NATIVE_SHIM_PATH`, fallback gracioso |
+| [`src/orchestrator/native-shim.test.ts`](../src/orchestrator/native-shim.test.ts) | Testes end-to-end provando que o shim remappeia bind() real + cobertura do prebuilt path |
+| [`Dockerfile`](../Dockerfile) | Pré-compila `huu-port-shim.so` no builder e exporta `HUU_NATIVE_SHIM_PATH` no runtime — preserva camada 3 sem `cc` no container |
+| [`src/orchestrator/port-allocator.ts`](../src/orchestrator/port-allocator.ts) | Camada 1 — janelas únicas por agente, com probe TCP |
+| [`src/orchestrator/port-allocator.test.ts`](../src/orchestrator/port-allocator.test.ts) | Testes do alocador |
+| [`src/orchestrator/agent-env.ts`](../src/orchestrator/agent-env.ts) | Camada 2+4 — escreve `.env.huu` com `LD_PRELOAD` + `HUU_PORT_REMAP`, gera bloco markdown para o prompt |
+| [`src/orchestrator/agents-md-generator.ts`](../src/orchestrator/agents-md-generator.ts) | Injeta o bloco de port allocation no system prompt |
+| [`src/orchestrator/index.ts`](../src/orchestrator/index.ts) | Orquestrador — chama `ensureNativeShim` no start, aloca porta após criar worktree, libera em todos os exit paths, gitignore artifacts |
+| [`src/lib/types.ts`](../src/lib/types.ts) | Schema `Pipeline.portAllocation: { basePort?, windowSize?, enabled? }` |
+| [`README.md`](../README.md) (pt-br), [`README.en.md`](../README.en.md) | Seção "Segurança em paralelo: isolamento de portas por agente" / "Parallel safety: per-agent port isolation" |
+| a análise crítica original (documento histórico removido), §5.1 | Definição original do "blind testing problem" que motivou esta técnica |
 
 ## 11. Referências externas
 

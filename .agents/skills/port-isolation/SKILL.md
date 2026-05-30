@@ -17,7 +17,7 @@ without resorting to Docker or network namespaces. Worktrees isolate the
 filesystem; this layer isolates the host network.
 
 The complete walkthrough — problem framing, alternatives weighed, design
-decisions, and limits — lives in [`PORT-SHIM.md`](../../../PORT-SHIM.md) at
+decisions, and limits — lives in [`PORT-SHIM.md`](../../../docs/PORT-SHIM.md) at
 the repo root. **Read it before changing anything in this layer.**
 
 ## Boundaries
@@ -167,7 +167,7 @@ fallback.
 
 ## When in doubt
 
-Read [`PORT-SHIM.md`](../../../PORT-SHIM.md). It documents:
+Read [`docs/PORT-SHIM.md`](../../../docs/PORT-SHIM.md). It documents:
 - Why we rejected Docker (per-agent), netns, code rewriting, and serialization.
 - The diagnostic flowchart for "EADDRINUSE despite the shim".
 - The Docker scenario (huu-in-container) and how the prebuilt path

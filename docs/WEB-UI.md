@@ -438,7 +438,7 @@ scripts/
 - `src/web/session.ts` — aceita `initialPipeline` + `autoStart` (idem TUI)
 - `package.json` — adiciona workspace `webui`, scripts `build:webui`, dep `ws`
 - `.gitignore` — exclui `src/web/dist-static/`
-- `README.md` + `README.pt-BR.md` — seção Web UI
+- `README.md` + `README.en.md` — seção Web UI
 - `AGENTS.md` — skill `web-ui-react` + seção arquitetural
 - `agent-skills.md` — catálogo de skills atualizado
 - `CHANGELOG.md` — entries no `[Unreleased]`
@@ -466,5 +466,5 @@ scripts/
 - `AGENTS.md` → seção "Web UI mode" + skill `web-ui-react`
 - `.agents/skills/web-ui-react/SKILL.md` → spec da skill
 - `CHANGELOG.md` → `[Unreleased]` → `Added`
-- `README.md` / `README.pt-BR.md` → seção "Web UI"
+- `README.md` / `README.en.md` → seção "Web UI"
 - `scripts/smoke-web.sh` → smoke test executável

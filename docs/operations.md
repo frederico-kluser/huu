@@ -204,6 +204,21 @@ credentials (`~/.ssh`, `~/.aws`, …) — a one-line warning is printed to
 stderr each time. The non-TUI subcommands (`huu --help`,
 `huu init-docker`, `huu status`) always run native regardless.
 
+### Troubleshooting: `denied: denied` on pull
+
+`docker: ... error from registry: denied` means Docker could not pull the
+image from GHCR — usually because the tag isn't published/is private, or
+because of invalid cached credentials in `~/.docker/config.json` (GHCR
+does not fall back to anonymous access in that case). Three ways out, from
+simplest to most complete:
+
+| Path | Command | When |
+|---|---|---|
+| Clear credentials | `docker logout ghcr.io` | Quick one-off fix |
+| **Local build** | `docker build -t huu:local .` then `HUU_IMAGE=huu:local huu run …` | **Recommended** — reproducible, registry-free |
+| Run native | `huu --yolo run …` (== `HUU_NO_DOCKER=1`) | Dev/testing; ⚠️ exposes `~/.ssh`/`~/.aws` to the agent |
+| Re-authenticate | `echo "$PAT" \| docker login ghcr.io -u <user> --password-stdin` | Need private images (PAT with `read:packages` scope) |
+
 ---
 
 ## Web UI (`huu --web`)
@@ -416,7 +431,7 @@ is fine — burn tokens "fixing" a non-bug.
    `./.huu-bin/with-ports <command>` shell wrapper.
 
 **Coverage matrix, exclusions, disabling, and the full design:**
-[`PORT-SHIM.md`](../PORT-SHIM.md).
+[`PORT-SHIM.md`](PORT-SHIM.md).
 
 To opt out for pure refactors / static analysis / doc generation, add
 `"portAllocation": { "enabled": false }` to the pipeline.

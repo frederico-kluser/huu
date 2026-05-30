@@ -1,23 +1,23 @@
 <p align="center">
-  <img src="assets/huu-demo.gif" alt="huu generating 100% unit-test coverage — 55 minutes sped up to 10 seconds" width="720">
+  <img src="assets/huu-demo.gif" alt="huu gerando 100% de cobertura de testes unitários — 55 minutos acelerados pra 10 segundos" width="720">
 </p>
 
 <p align="center">
-  <em>55 minutes of <code>huu</code> generating 100% unit-test coverage — sped up to 10 seconds.</em>
+  <em>55 minutos do <code>huu</code> gerando 100% de cobertura de testes unitários — acelerados pra 10 segundos.</em>
 </p>
 
 <h1 align="center">huu</h1>
 
 <p align="center">
-  <strong><code>huu</code> — <em>Humans Underwrite Undertakings</em>.</strong>
+  <strong><code>huu</code> — <em>Humans Underwrite Undertakings</em> (humanos subscrevem empreitadas).</strong>
 </p>
 
 <p align="center">
-  <strong>English</strong> · <a href="README.pt-BR.md">Português (BR)</a>
+  <a href="README.en.md">English</a> · <strong>Português (BR)</strong>
 </p>
 
 <p align="center">
-  <a href="#license"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
+  <a href="#licença"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
   <img alt="Node.js 20+" src="https://img.shields.io/badge/node-%E2%89%A5%2020-339933?logo=node.js&logoColor=white">
   <img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.x-3178C6?logo=typescript&logoColor=white">
   <img alt="Built with Ink" src="https://img.shields.io/badge/TUI-Ink%204-000000">
@@ -25,159 +25,166 @@
 
 ---
 
-## What huu is
+## O que é o huu
 
-**A pipeline is a file of orders that the AI obeys.** You write a
-`huu-pipeline-v1.json` listing the steps and the files each step
-touches. The orchestrator turns each step into a fan-out of parallel
-agents — one agent per file when you ask for it — runs them in
-isolated git worktrees, and merges them back into a single integration
-branch **between every stage**. The whole run is sandboxed in Docker
-so the agent never sees your shell credentials.
+**Um pipeline é um arquivo de ordens que a IA obedece.** Você escreve
+um `huu-pipeline-v1.json` listando os passos e os arquivos que cada
+passo toca. O orchestrator transforma cada passo em um fan-out de
+agentes paralelos — um agente por arquivo quando você pede assim —
+roda eles em worktrees git isolados, e mescla tudo de volta num único
+branch de integração **entre cada etapa**. A execução inteira é
+sandboxed em Docker, então o agente nunca vê suas credenciais de shell.
 
-That sentence has a few claims worth unpacking:
+Essa frase tem algumas afirmações que vale destacar:
 
-- **The human underwrites the scope.** No LLM planner decides what
-  step 3 should do or which files it should touch. If a step is
-  misdesigned, the result is predictably and auditably wrong — not
-  surprisingly wrong.
-- **In `per-file` mode, one agent gets one file.** The prompt is
-  identical across the N agents — only `$file` is substituted. No
-  context degradation between agents, no scope drift. The Pi coding
-  agent (default backend) runs with `thinking=medium` so the model
-  trades latency for quality on its single mission.
-- **Pipelines are portable, not provider-locked.** A
-  `huu-pipeline-v1.json` is a versioned artifact — commit it, share
-  it as a gist, contribute it to the cookbook. The know-how of *how
-  to decompose this class of task* lives in plain JSON.
+- **O humano subscreve o escopo.** Nenhum planner LLM decide o que o
+  passo 3 deve fazer ou quais arquivos ele deve tocar. Se um passo for
+  mal projetado, o resultado vai ser previsivelmente e auditavelmente
+  errado — não surpreendentemente errado.
+- **Em modo `per-file`, um agente recebe um arquivo.** O prompt é
+  idêntico entre os N agentes — só `$file` é substituído. Sem
+  degradação de contexto entre agentes, sem drift de escopo. O Pi
+  coding agent (backend padrão) roda com `thinking=medium` pra que o
+  modelo troque latência por qualidade na sua missão única.
+- **Pipelines são portáteis, não presos a um provider.** Um
+  `huu-pipeline-v1.json` é um artefato versionado — comite, compartilhe
+  como gist, contribua pro cookbook. O know-how de *como decompor essa
+  classe de tarefa* mora em JSON puro.
 
-### Stage → merge → stage
+### Etapa → merge → etapa
 
 ```mermaid
 flowchart LR
-    subgraph Docker["🐳 Docker (sandboxed, no shell creds)"]
+    subgraph Docker["🐳 Docker (sandboxed, sem credenciais de shell)"]
         direction TB
-        H["Integration HEAD<br/>(stage N base)"]
-        H --> F1["Agent 1<br/>worktree"]
-        H --> F2["Agent 2<br/>worktree"]
-        H --> F3["Agent N<br/>worktree"]
+        H["Integration HEAD<br/>(base da etapa N)"]
+        H --> F1["Agente 1<br/>worktree"]
+        H --> F2["Agente 2<br/>worktree"]
+        H --> F3["Agente N<br/>worktree"]
         F1 --> M["Merge<br/>git merge --no-ff"]
         F2 --> M
         F3 --> M
-        M --> H2["Integration HEAD<br/>(stage N+1 base)"]
-        M -. conflict .-> R["LLM integration agent<br/>(side worktree)"]
+        M --> H2["Integration HEAD<br/>(base da etapa N+1)"]
+        M -. conflito .-> R["Agente de integração LLM<br/>(worktree lateral)"]
         R --> H2
     end
 ```
 
-Each stage forks N agents off the integration HEAD, lets them work in
-parallel in their own worktrees, and merges them back **before**
-the next stage starts. The integration worktree is never rewound —
-loops re-execute on top of the current HEAD, accumulating commits.
-Conflicts hit a side LLM integration agent (skipped in `--stub` mode).
+Cada etapa ramifica N agentes a partir do HEAD de integração, deixa
+eles trabalharem em paralelo nos seus próprios worktrees, e mescla
+tudo de volta **antes** da próxima etapa começar. O worktree de
+integração nunca dá rewind — loops re-executam em cima do HEAD atual,
+acumulando commits. Conflitos caem num agente de integração LLM
+lateral (pulado no modo `--stub`).
 
-### Per-file scope: one agent, one mission
+### Scope per-file: um agente, uma missão
 
 ```mermaid
 flowchart LR
-    P["Step prompt:<br/>'Test $file'<br/>scope: per-file"]
-    P --> A1["Agent 1<br/>$file = src/a.ts"]
-    P --> A2["Agent 2<br/>$file = src/b.ts"]
-    P --> A3["Agent 3<br/>$file = src/c.ts"]
-    P --> A4["Agent 4<br/>$file = src/d.ts"]
-    A1 --> Out["4 parallel commits<br/>(no overlap by design)"]
+    P["Prompt do step:<br/>'Teste $file'<br/>scope: per-file"]
+    P --> A1["Agente 1<br/>$file = src/a.ts"]
+    P --> A2["Agente 2<br/>$file = src/b.ts"]
+    P --> A3["Agente 3<br/>$file = src/c.ts"]
+    P --> A4["Agente 4<br/>$file = src/d.ts"]
+    A1 --> Out["4 commits paralelos<br/>(sem sobreposição por design)"]
     A2 --> Out
     A3 --> Out
     A4 --> Out
 ```
 
-Same prompt, different `$file`. Agents read the whole worktree for
-context but are instructed to write only to their assigned file —
-disjoint writes mean clean merges. **This is the revolutionary bit:
-your pipeline is the contract, and the contract scales horizontally.**
+Mesmo prompt, `$file` diferente. Agentes leem o worktree inteiro pra
+contexto mas são instruídos a escrever só no arquivo atribuído —
+escritas disjuntas geram merges limpos. **Aqui está a sacada
+revolucionária: seu pipeline é o contrato, e o contrato escala
+horizontalmente.**
 
 ---
 
 ## Showcase: huu Test Suite
 
-`huu Test Suite` is the default pipeline materialized on first run. It
-demonstrates why mixing `project` and `per-file` scope is the recipe.
+`huu Test Suite` é o pipeline default materializado na primeira
+execução. Ele demonstra porque misturar scope `project` e `per-file` é
+a receita.
 
-| # | Step | Scope | What it does |
+| # | Step | Scope | O que faz |
 |---|---|---|---|
-| 1 | Analyze stack and write `huu-tests.md` | `project` | Detects language (Node / Python / Go / Rust / Java / .NET), verifies test runner, writes the **plan** every later step obeys. |
-| 2 | Test 3 representative files | `project` | Picks 3 diverse business-logic files, writes tests, fixes failures, appends learnings to `huu-tests-faq.json`. |
-| 3 | **Test `$file` (user-selected)** | `per-file` | **N parallel agents, each receives one file.** Each follows `huu-tests.md`, writes a test, accumulates FAQ. |
-| 4 | Final cleanup + coverage badge | `project` | Runs the full suite, deletes only the failing **blocks** (never entire files), updates README badge. |
+| 1 | Analisa stack e escreve `huu-tests.md` | `project` | Detecta a linguagem (Node / Python / Go / Rust / Java / .NET), verifica o test runner, escreve o **plano** que todos os passos seguintes obedecem. |
+| 2 | Testa 3 arquivos representativos | `project` | Escolhe 3 arquivos diversos de lógica de negócio, escreve testes, corrige falhas, adiciona aprendizados em `huu-tests-faq.json`. |
+| 3 | **Testa `$file` (escolhido pelo usuário)** | `per-file` | **N agentes em paralelo, cada um recebe um arquivo.** Cada um segue o `huu-tests.md`, escreve um teste, acumula no FAQ. |
+| 4 | Limpeza final + badge de cobertura | `project` | Roda a suíte completa, deleta só os **blocos** com falha (nunca arquivos inteiros), atualiza o badge no README. |
 
-Step 1 writes a contract; step 3 makes 30 agents obey it in parallel;
-step 4 validates. **Plan in `project`, execute in `per-file`, validate
-in `project`** — the template for everything else.
+Step 1 escreve um contrato; step 3 faz 30 agentes obedecerem em
+paralelo; step 4 valida. **Planeje em `project`, execute em
+`per-file`, valide em `project`** — o template pra tudo o mais.
 
-Step-by-step walkthrough with prompts:
-[`docs/onboarding.md#example-walkthrough`](docs/onboarding.md#example-walkthrough).
-
----
-
-## What else can you build
-
-A pipeline is a creative artifact. Five other defaults ship in the box,
-and a creative author can write anything that fits the
-**plan → fan-out → merge** shape:
-
-- **Security pipeline.** Hand-pick the files you want audited, pass the
-  threat model and standards (OWASP, CWE) as documentation, parallelize
-  per-file scans. Stage 1 builds a `THREAT-MODEL.md`. Stage 2 fans out
-  N agents, each scanning one file against the model. Stage 3
-  consolidates findings and writes the remediation roadmap. All
-  worktrees merge into a single integration branch.
-- **Mass migration.** *Migrate 40 Mocha tests to Vitest:* stage 1 audits
-  patterns into `MIGRATION.md`, stage 2 fans out 40 agents (one per
-  test file), stage 3 runs `npm test` and updates `CHANGELOG.md`.
-- **Docs / Quality / Performance / Refactor audits** ship as bundled
-  default pipelines — strict report-only, never touch your manifests
-  or production source.
-- **Your idea.** If you can write the plan as a list of ordered
-  steps with prompts and a `scope`, you can run it. The pipeline
-  format is stable; the cookbook is open.
-
-Bundled defaults: [`docs/onboarding.md#bundled-default-pipelines`](docs/onboarding.md#bundled-default-pipelines).
+Passo a passo com prompts:
+[`docs/onboarding.pt-BR.md#exemplo-passo-a-passo`](docs/onboarding.pt-BR.md#exemplo-passo-a-passo).
 
 ---
 
-## Backends — any model, your choice
+## O que mais você pode construir
+
+Um pipeline é um artefato criativo. Cinco outros defaults vêm na
+caixa, e um autor criativo pode escrever qualquer coisa que se encaixe
+no formato **planejar → fan-out → mergear**:
+
+- **Pipeline de segurança.** Escolha à mão os arquivos que quer
+  auditar, passe o threat model e padrões (OWASP, CWE) como
+  documentação, paralelize scans por arquivo. Etapa 1 monta um
+  `THREAT-MODEL.md`. Etapa 2 ramifica N agentes, cada um scanning um
+  arquivo contra o modelo. Etapa 3 consolida findings e escreve o
+  roadmap de remediação. Todos os worktrees mergeiam num único branch
+  de integração.
+- **Migração massiva.** *Migrar 40 testes Mocha pra Vitest:* etapa 1
+  audita patterns em `MIGRATION.md`, etapa 2 ramifica 40 agentes (um
+  por arquivo de teste), etapa 3 roda `npm test` e atualiza o
+  `CHANGELOG.md`.
+- **Auditorias de Docs / Quality / Performance / Refactor** vêm como
+  pipelines default empacotados — só-relatório estrito, nunca tocam
+  seus manifests ou source de produção.
+- **Sua ideia.** Se você consegue escrever o plano como uma lista
+  ordenada de steps com prompts e um `scope`, você consegue rodar.
+  O formato do pipeline é estável; o cookbook é aberto.
+
+Defaults empacotados:
+[`docs/onboarding.pt-BR.md#pipelines-default-empacotados`](docs/onboarding.pt-BR.md#pipelines-default-empacotados).
+
+---
+
+## Backends — qualquer modelo, sua escolha
 
 ```mermaid
 flowchart LR
     K["kind: 'pi' | 'copilot' | 'stub'"]
     K --> R["selectBackend()<br/>registry.ts"]
-    R --> P["Pi<br/>(OpenRouter, any model)"]
-    R --> C["Copilot<br/>(stabilizing)"]
-    R --> S["Stub<br/>(no LLM, smoke)"]
+    R --> P["Pi<br/>(OpenRouter, qualquer modelo)"]
+    R --> C["Copilot<br/>(estabilizando)"]
+    R --> S["Stub<br/>(sem LLM, smoke)"]
 ```
 
-| Backend | Flag | Cost model | Status |
+| Backend | Flag | Modelo de custo | Status |
 |---|---|---|---|
-| **Pi** (default) | `--backend=pi` | Pay-per-token via `OPENROUTER_API_KEY` — **any OpenRouter model** | Recommended |
-| GitHub Copilot | `--copilot` | Subscription via `COPILOT_GITHUB_TOKEN` | Stabilizing |
-| Stub | `--stub` | Free, no LLM — smoke tests / demos | Stable |
+| **Pi** (padrão) | `--backend=pi` | Por-token via `OPENROUTER_API_KEY` — **qualquer modelo OpenRouter** | Recomendado |
+| GitHub Copilot | `--copilot` | Assinatura via `COPILOT_GITHUB_TOKEN` | Estabilizando |
+| Stub | `--stub` | Grátis, sem LLM — smoke tests / demos | Estável |
 
-The Pi factory enables `thinking=medium` by default for every model
-that supports it — the model is allowed to draft, critique, and revise
-internally before emitting a final answer. For per-file work (one
-agent, one mission), this is the right trade-off. All three backends
-share the same orchestrator, worktree lifecycle, and merge logic.
+A factory do Pi habilita `thinking=medium` por padrão pra todo modelo
+que suporta — o modelo pode rascunhar, criticar e revisar internamente
+antes de emitir uma resposta final. Pra trabalho per-file (um agente,
+uma missão), esse é o trade-off certo. Todos os três backends
+compartilham o mesmo orchestrator, ciclo de vida de worktree e lógica
+de merge.
 
-Adding a future backend (ACP, Claude Code, …) is a one-folder +
-one-case-in-registry change under `src/orchestrator/backends/`.
+Adicionar um backend futuro (ACP, Claude Code, …) é uma mudança de
+uma pasta + um case no registry sob `src/orchestrator/backends/`.
 
-Deep dive: [`docs/onboarding.md#backends-deep-dive`](docs/onboarding.md#backends-deep-dive).
+A fundo: [`docs/onboarding.pt-BR.md#backends-a-fundo`](docs/onboarding.pt-BR.md#backends-a-fundo).
 
 ---
 
-## Quick start
+## Início rápido
 
-### Docker (recommended)
+### Docker (recomendado)
 
 ```bash
 git clone https://github.com/frederico-kluser/huu
@@ -187,27 +194,28 @@ export OPENROUTER_API_KEY=sk-or-...
 HUU_IMAGE=huu:local huu run example.pipeline.json
 ```
 
-Pre-built images at `ghcr.io/frederico-kluser/huu:latest` — the wrapper
-pulls automatically when no `HUU_IMAGE` is set. VPN-aware MTU, secret
-mounting, signal forwarding, and orphan cleanup are all handled by
-the wrapper.
+Imagens pré-buildadas em `ghcr.io/frederico-kluser/huu:latest` — o
+wrapper puxa automaticamente quando nenhum `HUU_IMAGE` está setado.
+MTU VPN-aware, mount de secrets, forwarding de sinais e limpeza de
+órfãos são todos cuidados pelo wrapper.
 
-### Native
+### Nativo
 
 ```bash
-npm install -g huu-pipe        # Node 20+ and a working `git`
-huu --yolo                     # opens the TUI natively (no Docker)
+npm install -g huu-pipe        # Node 20+ e um `git` funcional
+huu --yolo                     # abre a TUI nativa (sem Docker)
 ```
 
-Native runs expose your shell credentials to the LLM agent. Prefer
-Docker for anything real. Full install matrix (macOS / Windows / Linux,
-OrbStack notes, WSL2 caveats): [`docs/onboarding.md#install`](docs/onboarding.md#install).
+Execuções nativas expõem suas credenciais de shell pro agente LLM.
+Prefira Docker pra qualquer coisa real. Matriz completa de
+instalação (macOS / Windows / Linux, notas do OrbStack, caveats do
+WSL2): [`docs/onboarding.pt-BR.md#instalação`](docs/onboarding.pt-BR.md#instalação).
 
 ---
 
-## Headless / one-command mode
+## Modo headless / um-comando
 
-For CI, cron, demos:
+Pra CI, cron, demos:
 
 ```bash
 huu auto pipeline.json --config config.json
@@ -222,17 +230,18 @@ huu auto pipeline.json --config config.json
 }
 ```
 
-- **stderr** — NDJSON progress events (one per state change).
-- **stdout** — one final JSON object on completion (`runId`,
+- **stderr** — eventos de progresso em NDJSON (um por mudança de
+  estado).
+- **stdout** — um objeto JSON final no término (`runId`,
   `integrationBranch`, `totalCost`, …).
-- **Exit code** — `0` if `status === 'done'`, `1` otherwise.
+- **Exit code** — `0` se `status === 'done'`, `1` caso contrário.
 
-Build pipes on top: `huu auto … | jq .runId`. Full doc:
-[`docs/onboarding.md#headless-mode`](docs/onboarding.md#headless-mode).
+Construa pipes em cima: `huu auto … | jq .runId`. Doc completa:
+[`docs/onboarding.pt-BR.md#modo-headless`](docs/onboarding.pt-BR.md#modo-headless).
 
 ---
 
-## Pipeline schema (compact)
+## Schema do pipeline (compacto)
 
 ```json
 {
@@ -259,56 +268,58 @@ Build pipes on top: `huu auto … | jq .runId`. Full doc:
 }
 ```
 
-`scope` controls decomposition: `project` = one whole-project task,
-`per-file` = one task per file (the parallelism sweet spot),
-`flexible` = user picks at edit time.
+`scope` controla a decomposição: `project` = uma tarefa pro projeto
+inteiro, `per-file` = uma tarefa por arquivo (o sweet spot do
+paralelismo), `flexible` = usuário escolhe na hora de editar.
 
-Full schema (timeouts, retries, conditional `check` steps, model
-overrides, port allocation): [`docs/pipeline-json-guide.md`](docs/pipeline-json-guide.md).
+Schema completo (timeouts, retries, steps `check` condicionais,
+overrides de modelo, alocação de portas):
+[`docs/pipeline-json-guide.md`](docs/pipeline-json-guide.md).
 
 ---
 
-## More
+## Mais
 
-| Topic | Where |
+| Tópico | Onde |
 |---|---|
-| **Tutorial / first run / authoring** | [`docs/onboarding.md`](docs/onboarding.md) |
-| **Architecture & layered import rules** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
-| **Operations (Docker, env vars, FAQ, roadmap)** | [`docs/operations.md`](docs/operations.md) |
-| **Web UI mode (`huu --web`)** | [`docs/WEB-UI.md`](docs/WEB-UI.md) |
-| **Pipeline JSON schema** | [`docs/pipeline-json-guide.md`](docs/pipeline-json-guide.md) |
-| **Port isolation internals** | [`PORT-SHIM.md`](PORT-SHIM.md) |
-| **Keyboard reference** | [`docs/KEYBOARD.md`](docs/KEYBOARD.md) |
-| **Agent skills catalog** | [`agent-skills.md`](agent-skills.md) |
+| **Tutorial / primeira execução / autoria** | [`docs/onboarding.pt-BR.md`](docs/onboarding.pt-BR.md) |
+| **Arquitetura & regras de import em camadas** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| **Operações (Docker, env vars, FAQ, roadmap)** | [`docs/operations.pt-BR.md`](docs/operations.pt-BR.md) |
+| **Modo Web UI (`huu --web`)** | [`docs/WEB-UI.md`](docs/WEB-UI.md) |
+| **Schema JSON do pipeline** | [`docs/pipeline-json-guide.md`](docs/pipeline-json-guide.md) |
+| **Internals do isolamento de portas** | [`docs/PORT-SHIM.md`](docs/PORT-SHIM.md) |
+| **Referência de teclado** | [`docs/KEYBOARD.md`](docs/KEYBOARD.md) |
+| **Catálogo de skills de agente** | [`agent-skills.md`](agent-skills.md) |
 | **Changelog** | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ---
 
-## License
+## Licença
 
-`huu` (the runner) is licensed under the **Apache License 2.0**. See
-[LICENSE](LICENSE) for the full text. You're free to use, modify, and
-redistribute commercially and non-commercially, with attribution and a
-copy of the license.
+`huu` (o runner) é licenciado sob **Apache License 2.0**. Veja
+[LICENSE](LICENSE) pro texto completo. Você é livre pra usar,
+modificar e redistribuir comercialmente e não-comercialmente, com
+atribuição e uma cópia da licença.
 
-**Pipelines are not the runner.** The `huu-pipeline-v1` JSON format is
-an open specification. Pipelines you author or pick up from the
-community are *yours* (or the original author's): they are not
-encumbered by the runner's license. The cookbook convention is MIT or
-CC0 — use them at work, at home, anywhere.
+**Pipelines não são o runner.** O formato JSON `huu-pipeline-v1` é uma
+especificação aberta. Pipelines que você escreve ou pega da
+comunidade são *seus* (ou do autor original): eles não estão
+amarrados à licença do runner. A convenção do cookbook é MIT ou
+CC0 — use no trabalho, em casa, onde quiser.
 
 ---
 
-## Author
+## Autor
 
 **Frederico Guilherme Kluser de Oliveira**
 [kluserhuu@gmail.com](mailto:kluserhuu@gmail.com)
 
-`huu` builds on [`@mariozechner/pi-coding-agent`](https://www.npmjs.com/package/@mariozechner/pi-coding-agent)
-— a lean, multi-provider coding-agent SDK by Mario Zechner. His
-[post on the design](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/)
-is worth a read; the philosophical overlap is not coincidental.
+`huu` é construído em cima de [`@mariozechner/pi-coding-agent`](https://www.npmjs.com/package/@mariozechner/pi-coding-agent)
+— um SDK de coding agent lean e multi-provider do Mario Zechner. O
+[post dele sobre o design](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/)
+vale a leitura; a sobreposição filosófica não é coincidência.
 
-The GitHub Copilot integration uses [`@github/copilot-sdk`](https://www.npmjs.com/package/@github/copilot-sdk)
-(declared as an optional dependency) — providing subscription-based
-access for users already on a GitHub Copilot plan.
+A integração com GitHub Copilot usa
+[`@github/copilot-sdk`](https://www.npmjs.com/package/@github/copilot-sdk)
+(declarada como dependência opcional) — fornecendo acesso baseado em
+assinatura pra usuários que já têm um plano GitHub Copilot.

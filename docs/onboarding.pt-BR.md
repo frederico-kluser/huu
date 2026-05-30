@@ -2,7 +2,7 @@
 
 > **English:** [docs/onboarding.md](onboarding.md)
 
-Este é o tutorial longo do `huu`. O [README](../README.pt-BR.md) é o pitch e
+Este é o tutorial longo do `huu`. O [README](../README.md) é o pitch e
 um gostinho rápido — aqui é o passo-a-passo.
 
 ## Sumário
