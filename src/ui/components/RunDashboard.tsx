@@ -439,6 +439,7 @@ export function RunDashboard({
           focusedKey={focusedKey}
           nowMs={nowMs}
           lastLogByAgent={lastLogByAgent}
+          stageIntegrations={state.stageIntegrations}
           maxCardRows={maxCardRows}
         />
         {showLogSidebar && (
