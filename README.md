@@ -124,10 +124,19 @@ Passo a passo com prompts:
 
 ## O que mais você pode construir
 
-Um pipeline é um artefato criativo. Cinco outros defaults vêm na
+Um pipeline é um artefato criativo. Seis outros defaults vêm na
 caixa, e um autor criativo pode escrever qualquer coisa que se encaixe
 no formato **planejar → fan-out → mergear**:
 
+- **huu Agent Knowledge** (default empacotado). O conhecimento
+  progressivo levado ao limite: recon do projeto, estudo profundo por
+  arquivo convergindo em `.huu/knowledge/findings.json`, síntese de
+  tópicos, e a compilação final em **Agent Skills**
+  ([spec](https://agentskills.io/specification)) sob `.agents/skills/`
+  — uma skill por tópico mais a skill roteadora `project-knowledge`
+  que qualquer agente futuro (huu, Claude Code, Codex, Cursor) carrega
+  primeiro pra saber qual skill puxar. Um step `check` valida as
+  skills geradas e devolve pro passo anterior se algo violar a spec.
 - **Pipeline de segurança.** Escolha à mão os arquivos que quer
   auditar, passe o threat model e padrões (OWASP, CWE) como
   documentação, paralelize scans por arquivo. Etapa 1 monta um

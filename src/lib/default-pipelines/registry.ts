@@ -8,6 +8,7 @@
 // Idempotency / non-overwrite is enforced by the bootstrap, not here.
 
 import * as testSuite from './huu-test-suite.js';
+import * as agentKnowledge from './huu-agent-knowledge.js';
 import * as docsAudit from './huu-docs-audit.js';
 import * as qualityAudit from './huu-quality-audit.js';
 import * as performanceAudit from './huu-performance-audit.js';
@@ -24,6 +25,7 @@ export interface DefaultPipelineModule {
 
 export const DEFAULT_PIPELINES: readonly DefaultPipelineModule[] = [
   testSuite,
+  agentKnowledge,
   docsAudit,
   qualityAudit,
   performanceAudit,

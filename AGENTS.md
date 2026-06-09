@@ -108,6 +108,7 @@ default pipelines into `pipelines/` on first run. Each one is idempotent
 | Pipeline | What it does | Methodology |
 |---|---|---|
 | `huu Test Suite` (`_default`) | Stack detection → test runner setup → unit tests for 3 representative files + user-selected files → prune failing blocks → add coverage badge to README. | Unit-test fundamentals |
+| `huu Agent Knowledge` | Recon → per-file deep study converging into `.huu/knowledge/` (atlas + findings) → topic synthesis → materializes Agent Skills under `.agents/skills/` (one per topic + a `project-knowledge` router skill) → judge validates frontmatter/naming/router coverage, looping back on `rework`. Setup pipeline — mutates the repo. | [Agent Skills spec](https://agentskills.io/specification) + progressive knowledge |
 | `huu Docs Audit` | Inventories every doc, classifies by Diátaxis quadrant, scores the README, flags stale references, measures inline API-doc coverage. Report-only. | [Diátaxis](https://diataxis.fr/) + Awesome-README |
 | `huu Quality Audit` | Sonar-style report: cyclomatic / cognitive complexity, function/file size, parameter count, nesting depth, duplication, dead code, composite score. Report-only. | [SonarSource](https://www.sonarsource.com/resources/library/cyclomatic-complexity/) + Fowler smells |
 | `huu Performance Audit` | Static hotspot scan (N+1, big-O, sync I/O, memory leak signals), Core Web Vitals scorecard for frontends, USE-method checklist for backends/CLIs. Report-only. | [USE method](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
@@ -115,23 +116,29 @@ default pipelines into `pipelines/` on first run. Each one is idempotent
 | `huu Security Audit` | Secrets sweep (gitleaks), OWASP Top 10:2021 per-file scan (semgrep when available), dependency CVE scan, remediation roadmap. Report-only. | [OWASP Top 10](https://owasp.org/Top10/2021/) + [CWE Top 25 (2024)](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) |
 
 Only `huu Test Suite` carries `_default: true` — it's the entry the Welcome
-screen highlights. The other five are surfaced in the pipeline picker but
+screen highlights. The other six are surfaced in the pipeline picker but
 are not flagged as "the default".
 
 ### Side-effect surface
 
-The five audits are **strict report-only**: they write ONLY to
+The five audits are **report-only**: they write ONLY to
 `.huu/audits/<topic>.md` and `.huu/audits/<topic>-faq.json` (working
-files under `.huu/audits/.tmp/`). They never touch `README.md`,
-`package.json`, `requirements.txt`, `pyproject.toml`, `Cargo.toml`,
-`go.mod`, lockfiles, or any production source. Auxiliary tooling
-(gitleaks, semgrep, jscpd, lighthouse-ci, depcheck, vulture, …) is
-invoked ephemerally via `npx --yes`, `pipx run`, or vendored binaries
-under `$HOME/.huu/bin/` — never added to your project's manifests.
+files under `.huu/audits/.tmp/`), plus at most ONE `.gitignore`
+adjustment (rewriting a committed `.huu/` line to `.huu/*` +
+`!.huu/audits/` so the reports survive the stage merge — without it,
+worktree commits silently drop everything under an ignored `.huu/`).
+They never touch `README.md`, `package.json`, `requirements.txt`,
+`pyproject.toml`, `Cargo.toml`, `go.mod`, lockfiles, or any production
+source. Auxiliary tooling (gitleaks, semgrep, jscpd, lighthouse-ci,
+depcheck, vulture, …) is invoked ephemerally via `npx --yes`,
+`pipx run`, or vendored binaries under `$HOME/.huu/bin/` — never added
+to your project's manifests.
 
-The only pipeline that mutates production state is `huu Test Suite`
-(writes `huu-tests.md` to repo root + inserts a tests-coverage badge in
-`README.md`). This is intentional — it's a setup pipeline, not an audit.
+Two pipelines mutate production state by design (setup pipelines, not
+audits): `huu Test Suite` (writes `huu-tests.md` to repo root + inserts
+a tests-coverage badge in `README.md`) and `huu Agent Knowledge`
+(writes `.agents/skills/**` + `.huu/knowledge/**`, same single
+`.gitignore` adjustment rule with `!.huu/knowledge/`).
 
 Per-file steps are bounded by `Pipeline.maxNodeExecutions = 50`. Each
 per-file prompt opens with an auto-skip rule for `node_modules/`,
