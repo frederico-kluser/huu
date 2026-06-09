@@ -13,6 +13,7 @@ import type {
   PreflightResult,
   PromptStep,
   RunManifest,
+  StageIntegration,
   AgentManifestEntry,
   AgentLifecyclePhase,
   WorkStep,
@@ -57,8 +58,13 @@ function ensureGitignored(repoRoot: string, line: string): void {
     return;
   }
   const existing = readFileSync(gitignorePath, 'utf8');
-  const normalizedLines = existing.split(/\r?\n/);
-  if (normalizedLines.some((l) => l.trim() === line.trim())) return;
+  const normalizedLines = existing.split(/\r?\n/).map((l) => l.trim());
+  if (normalizedLines.includes(line.trim())) return;
+  // `dir/*` covers `dir/` for our purposes — pipelines that need to commit
+  // a subtree (e.g. `.huu/knowledge/`) rewrite `.huu/` to `.huu/*` plus a
+  // `!.huu/<subtree>/` negation. Re-appending `.huu/` here would kill the
+  // negation (git can't re-include below an excluded directory).
+  if (line.trim().endsWith('/') && normalizedLines.includes(`${line.trim()}*`)) return;
   const sep = existing.endsWith('\n') ? '' : '\n';
   appendFileSync(gitignorePath, sep + line + '\n', 'utf8');
 }
@@ -192,6 +198,13 @@ export class Orchestrator {
    * repeated step names with monotonically increasing visitIndex/runs.
    */
   private executionTrace: ExecutionTraceEntry[] = [];
+  /**
+   * Per-stage-visit merge history. One entry per WorkStep visit, created
+   * in `pending` when the stage's agents start and advanced through
+   * merging/conflict_resolving/done so the dashboards can render a merge
+   * card instead of freezing during `status === 'integrating'`.
+   */
+  private stageIntegrations: StageIntegration[] = [];
 
   constructor(
     private config: AppConfig,
@@ -233,6 +246,7 @@ export class Orchestrator {
       completedTasks: this.completedTasks,
       totalTasks: this.totalTasksAcrossStages,
       integrationStatus: this.integrationStatus,
+      stageIntegrations: [...this.stageIntegrations],
       startedAt: this.startedAt,
       elapsedMs: this.startedAt > 0 ? Date.now() - this.startedAt : 0,
       concurrency: this.instanceCount,
@@ -633,6 +647,19 @@ export class Orchestrator {
           level: 'info',
           message: `=== step ${visitIndex}: ${workStep.name} (run ${runs})`,
         });
+        // Merge card for this stage visit — TODO column while the agents run.
+        this.stageIntegrations.push({
+          visitIndex,
+          stepIndex: stepIdx,
+          stageName: workStep.name,
+          runs,
+          phase: 'pending',
+          modelId: this.pipeline.integrationModelId ?? this.config.modelId,
+          resolverUsed: false,
+          branchesMerged: [],
+          branchesPending: [],
+          conflicts: [],
+        });
         this.emit();
 
         await this.executeTaskPool(stageTasks, workStep);
@@ -641,8 +668,8 @@ export class Orchestrator {
 
         // Stage integration
         this.status = 'integrating';
-        this.emit();
-        const merged = await this.runStageIntegration(stageTasks);
+        this.upsertStageIntegration(visitIndex, { phase: 'merging', startedAt: Date.now() });
+        const merged = await this.runStageIntegration(stageTasks, visitIndex);
         if (!merged && !this.continueOnConflict) {
           this.status = 'error';
           this.log({ level: 'error', message: 'stage integration failed (conflicts unresolved)' });
@@ -699,10 +726,18 @@ export class Orchestrator {
       } else if (this.aborted && this.status !== 'error') {
         this.status = 'done';
       }
+      // Sweep merge cards that never reached a terminal phase (abort or
+      // mid-stage error): without this they'd sit in TODO/DOING forever.
+      this.stageIntegrations = this.stageIntegrations.map((e) =>
+        e.phase === 'pending' || e.phase === 'merging' || e.phase === 'conflict_resolving'
+          ? { ...e, phase: 'error' as const, error: e.error ?? 'aborted', finishedAt: e.finishedAt ?? Date.now() }
+          : e,
+      );
       if (this.manifest) {
         this.manifest.finishedAt = Date.now();
         this.manifest.status = this.status === 'done' ? 'done' : 'error';
         this.manifest.executionTrace = this.executionTrace;
+        this.manifest.stageIntegrations = this.stageIntegrations;
       }
       this.emit();
 
@@ -1244,7 +1279,18 @@ export class Orchestrator {
     }
   }
 
-  private async runStageIntegration(stageTasks: AgentTask[]): Promise<boolean> {
+  /**
+   * Patch the merge-card entry for a stage visit and notify subscribers.
+   * Replaces the entry immutably so React consumers see a fresh reference.
+   */
+  private upsertStageIntegration(visitIndex: number, patch: Partial<StageIntegration>): void {
+    const idx = this.stageIntegrations.findIndex((e) => e.visitIndex === visitIndex);
+    if (idx === -1) return;
+    this.stageIntegrations[idx] = { ...this.stageIntegrations[idx]!, ...patch };
+    this.emit();
+  }
+
+  private async runStageIntegration(stageTasks: AgentTask[], visitIndex: number): Promise<boolean> {
     const integrationPath = this.manifest!.integrationWorktreePath;
     const integrationBranch = this.manifest!.integrationBranch;
     const repoRoot = this.preflight!.repoRoot;
@@ -1291,18 +1337,32 @@ export class Orchestrator {
         level: 'warn',
         message: `stage produced no eligible entries (0/${stageTasks.length} agents committed)`,
       });
+      this.upsertStageIntegration(visitIndex, {
+        phase: 'skipped',
+        finishedAt: Date.now(),
+        lastLog: `0/${stageTasks.length} agents committed — nothing to merge`,
+      });
       return true;
     }
 
     if (this.conflictResolverFactory) {
       // LLM-resolved path: try deterministic merge, then fall back to integration agent.
+      const effectiveConfig = this.pipeline.integrationModelId
+        ? { ...this.config, modelId: this.pipeline.integrationModelId }
+        : this.config;
       const resolution = await runStageIntegrationWithResolver(eligibleEntries, {
         repoRoot,
         integrationWorktreePath: integrationPath,
         integrationBranch,
         runId,
-        config: this.config,
+        config: effectiveConfig,
         resolverFactory: this.conflictResolverFactory,
+        onPhase: () => {
+          this.upsertStageIntegration(visitIndex, {
+            phase: 'conflict_resolving',
+            resolverUsed: true,
+          });
+        },
         onEvent: (agentId, event) => {
           // Forward integration-agent events into the run logs.
           // Integration agent uses the reserved id 9999.
@@ -1312,12 +1372,22 @@ export class Orchestrator {
               message: event.message,
               agentId,
             });
+            this.upsertStageIntegration(visitIndex, { lastLog: event.message });
           } else if (event.type === 'error') {
             this.log({ level: 'error', message: event.message, agentId });
+            this.upsertStageIntegration(visitIndex, { lastLog: event.message });
           }
         },
       });
       this.mergeIntegrationStatus(resolution.status);
+      this.upsertStageIntegration(visitIndex, {
+        phase: resolution.success ? 'done' : 'error',
+        finishedAt: Date.now(),
+        branchesMerged: [...resolution.status.branchesMerged],
+        branchesPending: [...resolution.status.branchesPending],
+        conflicts: resolution.status.conflicts.map((c) => ({ ...c })),
+        error: resolution.errorMessage,
+      });
       this.log({
         level: resolution.success ? 'info' : 'error',
         message: resolution.success
@@ -1339,6 +1409,16 @@ export class Orchestrator {
     const hasIssues =
       stageStatus.conflicts.length > 0 ||
       stageStatus.branchesPending.length > 0;
+    this.upsertStageIntegration(visitIndex, {
+      phase: hasIssues ? 'error' : 'done',
+      finishedAt: Date.now(),
+      branchesMerged: [...stageStatus.branchesMerged],
+      branchesPending: [...stageStatus.branchesPending],
+      conflicts: stageStatus.conflicts.map((c) => ({ ...c })),
+      error: hasIssues
+        ? `${stageStatus.conflicts.length} conflict(s), ${stageStatus.branchesPending.length} pending (no resolver)`
+        : undefined,
+    });
     this.log({
       level: hasIssues ? 'error' : 'info',
       message: `merged ${stageStatus.branchesMerged.length}/${eligibleEntries.length} branches; ${stageStatus.conflicts.length} conflicts; ${stageStatus.branchesPending.length} pending` +

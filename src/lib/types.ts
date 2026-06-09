@@ -160,6 +160,13 @@ export interface Pipeline {
    * distance — leaving it on by default and letting users opt out.
    */
   portAllocation?: PortAllocationConfig;
+  /**
+   * Optional model override for the merge/integration agent (the conflict
+   * resolver that runs in the integration worktree between stages). Same
+   * spirit as `WorkStep.modelId`: falls back to `AppConfig.modelId` when
+   * undefined.
+   */
+  integrationModelId?: string;
 }
 
 export interface PortAllocationConfig {
@@ -205,6 +212,8 @@ export interface RunManifest {
    * dashboard / run-log have a single source of truth.
    */
   executionTrace?: ExecutionTraceEntry[];
+  /** Per-stage-visit merge history (mirrors `OrchestratorState.stageIntegrations`). */
+  stageIntegrations?: StageIntegration[];
 }
 
 export interface ExecutionTraceEntry {
@@ -321,6 +330,8 @@ export interface OrchestratorState {
   completedTasks: number;
   totalTasks: number;
   integrationStatus: IntegrationStatus;
+  /** Per-stage-visit merge history — drives the kanban merge cards. */
+  stageIntegrations: StageIntegration[];
   startedAt: number;
   elapsedMs: number;
   concurrency: number;
@@ -343,6 +354,44 @@ export interface IntegrationConflict {
   file: string;
   branches: string[];
   resolved: boolean;
+}
+
+export type StageIntegrationPhase =
+  | 'pending'
+  | 'merging'
+  | 'conflict_resolving'
+  | 'done'
+  | 'error'
+  | 'skipped';
+
+/**
+ * Per-stage-visit merge record. One entry is created for every WorkStep
+ * visit (loops create fresh entries) so the dashboards can render the merge
+ * as a kanban card flowing TODO → DOING → DONE instead of the UI appearing
+ * frozen while `OrchestratorState.status === 'integrating'`. Unlike
+ * `IntegrationStatus` (which is cumulative across the whole run), entries
+ * here are scoped to a single stage merge.
+ */
+export interface StageIntegration {
+  /** visitIndex of the WorkStep visit this merge follows — unique even with loops. */
+  visitIndex: number;
+  /** Index of the work step in `pipeline.steps` (for editor/model lookups). */
+  stepIndex: number;
+  stageName: string;
+  /** 1-based per-step iteration counter at this visit (= `$runs`). */
+  runs: number;
+  phase: StageIntegrationPhase;
+  /** Effective integration model: `pipeline.integrationModelId ?? config.modelId`. */
+  modelId: string;
+  /** True once the LLM conflict resolver was actually spawned. */
+  resolverUsed: boolean;
+  branchesMerged: string[];
+  branchesPending: string[];
+  conflicts: IntegrationConflict[];
+  lastLog?: string;
+  error?: string;
+  startedAt?: number;
+  finishedAt?: number;
 }
 
 export interface LogEntry {

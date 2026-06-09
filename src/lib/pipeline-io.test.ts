@@ -47,6 +47,30 @@ describe('pipeline-io', () => {
     expect(importPipeline(file)).toEqual(original);
   });
 
+  it('round-trips integrationModelId and portAllocation', () => {
+    const original: Pipeline = {
+      name: 'with-integration-model',
+      steps: [{ name: 'S', prompt: 'p', files: [] }],
+      integrationModelId: 'anthropic/claude-sonnet-4.6',
+      portAllocation: { basePort: 56000, windowSize: 12, enabled: true },
+    };
+    const file = join(tmp, 'integration-model.pipeline.json');
+    exportPipeline(original, file);
+    expect(importPipeline(file)).toEqual(original);
+  });
+
+  it('keeps integrationModelId absent when not set', () => {
+    const original: Pipeline = {
+      name: 'no-integration-model',
+      steps: [{ name: 'S', prompt: 'p', files: [] }],
+    };
+    const file = join(tmp, 'no-integration-model.pipeline.json');
+    exportPipeline(original, file);
+    const restored = importPipeline(file);
+    expect(restored).toEqual(original);
+    expect('integrationModelId' in restored).toBe(false);
+  });
+
   it('accepts a raw pipeline JSON without the format wrapper', () => {
     const file = join(tmp, 'raw.json');
     writeFileSync(

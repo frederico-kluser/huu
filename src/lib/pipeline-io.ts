@@ -57,6 +57,12 @@ const CheckStepSchema = z.object({
  */
 const PipelineStepSchema = z.union([CheckStepSchema, WorkStepSchema]);
 
+const PortAllocationSchema = z.object({
+  basePort: z.number().int().positive().optional(),
+  windowSize: z.number().int().positive().optional(),
+  enabled: z.boolean().optional(),
+});
+
 export const PipelineSchema = z.object({
   name: z.string().min(1),
   steps: z.array(PipelineStepSchema).min(1),
@@ -64,6 +70,8 @@ export const PipelineSchema = z.object({
   singleFileCardTimeoutMs: z.number().int().positive().optional(),
   maxRetries: z.number().int().min(0).max(3).optional(),
   maxNodeExecutions: z.number().int().positive().max(1000).optional(),
+  portAllocation: PortAllocationSchema.optional(),
+  integrationModelId: z.string().min(1).optional(),
   _default: z.boolean().optional(),
 }).superRefine((pipeline, ctx) => {
   validateTopology(pipeline as Pipeline, ctx);

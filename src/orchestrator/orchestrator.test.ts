@@ -112,6 +112,135 @@ describe('multi-stage pipeline', () => {
     }
   });
 
+  it('tracks per-stage merge cards through pending → merging → done', async () => {
+    const pipeline: Pipeline = {
+      name: 'merge-cards',
+      steps: [
+        { name: 'stage1', prompt: 's1', files: [] },
+        { name: 'stage2', prompt: 's2', files: [] },
+      ],
+    };
+
+    const orch = new Orchestrator(
+      { apiKey: 'stub', modelId: 'stub-model', backend: 'stub' },
+      pipeline,
+      scratch,
+      okFactory,
+      { initialConcurrency: 2 },
+    );
+
+    const phasesByVisit = new Map<number, Set<string>>();
+    orch.subscribe((state) => {
+      for (const e of state.stageIntegrations) {
+        if (!phasesByVisit.has(e.visitIndex)) phasesByVisit.set(e.visitIndex, new Set());
+        phasesByVisit.get(e.visitIndex)!.add(e.phase);
+      }
+    });
+
+    const result = await orch.start();
+
+    expect(result.manifest.status).toBe('done');
+    const integrations = result.manifest.stageIntegrations!;
+    expect(integrations).toHaveLength(2);
+    for (const entry of integrations) {
+      expect(entry.phase).toBe('done');
+      expect(entry.branchesMerged).toHaveLength(1);
+      expect(entry.resolverUsed).toBe(false);
+      expect(entry.modelId).toBe('stub-model');
+      expect(entry.startedAt).toBeDefined();
+      expect(entry.finishedAt).toBeDefined();
+    }
+    expect(integrations.map((e) => e.stageName)).toEqual(['stage1', 'stage2']);
+    // The card must have been observable in TODO (pending) and DOING (merging).
+    expect(phasesByVisit.get(1)).toContain('pending');
+    expect(phasesByVisit.get(1)).toContain('merging');
+  });
+
+  it('passes integrationModelId to the conflict resolver and marks resolverUsed', async () => {
+    const originalMerge = GitClient.prototype.merge;
+    let callCount = 0;
+    GitClient.prototype.merge = async function (worktreePath: string, branchName: string) {
+      callCount++;
+      if (callCount === 1) {
+        return { success: false, conflicts: ['conflict.txt'] };
+      }
+      return originalMerge.call(this, worktreePath, branchName);
+    };
+
+    const pipeline: Pipeline = {
+      name: 'integration-model',
+      steps: [{ name: 'stage1', prompt: 's1', files: [] }],
+      integrationModelId: 'resolver-model',
+    };
+
+    const capturedModelIds: string[] = [];
+    const resolverFactory: AgentFactory = async (task, config, _hint, _cwd, onEvent) => ({
+      agentId: task.agentId,
+      task,
+      async prompt(_message: string): Promise<void> {
+        capturedModelIds.push(config.modelId);
+        onEvent({ type: 'log', message: 'resolving conflicts' });
+      },
+      async abort(): Promise<void> {},
+      async dispose(): Promise<void> {},
+    });
+
+    const orch = new Orchestrator(
+      { apiKey: 'stub', modelId: 'stub-model', backend: 'stub' },
+      pipeline,
+      scratch,
+      okFactory,
+      { initialConcurrency: 1, conflictResolverFactory: resolverFactory },
+    );
+
+    const result = await orch.start();
+
+    GitClient.prototype.merge = originalMerge;
+
+    expect(result.manifest.status).toBe('done');
+    expect(capturedModelIds).toEqual(['resolver-model']);
+    const integrations = result.manifest.stageIntegrations!;
+    expect(integrations).toHaveLength(1);
+    expect(integrations[0]!.phase).toBe('done');
+    expect(integrations[0]!.resolverUsed).toBe(true);
+    expect(integrations[0]!.modelId).toBe('resolver-model');
+  });
+
+  it('marks the merge card skipped when no agent commits', async () => {
+    const noChangesFactory: AgentFactory = async (task, _config, _hint, _cwd, onEvent) => ({
+      agentId: task.agentId,
+      task,
+      async prompt(_message: string): Promise<void> {
+        onEvent({ type: 'done' });
+      },
+      async abort(): Promise<void> {},
+      async dispose(): Promise<void> {},
+    });
+
+    const pipeline: Pipeline = {
+      name: 'no-changes',
+      steps: [{ name: 'stage1', prompt: 's1', files: [] }],
+      // Keep the worktree pristine — the default port allocation writes
+      // .env.huu/.huu-bin into it, which would count as agent changes here.
+      portAllocation: { enabled: false },
+    };
+
+    const orch = new Orchestrator(
+      { apiKey: 'stub', modelId: 'stub-model', backend: 'stub' },
+      pipeline,
+      scratch,
+      noChangesFactory,
+      { initialConcurrency: 1 },
+    );
+
+    const result = await orch.start();
+
+    expect(result.manifest.status).toBe('done');
+    const integrations = result.manifest.stageIntegrations!;
+    expect(integrations).toHaveLength(1);
+    expect(integrations[0]!.phase).toBe('skipped');
+  });
+
   it('fails the run when a merge fails for a non-conflict reason', async () => {
     const originalMerge = GitClient.prototype.merge;
     let callCount = 0;
