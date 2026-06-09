@@ -7,6 +7,23 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
+### Added
+
+- **`Pipeline.integrationModelId`** — pipeline-level model override for the merge/integration agent (the conflict resolver that runs between stages). Falls back to the run's global model. Editable in the TUI pipeline editor (`T` → "Integration agent model", backed by the model selector) and in the web pipeline editor; documented in `docs/pipeline-json-guide.md`.
+- **Merge cards on the kanban** — every stage visit now creates a `StageIntegration` entry (`OrchestratorState.stageIntegrations`, persisted to `manifest.stageIntegrations`) that both dashboards render as a display-only card flowing TODO → DOING → DONE (`pending → merging → conflict_resolving → done/error/skipped`), with live last-log, branches/conflicts counts, elapsed time and the effective integration model. The UI no longer looks frozen during `status: integrating`. TUI: `RunKanban`; web: new `IntegrationPill` molecule in `KanbanBoard`. The `conflict_resolving` state uses the AI color token (`theme.ai`); the deterministic merge stays cyan.
+- **`huu Agent Knowledge` default pipeline** — studies the project progressively (recon → per-file deep study → topic synthesis, accumulating into `.huu/knowledge/atlas.md` + `findings.json`) and compiles the knowledge into Agent Skills under `.agents/skills/` following the [agentskills.io](https://agentskills.io/specification) spec: one skill per topic plus a `project-knowledge` router skill that any future agent loads first. A check step validates frontmatter/naming/router coverage and loops back to the materialize step on `rework` (max 3 runs; `approved` is the default outcome). Setup pipeline — mutates the repo by design.
+- **`MANIFESTO.md` + `MANIFESTO.en.md`** — the project thesis ("deterministic in method, not in result", BSP over git), including an honest prior-art counterpoint section. Linked from both READMEs.
+
+### Changed
+
+- **Progressive knowledge protocol across the six bundled defaults** (new shared `src/lib/default-pipelines/knowledge-protocol.ts`): project-scope steps that previously acted blind now read the run's findings JSON before acting and append after (re-read + dedupe, append-only); findings gain optional `priority`/`fixability` fields that the final consolidation steps use to order recommendations; audit bootstraps gain a `.gitignore` persistence check (a committed `.huu/` line is rewritten to `.huu/*` + `!.huu/audits/` so reports survive the stage merge — previously they were silently dropped). Test Suite: step 2 records its 3 picks as a `category:"selection"` entry, step 3 builds on it instead of re-testing, step 4 closes the loop with a `category:"run-summary"` entry. Note: pipeline bootstrap is skip-if-exists, so already-materialized `pipelines/*.json` keep their old prompts — delete the file to re-materialize.
+- `ensureGitignored()` now treats an existing `dir/*` line as satisfying `dir/`, so it no longer re-appends `.huu/` after a user adopts the negation pattern.
+
+### Fixed
+
+- `portAllocation` was silently stripped from pipelines on import/export round-trips (missing from the Zod schema).
+- `huu Security Audit` step 5 told the agent to add a README badge while its own HARD RULES forbid it; `huu Quality Audit` step 1 allowed `package.json` devDeps additions against its own report-only rule; quality/performance step-5 names still said "+ badge". All report-only contracts are now consistent.
+
 ## [1.2.0] - 2026-05-21
 
 ### Added

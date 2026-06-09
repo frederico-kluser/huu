@@ -15,7 +15,8 @@ Documents how pipelines are defined, decomposed into tasks, and how agents
 ## Boundaries
 
 **Do:**
-- Follow the pipeline's Zod schema (v2): `{ _format: "huu-pipeline-v2", exportedAt, pipeline: { name, steps: PipelineStep[], maxNodeExecutions? } }`. v1 (`{ name, prompt, files, scope?, modelId? }` only, no `type`) is still accepted — `type` defaults to `'work'`.
+- Follow the pipeline's Zod schema (v2): `{ _format: "huu-pipeline-v2", exportedAt, pipeline: { name, steps: PipelineStep[], maxNodeExecutions?, portAllocation?, integrationModelId? } }`. v1 (`{ name, prompt, files, scope?, modelId? }` only, no `type`) is still accepted — `type` defaults to `'work'`.
+- `Pipeline.integrationModelId` pins the merge/integration agent's model (falls back to `AppConfig.modelId`). The orchestrator computes the effective config; `integration-agent.ts` stays pipeline-agnostic.
 - `PipelineStep` is a discriminated union: `WorkStep` (`type: 'work'` or omitted) | `CheckStep` (`type: 'check'`). Narrow with `isWorkStep` / `isCheckStep` from `lib/types.ts`.
 - Use `decomposeTasks()` to convert **work** steps into `AgentTask[]` — 1 task per file, or 1 whole-project. Check steps do NOT decompose into worker pool tasks; they spawn a single judge agent via `check-evaluator.ts` (reserved `agentId 9998`).
 - Implement new agents as `AgentFactory` following the interface in `orchestrator/types.ts`
@@ -55,6 +56,7 @@ The runtime is a cursor walking a directed graph:
 - On `WorkStep` revisit (`runs > 1`): allocate fresh agent IDs.
 - Honor `WorkStep.next` override; otherwise fall through to `steps[idx+1]`; `null` = end.
 - Persist `executionTrace` into `manifest.executionTrace`.
+- Per WorkStep visit, push a `StageIntegration` entry (`stageIntegrations`) and advance its phase `pending → merging → conflict_resolving? → done|error|skipped` — both dashboards render it as the merge card. New terminal paths in the orchestrator MUST sweep non-terminal entries to `error` (see the end-of-run sweep in `start()`), or cards hang in DOING forever.
 
 ### AgentFactory
 ```typescript

@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <strong>English</strong> · <a href="README.md">Português (BR)</a>
+  <a href="MANIFESTO.en.md">Manifesto</a> · <strong>English</strong> · <a href="README.md">Português (BR)</a>
 </p>
 
 <p align="center">
