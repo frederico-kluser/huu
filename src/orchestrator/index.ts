@@ -46,8 +46,9 @@ import {
 import { ensureNativeShim, type NativeShim } from './native-shim.js';
 import { AutoScaler } from './auto-scaler.js';
 import { getSystemMetrics } from '../lib/resource-monitor.js';
-import { existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { join, dirname, isAbsolute } from 'node:path';
 import { log as dlog } from '../lib/debug-logger.js';
 import { checkOpenRouterReachable } from '../lib/openrouter.js';
 
@@ -67,6 +68,35 @@ function ensureGitignored(repoRoot: string, line: string): void {
   if (line.trim().endsWith('/') && normalizedLines.includes(`${line.trim()}*`)) return;
   const sep = existing.endsWith('\n') ? '' : '\n';
   appendFileSync(gitignorePath, sep + line + '\n', 'utf8');
+}
+
+/**
+ * Agent worktrees check out the COMMITTED .gitignore, so the host-side
+ * `ensureGitignored` additions never reach them. In repos that haven't
+ * committed the huu entries, every parallel agent commits its own
+ * `.env.huu`/`.huu-bin` (different ports → different content) and the
+ * stage merge hits a guaranteed add/add conflict. `info/exclude` lives in
+ * the COMMON git dir and applies to every worktree without touching the
+ * user's tracked files — the right home for these runtime-only paths.
+ */
+function ensureWorktreeExcluded(repoRoot: string, lines: string[]): void {
+  try {
+    const rel = execFileSync(
+      'git',
+      ['-C', repoRoot, 'rev-parse', '--git-path', 'info/exclude'],
+      { encoding: 'utf8' },
+    ).trim();
+    const excludePath = isAbsolute(rel) ? rel : join(repoRoot, rel);
+    mkdirSync(dirname(excludePath), { recursive: true });
+    const existing = existsSync(excludePath) ? readFileSync(excludePath, 'utf8') : '';
+    const have = new Set(existing.split(/\r?\n/).map((l) => l.trim()));
+    const missing = lines.filter((l) => !have.has(l));
+    if (missing.length === 0) return;
+    const sep = existing.length === 0 || existing.endsWith('\n') ? '' : '\n';
+    writeFileSync(excludePath, existing + sep + missing.join('\n') + '\n', 'utf8');
+  } catch {
+    // Best effort — a failure here only degrades to the old behavior.
+  }
 }
 
 export type OrchestratorSubscriber = (state: OrchestratorState) => void;
@@ -451,6 +481,7 @@ export class Orchestrator {
       ensureGitignored(this.preflight.repoRoot, AGENT_ENV_FILE);
       ensureGitignored(this.preflight.repoRoot, `${AGENT_BIN_DIR}/`);
       ensureGitignored(this.preflight.repoRoot, '.huu-cache/');
+      ensureWorktreeExcluded(this.preflight.repoRoot, [AGENT_ENV_FILE, `${AGENT_BIN_DIR}/`]);
 
       if (this.portAllocator.isEnabled()) {
         this.nativeShim = ensureNativeShim(this.preflight.repoRoot, (msg) => {

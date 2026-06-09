@@ -1,7 +1,7 @@
 import React from 'react';
 import { render } from 'ink';
 import { RunDashboard } from '../src/ui/components/RunDashboard.js';
-import { stubAgentFactory } from '../src/orchestrator/stub-agent.js';
+import { stubAgentFactory } from '../src/orchestrator/backends/stub/factory.js';
 import type { Pipeline } from '../src/lib/types.js';
 
 const pipeline: Pipeline = {
@@ -14,7 +14,7 @@ const pipeline: Pipeline = {
 
 render(
   <RunDashboard
-    config={{ apiKey: 'stub', modelId: 'stub/demo-model' }}
+    config={{ apiKey: 'stub', modelId: 'stub/demo-model', backend: 'stub' }}
     pipeline={pipeline}
     cwd={process.cwd()}
     agentFactory={stubAgentFactory}

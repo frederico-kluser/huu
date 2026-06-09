@@ -206,6 +206,39 @@ describe('multi-stage pipeline', () => {
     expect(integrations[0]!.modelId).toBe('resolver-model');
   });
 
+  it('parallel agents never conflict on .env.huu (worktree info/exclude)', async () => {
+    // The scratch repo's COMMITTED .gitignore lacks the huu entries — the
+    // worktrees would otherwise each commit their own .env.huu (different
+    // ports → different content) and the stage merge would add/add-conflict.
+    const pipeline: Pipeline = {
+      name: 'parallel-envhuu',
+      steps: [{ name: 'stage1', prompt: 'p', files: ['a.ts', 'b.ts'] }],
+    };
+
+    const orch = new Orchestrator(
+      { apiKey: 'stub', modelId: 'stub-model', backend: 'stub' },
+      pipeline,
+      scratch,
+      okFactory,
+      { initialConcurrency: 2 },
+    );
+
+    const result = await orch.start();
+
+    expect(result.manifest.status).toBe('done');
+    const entry = result.manifest.stageIntegrations![0]!;
+    expect(entry.phase).toBe('done');
+    expect(entry.branchesMerged).toHaveLength(2);
+    expect(entry.conflicts).toHaveLength(0);
+
+    const git = new GitClient(scratch);
+    const tree = await git.exec(
+      `ls-tree -r --name-only ${result.manifest.integrationBranch}`,
+    );
+    expect(tree).not.toContain('.env.huu');
+    expect(tree).not.toContain('.huu-bin');
+  });
+
   it('marks the merge card skipped when no agent commits', async () => {
     const noChangesFactory: AgentFactory = async (task, _config, _hint, _cwd, onEvent) => ({
       agentId: task.agentId,
