@@ -7,14 +7,26 @@
 // of `App` mount via the default-pipelines registry.
 
 import type { Pipeline } from '../types.js';
+import {
+  knowledgeProtocol,
+  persistenceCheck,
+  KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
+  KNOWLEDGE_ORDERING_NOTE,
+} from './knowledge-protocol.js';
 
 export const DEFAULT_PIPELINE_FILENAME = 'huu-docs-audit.pipeline.json';
 export const DEFAULT_PIPELINE_NAME = 'huu Docs Audit';
 
+const FAQ_PATH = './.huu/audits/docs-faq.json';
+const FAQ_SCHEMA_LINE =
+  '{ "summary": "<=256 chars", "knowledge": "<=5000 chars", "path": "<doc file>", "category": "diataxis|readme|staleness|api-doc|recommendation", "severity": "info|warn|critical" }';
+
 const STEP1_PROMPT = `You are huu's documentation-audit bootstrap agent. Goal: enumerate every documentation artifact in the repo, write \`.huu/audits/docs.md\` with the audit scaffold, and initialize \`.huu/audits/docs-faq.json\` as the per-file finding store.
 
 === STEP 0 — REPORT-ONLY HARD RULE ===
-You may NOT modify any file in the repo OTHER than the audit artifacts under \`.huu/audits/\` (and \`.huu/audits/.tmp/\` for working files). If a tool requires installation, use \`npx --yes <tool>\` (Node), \`pipx run <tool>\` (Python), or vendored binaries under \`$HOME/.huu/bin/\`. NEVER touch package.json, requirements.txt, pyproject.toml, Cargo.toml, go.mod, lockfiles, or any production source. Create the output directory with \`mkdir -p .huu/audits/.tmp/docs\` before writing.
+You may NOT modify any file in the repo OTHER than the audit artifacts under \`.huu/audits/\` (and \`.huu/audits/.tmp/\` for working files) plus the single \`.gitignore\` adjustment described below. If a tool requires installation, use \`npx --yes <tool>\` (Node), \`pipx run <tool>\` (Python), or vendored binaries under \`$HOME/.huu/bin/\`. NEVER touch package.json, requirements.txt, pyproject.toml, Cargo.toml, go.mod, lockfiles, or any production source. Create the output directory with \`mkdir -p .huu/audits/.tmp/docs\` before writing.
+
+${persistenceCheck('audits')}
 
 === STEP 1 — Enumerate documentation ===
 Find every file that is documentation. Cast a wide net:
@@ -71,8 +83,9 @@ If present and corrupted: replace with \`[]\` and note in commit message.
 
 Schema per entry (appended by later steps):
 \`\`\`json
-{ "summary": "<=256 chars", "knowledge": "<=5000 chars", "path": "<doc file>", "category": "diataxis|readme|staleness|api-doc|recommendation", "severity": "info|warn|critical" }
+${FAQ_SCHEMA_LINE}
 \`\`\`
+${KNOWLEDGE_OPTIONAL_FIELDS_NOTE}
 
 === HARD RULES ===
 - No source-code changes outside the new files above + \`.huu/audits/.tmp/docs/files.txt\`.
@@ -140,6 +153,9 @@ Diátaxis anti-patterns flagged: X (see findings in .huu/audits/docs-faq.json)
 
 const STEP3_PROMPT = `You are at step 3 — README quality scorecard. Goal: score the project's README against the Awesome-README rubric (https://github.com/matiassingers/awesome-readme), append findings, and populate section "3. README scorecard" of \`.huu/audits/docs.md\`.
 
+${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
+In particular: step 2 already classified the README under category "diataxis" — read that finding first; a README flagged as a tutorial/reference mix should lose points on the relevant checks below, citing the prior finding.
+
 === STEP 1 — Locate the README ===
 Search case-insensitively for \`README*\` at the repo root. If multiple (e.g. README.md + README.es.md), score the English one if present; otherwise the largest by byte size. If NO README exists, write the scorecard with all checks failing and severity=critical.
 
@@ -184,6 +200,9 @@ Replace the placeholder with:
 - Update ONLY section "3" of \`.huu/audits/docs.md\`.`;
 
 const STEP4_PROMPT = `You are at step 4 — staleness scan. Goal: detect docs that reference removed files, contradict current code, or have not been touched in > 12 months. Append findings and populate section "4. Staleness scan" of \`.huu/audits/docs.md\`.
+
+${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
+In particular: low-scoring docs from steps 2–3 (categories "diataxis" and "readme") are the most likely to also be stale — check those first and cross-reference the prior finding in your "knowledge" field.
 
 === STEP 1 — Build a list of doc files to scan ===
 Use \`.huu/audits/.tmp/docs/files.txt\` from step 1. If absent: re-enumerate (same heuristic).
@@ -298,7 +317,8 @@ Files with critical gaps (< 50% docs):
 \`\`\`
 
 === STEP 3 — Compute section "6. Recommendations" ===
-Synthesize from ALL findings into prioritized recommendations:
+Synthesize from ALL findings into prioritized recommendations.
+${KNOWLEDGE_ORDERING_NOTE}
 
 ### Critical (do these first)
 - Bullet for each critical-severity finding, grouped by category. Include the path and a 1-line action.

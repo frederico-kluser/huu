@@ -81,8 +81,9 @@ Required content (English, concise, no fluff):
 ## Accumulated FAQ
 See \`huu-tests-faq.json\` — incremental knowledge base populated by the next pipeline steps. Schema per item:
 \`\`\`json
-{ "summary": "string up to 256 chars", "knowledge": "string up to 5000 chars" }
+{ "summary": "string up to 256 chars", "knowledge": "string up to 5000 chars", "path": "<file the lesson came from — optional>", "category": "<free-form tag, e.g. 'selection', 'mocking', 'run-summary' — optional>" }
 \`\`\`
+\`path\` and \`category\` are optional and additive — entries carrying only \`summary\` + \`knowledge\` (from older runs) remain valid.
 
 === STEP 4 — Initialize huu-tests-faq.json AT THE ROOT ===
 Path: ./huu-tests-faq.json
@@ -116,8 +117,13 @@ Selection heuristic (do NOT pick trivial files):
 - Prefer files with a clear public surface (multiple exported functions/methods).
 - Cover DIVERSITY: try to take 3 distinct areas (e.g.: 1 pure util, 1 with abstractable I/O, 1 stateful/orchestrator).
 - IGNORE: purely declarative files (constants, types), entry points (index/main), generated files (dist/, build/, *.generated.*), config (eslint/prettier/tsconfig), files < 30 useful lines.
+- Check the FAQ first: if a previous run left a \`category: "selection"\` entry, prefer files NOT already covered by it.
 
-List the 3 picks before you start writing (leave them in the log).
+List the 3 picks before you start writing (leave them in the log), then APPEND one entry to \`huu-tests-faq.json\` recording them:
+\`\`\`json
+{ "summary": "Step 2 selection: <fileA>, <fileB>, <fileC>", "knowledge": "<1-2 sentences per pick: why it was representative>", "category": "selection" }
+\`\`\`
+This tells step 3's parallel agents (and future runs) which files already have fresh tests.
 
 === STEP 4 — For EACH of the 3 files ===
 a) Identify the public surface (exports, classes, functions, components).
@@ -153,9 +159,11 @@ const STEP3_PROMPT = `You are at step 3 — write tests for ONE source file: \`$
 
 === STEP 1 — REQUIRED: read BEFORE any action ===
 a) \`huu-tests.md\` at the root (runner, commands, conventions).
-b) \`huu-tests-faq.json\` at the root (array of \`{ summary, knowledge }\` — knowledge base accumulated by the previous steps; use it to avoid repeating errors other agents already solved).
+b) \`huu-tests-faq.json\` at the root (array of \`{ summary, knowledge, path?, category? }\` — knowledge base accumulated by the previous steps; use it to avoid repeating errors other agents already solved).
 
 If either is missing: abort with a clear error. Steps 1 and 2 of the pipeline are prerequisites.
+
+If the FAQ has a \`category: "selection"\` entry listing \`$file\`: step 2 already wrote fresh tests for it. Do NOT start from scratch — run the existing tests and only ADD missing edge/error cases (Case A below).
 
 === STEP 2 — Locate / create the test file for $file ===
 Follow the convention documented in huu-tests.md. Examples:
@@ -205,10 +213,11 @@ This WHOLE pipeline is about UNIT tests. No integration, no e2e.`;
 
 const STEP4_PROMPT = `You are the final agent — step 4. Goal: leave the test suite 100% green by DELETING only the test functions/blocks that keep failing, collect coverage, and update the badge in README.md.
 
-=== STEP 1 — Read huu-tests.md at the root ===
-Grab the exact commands for:
+=== STEP 1 — Read huu-tests.md AND huu-tests-faq.json at the root ===
+From \`huu-tests.md\`, grab the exact commands for:
 - Running ALL tests.
 - Measuring coverage.
+From \`huu-tests-faq.json\`, read the accumulated lessons: recurring failure causes recorded by steps 2-3 tell you WHICH failing tests are likely flaky-by-construction (delete candidates) versus signal of a real bug worth one more look before deleting.
 
 === STEP 2 — Run the full suite and identify failures ===
 Execute the "run all tests" command from huu-tests.md.
@@ -256,13 +265,19 @@ Idempotent insertion rule:
 2. Otherwise, insert the line right after the first H1 heading (\`# Title\`), with one blank line before and after.
 3. If there is no H1, insert it at the absolute top of the file.
 
-DO NOT touch other parts of the README. DO NOT touch huu-tests.md, huu-tests-faq.json, or production code.
+DO NOT touch other parts of the README. DO NOT touch huu-tests.md or production code. The only huu-tests-faq.json change allowed in this whole step is the single run-summary append from STEP 7.
 
-=== STEP 7 — Final verification ===
+=== STEP 7 — Close the knowledge loop + final verification ===
+APPEND one final entry to \`huu-tests-faq.json\` (re-read it first; preserve the array):
+\`\`\`json
+{ "summary": "Run summary: coverage <XX>%, <N> failing blocks deleted", "knowledge": "<which blocks were deleted and why, what the recurring failure causes were, what the next run should do differently>", "category": "run-summary" }
+\`\`\`
+
+Then verify:
 - "run all tests" still passes.
 - README.md contains exactly ONE line with \`img.shields.io/badge/tests-\`.
 - No test file was DELETED (only internal blocks).
-- huu-tests-faq.json is still a valid JSON array (should NOT have been touched in this step).`;
+- huu-tests-faq.json is still a valid JSON array (your run-summary append must be its ONLY change in this step).`;
 
 export function getDefaultPipeline(): Pipeline {
   return {

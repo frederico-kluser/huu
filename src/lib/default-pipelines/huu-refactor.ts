@@ -9,6 +9,11 @@
 // - Strangler Fig: https://martinfowler.com/bliki/StranglerFigApplication.html
 
 import type { Pipeline } from '../types.js';
+import {
+  persistenceCheck,
+  KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
+  KNOWLEDGE_ORDERING_NOTE,
+} from './knowledge-protocol.js';
 
 export const DEFAULT_PIPELINE_FILENAME = 'huu-refactor.pipeline.json';
 export const DEFAULT_PIPELINE_NAME = 'huu Refactor Plan';
@@ -16,7 +21,9 @@ export const DEFAULT_PIPELINE_NAME = 'huu Refactor Plan';
 const STEP1_PROMPT = `You are huu's refactoring-planner bootstrap agent. Goal: capture the current test baseline (characterization tests), scaffold \`.huu/audits/refactor.md\`, initialize \`.huu/audits/refactor-faq.json\`.
 
 === STEP 0 — REPORT-ONLY HARD RULE ===
-You may NOT modify any file in the repo OTHER than the audit artifacts under \`.huu/audits/\` (and \`.huu/audits/.tmp/\` for working files). The deliverable is a PLAN, not a refactor. NEVER touch source code, NEVER touch package.json / requirements.txt / pyproject.toml / Cargo.toml / lockfiles. Create the output directory with \`mkdir -p .huu/audits/.tmp/refactor\` before writing.
+You may NOT modify any file in the repo OTHER than the audit artifacts under \`.huu/audits/\` (and \`.huu/audits/.tmp/\` for working files) plus the single \`.gitignore\` adjustment described below. The deliverable is a PLAN, not a refactor. NEVER touch source code, NEVER touch package.json / requirements.txt / pyproject.toml / Cargo.toml / lockfiles. Create the output directory with \`mkdir -p .huu/audits/.tmp/refactor\` before writing.
+
+${persistenceCheck('audits')}
 
 === STEP 1 — Locate the test runner ===
 Look for \`huu-tests.md\` first (created by the huu Test Suite pipeline). If absent, detect the runner heuristically:
@@ -68,6 +75,7 @@ Schema:
 \`\`\`json
 { "summary": "<=256>", "knowledge": "<=5000>", "path": "<file>", "smell": "long-function|duplication|primitive-obsession|feature-envy|data-clumps|switch-statement|shotgun-surgery|divergent-change|inappropriate-intimacy|comments-as-deodorant|other", "severity": "info|warn|critical", "fowler_refactoring": "<catalog entry name or null>" }
 \`\`\`
+${KNOWLEDGE_OPTIONAL_FIELDS_NOTE}
 
 === HARD RULES ===
 - DO NOT modify production source code in this pipeline.
@@ -137,7 +145,7 @@ Score each finding:
 - warn = 2 points.
 - info = 0 points.
 
-Aggregate per file. Top 5 files by total score = the top 5 targets. Within each, pick the single highest-severity smell as the headline.
+Aggregate per file. Top 5 files by total score = the top 5 targets. Within each, pick the single highest-severity smell as the headline. Break ties by "priority" (1 first) then "fixability" (trivial first) when the findings carry those fields.
 
 === STEP 3 — Write section "3. Top 5 targets" ===
 Replace the placeholder with:
@@ -221,7 +229,8 @@ const STEP5_PROMPT = `You are the final agent — step 5. Goal: synthesize \`.hu
 Group ALL findings by their \`fowler_refactoring\` field. For each unique refactoring (e.g. "Extract Function", "Replace Conditional with Polymorphism"), count how many findings reference it.
 
 === STEP 3 — Write section "5. Recommended Fowler refactorings" ===
-Sort by count descending. For each refactoring:
+Sort by count descending. ${KNOWLEDGE_ORDERING_NOTE}
+For each refactoring:
 
 ### Extract Function (12 occurrences across 8 files)
 Catalog: https://refactoring.com/catalog/extractFunction.html

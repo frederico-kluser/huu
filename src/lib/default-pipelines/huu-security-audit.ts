@@ -8,14 +8,26 @@
 // - Secrets scanning tools: gitleaks, trufflehog, detect-secrets.
 
 import type { Pipeline } from '../types.js';
+import {
+  knowledgeProtocol,
+  persistenceCheck,
+  KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
+  KNOWLEDGE_ORDERING_NOTE,
+} from './knowledge-protocol.js';
 
 export const DEFAULT_PIPELINE_FILENAME = 'huu-security-audit.pipeline.json';
 export const DEFAULT_PIPELINE_NAME = 'huu Security Audit';
 
+const FAQ_PATH = './.huu/audits/security-faq.json';
+const FAQ_SCHEMA_LINE =
+  '{ "summary": "<=256>", "knowledge": "<=5000>", "path": "<file or \'global\'>", "category": "secret|owasp-a01..a10|cve|misc", "cwe_id": "CWE-XXX or null", "severity": "info|warn|critical", "cheatsheet": "<URL>" }';
+
 const STEP1_PROMPT = `You are huu's security-audit bootstrap agent. Goal: detect the stack, make ephemeral security scanners available, write \`.huu/audits/security.md\` scaffold, initialize \`.huu/audits/security-faq.json\`.
 
 === STEP 0 — REPORT-ONLY HARD RULE ===
-You may NOT modify any file in the repo OTHER than the audit artifacts under \`.huu/audits/\` (and \`.huu/audits/.tmp/\` for working files). If a tool requires installation, use \`npx --yes <tool>\` (Node), \`pipx run <tool>\` (Python), or vendored binaries under \`$HOME/.huu/bin/\`. NEVER touch package.json, requirements.txt, pyproject.toml, Cargo.toml, go.mod, lockfiles, or any production source. Create the output directory with \`mkdir -p .huu/audits/.tmp/security\` before writing.
+You may NOT modify any file in the repo OTHER than the audit artifacts under \`.huu/audits/\` (and \`.huu/audits/.tmp/\` for working files) plus the single \`.gitignore\` adjustment described below. If a tool requires installation, use \`npx --yes <tool>\` (Node), \`pipx run <tool>\` (Python), or vendored binaries under \`$HOME/.huu/bin/\`. NEVER touch package.json, requirements.txt, pyproject.toml, Cargo.toml, go.mod, lockfiles, or any production source. Create the output directory with \`mkdir -p .huu/audits/.tmp/security\` before writing.
+
+${persistenceCheck('audits')}
 
 === STEP 1 — Detect the stack and manifest files ===
 Identify presence of:
@@ -84,6 +96,7 @@ Schema:
 \`\`\`json
 { "summary": "<=256>", "knowledge": "<=5000>", "path": "<file or 'global'>", "category": "secret|owasp-a01|owasp-a02|owasp-a03|owasp-a04|owasp-a05|owasp-a06|owasp-a07|owasp-a08|owasp-a09|owasp-a10|cve|misc", "cwe_id": "CWE-XXX or null", "severity": "info|warn|critical", "cheatsheet": "<URL>" }
 \`\`\`
+${KNOWLEDGE_OPTIONAL_FIELDS_NOTE}
 
 === HARD RULES ===
 - DO NOT modify production source code.
@@ -91,6 +104,9 @@ Schema:
 - DO NOT call external services beyond the listed scanners (e.g. don't curl arbitrary URLs from secrets).`;
 
 const STEP2_PROMPT = `You are at step 2 — secrets sweep (whole-project). Goal: find committed secrets in current files AND in git history, redact them, append findings, populate section "2. Secrets sweep" of \`.huu/audits/security.md\`. NO code changes.
+
+${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
+In particular: step 1 recorded which scanners are actually available (and which install attempts failed) — read those findings instead of re-probing every tool.
 
 === STEP 1 — Run gitleaks (preferred) ===
 If gitleaks is available:
@@ -246,6 +262,9 @@ Severity rules:
 
 const STEP4_PROMPT = `You are at step 4 — dependency CVE scan (whole-project). Goal: scan each manifest for known-vulnerable dependencies, append findings, populate section "4. Dependency CVEs" of \`.huu/audits/security.md\`.
 
+${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
+In particular: if step 3 flagged owasp-a06 findings (unpinned CDN fetches, vendored libs), cross-reference them — a CVE in a package that step 3 already flagged at a call site deserves "priority": 1.
+
 === STEP 1 — Detect manifests ===
 From step 1, you already know which manifests exist. For each, pick the most authoritative scanner.
 
@@ -315,7 +334,7 @@ Top critical findings:
 - DO NOT call \`npm install\` or any package manager beyond the audit commands.
 - If a scanner is unavailable for a stack, write an info-severity FAQ entry and continue.`;
 
-const STEP5_PROMPT = `You are the final agent — step 5. Goal: consolidate all findings in \`.huu/audits/security-faq.json\` into a remediation roadmap, populate sections "5. Summary by severity" and "6. Remediation roadmap" of \`.huu/audits/security.md\`. Add a security badge to README.md.
+const STEP5_PROMPT = `You are the final agent — step 5. Goal: consolidate all findings in \`.huu/audits/security-faq.json\` into a remediation roadmap, populate sections "5. Summary by severity" and "6. Remediation roadmap" of \`.huu/audits/security.md\`. Report-only — README is never touched.
 
 === STEP 1 — Read inputs ===
 - \`./.huu/audits/security.md\` (sections 1–4 populated).
@@ -353,6 +372,7 @@ OWASP Top 10 breakdown:
 
 === STEP 4 — Write section "6. Remediation roadmap" ===
 Order findings into a prioritized roadmap. For each item, link to the OWASP Cheat Sheet that explains the fix.
+${KNOWLEDGE_ORDERING_NOTE}
 
 ### Tier 1 — Fix immediately (critical severity)
 1. Rotate the AWS access key in src/config.ts:42 and remove from git history (BFG / git filter-repo). https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html
