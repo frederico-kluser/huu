@@ -5,3 +5,6 @@ src/web/dist-static/
 .DS_Store
 .huu-worktrees/
 .huu/
+
+# smoke-test scratch (scripts/smoke-*.sh no macOS)
+.smoke-tmp/

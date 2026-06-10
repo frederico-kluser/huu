@@ -40,7 +40,19 @@ docker run --rm --entrypoint sh "$IMAGE" -c \
     || fail "safe.directory '*' ausente"
 
 step "bind-mount worktree consistency (gotcha §4.1)"
-REPO=$(mktemp -d)
+# O repo scratch precisa viver num caminho que a VM do Docker bind-monta.
+# No macOS o mktemp padrão cai em /var/folders/… — fora do file sharing do
+# Docker Desktop/colima (o mount chega vazio) — e o mktemp do Darwin ignora
+# TMPDIR, daí o template explícito. Default no macOS: dentro do próprio repo
+# huu (se deu pra buildar a imagem daqui, este caminho está compartilhado
+# com a VM). Override: HUU_SMOKE_TMPDIR.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ "$(uname)" = Darwin ]; then SMOKE_TMP="${HUU_SMOKE_TMPDIR:-$SCRIPT_DIR/../.smoke-tmp}"; else SMOKE_TMP="${HUU_SMOKE_TMPDIR:-${TMPDIR:-/tmp}}"; fi
+mkdir -p "$SMOKE_TMP"
+# Normaliza (sem "..") — o caminho vira alvo de -v/-w no container, onde os
+# diretórios intermediários do caminho não normalizado não existem.
+SMOKE_TMP="$(cd "$SMOKE_TMP" && pwd)"
+REPO=$(mktemp -d "$SMOKE_TMP/repo.XXXXXX")
 trap "rm -rf $REPO" EXIT
 git init -q "$REPO"
 git -C "$REPO" config user.email smoke@huu.test
