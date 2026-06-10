@@ -7,6 +7,8 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-06-10
+
 ### Added
 
 - **`Pipeline.integrationModelId`** — pipeline-level model override for the merge/integration agent (the conflict resolver that runs between stages). Falls back to the run's global model. Editable in the TUI pipeline editor (`T` → "Integration agent model", backed by the model selector) and in the web pipeline editor; documented in `docs/pipeline-json-guide.md`.
@@ -21,6 +23,8 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Fixed
 
+- `scripts/smoke-image.sh` / `scripts/smoke-pipeline.sh` now work on macOS with Docker Desktop/colima: the scratch repo moves from `mktemp -d` (which lands in `/var/folders/…`, outside the Docker VM's file sharing, so the bind mount arrived empty) to a `.smoke-tmp/` dir inside the huu repo itself (override with `HUU_SMOKE_TMPDIR`), and the path is normalized before being used as a `-v`/`-w` target (an unresolved `..` made git try to create the leading directories inside the container and fail with `Permission denied`).
+- `scripts/smoke-pipeline.sh` drove `huu --stub run pipeline.json` expecting it to finish without keyboard input — but `huu run` is interactive by contract (it opens the pipeline editor and waits for `G`), so the smoke hung forever at the editor screen. It now drives the headless `huu auto pipeline.json --config config.json` path (stub backend) and asserts the final stdout JSON has `"ok": true` instead of the TUI-only `wait_until_exit_resolved` log event.
 - **Guaranteed add/add merge conflict on `.env.huu` in fresh repos** — agent worktrees check out the *committed* `.gitignore`, so in any repo that hadn't committed the huu entries, every parallel agent committed its own `.env.huu`/`.huu-bin` (different ports → different content) and every stage merge conflicted (failing the run without a resolver, or burning an LLM call on a junk file with one). The orchestrator now writes these runtime-only paths to `.git/info/exclude` (shared by all worktrees, never touches tracked files). Found by exercising the new merge cards in a scratch repo.
 - `scripts/smoke-dashboard.tsx` was broken since the backend registry refactor (imported the long-gone `orchestrator/stub-agent.js` and didn't pass `backend: 'stub'`, so the OpenRouter key probe 401-ed the run).
 - `portAllocation` was silently stripped from pipelines on import/export round-trips (missing from the Zod schema).
@@ -300,6 +304,11 @@ Initial public release. Available on npm as `huu-pipe`
 - `safe.directory '*'` set system-wide in the image.
 
 
-[Unreleased]: https://github.com/frederico-kluser/huu/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/frederico-kluser/huu/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.3.0
+[1.2.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.2.0
+[1.1.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.1.0
+[1.0.2]: https://github.com/frederico-kluser/huu/releases/tag/v1.0.2
+[1.0.1]: https://github.com/frederico-kluser/huu/releases/tag/v1.0.1
 [0.3.1]: https://github.com/frederico-kluser/huu/releases/tag/v0.3.1
 [0.3.0]: https://github.com/frederico-kluser/huu/releases/tag/v0.3.0

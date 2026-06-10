@@ -1,6 +1,6 @@
 {
   "name": "huu-pipe",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "huu (Humans Underwrite Undertakings) — guided-execution TUI that runs LLM agent pipelines in parallel git worktrees, with serial reproducible merges stage-by-stage.",
   "author": "Frederico Guilherme Kluser de Oliveira <kluserhuu@gmail.com>",
   "license": "Apache-2.0",
