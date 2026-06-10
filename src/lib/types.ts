@@ -221,6 +221,8 @@ export interface RunManifest {
   executionTrace?: ExecutionTraceEntry[];
   /** Per-stage-visit merge history (mirrors `OrchestratorState.stageIntegrations`). */
   stageIntegrations?: StageIntegration[];
+  /** Per-check-visit judge history (mirrors `OrchestratorState.checkRuns`). */
+  checkRuns?: CheckRun[];
 }
 
 export interface ExecutionTraceEntry {
@@ -365,6 +367,8 @@ export interface OrchestratorState {
   integrationStatus: IntegrationStatus;
   /** Per-stage-visit merge history — drives the kanban merge cards. */
   stageIntegrations: StageIntegration[];
+  /** Per-check-visit judge history — drives the kanban judge cards. */
+  checkRuns: CheckRun[];
   startedAt: number;
   elapsedMs: number;
   concurrency: number;
@@ -425,6 +429,40 @@ export interface StageIntegration {
   error?: string;
   startedAt?: number;
   finishedAt?: number;
+}
+
+export type CheckRunPhase = 'judging' | 'done' | 'error';
+
+/**
+ * Per-CheckStep-visit judge record. One entry is created for every check
+ * visit (loops create fresh entries) so the dashboards can render the judge
+ * as a kanban card — DOING while it deliberates, DONE with the chosen
+ * outcome label — instead of the check being visible only in the logs.
+ */
+export interface CheckRun {
+  /** visitIndex of the CheckStep visit — unique even with loops. */
+  visitIndex: number;
+  /** Index of the check step in `pipeline.steps`. */
+  stepIndex: number;
+  stepName: string;
+  /** 1-based per-step iteration counter at this visit (= `$runs`). */
+  runs: number;
+  maxRuns?: number;
+  phase: CheckRunPhase;
+  /** Effective judge model: `step.modelId ?? config.modelId`. */
+  modelId: string;
+  /** Condition after `$runs` substitution (as the judge saw it). */
+  condition: string;
+  outcomeLabel?: string;
+  nextStepName?: string;
+  /** True when the verdict came from the LLM; false = default outcome (judge failed / maxRuns). */
+  fromJudge?: boolean;
+  /** Free-text reason from the judge, if any. */
+  reason?: string;
+  lastLog?: string;
+  startedAt: number;
+  finishedAt?: number;
+  error?: string;
 }
 
 export interface LogEntry {

@@ -14,6 +14,7 @@ import type {
   PromptStep,
   RunManifest,
   StageIntegration,
+  CheckRun,
   AgentManifestEntry,
   AgentLifecyclePhase,
   WorkStep,
@@ -256,6 +257,12 @@ export class Orchestrator {
    * card instead of freezing during `status === 'integrating'`.
    */
   private stageIntegrations: StageIntegration[] = [];
+  /**
+   * Per-check-visit judge history. One entry per CheckStep visit, created
+   * in `judging` when the evaluator starts and finished with the chosen
+   * outcome — so the judge shows up as a kanban card like merges do.
+   */
+  private checkRuns: CheckRun[] = [];
 
   constructor(
     private config: AppConfig,
@@ -301,6 +308,7 @@ export class Orchestrator {
       totalTasks: this.totalTasksAcrossStages,
       integrationStatus: this.integrationStatus,
       stageIntegrations: [...this.stageIntegrations],
+      checkRuns: [...this.checkRuns],
       startedAt: this.startedAt,
       elapsedMs: this.startedAt > 0 ? Date.now() - this.startedAt : 0,
       concurrency: this.instanceCount,
@@ -667,12 +675,31 @@ export class Orchestrator {
 
         if (isCheckStep(step)) {
           // --- CheckStep: pure evaluator, no worktrees, no merges. ---
+          const judgeModelId = step.modelId ?? this.config.modelId;
           const maxRuns = step.maxRuns;
           if (maxRuns !== undefined && runs > maxRuns) {
             const fallback = step.outcomes.find((o) => o.default) ?? step.outcomes[0]!;
             this.log({
               level: 'warn',
               message: `check "${step.name}" hit maxRuns=${maxRuns}; using default outcome "${fallback.label}"`,
+            });
+            // Completed judge card so the forced default is visible on the
+            // board (DONE column) rather than the check silently skipping.
+            this.checkRuns.push({
+              visitIndex,
+              stepIndex: stepIdx,
+              stepName: step.name,
+              runs,
+              maxRuns,
+              phase: 'done',
+              modelId: judgeModelId,
+              condition: step.condition,
+              outcomeLabel: fallback.label,
+              nextStepName: fallback.nextStepName,
+              fromJudge: false,
+              reason: `maxRuns=${maxRuns} reached`,
+              startedAt: Date.now(),
+              finishedAt: Date.now(),
             });
             traceEntry.outcomeLabel = fallback.label;
             traceEntry.nextStepName = fallback.nextStepName;
@@ -685,6 +712,18 @@ export class Orchestrator {
           this.log({
             level: 'info',
             message: `=== check ${visitIndex}: ${step.name} (run ${runs}${maxRuns ? `/${maxRuns}` : ''})`,
+          });
+          // Judge card — DOING column while the judge deliberates.
+          this.checkRuns.push({
+            visitIndex,
+            stepIndex: stepIdx,
+            stepName: step.name,
+            runs,
+            maxRuns,
+            phase: 'judging',
+            modelId: judgeModelId,
+            condition: step.condition,
+            startedAt: Date.now(),
           });
           this.emit();
 
@@ -700,10 +739,21 @@ export class Orchestrator {
             onEvent: (agentId, event) => {
               if (event.type === 'log') {
                 this.log({ level: event.level ?? 'info', message: event.message, agentId });
+                this.upsertCheckRun(visitIndex, { lastLog: event.message });
               } else if (event.type === 'error') {
                 this.log({ level: 'error', message: event.message, agentId });
+                this.upsertCheckRun(visitIndex, { lastLog: event.message });
               }
             },
+          });
+          this.upsertCheckRun(visitIndex, {
+            phase: 'done',
+            condition: result.resolvedCondition,
+            outcomeLabel: result.label,
+            nextStepName: result.nextStepName,
+            fromJudge: result.fromJudge,
+            reason: result.reason,
+            finishedAt: Date.now(),
           });
           traceEntry.outcomeLabel = result.label;
           traceEntry.nextStepName = result.nextStepName;
@@ -825,11 +875,18 @@ export class Orchestrator {
           ? { ...e, phase: 'error' as const, error: e.error ?? 'aborted', finishedAt: e.finishedAt ?? Date.now() }
           : e,
       );
+      // Same sweep for judge cards stuck mid-deliberation.
+      this.checkRuns = this.checkRuns.map((e) =>
+        e.phase === 'judging'
+          ? { ...e, phase: 'error' as const, error: e.error ?? 'aborted', finishedAt: e.finishedAt ?? Date.now() }
+          : e,
+      );
       if (this.manifest) {
         this.manifest.finishedAt = Date.now();
         this.manifest.status = this.status === 'done' ? 'done' : 'error';
         this.manifest.executionTrace = this.executionTrace;
         this.manifest.stageIntegrations = this.stageIntegrations;
+        this.manifest.checkRuns = this.checkRuns;
       }
       this.emit();
 
@@ -1396,6 +1453,14 @@ export class Orchestrator {
     const idx = this.stageIntegrations.findIndex((e) => e.visitIndex === visitIndex);
     if (idx === -1) return;
     this.stageIntegrations[idx] = { ...this.stageIntegrations[idx]!, ...patch };
+    this.emit();
+  }
+
+  /** Same as {@link upsertStageIntegration}, for the judge cards. */
+  private upsertCheckRun(visitIndex: number, patch: Partial<CheckRun>): void {
+    const idx = this.checkRuns.findIndex((e) => e.visitIndex === visitIndex);
+    if (idx === -1) return;
+    this.checkRuns[idx] = { ...this.checkRuns[idx]!, ...patch };
     this.emit();
   }
 

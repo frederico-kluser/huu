@@ -460,6 +460,7 @@ export function RunDashboard({
           nowMs={nowMs}
           lastLogByAgent={lastLogByAgent}
           stageIntegrations={state.stageIntegrations}
+          checkRuns={state.checkRuns}
           maxCardRows={maxCardRows}
         />
         {showLogSidebar && (

@@ -1,5 +1,6 @@
 export { AgentStatusPill, type AgentStatusPillProps } from './AgentStatusPill';
 export { BackendCard, type BackendCardProps } from './BackendCard';
+export { CheckRunPill, type CheckRunPillProps } from './CheckRunPill';
 export { ConcurrencyControl, type ConcurrencyControlProps } from './ConcurrencyControl';
 export { CostDisplay, type CostDisplayProps } from './CostDisplay';
 export { FileChip, type FileChipProps } from './FileChip';

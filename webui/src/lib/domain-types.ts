@@ -18,6 +18,7 @@ export type AgentStatus = OrchestratorState['agents'][number];
 export type LogEntry = OrchestratorState['logs'][number];
 export type AgentLifecyclePhase = AgentStatus['phase'];
 export type StageIntegration = OrchestratorState['stageIntegrations'][number];
+export type CheckRun = OrchestratorState['checkRuns'][number];
 /**
  * Narrow Pipeline.steps to the work-step shape (the one with `prompt`/`files`).
  * The webui editor only handles work steps; check steps live in TUI for now.
