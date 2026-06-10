@@ -10,14 +10,26 @@
 // - Duplication > 3% = warn.
 
 import type { Pipeline } from '../types.js';
+import {
+  knowledgeProtocol,
+  persistenceCheck,
+  KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
+  KNOWLEDGE_ORDERING_NOTE,
+} from './knowledge-protocol.js';
 
 export const DEFAULT_PIPELINE_FILENAME = 'huu-quality-audit.pipeline.json';
 export const DEFAULT_PIPELINE_NAME = 'huu Quality Audit';
 
+const FAQ_PATH = './.huu/audits/quality-faq.json';
+const FAQ_SCHEMA_LINE =
+  '{ "summary": "<=256>", "knowledge": "<=5000>", "path": "<file or \'global\'>", "category": "complexity|duplication|dead-code|size|composite", "severity": "info|warn|critical", "metric": { "name": "...", "value": ... } }';
+
 const STEP1_PROMPT = `You are huu's code-quality-audit bootstrap agent. Goal: detect the project's language(s), make ephemeral complexity tools available where possible, write \`.huu/audits/quality.md\` scaffold and initialize \`.huu/audits/quality-faq.json\`.
 
 === STEP 0 — REPORT-ONLY HARD RULE ===
-You may NOT modify any file in the repo OTHER than the audit artifacts under \`.huu/audits/\` (and \`.huu/audits/.tmp/\` for working files). If a tool requires installation, use \`npx --yes <tool>\` (Node), \`pipx run <tool>\` (Python), or vendored binaries under \`$HOME/.huu/bin/\`. NEVER touch package.json, requirements.txt, pyproject.toml, Cargo.toml, go.mod, lockfiles, or any production source. Create the output directory with \`mkdir -p .huu/audits/.tmp/quality\` before writing.
+You may NOT modify any file in the repo OTHER than the audit artifacts under \`.huu/audits/\` (and \`.huu/audits/.tmp/\` for working files) plus the single \`.gitignore\` adjustment described below. If a tool requires installation, use \`npx --yes <tool>\` (Node), \`pipx run <tool>\` (Python), or vendored binaries under \`$HOME/.huu/bin/\`. NEVER touch package.json, requirements.txt, pyproject.toml, Cargo.toml, go.mod, lockfiles, or any production source. Create the output directory with \`mkdir -p .huu/audits/.tmp/quality\` before writing.
+
+${persistenceCheck('audits')}
 
 === STEP 1 — Detect language(s) ===
 Walk the repo and tally source files by extension. Identify the top language(s) by file count. Common targets:
@@ -88,11 +100,12 @@ Schema:
 \`\`\`json
 { "summary": "<=256>", "knowledge": "<=5000>", "path": "<file or 'global'>", "category": "complexity|duplication|dead-code|size|composite", "severity": "info|warn|critical", "metric": { "name": "cyclomatic", "value": 17 } }
 \`\`\`
+${KNOWLEDGE_OPTIONAL_FIELDS_NOTE}
 
 === HARD RULES ===
 - DO NOT modify production source code.
 - DO NOT touch CI/CD config.
-- The only outputs are .huu/audits/quality.md + .huu/audits/quality-faq.json + (optional) package.json devDeps additions for installed tools.`;
+- The only outputs are .huu/audits/quality.md + .huu/audits/quality-faq.json (tools are ephemeral — npx/pipx/\$HOME/.huu/bin — never devDeps).`;
 
 const STEP2_PROMPT = `You are at step 2 — per-file complexity scan of \`$file\`. Goal: compute metrics (cyclomatic, function length, parameter count, nesting depth) for \`$file\` and append findings to \`.huu/audits/quality-faq.json\`. NO code changes.
 
@@ -148,6 +161,9 @@ If \`$file\` has zero findings, append ONE info-severity summary saying so:
 
 const STEP3_PROMPT = `You are at step 3 — duplication scan (whole-project). Goal: find duplicated code blocks across the codebase, append findings to \`.huu/audits/quality-faq.json\`, populate section "3. Duplication" of \`.huu/audits/quality.md\`. NO code changes.
 
+${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
+In particular: step 2's per-file findings tell you which files are complexity hotspots — duplications involving those files deserve a severity bump and a cross-reference in your "knowledge" field.
+
 === STEP 1 — Pick the tool ===
 - If \`jscpd\` is installed: \`npx --yes jscpd --min-lines 8 --min-tokens 50 --threshold 3 --reporters json --output ./.huu/audits/.tmp/quality/jscpd-report .\`. Read the JSON report.
 - If \`pmd\` is available: \`pmd cpd --minimum-tokens 50 --files <src> --format text\`.
@@ -189,6 +205,9 @@ Delete the \`.huu-jscpd-report\` file (working artifact) if it was created.
 
 const STEP4_PROMPT = `You are at step 4 — dead-code detection (whole-project). Goal: list unused exports, unused dependencies, unused private helpers. Append findings, populate section "4. Dead code" of \`.huu/audits/quality.md\`. NO code changes.
 
+${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
+In particular: dead code inside a file already flagged for complexity (step 2 findings) is the cheapest win — mark those entries "priority": 1, "fixability": "trivial".
+
 === STEP 1 — Pick tools per stack ===
 - TS/JS:
   - \`npx --yes ts-unused-exports tsconfig.json\` if tsconfig present.
@@ -217,7 +236,7 @@ Replace the placeholder with a table of the top 30 findings.
 - DO NOT update package.json's deps even if depcheck found unused ones.
 - DO NOT touch source code.`;
 
-const STEP5_PROMPT = `You are the final agent — step 5. Goal: read all findings from \`.huu/audits/quality-faq.json\`, compute a composite quality score, populate sections "5. Composite score" and "6. Recommendations" of \`.huu/audits/quality.md\`, and add a quality badge to README.md.
+const STEP5_PROMPT = `You are the final agent — step 5. Goal: read all findings from \`.huu/audits/quality-faq.json\`, compute a composite quality score, populate sections "5. Composite score" and "6. Recommendations" of \`.huu/audits/quality.md\`. Report-only — README is never touched.
 
 === STEP 1 — Read inputs ===
 - \`./.huu/audits/quality.md\` (sections 1–4 already populated).
@@ -254,7 +273,8 @@ Hotspot files (top 10):
 \`\`\`
 
 === STEP 4 — Update .huu/audits/quality.md section "6. Recommendations" ===
-Group findings and write actionable recommendations, each linked to a Fowler refactoring catalog entry where applicable:
+Group findings and write actionable recommendations, each linked to a Fowler refactoring catalog entry where applicable.
+${KNOWLEDGE_ORDERING_NOTE}
 
 ### Critical (fix first)
 - "src/foo.ts:bar() has cyclomatic 27 — apply Extract Function (https://refactoring.com/catalog/extractFunction.html) and Decompose Conditional."
@@ -306,7 +326,7 @@ export function getDefaultPipeline(): Pipeline {
       },
       {
         type: 'work',
-        name: '5. Composite score + recommendations + badge',
+        name: '5. Composite score + recommendations',
         prompt: STEP5_PROMPT,
         files: [],
         scope: 'project',

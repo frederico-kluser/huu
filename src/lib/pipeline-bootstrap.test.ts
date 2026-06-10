@@ -181,4 +181,22 @@ describe('ensureAllDefaultPipelines', () => {
       }
     }
   });
+
+  it('huu Agent Knowledge: validation check loops to materialize and terminates on approved', () => {
+    const mod = DEFAULT_PIPELINES.find((m) => m.DEFAULT_PIPELINE_NAME === 'huu Agent Knowledge')!;
+    const p = mod.getDefaultPipeline();
+    const check = p.steps.find((s) => s.type === 'check');
+    expect(check).toBeDefined();
+    if (check?.type !== 'check') throw new Error('unreachable');
+    expect(check.maxRuns).toBe(3);
+    const approved = check.outcomes.find((o) => o.label === 'approved')!;
+    const rework = check.outcomes.find((o) => o.label === 'rework')!;
+    // `approved` must be the default so judge failures / --stub terminate
+    // the loop instead of bouncing back to materialize until maxRuns.
+    expect(approved.default).toBe(true);
+    expect(approved.nextStepName).toBe('6. Finalize knowledge base');
+    expect(rework.nextStepName).toBe('4. Materialize .agents/skills/');
+    expect(p.steps.map((s) => s.name)).toContain(approved.nextStepName);
+    expect(p.steps.map((s) => s.name)).toContain(rework.nextStepName);
+  });
 });

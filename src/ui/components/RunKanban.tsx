@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { AgentStatus, Pipeline } from '../../lib/types.js';
+import type { AgentStatus, Pipeline, StageIntegration } from '../../lib/types.js';
+import { theme } from '../theme.js';
 
 // In-house kanban renderer. Replaces `ink-kanban-board` to keep the run
 // dashboard free of third-party setIntervals and duplicate `useInput`
@@ -79,6 +80,53 @@ function pickColumn(s: AgentStatus): 'todo' | 'doing' | 'done' {
   return 'doing';
 }
 
+// `theme.ai` is allowed here ONLY for conflict_resolving — the LLM resolver
+// is AI-driven UI; the deterministic merge stays cyan per the theme rule.
+function integrationStatus(e: StageIntegration): CardStatus {
+  switch (e.phase) {
+    case 'pending':
+      return { label: 'PENDING', color: 'gray' };
+    case 'merging':
+      return { label: 'MERGING', color: 'cyan' };
+    case 'conflict_resolving':
+      return { label: 'AI RESOLVE', color: theme.ai };
+    case 'done':
+      return { label: 'MERGED', color: 'green' };
+    case 'skipped':
+      return { label: 'SKIPPED', color: 'yellow' };
+    case 'error':
+      return { label: 'FAILED', color: 'red' };
+  }
+}
+
+function pickIntegrationColumn(e: StageIntegration): 'todo' | 'doing' | 'done' {
+  if (e.phase === 'pending') return 'todo';
+  if (e.phase === 'merging' || e.phase === 'conflict_resolving') return 'doing';
+  return 'done';
+}
+
+function buildIntegrationCard(e: StageIntegration, isOverride: boolean): BoardCard {
+  const modelShort = e.modelId.includes('/') ? e.modelId.split('/').pop() : e.modelId;
+  const total = e.branchesMerged.length + e.branchesPending.length;
+  const subtitle =
+    e.phase === 'pending'
+      ? '[merge] waiting for stage agents'
+      : `[merge] ${e.branchesMerged.length}/${total} branches · ${e.conflicts.length} conflicts`;
+  return {
+    key: `merge-${e.visitIndex}`,
+    title: `merge: ${truncate(e.stageName, 22)}${e.runs > 1 ? ` ×${e.runs}` : ''}`,
+    subtitle,
+    status: integrationStatus(e),
+    branchShort: undefined,
+    modelShort: modelShort ? `${modelShort}${isOverride ? ' (int)' : ''}` : undefined,
+    filesModifiedCount: 0,
+    errorLine: e.error ? truncate(e.error, 80) : undefined,
+    lastLog: e.lastLog ? truncate(e.lastLog, 80) : undefined,
+    startedAt: e.startedAt,
+    finishedAt: e.finishedAt,
+  };
+}
+
 function truncate(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, Math.max(0, max - 1))}…` : s;
 }
@@ -137,6 +185,12 @@ export interface RunKanbanProps {
   /** Last log per agent, pre-computed by the dashboard. */
   lastLogByAgent: ReadonlyMap<number, string>;
   /**
+   * Per-stage merge history. Each entry renders as a display-only card
+   * (key `merge-<visitIndex>`, never focusable) so the board keeps moving
+   * during `status === 'integrating'`.
+   */
+  stageIntegrations?: ReadonlyArray<StageIntegration>;
+  /**
    * Maximum rows of card content the column body may render. The board
    * subtracts column chrome (border + title + margin) and overall page chrome
    * (header/footer/metrics bar) before passing this in. When a column would
@@ -153,6 +207,7 @@ function RunKanbanInner({
   focusedKey,
   nowMs,
   lastLogByAgent,
+  stageIntegrations,
   maxCardRows,
 }: RunKanbanProps): React.JSX.Element {
   const todo: BoardCard[] = [];
@@ -169,6 +224,17 @@ function RunKanbanInner({
       lastLogByAgent.get(agent.agentId),
     );
     const col = pickColumn(agent);
+    if (col === 'todo') todo.push(card);
+    else if (col === 'doing') doing.push(card);
+    else done.push(card);
+  }
+
+  // Merge cards go after the agent cards of each column so packCards (which
+  // anchors on the last card when nothing is focused) keeps the active merge
+  // visible while the stage integrates.
+  for (const entry of stageIntegrations ?? []) {
+    const card = buildIntegrationCard(entry, Boolean(pipeline.integrationModelId));
+    const col = pickIntegrationColumn(entry);
     if (col === 'todo') todo.push(card);
     else if (col === 'doing') doing.push(card);
     else done.push(card);

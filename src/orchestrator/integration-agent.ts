@@ -20,6 +20,12 @@ export interface IntegrationContext {
   resolverFactory: AgentFactory;
   /** Forwarded so the orchestrator can render integration-agent logs in the dashboard. */
   onEvent: (agentId: number, event: AgentEvent) => void;
+  /**
+   * Fired once, right before the LLM conflict resolver is spawned (i.e. the
+   * deterministic merge left conflicts). Lets the orchestrator flip the
+   * merge card from `merging` to `conflict_resolving`.
+   */
+  onPhase?: (phase: 'conflict_resolving') => void;
 }
 
 export interface IntegrationResolution {
@@ -87,6 +93,7 @@ export async function runStageIntegrationWithResolver(
   let agent: Awaited<ReturnType<AgentFactory>> | null = null;
 
   try {
+    ctx.onPhase?.('conflict_resolving');
     agent = await ctx.resolverFactory(
       integrationTask,
       ctx.config,

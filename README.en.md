@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <strong>English</strong> · <a href="README.md">Português (BR)</a>
+  <a href="MANIFESTO.en.md">Manifesto</a> · <strong>English</strong> · <a href="README.md">Português (BR)</a>
 </p>
 
 <p align="center">
@@ -121,10 +121,19 @@ Step-by-step walkthrough with prompts:
 
 ## What else can you build
 
-A pipeline is a creative artifact. Five other defaults ship in the box,
+A pipeline is a creative artifact. Six other defaults ship in the box,
 and a creative author can write anything that fits the
 **plan → fan-out → merge** shape:
 
+- **huu Agent Knowledge** (bundled default). Progressive knowledge
+  pushed to its limit: project recon, per-file deep study converging
+  into `.huu/knowledge/findings.json`, topic synthesis, and a final
+  compilation into **Agent Skills**
+  ([spec](https://agentskills.io/specification)) under
+  `.agents/skills/` — one skill per topic plus a `project-knowledge`
+  router skill that any future agent (huu, Claude Code, Codex, Cursor)
+  loads first to know which skill to pull. A `check` step validates the
+  generated skills and loops back if anything violates the spec.
 - **Security pipeline.** Hand-pick the files you want audited, pass the
   threat model and standards (OWASP, CWE) as documentation, parallelize
   per-file scans. Stage 1 builds a `THREAT-MODEL.md`. Stage 2 fans out

@@ -7,14 +7,26 @@
 // - Google Core Web Vitals: LCP <=2.5s, INP <=200ms, CLS <=0.1.
 
 import type { Pipeline } from '../types.js';
+import {
+  knowledgeProtocol,
+  persistenceCheck,
+  KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
+  KNOWLEDGE_ORDERING_NOTE,
+} from './knowledge-protocol.js';
 
 export const DEFAULT_PIPELINE_FILENAME = 'huu-performance-audit.pipeline.json';
 export const DEFAULT_PIPELINE_NAME = 'huu Performance Audit';
 
+const FAQ_PATH = './.huu/audits/performance-faq.json';
+const FAQ_SCHEMA_LINE =
+  '{ "summary": "<=256>", "knowledge": "<=5000>", "path": "<file or \'global\'>", "category": "n+1|big-o|sync-io|memory|render-blocking|use-method|cwv|bundle", "severity": "info|warn|critical", "metric": { "name": "...", "value": ... } }';
+
 const STEP1_PROMPT = `You are huu's performance-audit bootstrap agent. Goal: classify the project (frontend / backend / library / CLI / mobile), make ephemeral profilers available, write \`.huu/audits/performance.md\` scaffold, initialize \`.huu/audits/performance-faq.json\`.
 
 === STEP 0 — REPORT-ONLY HARD RULE ===
-You may NOT modify any file in the repo OTHER than the audit artifacts under \`.huu/audits/\` (and \`.huu/audits/.tmp/\` for working files). If a tool requires installation, use \`npx --yes <tool>\` (Node), \`pipx run <tool>\` (Python), or vendored binaries under \`$HOME/.huu/bin/\`. NEVER touch package.json, requirements.txt, pyproject.toml, Cargo.toml, go.mod, lockfiles, or any production source. Create the output directory with \`mkdir -p .huu/audits/.tmp/performance\` before writing.
+You may NOT modify any file in the repo OTHER than the audit artifacts under \`.huu/audits/\` (and \`.huu/audits/.tmp/\` for working files) plus the single \`.gitignore\` adjustment described below. If a tool requires installation, use \`npx --yes <tool>\` (Node), \`pipx run <tool>\` (Python), or vendored binaries under \`$HOME/.huu/bin/\`. NEVER touch package.json, requirements.txt, pyproject.toml, Cargo.toml, go.mod, lockfiles, or any production source. Create the output directory with \`mkdir -p .huu/audits/.tmp/performance\` before writing.
+
+${persistenceCheck('audits')}
 
 === STEP 1 — Classify the project ===
 Inspect the manifests and pick the BEST single classification (or "mixed"):
@@ -84,6 +96,7 @@ Path: \`./.huu/audits/performance.md\`. Required structure:
 \`\`\`json
 { "summary": "<=256>", "knowledge": "<=5000>", "path": "<file or 'global'>", "category": "n+1|big-o|sync-io|memory|render-blocking|use-method|cwv|bundle", "severity": "info|warn|critical", "metric": { "name": "...", "value": ... } }
 \`\`\`
+${KNOWLEDGE_OPTIONAL_FIELDS_NOTE}
 
 === HARD RULES ===
 - DO NOT modify source code.
@@ -154,6 +167,9 @@ If \`$file\` has zero findings, append ONE info-severity confirmation.
 
 const STEP3_PROMPT = `You are at step 3 — frontend Core Web Vitals. Goal: if the project classifies as a frontend, attempt to capture LCP / INP / CLS via lighthouse-ci (or a static heuristic if not). Append findings, populate section "3. Frontend metrics" of \`.huu/audits/performance.md\`. SKIP this step gracefully for non-frontend projects.
 
+${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
+In particular: step 2's per-file findings under "render-blocking" and "bundle" point at the files most likely to explain a bad LCP — cross-reference them in your "knowledge" field instead of re-discovering them.
+
 === STEP 1 — Check classification ===
 Read \`./.huu/audits/performance.md\` section 1. If classification is NOT frontend or mixed: write "N/A — non-frontend project" into section "3. Frontend metrics" and finish.
 
@@ -205,6 +221,9 @@ Update section "3. Frontend metrics" in \`.huu/audits/performance.md\` with a sc
 - If you couldn't run Lighthouse, that's fine — the static fallback is the report.`;
 
 const STEP4_PROMPT = `You are at step 4 — USE checklist (backend / CLI) and bundle weight (frontend / library). Skip the irrelevant half based on classification.
+
+${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
+In particular: step 2's "sync-io" and "n+1" findings tell you which software resources (DB pool, event loop, worker queue) deserve a USE row — start the checklist from them.
 
 === STEP 1 — Branch on classification ===
 Read \`./.huu/audits/performance.md\` section 1.
@@ -266,6 +285,7 @@ Start at 100. Subtract per finding:
 
 === STEP 3 — Populate section "6. Recommendations" ===
 Group by category, prioritize by severity.
+${KNOWLEDGE_ORDERING_NOTE}
 
 ### Critical hotspots
 - Cite each by \`<file>:<line>\` and give a one-liner fix.
@@ -322,7 +342,7 @@ export function getDefaultPipeline(): Pipeline {
       },
       {
         type: 'work',
-        name: '5. Composite score + recommendations + badge',
+        name: '5. Composite score + recommendations',
         prompt: STEP5_PROMPT,
         files: [],
         scope: 'project',

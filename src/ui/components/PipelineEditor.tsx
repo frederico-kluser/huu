@@ -12,6 +12,7 @@ import {
 } from '../../lib/types.js';
 import { StepEditor } from './StepEditor.js';
 import { CheckStepEditor } from './CheckStepEditor.js';
+import { ModelSelectorOverlay } from './ModelSelectorOverlay.js';
 import { log as dlog, bump as dbump } from '../../lib/debug-logger.js';
 import { savePipelineToMemory } from '../../lib/pipeline-io.js';
 import { theme } from '../theme.js';
@@ -269,9 +270,13 @@ export function PipelineEditor({
           cardTimeoutMs: pipeline.cardTimeoutMs ?? DEFAULT_CARD_TIMEOUT_MS,
           singleFileCardTimeoutMs: pipeline.singleFileCardTimeoutMs ?? DEFAULT_SINGLE_FILE_CARD_TIMEOUT_MS,
           maxRetries: pipeline.maxRetries ?? DEFAULT_MAX_RETRIES,
+          integrationModelId: pipeline.integrationModelId,
         }}
         onSave={(values) => {
-          setPipeline((p) => ({ ...p, ...values }));
+          setPipeline((p) => {
+            const { integrationModelId: cleared, ...rest } = { ...p, ...values };
+            return cleared ? { ...rest, integrationModelId: cleared } : rest;
+          });
           setMode({ kind: 'list' });
         }}
         onCancel={() => setMode({ kind: 'list' })}
@@ -353,8 +358,13 @@ export function PipelineEditor({
 
         <Box marginTop={1}>
           <Text dimColor>
-            card timeout: {msToMin(pipeline.cardTimeoutMs ?? DEFAULT_CARD_TIMEOUT_MS)}min (multi/whole-project) · {msToMin(pipeline.singleFileCardTimeoutMs ?? DEFAULT_SINGLE_FILE_CARD_TIMEOUT_MS)}min (single-file) · retries: {pipeline.maxRetries ?? DEFAULT_MAX_RETRIES}
+            card timeout: {msToMin(pipeline.cardTimeoutMs ?? DEFAULT_CARD_TIMEOUT_MS)}min (multi/whole-project) · {msToMin(pipeline.singleFileCardTimeoutMs ?? DEFAULT_SINGLE_FILE_CARD_TIMEOUT_MS)}min (single-file) · retries: {pipeline.maxRetries ?? DEFAULT_MAX_RETRIES} · integration 🧠{' '}
           </Text>
+          {pipeline.integrationModelId ? (
+            <Text color={theme.ai}>{pipeline.integrationModelId}</Text>
+          ) : (
+            <Text dimColor>global</Text>
+          )}
         </Box>
 
         <Box marginTop={1} flexDirection="column">
@@ -362,7 +372,7 @@ export function PipelineEditor({
             <Text bold>↑↓</Text> select · <Text bold>SHIFT+↑↓</Text> reorder · <Text bold>ENTER</Text> edit · <Text bold>N</Text> new work · <Text bold>C</Text> new check · <Text bold>D</Text> delete
           </Text>
           <Text dimColor>
-            <Text bold>R</Text> rename · <Text bold>T</Text> timeouts · <Text bold>I</Text> import · <Text bold>S</Text> save · <Text bold>G</Text> run · <Text bold>ESC</Text> back
+            <Text bold>R</Text> rename · <Text bold>T</Text> settings · <Text bold>I</Text> import · <Text bold>S</Text> save · <Text bold>G</Text> run · <Text bold>ESC</Text> back
           </Text>
         </Box>
       </Box>
@@ -374,6 +384,7 @@ interface SettingsValues {
   cardTimeoutMs: number;
   singleFileCardTimeoutMs: number;
   maxRetries: number;
+  integrationModelId?: string;
 }
 
 interface SettingsEditorProps {
@@ -382,46 +393,82 @@ interface SettingsEditorProps {
   onCancel: () => void;
 }
 
-type SettingsField = 'cardTimeout' | 'singleFileTimeout' | 'maxRetries';
+type SettingsField = 'cardTimeout' | 'singleFileTimeout' | 'maxRetries' | 'integrationModel';
 type SettingsMode = 'selecting' | 'editing';
+
+const SETTINGS_FIELD_ORDER: SettingsField[] = [
+  'cardTimeout',
+  'singleFileTimeout',
+  'maxRetries',
+  'integrationModel',
+];
 
 function SettingsEditor({ initial, onSave, onCancel }: SettingsEditorProps): React.JSX.Element {
   const [cardMin, setCardMin] = useState<string>(msToMin(initial.cardTimeoutMs));
   const [singleMin, setSingleMin] = useState<string>(msToMin(initial.singleFileCardTimeoutMs));
   const [retries, setRetries] = useState<string>(String(initial.maxRetries));
+  const [integrationModelId, setIntegrationModelId] = useState<string | undefined>(
+    initial.integrationModelId,
+  );
   const [field, setField] = useState<SettingsField>('cardTimeout');
   const [mode, setMode] = useState<SettingsMode>('selecting');
+  const [pickingModel, setPickingModel] = useState(false);
 
   const cardMs = minToMs(cardMin);
   const singleMs = minToMs(singleMin);
   const retriesN = parseRetries(retries);
   const allValid = cardMs !== null && singleMs !== null && retriesN !== null;
 
-  useInput((_input, key) => {
+  useInput((input, key) => {
+    if (pickingModel) return; // ModelSelectorOverlay owns the input
     if (mode === 'editing') {
       if (key.escape) setMode('selecting');
       return;
     }
     if (key.escape) {
       if (allValid) {
-        onSave({ cardTimeoutMs: cardMs!, singleFileCardTimeoutMs: singleMs!, maxRetries: retriesN! });
+        onSave({
+          cardTimeoutMs: cardMs!,
+          singleFileCardTimeoutMs: singleMs!,
+          maxRetries: retriesN!,
+          integrationModelId,
+        });
       } else {
         onCancel();
       }
       return;
     }
     if (key.upArrow) {
-      setField((f) =>
-        f === 'singleFileTimeout' ? 'cardTimeout' : f === 'maxRetries' ? 'singleFileTimeout' : 'cardTimeout',
-      );
+      setField((f) => SETTINGS_FIELD_ORDER[Math.max(0, SETTINGS_FIELD_ORDER.indexOf(f) - 1)]!);
     } else if (key.downArrow || key.tab) {
-      setField((f) =>
-        f === 'cardTimeout' ? 'singleFileTimeout' : f === 'singleFileTimeout' ? 'maxRetries' : 'maxRetries',
+      setField(
+        (f) =>
+          SETTINGS_FIELD_ORDER[
+            Math.min(SETTINGS_FIELD_ORDER.length - 1, SETTINGS_FIELD_ORDER.indexOf(f) + 1)
+          ]!,
       );
+    } else if (field === 'integrationModel') {
+      if (key.return || input === 'm' || input === 'M') {
+        setPickingModel(true);
+      } else if (input === 'c' || input === 'C') {
+        setIntegrationModelId(undefined);
+      }
     } else if (key.return) {
       setMode('editing');
     }
   });
+
+  if (pickingModel) {
+    return (
+      <ModelSelectorOverlay
+        onSelect={(modelId) => {
+          setIntegrationModelId(modelId);
+          setPickingModel(false);
+        }}
+        onCancel={() => setPickingModel(false)}
+      />
+    );
+  }
 
   const     fieldRow = (
     label: string,
@@ -450,18 +497,37 @@ function SettingsEditor({ initial, onSave, onCancel }: SettingsEditorProps): Rea
   return (
     <Box flexDirection="column" width="100%">
       <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
-        <Text bold color="cyan">Card timeouts &amp; retries</Text>
+        <Text bold color="cyan">Pipeline settings</Text>
         <Text dimColor>Timeouts are applied PER CARD. There is no time limit on the pipeline as a whole.</Text>
 
         {fieldRow('Whole-project card timeout:', 'min', 'cardTimeout', cardMin, setCardMin, cardMs !== null)}
         {fieldRow('Single-file card timeout:', 'min', 'singleFileTimeout', singleMin, setSingleMin, singleMs !== null)}
         {fieldRow('Max retries per card:', '(0–3)', 'maxRetries', retries, setRetries, retriesN !== null)}
 
+        <Box marginTop={1}>
+          <Text color="cyan">{field === 'integrationModel' ? '› ' : '  '}</Text>
+          <Box width={30}>
+            <Text color={field === 'integrationModel' ? 'cyan' : undefined}>
+              Integration agent model:
+            </Text>
+          </Box>
+          {integrationModelId ? (
+            <Text color={theme.ai}>🧠 {integrationModelId}</Text>
+          ) : (
+            <Text dimColor>🧠 global (run model)</Text>
+          )}
+        </Box>
+
         <Box marginTop={2} flexDirection="column">
           {mode === 'selecting' ? (
             <>
               <Text dimColor>
                 <Text bold>↑↓</Text> select · <Text bold>TAB</Text> cycle · <Text bold>ENTER</Text> edit
+                {field === 'integrationModel' && (
+                  <>
+                    {' '}· <Text bold>M</Text> pick model · <Text bold>C</Text> clear (use global)
+                  </>
+                )}
               </Text>
               <Text>
                 <Text bold>ESC</Text>{' '}

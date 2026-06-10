@@ -72,7 +72,7 @@ export function RunPage() {
         className="lg:flex-row"
         left={
           <div className="overflow-x-auto snap-x snap-mandatory">
-            <KanbanBoard agents={state.agents} />
+            <KanbanBoard agents={state.agents} integrations={state.stageIntegrations} />
           </div>
         }
         right={

@@ -139,6 +139,7 @@ Both are valid. The wrapped format is preferred because it's self-documenting an
 | `maxRetries` | integer | No | `1` | Range: 0–3. Retries on timeout/failure before marking a task as failed. |
 | `maxNodeExecutions` | integer | No | `50` | Global cap on total node visits per run (safety net for loops via check steps). |
 | `portAllocation` | PortAllocationConfig | No | `{ enabled: true }` | See [Port Allocation](#port-allocation). |
+| `integrationModelId` | string | No | Falls back to global model | Model for the merge/integration agent (the conflict resolver that runs between stages). See [Model Selection](#model-selection-modelid). |
 
 ### WorkStep object (the v1 "PromptStep" — still the default)
 
@@ -407,6 +408,10 @@ Each step can optionally specify a `modelId` to override the global model select
 - The model catalog is project-configurable — check the project's `recommended-models.json` for the current list.
 - If omitted, the pipeline uses whatever model the user selected globally in the TUI.
 - When in doubt, assign a model — it gives the user one less decision to make at runtime.
+
+### Integration agent model (`integrationModelId`)
+
+The pipeline-level `integrationModelId` pins the model of the **merge/integration agent** — the conflict resolver spawned in the integration worktree when the deterministic stage merge hits conflicts. It falls back to the run's global model when omitted. Conflict resolution is a cross-file reasoning task, so a workhorse-tier model is usually the right choice here even when the steps themselves run on a fast/cheap model. Editable in the TUI pipeline editor under `T` (Pipeline settings) and shown on the merge card in the run dashboard.
 
 ---
 

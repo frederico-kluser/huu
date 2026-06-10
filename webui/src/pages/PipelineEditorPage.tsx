@@ -53,12 +53,27 @@ export function PipelineEditorPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 rounded-lg border border-foreground/15 bg-background p-3 md:flex-row md:items-end md:justify-between">
-        <Input
-          label="Pipeline name"
-          value={pipeline.name}
-          onChange={(e) => setPipeline((p) => ({ ...p, name: e.target.value }))}
-          containerClassName="md:w-72"
-        />
+        <div className="flex flex-col gap-3 md:flex-row md:items-end">
+          <Input
+            label="Pipeline name"
+            value={pipeline.name}
+            onChange={(e) => setPipeline((p) => ({ ...p, name: e.target.value }))}
+            containerClassName="md:w-72"
+          />
+          <Input
+            label="Integration agent model (optional)"
+            placeholder="global (run model)"
+            value={pipeline.integrationModelId ?? ''}
+            onChange={(e) =>
+              setPipeline((p) => {
+                const v = e.target.value.trim();
+                const { integrationModelId: _omit, ...rest } = p;
+                return v ? { ...rest, integrationModelId: v } : rest;
+              })
+            }
+            containerClassName="md:w-72"
+          />
+        </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={onImport} disabled={disabled} className="min-h-[44px]">
             <Upload className="h-4 w-4" /> Import

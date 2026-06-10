@@ -460,7 +460,7 @@ override específico do huu é necessário.
 
 ## Pipelines default empacotados
 
-Na primeira execução, o huu materializa seis pipelines iniciais
+Na primeira execução, o huu materializa sete pipelines iniciais
 agnósticos de framework dentro de `pipelines/`. Eles são
 **idempotentes** — nunca sobrescrevem um arquivo existente, então
 editar um preserva suas mudanças entre launches.
@@ -468,22 +468,26 @@ editar um preserva suas mudanças entre launches.
 | Pipeline | O que faz | Metodologia |
 |---|---|---|
 | **huu Test Suite** *(destacado)* | Detecta a stack, configura test runner, escreve testes unitários pra 3 arquivos representativos + os arquivos selecionados pelo usuário, depois poda os blocos com falha e adiciona um badge de cobertura no README. | Fundamentos de teste unitário |
+| **huu Agent Knowledge** | Estuda o projeto (recon + estudo profundo por arquivo), acumula findings em `.huu/knowledge/`, e compila tudo em Agent Skills sob `.agents/skills/` — uma skill por tópico mais a skill roteadora `project-knowledge` que qualquer agente futuro carrega primeiro. Um step juiz valida as skills geradas e volta pro passo anterior em caso de falha. | [Spec Agent Skills](https://agentskills.io/specification) + conhecimento progressivo |
 | **huu Docs Audit** | Classifica cada doc pelo quadrante [Diátaxis](https://diataxis.fr/), pontua o README contra o Awesome-README, sinaliza referências stale, mede cobertura de doc inline de API. | Diátaxis + Awesome-README |
 | **huu Quality Audit** | Estilo Sonar: complexidade ciclomática / cognitiva, tamanho de função/arquivo, contagem de parâmetros, profundidade de aninhamento, duplicação, código morto. | [SonarSource](https://www.sonarsource.com/resources/library/cyclomatic-complexity/) + smells do Fowler |
 | **huu Performance Audit** | Varredura estática de hotspots (N+1, big-O, I/O sync, sinais de memory leak), Core Web Vitals pra frontends, checklist USE pra backends/CLIs. | [Método USE](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
 | **huu Refactor Plan** | Baseline de testes de caracterização, catálogo de smells do Fowler por arquivo, ranking top-5 de targets, grafo de dependências estilo Mikado estático, recomendações finais. Só plano — sem reescrita de código. | [Catálogo Fowler](https://refactoring.com/catalog/) + [Método Mikado](https://www.manning.com/books/the-mikado-method) |
 | **huu Security Audit** | Varredura de secrets com gitleaks/trufflehog, scan OWASP Top 10:2021 por arquivo, scan de CVE de dependências, roadmap de remediação alinhado com CWE Top 25:2024. | [OWASP Top 10](https://owasp.org/Top10/2021/) + [CWE Top 25](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) |
 
-**Contrato estrito de apenas-relatório pras cinco auditorias.** Elas
-escrevem APENAS em `.huu/audits/<topico>.md` e
-`.huu/audits/<topico>-faq.json`. Nunca modificam seu README,
-`package.json`, lockfiles, ou qualquer source de produção. Tools que
-precisam ser invocadas (semgrep, jscpd, gitleaks, lighthouse-ci, …)
-rodam efêmeras via `npx --yes`, `pipx run`, ou binários vendorizados
-sob `$HOME/.huu/bin/` — nunca adicionadas aos manifests do seu
-projeto. O único pipeline que toca arquivos de produção é o
-`huu Test Suite`, que é um pipeline de setup (escreve `huu-tests.md`
-e um badge de testes no README — isso é intencional).
+**Contrato de apenas-relatório pras cinco auditorias.** Elas escrevem
+APENAS em `.huu/audits/<topico>.md` e `.huu/audits/<topico>-faq.json`,
+mais no máximo um ajuste de `.gitignore` (uma linha `.huu/` commitada
+vira `.huu/*` + `!.huu/audits/` — sem isso, os relatórios são
+silenciosamente descartados no merge da etapa). Nunca modificam seu
+README, `package.json`, lockfiles, ou qualquer source de produção.
+Tools que precisam ser invocadas (semgrep, jscpd, gitleaks,
+lighthouse-ci, …) rodam efêmeras via `npx --yes`, `pipx run`, ou
+binários vendorizados sob `$HOME/.huu/bin/` — nunca adicionadas aos
+manifests do seu projeto. Dois pipelines tocam arquivos de produção por
+design: `huu Test Suite` (escreve `huu-tests.md` e um badge de testes
+no README) e `huu Agent Knowledge` (escreve `.agents/skills/**` e
+`.huu/knowledge/**`) — ambos são pipelines de setup, não auditorias.
 
 Steps por-arquivo são limitados por `Pipeline.maxNodeExecutions = 50`.
 Em repos grandes, restrinja sua seleção de arquivos com Smart Select;
