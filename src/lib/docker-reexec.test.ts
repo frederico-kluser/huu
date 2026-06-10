@@ -83,6 +83,22 @@ describe('decideReexec', () => {
     expect(decideReexec(['--stub', '--yolo', 'run', 'p.json'], env()).shouldReexec).toBe(false);
   });
 
+  it('skips re-exec for --no-docker (neutral CI spelling of --yolo)', () => {
+    const r = decideReexec(['--no-docker'], env());
+    expect(r.shouldReexec).toBe(false);
+    expect(r.reason).toMatch(/--no-docker/);
+  });
+
+  it('skips re-exec for --no-docker regardless of position and with subcommands', () => {
+    expect(decideReexec(['--no-docker', 'run', 'p.json'], env()).shouldReexec).toBe(false);
+    expect(decideReexec(['auto', 'p.json', '--config', 'c.json', '--no-docker'], env()).shouldReexec).toBe(false);
+  });
+
+  it('--no-docker wins over contradictory env state', () => {
+    const r = decideReexec(['--no-docker'], env({ HUU_NO_DOCKER: '0' }));
+    expect(r.shouldReexec).toBe(false);
+  });
+
   it('--yolo wins over HUU_NO_DOCKER=0 in env', () => {
     // Explicit user intent on the CLI overrides shell state. The value
     // happens to be falsy here but the principle holds: CLI > env.

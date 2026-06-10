@@ -20,7 +20,7 @@ import { preflightGitOnHost } from './lib/git-preflight.js';
 {
   const rawArgs = process.argv.slice(2);
   const wantsWeb = rawArgs.includes('--web');
-  const wantsYolo = rawArgs.includes('--yolo');
+  const wantsYolo = rawArgs.includes('--yolo') || rawArgs.includes('--no-docker');
   if (wantsWeb && !wantsYolo && process.env.HUU_IN_CONTAINER !== '1') {
     process.stderr.write(
       'huu: --web requires --yolo in Phase 1 (Docker port-publishing for the web UI is not implemented yet).\n',
@@ -163,6 +163,7 @@ Usage:
   huu --copilot             Alias for --backend=copilot
   huu --stub                Alias for --backend=stub (no real LLM)
   huu --yolo                Skip Docker, run native on the host (agent sees your shell creds)
+  huu --no-docker           Alias for --yolo / HUU_NO_DOCKER=1 — neutral spelling for CI runners
   huu --concurrency=<n>     Pin manual concurrency at n (disables memory-based auto-scale)
   huu --no-auto-scale       Disable memory-based auto-scale (on by default; guard stays on)
   huu --auto-scale          Deprecated: auto-scale is now the default
@@ -345,7 +346,7 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const useStub = args.includes('--stub');
   const useCopilot = args.includes('--copilot');
-  const useYolo = args.includes('--yolo');
+  const useYolo = args.includes('--yolo') || args.includes('--no-docker');
   const concurrencyArg = args
     .filter((a) => a.startsWith('--concurrency='))
     .map((a) => Number(a.slice('--concurrency='.length)))
@@ -398,6 +399,7 @@ async function main(): Promise<void> {
       a !== '--stub' &&
       a !== '--copilot' &&
       a !== '--yolo' &&
+      a !== '--no-docker' &&
       a !== '--auto-scale' &&
       a !== '--no-auto-scale' &&
       a !== '--web' &&
