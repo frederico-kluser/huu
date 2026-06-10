@@ -99,8 +99,9 @@ Flags globais relevantes ao Pi:
   LLM; escreve `STUB_*.md`). O backend stub tem
   `conflictResolverFactory: undefined`, então **desabilita** o resolver
   de conflitos LLM (falha loud em conflito).
-- `--yolo` — pula a re-exec em Docker e roda nativo (== `HUU_NO_DOCKER=1`).
-- `--auto-scale` — liga o `AutoScaler` de concorrência no startup.
+- `--yolo` / `--no-docker` — pula a re-exec em Docker e roda nativo (== `HUU_NO_DOCKER=1`).
+- `--concurrency=N` / `--no-auto-scale` — pinam concorrência manual (o
+  auto-scale por memória é o padrão; `--auto-scale` está deprecated).
 
 `huu status` expõe `--json`, `--liveness` (exit 1 se stalled/crashed,
 para o Docker HEALTHCHECK) e `--stalled-after <sec>`. Exit codes do

@@ -2,6 +2,13 @@
 
 A TypeScript/React (Ink) CLI TUI that runs LLM-agent pipelines in isolated git worktrees. Each stage decomposes into parallel tasks, deterministically merged into a central worktree at the end of every stage.
 
+**Identity:** huu designs pipelines that make *thinking* agents follow a
+*deterministic* process. It is NOT a tool for building new features — the
+focus is audits, test generation, knowledge extraction, and any
+assembly-line process with real, predictable value. No LLM planner invents
+scope; the human underwrites the method, the agent supplies the
+intelligence. Keep this framing in all docs and default pipelines.
+
 ## Build & Run
 
 ```bash
@@ -95,7 +102,26 @@ The Docker host wrapper (`lib/docker-reexec.ts`) is invoked from the very top
 of `cli.tsx` BEFORE the heavy Ink/React imports, so on the wrapper path none
 of the TUI code loads. Inside the container, `HUU_IN_CONTAINER=1` (set by
 the Dockerfile) short-circuits the gate so the same binary runs the TUI
-directly. See the `docker-runtime` skill for the full lifecycle.
+directly. Native bypasses: `--yolo`, `--no-docker` (neutral CI spelling),
+or `HUU_NO_DOCKER=1` — see `docs/ci.md` for the GitHub Actions / GitLab
+recipes. See the `docker-runtime` skill for the full lifecycle.
+
+### Dynamic concurrency (memory-aware, default ON)
+
+The orchestrator always instantiates the `AutoScaler`
+(`src/orchestrator/auto-scaler.ts`). In `auto` mode (the default) the
+concurrency target is memory-headroom based: `ramAvailableBytes` minus a
+10%/512MiB safety margin, divided by an EMA-observed per-agent footprint
+(seeded 250MiB, clamped 128MiB–2GiB). `--concurrency=N` or
+`--no-auto-scale` (or `RunConfig.concurrency` in headless) pins `manual`
+mode. The MEMORY GUARD runs in BOTH modes: at ≥95% RAM/CPU it kills the
+NEWEST agent (least work done — picked by `startedAt`), resets its card to
+`pending` with a `requeues` counter (TODO column, `↻N` badge), and requeues
+the task at the front of the queue. The killed-attempt marker is the
+consumable `killedAgentIds` Set in `orchestrator/index.ts` — never a status
+flag (see `requeue.test.ts` for the race + stale-flag regression).
+CheckStep judges surface as kanban cards via `OrchestratorState.checkRuns`
+(persisted to `RunManifest.checkRuns`).
 
 ## Bundled default pipelines
 
@@ -107,17 +133,27 @@ default pipelines into `pipelines/` on first run. Each one is idempotent
 
 | Pipeline | What it does | Methodology |
 |---|---|---|
-| `huu Test Suite` (`_default`) | Stack detection → test runner setup → unit tests for 3 representative files + user-selected files → prune failing blocks → add coverage badge to README. | Unit-test fundamentals |
+| `huu Test Suite` (`_default`) | Stack detection → test runner setup → unit tests for 3 representative files + user-selected files → prune failing blocks → add coverage badge to README. Prompts bake in mutation-surviving assertion rules and an anti-flaky determinism ruleset. | Google Testing Blog (behavior, not implementation) + [Fowler non-determinism](https://martinfowler.com/articles/nonDeterminism.html) + [Stryker](https://stryker-mutator.io/) follow-up |
 | `huu Agent Knowledge` | Recon → per-file deep study converging into `.huu/knowledge/` (atlas + findings) → topic synthesis → materializes Agent Skills under `.agents/skills/` (one per topic + a `project-knowledge` router skill) → judge validates frontmatter/naming/router coverage, looping back on `rework`. Setup pipeline — mutates the repo. | [Agent Skills spec](https://agentskills.io/specification) + progressive knowledge |
-| `huu Docs Audit` | Inventories every doc, classifies by Diátaxis quadrant, scores the README, flags stale references, measures inline API-doc coverage. Report-only. | [Diátaxis](https://diataxis.fr/) + Awesome-README |
-| `huu Quality Audit` | Sonar-style report: cyclomatic / cognitive complexity, function/file size, parameter count, nesting depth, duplication, dead code, composite score. Report-only. | [SonarSource](https://www.sonarsource.com/resources/library/cyclomatic-complexity/) + Fowler smells |
-| `huu Performance Audit` | Static hotspot scan (N+1, big-O, sync I/O, memory leak signals), Core Web Vitals scorecard for frontends, USE-method checklist for backends/CLIs. Report-only. | [USE method](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
-| `huu Refactor Plan` | Characterization-test baseline → per-file smell catalog → top-5 target ranking → STATIC Mikado-style graph per target → final Fowler recommendations. Report-only. | [Fowler refactoring catalog](https://refactoring.com/catalog/) + [Mikado method](https://www.manning.com/books/the-mikado-method) |
-| `huu Security Audit` | Secrets sweep (gitleaks), OWASP Top 10:2021 per-file scan (semgrep when available), dependency CVE scan, remediation roadmap. Report-only. | [OWASP Top 10](https://owasp.org/Top10/2021/) + [CWE Top 25 (2024)](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) |
+| `huu Docs Audit` | Inventories every doc, classifies via the Diátaxis compass, scores the README (standard-readme grounded), flags stale references, measures inline API-doc coverage. Report-only + judge gate. | [Diátaxis](https://diataxis.fr/) + [standard-readme](https://github.com/RichardLitt/standard-readme) |
+| `huu Quality Audit` | Sonar-style report: cyclomatic + cognitive complexity, size metrics, churn×complexity hotspots (git-log mining), duplication, dead code, hotspot-weighted composite score. Report-only + judge gate. | [SonarSource cognitive complexity](https://www.sonarsource.com/docs/CognitiveComplexity.pdf) + [Tornhill hotspots](https://docs.enterprise.codescene.io/versions/4.0.16/guides/technical/hotspots.html) |
+| `huu Performance Audit` | Static hotspot scan (N+1, big-O, sync I/O, memory leaks, unbounded concurrency, missing caching), Core Web Vitals scorecard (INP via TBT lab proxy, caveat explicit), USE-method checklist. Report-only + judge gate. | [USE method](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
+| `huu Refactor Plan` | Characterization-test baseline → per-file smell catalog → top-5 ranking by smell-weight × churn → STATIC Mikado-style graph per target → final Fowler recommendations. Report-only + judge gate. | [Fowler refactoring catalog](https://refactoring.com/catalog/) + [Mikado method](https://www.manning.com/books/the-mikado-method) + Tornhill hotspots |
+| `huu Security Audit` | Secrets sweep (gitleaks v8.19+ `git`/`dir`), OWASP Top 10:2025 per-file scan (semgrep when available), dependency CVE scan, supply-chain & CI posture (SLSA v1.2 / OpenSSF Scorecard informed), remediation roadmap. Report-only + judge gate. | [OWASP Top 10:2025](https://owasp.org/Top10/2025/) + [CWE Top 25 (2025)](https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html) + [SLSA](https://slsa.dev/spec/v1.2/) |
 
 Only `huu Test Suite` carries `_default: true` — it's the entry the Welcome
 screen highlights. The other six are surfaced in the pipeline picker but
 are not flagged as "the default".
+
+Every report-only audit ENDS with a judge CheckStep (`N. Validate report`,
+shared `reportJudgeCondition()` in `knowledge-protocol.ts`): sections
+complete, summary counts match the FAQ, ordering correct, report-only
+contract held. `approved` (the default outcome) advances to a terminal
+`Finalize report` stamp step; `rework` loops back to consolidation
+(maxRuns 2). `registry.test.ts` guards this contract — keep it green when
+editing the modules. Note `pipeline-bootstrap` never overwrites: users with
+already-materialized pipeline files keep them; delete
+`pipelines/<name>.pipeline.json` to re-materialize the current version.
 
 ### Side-effect surface
 

@@ -7,6 +7,40 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
+### Added
+
+- **Memory-aware dynamic concurrency is now the DEFAULT.** The orchestrator always runs the `AutoScaler`: in `auto` mode (default) the worker-pool target is computed from real memory headroom — `ramAvailableBytes` (new in `SystemMetrics`: cgroup `limit − current`, `/proc/meminfo MemAvailable` on Linux hosts, `os.freemem()` fallback) minus a 10%/512 MiB safety margin, divided by an EMA-observed per-agent footprint (seeded 250 MiB, clamped 128 MiB–2 GiB) — replacing the old fixed total-RAM/250 MB estimate. New flags: `--concurrency=N` (pins manual mode at N) and `--no-auto-scale`; headless configs gain `autoScale?: boolean` with back-compat derivation (a config that sets `concurrency` keeps exact manual behavior). New web message `run.setAutoScale`; `run.setConcurrency` now pins manual (parity with the TUI `+`/`-` keys). Headless NDJSON state events now include `concurrency` and `autoScale` mode.
+- **Always-on memory guard with kill→TODO requeue.** In BOTH modes, at ≥95% RAM/CPU the orchestrator kills the NEWEST agent (least work done — picked by `startedAt`), resets its kanban card to `pending` with a `requeues` counter (TODO column, `↻N` badge in the TUI, `requeued ×N` badge in the web UI) and requeues the task at the front of the queue — older agents' finished work is never lost. TUI header shows `~MB/agent` + free MB in auto mode and a `GUARD` chip (+ kill count) in manual mode.
+- **CheckStep judges are now kanban cards** (TUI + web). New `CheckRun` slice (`OrchestratorState.checkRuns`, persisted to `manifest.checkRuns`): one entry per check visit with phase `judging → done/error`, the chosen outcome label, `fromJudge` flag (yellow `DEFAULT:` badge when the fallback fired), judge model, resolved condition, reason and live last-log. The maxRuns-exceeded forced default is its own DONE card instead of an invisible skip. TUI: `judge:` cards in `RunKanban` (`theme.ai` while judging); web: new `CheckRunPill` molecule.
+- **`--no-docker`** — neutral CI spelling of `--yolo` (accepted everywhere `--yolo` is: re-exec gate, `--web` gate, credentials warning).
+- **`docs/ci.md` + `docs/ci.pt-BR.md`** — running huu in CI without Docker: GitHub Actions and GitLab CI recipes for `huu auto` (npm install, secrets, `fetch-depth: 0` for history-scanning audits, `.huu/audits/**` artifacts, exit-code gating, dynamic per-file config via `git ls-files`, concurrency guidance for small runners). Linked from the READMEs and `docs/README.md`.
+- **Judge gate on the five report-only audits.** Docs/Quality/Performance/Refactor/Security now END with a `N. Validate report` CheckStep (shared `reportJudgeCondition()` helper in `knowledge-protocol.ts`: sections complete, summary counts match the FAQ, ordering correct, report-only contract held) looping `rework` back to consolidation (maxRuns 2, `approved` is the default outcome) plus a terminal `Finalize report` stamp step. New `registry.test.ts` guards the contract (schema round-trip incl. topology, judge shape, REPORT-ONLY marker, caps).
+
+### Changed
+
+- **All 7 default pipelines redesigned on cited, current methodology** (delete `pipelines/<name>.pipeline.json` to re-materialize — bootstrap never overwrites):
+  - *Security Audit*: OWASP Top 10 **2021 → 2025** (new A03 Software Supply Chain Failures and A10 Mishandling of Exceptional Conditions; SSRF folded into A01), CWE Top 25 **2025**, NEW step "Supply chain & CI posture" (SLSA v1.2 / OpenSSF Scorecard informed: lockfile + SHA pinning, `pull_request_target` pwn-request detection, workflow `permissions:`, `curl | bash`, binary artifacts), gitleaks v8.19+ `git`/`dir` subcommands, `semgrep scan`, osv-scanner v2 `scan source`, path-traversal patterns.
+  - *Quality Audit*: NEW step "Hotspot analysis (churn × complexity)" (Tornhill/CodeScene git-log mining), cognitive-complexity scoring rules + thresholds (Sonar S3776 = 15) alongside cyclomatic, hotspot-weighted refactor-first ranking.
+  - *Performance Audit*: explicit INP lab caveat (Lighthouse can't measure INP — TBT is the lab proxy; field/CrUX required), p75 framing, unbounded-concurrency and missing-caching/extraneous-fetching patterns.
+  - *Docs Audit*: classification via the Diátaxis compass; README rubric grounded in standard-readme required sections + assessment-badge evidence (ICSE 2018).
+  - *Refactor Plan*: top-5 target ranking is now smell-weight × churn; characterization-test rationale (Feathers) spelled out.
+  - *Test Suite*: assertion-quality rules that survive mutation testing (behavior not implementation, no change-detector/snapshot-only tests), determinism ruleset (no sleeps/network, frozen clocks, fixed seeds, hermetic tests), optional Stryker/mutmut/PIT follow-up documented in `huu-tests.md`.
+  - *Agent Knowledge*: agentskills.io spec details (optional frontmatter fields, 3-level progressive disclosure, scripts-over-prose guidance).
+- TUI `+`/`-` keys and web `run.setConcurrency` now PIN manual mode (auto-scale re-enabled with `A` / the web toggle). `--auto-scale` is deprecated (now the default; still accepted — with `--concurrency` it forces auto mode with that seed).
+- `AutoScaleStatus` gains `mode`, `observedAgentMemoryMb`, `ramAvailableMb`, `guardKillCount`; `OrchestratorState.autoScale` is now always present.
+- Positioning across READMEs, MANIFESTO, docs and package description: huu designs pipelines that make thinking agents follow a deterministic process — audits, test generation, knowledge extraction and predictable-value processes; NOT a tool for building new features.
+
+### Deprecated
+
+- `--auto-scale` flag (auto-scale is now the default), `AgentStatus.killedByAutoScaler`, lifecycle phase `killed_by_autoscaler` (kept so old manifests still parse; no longer produced).
+
+### Fixed
+
+- Guard-killed agents no longer park as `killed_by_autoscaler` errors in the DONE column — the card visibly returns to TODO with its requeue counter.
+- Stale `killedByAutoScaler` status flag could swallow a requeued task's later genuine failure (silent drop — never retried, never counted, never marked error). Replaced by a consumable kill-marker set; regression-tested in `requeue.test.ts`.
+- Auto-scaler active-agent accounting no longer inflates on retry/final-fail (it skewed the observed per-agent memory estimate).
+- `npm run build && npm test` no longer runs the compiled `dist/**/*.test.js` twins in parallel with `src/` (vitest 4 dropped the dist exclude; the duplicated native-shim tests raced each other on port 3000). New `vitest.config.ts`.
+
 ## [1.3.0] - 2026-06-10
 
 ### Added

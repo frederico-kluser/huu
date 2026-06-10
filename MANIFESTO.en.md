@@ -22,6 +22,15 @@ Everything inside Docker, without your shell credentials.
 The design fits in one sentence: **the human underwrites the scope;
 the AI executes inside it.**
 
+And it draws huu's territory: **making thinking agents follow a
+deterministic process** — audits, test generation, knowledge
+extraction, mechanical migrations, any assembly line with real,
+predictable value. huu is not a tool for building new features: when
+every step demands open design decisions, the place for that is an
+interactive coding agent; when the method is known and the value lies
+in executing it with discipline across N files, the place is a
+pipeline.
+
 ## The thesis
 
 The industry treats "agent" as a synonym for autonomy: hand the model a

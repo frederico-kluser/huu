@@ -35,6 +35,26 @@ Files governed: `webui/**`.
 - Default-export components (named exports only, matching the TUI convention).
 - Persist app state outside `useWsSession()` — the server's FSM is the source of truth; client state is for ephemeral input drafts and UI affordances only.
 
+## Run dashboard specifics
+
+- **CheckRunPill** (molecule) renders CheckStep judge runs on the run
+  page, next to `IntegrationPill`: fuchsia `ai` while `judging` (it is
+  an LLM agent), green outcome label when `fromJudge`, amber
+  `DEFAULT: <label>` on fallback. Data comes from
+  `state.checkRuns`; the derived type is
+  `CheckRun = OrchestratorState['checkRuns'][number]` in
+  `webui/src/lib/domain-types.ts` — extend that derivation, don't
+  re-declare the shape.
+- **AgentStatusPill** shows a `↻N` requeue badge (from
+  `agent.requeues`) when the memory guard killed the agent and sent its
+  task back to TODO.
+- Concurrency messages: `{ type: 'run.setConcurrency', concurrency }`
+  **pins manual mode server-side** (memory-aware auto-scale is the
+  default); `{ type: 'run.setAutoScale', enabled }` toggles auto back
+  on/off. Any new client message MUST also be added to
+  `CLIENT_MSG_TYPES` in `src/web/ws-protocol.ts` or `isClientMessage()`
+  rejects it with `BAD_MSG`.
+
 ## Cross-references
 
 - Protocol: `src/web/ws-protocol.ts`.

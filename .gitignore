@@ -8,3 +8,6 @@ src/web/dist-static/
 
 # smoke-test scratch (scripts/smoke-*.sh no macOS)
 .smoke-tmp/
+
+# huu runtime cache (native shim compiled on host smoke runs)
+.huu-cache/

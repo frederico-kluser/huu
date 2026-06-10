@@ -27,6 +27,13 @@
 
 ## O que é o huu
 
+**O huu desenha pipelines que fazem agentes que pensam seguirem um
+processo determinístico.** Ele não é uma ferramenta para desenvolver
+features novas: o foco é auditoria, geração de testes, extração de
+conhecimento e qualquer processo em esteira com previsibilidade real
+de valor — onde o método é fixo e o agente entra com a inteligência,
+não com o escopo.
+
 **Um pipeline é um arquivo de ordens que a IA obedece.** Você escreve
 um `huu-pipeline-v1.json` listando os passos e os arquivos que cada
 passo toca. O orchestrator transforma cada passo em um fan-out de
@@ -122,38 +129,41 @@ Passo a passo com prompts:
 
 ---
 
-## O que mais você pode construir
+## Para que o huu serve (e o que ele não é)
 
-Um pipeline é um artefato criativo. Seis outros defaults vêm na
-caixa, e um autor criativo pode escrever qualquer coisa que se encaixe
-no formato **planejar → fan-out → mergear**:
+O formato **planejar → fan-out → mergear** brilha em processos com
+previsibilidade real de valor — onde o método cabe num arquivo e o
+resultado é auditável:
 
-- **huu Agent Knowledge** (default empacotado). O conhecimento
-  progressivo levado ao limite: recon do projeto, estudo profundo por
-  arquivo convergindo em `.huu/knowledge/findings.json`, síntese de
-  tópicos, e a compilação final em **Agent Skills**
-  ([spec](https://agentskills.io/specification)) sob `.agents/skills/`
-  — uma skill por tópico mais a skill roteadora `project-knowledge`
-  que qualquer agente futuro (huu, Claude Code, Codex, Cursor) carrega
-  primeiro pra saber qual skill puxar. Um step `check` valida as
-  skills geradas e devolve pro passo anterior se algo violar a spec.
-- **Pipeline de segurança.** Escolha à mão os arquivos que quer
-  auditar, passe o threat model e padrões (OWASP, CWE) como
-  documentação, paralelize scans por arquivo. Etapa 1 monta um
-  `THREAT-MODEL.md`. Etapa 2 ramifica N agentes, cada um scanning um
-  arquivo contra o modelo. Etapa 3 consolida findings e escreve o
-  roadmap de remediação. Todos os worktrees mergeiam num único branch
-  de integração.
-- **Migração massiva.** *Migrar 40 testes Mocha pra Vitest:* etapa 1
-  audita patterns em `MIGRATION.md`, etapa 2 ramifica 40 agentes (um
-  por arquivo de teste), etapa 3 roda `npm test` e atualiza o
-  `CHANGELOG.md`.
-- **Auditorias de Docs / Quality / Performance / Refactor** vêm como
-  pipelines default empacotados — só-relatório estrito, nunca tocam
-  seus manifests ou source de produção.
-- **Sua ideia.** Se você consegue escrever o plano como uma lista
+- **Auditorias** (cinco defaults empacotados: Security, Quality,
+  Docs, Performance, Refactor Plan) — relatório-apenas estrito, nunca
+  tocam seus manifests ou source de produção. Cada uma é ancorada em
+  metodologia publicada (OWASP Top 10:2025, churn×complexidade,
+  Diátaxis, Core Web Vitals, Fowler/Mikado) e **termina com um agente
+  juiz** que valida o relatório e devolve pra retrabalho se as contas
+  não fecharem.
+- **Geração de testes** (`huu Test Suite`, o default) — regras de
+  asserção que sobrevivem a mutation testing e regras de determinismo
+  anti-flaky embutidas nos prompts.
+- **Extração de conhecimento** (`huu Agent Knowledge`) — recon, estudo
+  profundo por arquivo convergindo em `.huu/knowledge/findings.json`,
+  síntese de tópicos e compilação final em **Agent Skills**
+  ([spec](https://agentskills.io/specification)) sob `.agents/skills/`,
+  com um step `check` validando as skills geradas contra a spec.
+- **Processos mecânicos em massa.** *Migrar 40 testes Mocha pra
+  Vitest:* etapa 1 audita patterns em `MIGRATION.md`, etapa 2 ramifica
+  40 agentes (um por arquivo), etapa 3 valida com `npm test`. O prompt
+  é idêntico nos 40 — só `$file` muda. Previsível por construção.
+- **Seu processo.** Se você consegue escrever o método como uma lista
   ordenada de steps com prompts e um `scope`, você consegue rodar.
   O formato do pipeline é estável; o cookbook é aberto.
+
+**O que o huu NÃO é:** uma ferramenta para desenvolver features novas.
+Não existe planner LLM inventando escopo, e "construa o app X" não é
+um pipeline — é uma aposta. Quando a tarefa exige decisões abertas de
+design a cada passo, use um coding agent interativo; quando o método é
+conhecido e o valor está em executá-lo com disciplina sobre N
+arquivos, use o huu.
 
 Defaults empacotados:
 [`docs/onboarding.pt-BR.md#pipelines-default-empacotados`](docs/onboarding.pt-BR.md#pipelines-default-empacotados).
@@ -191,6 +201,31 @@ A fundo: [`docs/onboarding.pt-BR.md#backends-a-fundo`](docs/onboarding.pt-BR.md#
 
 ---
 
+## Concorrência dinâmica (memória-aware, padrão)
+
+Por padrão o huu **adapta a concorrência ao headroom real de memória**:
+ele mede quanto cada agente consome de verdade (média móvel, semeada em
+250 MB) e admite novos agentes só enquanto couberem na memória
+disponível menos uma margem de segurança — cgroup-aware, então dentro
+de um container ele respeita o limite do container, não o do host.
+
+Uma **guarda de memória fica sempre ativa** (mesmo com concorrência
+manual): se a RAM passa de ~95%, o agente **mais novo** — o que tem
+menos trabalho feito — é morto, seu card **volta para a coluna TODO**
+com um contador `↻N`, e a task recomeça do zero quando a memória
+liberar. O trabalho dos agentes mais antigos nunca é perdido.
+
+Controles:
+
+| Onde | Como |
+|---|---|
+| CLI | `--concurrency=N` pina manual em N · `--no-auto-scale` desliga o modo dinâmico |
+| TUI | `+`/`-` ajustam (e pinam manual) · `A` religa o auto-scale |
+| Web | controle de concorrência + toggle de auto-scale no header do run |
+| Headless | `"concurrency": N` no config pina manual; omita para o modo dinâmico |
+
+---
+
 ## Início rápido
 
 ### Docker (recomendado)
@@ -216,9 +251,11 @@ huu --yolo                     # abre a TUI nativa (sem Docker)
 ```
 
 Execuções nativas expõem suas credenciais de shell pro agente LLM.
-Prefira Docker pra qualquer coisa real. Matriz completa de
-instalação (macOS / Windows / Linux, notas do OrbStack, caveats do
-WSL2): [`docs/onboarding.pt-BR.md#instalação`](docs/onboarding.pt-BR.md#instalação).
+Prefira Docker pra qualquer coisa real no seu laptop. (`--no-docker` é
+o alias de grafia neutra do `--yolo`, pensado pra runners de CI — veja
+abaixo.) Matriz completa de instalação (macOS / Windows / Linux, notas
+do OrbStack, caveats do WSL2):
+[`docs/onboarding.pt-BR.md#instalação`](docs/onboarding.pt-BR.md#instalação).
 
 ---
 
@@ -247,6 +284,32 @@ huu auto pipeline.json --config config.json
 
 Construa pipes em cima: `huu auto … | jq .runId`. Doc completa:
 [`docs/onboarding.pt-BR.md#modo-headless`](docs/onboarding.pt-BR.md#modo-headless).
+
+---
+
+## Rodando no CI (GitHub Actions / GitLab — sem Docker)
+
+Um runner de CI já é um container efêmero: lá o wrapper Docker do huu
+não faz sentido (e Docker-in-Docker raramente existe). Combine
+`HUU_NO_DOCKER=1` (ou `--no-docker`) com o modo headless e o huu vira
+um job de esteira em qualquer runner com **Node.js ≥ 20 e git**:
+
+```yaml
+env:
+  HUU_NO_DOCKER: '1'
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+steps:
+  - run: npm install -g huu-pipe
+  - run: huu auto pipelines/huu-security-audit.pipeline.json --config huu-ci-config.json
+  - uses: actions/upload-artifact@v4
+    with: { name: huu-audits, path: .huu/audits/** }
+```
+
+As auditorias relatório-apenas são o encaixe natural: o job sobe
+`.huu/audits/` como artefato e o exit code (`0`/`1`) faz o gate.
+Receitas completas (GitHub Actions e GitLab CI, config dinâmico por
+`git ls-files`, concorrência em runner pequeno):
+[`docs/ci.pt-BR.md`](docs/ci.pt-BR.md).
 
 ---
 
@@ -292,6 +355,7 @@ overrides de modelo, alocação de portas):
 | Tópico | Onde |
 |---|---|
 | **Tutorial / primeira execução / autoria** | [`docs/onboarding.pt-BR.md`](docs/onboarding.pt-BR.md) |
+| **CI sem Docker (GitHub Actions / GitLab)** | [`docs/ci.pt-BR.md`](docs/ci.pt-BR.md) |
 | **Arquitetura & regras de import em camadas** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | **Operações (Docker, env vars, FAQ, roadmap)** | [`docs/operations.pt-BR.md`](docs/operations.pt-BR.md) |
 | **Modo Web UI (`huu --web`)** | [`docs/WEB-UI.md`](docs/WEB-UI.md) |

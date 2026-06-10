@@ -23,6 +23,15 @@ credenciais do seu shell.
 Esse desenho cabe numa frase: **o humano subscreve o escopo; a IA
 executa dentro dele.**
 
+E ele delimita o território do `huu`: **fazer agentes que pensam
+seguirem um processo determinístico** — auditorias, geração de testes,
+extração de conhecimento, migrações mecânicas, qualquer esteira com
+previsibilidade real de valor. O `huu` não é uma ferramenta para
+desenvolver features novas: quando cada passo exige decisões abertas de
+design, o lugar é um coding agent interativo; quando o método é
+conhecido e o valor está em executá-lo com disciplina sobre N arquivos,
+o lugar é um pipeline.
+
 ## A tese
 
 A indústria trata "agente" como sinônimo de autonomia: dê uma meta ao

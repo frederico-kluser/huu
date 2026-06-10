@@ -57,6 +57,13 @@ The runtime is a cursor walking a directed graph:
 - Honor `WorkStep.next` override; otherwise fall through to `steps[idx+1]`; `null` = end.
 - Persist `executionTrace` into `manifest.executionTrace`.
 - Per WorkStep visit, push a `StageIntegration` entry (`stageIntegrations`) and advance its phase `pending → merging → conflict_resolving? → done|error|skipped` — both dashboards render it as the merge card. New terminal paths in the orchestrator MUST sweep non-terminal entries to `error` (see the end-of-run sweep in `start()`), or cards hang in DOING forever.
+- Per CheckStep visit, push a `CheckRun` entry into `OrchestratorState.checkRuns` (one per visit, unique by `visitIndex`): phase `judging → done|error`, `outcomeLabel`, `fromJudge` (false = default outcome fired), effective `modelId`, the `$runs`-substituted `condition`, `reason`, `lastLog`, timestamps. Both dashboards render these as judge kanban cards; the slice is persisted to `RunManifest.checkRuns`.
+
+### Bundled audits: judge-validates-report idiom
+
+The five report-only audits (Docs / Quality / Performance / Refactor / Security) end with a judge CheckStep `N. Validate report` whose condition is built by `reportJudgeCondition()` in `src/lib/default-pipelines/knowledge-protocol.ts` — required sections complete (no placeholders), FAQ JSON counts matching the report's summary tables, recommendations ordered critical → warn → info, `git status` clean outside `.huu/`. Outcomes: `approved` (**`default: true`**, → terminal `Finalize report` stamp step) | `rework` (→ back to the consolidation step), `maxRuns: 2`. `approved` MUST stay the default — the default outcome fires on stub mode / judge failure / unknown label / maxRuns cap, and a backward default would loop every smoke run.
+
+`registry.test.ts` guards this contract: each audit keeps **exactly one** check step, the default outcome's label is `approved`, judge `maxRuns ≤ 3`, the audit's first prompt carries the `REPORT-ONLY` hard-rule marker, and the safety caps hold (`maxRetries ≤ 3`, `maxNodeExecutions ≤ 50`). Keep it green when editing the audit modules.
 
 ### AgentFactory
 ```typescript
@@ -97,3 +104,4 @@ contract.
 - The integration agent has permission to run git commands — normal agents do not.
 - The **check judge agent** (`agentId 9998`, distinct from integration agent `9999`) runs IN the integration worktree with shell access but MUST NOT commit, modify code, or push. Output contract: a JSON block `{ "label": "<one-of-outcomes>", "reason": "..." }`. Parsing failures or unknown labels → fall back to the outcome marked `default: true`. See `orchestrator/check-evaluator.ts` and `extractVerdict()`.
 - Setup-time feasibility analysis lives in `lib/assistant-check-feasibility.ts` — calls LangChain `ChatOpenAI` with `withStructuredOutput(FeasibilitySchema)` to produce `{feasible, reason, instructionDraft, warnings}`. Stub mode via `HUU_LANGCHAIN_STUB=1` or `apiKey==='stub'`.
+- `pipeline-bootstrap.ts` NEVER overwrites an existing `pipelines/<name>.pipeline.json` — users who already materialized a default keep their (possibly older/edited) copy after an upgrade. To pick up a redesigned default, delete the file and relaunch.

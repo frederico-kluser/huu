@@ -300,7 +300,7 @@ curto-circuita o check de requisito.
 | `HUU_CHECK_PUSH` | não | Quando setada, preflight verifica que o remote configurado está alcançável antes de a execução começar. |
 | `HUU_IN_CONTAINER` | não | Setada pra `1` automaticamente pela imagem Docker oficial. Usada pelo wrapper pra curto-circuitar o auto-Docker re-exec. |
 | `HUU_IMAGE` | não | Override da imagem de container usada pelo wrapper auto-Docker. Padrão: `ghcr.io/frederico-kluser/huu:latest`. Útil pra pinar uma release ou apontar pra um mirror privado. |
-| `HUU_NO_DOCKER` | não | Quando setada pra `1` ou `true`, pula o auto-Docker re-exec e roda huu nativo. Exige `npm install` local das deps do huu. Principalmente útil pro desenvolvimento do huu em si. |
+| `HUU_NO_DOCKER` | não | Quando setada pra `1` ou `true`, pula o auto-Docker re-exec e roda huu nativo. Equivalente à flag `--no-docker` (o alias de grafia neutra do `--yolo`, pensado pra CI). Exige `npm install` local das deps do huu. Útil pro desenvolvimento do huu em si e pra runners de CI — veja [`docs/ci.pt-BR.md`](ci.pt-BR.md). |
 | `HUU_DOCKER_NETWORK` | não | Valor pass-through pra `docker run --network=<value>`. Por padrão, huu auto-cria `huu-net-mtu<N>` quando em VPN (MTU da rota default < 1500); set isso pra override (ex.: `host`, ou o nome de uma rede gerenciada pelo usuário pré-existente). |
 | `HUU_DOCKER_PASS_ENV` | não | Lista separada por whitespace de nomes de env var adicionais pra forwardar pro container. O wrapper sempre forwarda `OPENROUTER_API_KEY`, `OPENROUTER_API_KEY_FILE`, `HUU_CHECK_PUSH`, `HUU_WORKTREE_BASE`, `HUU_HOST_HOME` e `TERM` — use isso pra adicionar nomes customizados. |
 | `HUU_HOST_HOME` | não | Setada automaticamente pelo wrapper pro home directory do host. Dentro do container, `getHuuHome()` lê isso pra escritas em `~/.huu/` e o target default de export `~/Downloads/` caírem no filesystem bind-montado do host. Sem set fora do Docker. |
@@ -346,13 +346,19 @@ bloquear a seleção.
 
 ## Concorrência com auto-scaling
 
-A concorrência começa em `10` e é ajustável ao vivo com `+`/`-` no
-dashboard da execução. Pra runs noturnos onde você não quer ficar de
-babá no slider, passe `--auto-scale` (ou pressione `A` no dashboard)
-pra habilitar o **auto-scaling limitado por recursos**.
+**O auto-scaling memória-aware é o padrão.** O auto-scaler dimensiona
+a concorrência pelo headroom real de memória: ele mede o consumo de
+verdade de cada agente (média móvel, semeada em 250 MB) e admite novos
+agentes só enquanto couberem na memória disponível menos uma margem de
+segurança — cgroup-aware, então dentro de um container ele respeita o
+limite do container, não o do host. Passe `--concurrency=N` ou
+`--no-auto-scale` pra pinar o **modo manual** (ajustável ao vivo com
+`+`/`-` no dashboard; `A` religa o auto). Em configs headless, setar
+`"concurrency"` pina manual; omita pro auto.
 
 O auto-scaler observa CPU e RAM via `lib/resource-monitor.ts` e
-transita entre cinco estados, mostrados como `AUTO <ESTADO>` no header:
+transita entre cinco estados, mostrados no header como
+`AUTO <ESTADO> · CPU/RAM · ~<N>MB/agente · free <N>MB`:
 
 - **NORMAL** — abaixo de ambos os thresholds, disposto a subir mais
   agentes até a profundidade da fila.
@@ -361,20 +367,23 @@ transita entre cinco estados, mostrados como `AUTO <ESTADO>` no header:
   recusa novos spawns mas deixa agentes em execução em paz.
 - **DESTROYING** — uso acima do threshold de destruição (default 95%);
   mata o agente **mais novo** (fase `killed_by_autoscaler`) pra
-  recuperar espaço. Cartões mortos são reenfileirados e tentados de
-  novo depois.
+  recuperar espaço. O cartão morto volta pra coluna TODO com um
+  contador de requeue `↻N` e a tarefa recomeça do zero depois — o
+  trabalho dos agentes mais antigos nunca é perdido.
 - **COOLDOWN** — pausa de 30s depois de um evento de destroy ou
   backoff pra que o sistema não oscile.
 
 `+`/`-` manuais no dashboard desabilitam o auto-scale automaticamente
-— pressione `A` pra reativar. O bloco de status também mostra `CPU%`
-e `RAM%` ao vivo, espelhando o `SystemMetricsBar` pra você não ter
-que correlacionar dois readouts.
+— pressione `A` pra reativar. A **guarda de memória continua ativa no
+modo manual** (o header troca o chip `AUTO` por um chip `GUARD` com o
+contador de kills). O bloco de status também mostra `CPU%` e `RAM%`
+ao vivo, espelhando o `SystemMetricsBar` pra você não ter que
+correlacionar dois readouts.
 
 Sobrescreva defaults setando `agentMemoryEstimateMb`,
 `stopThresholdPercent`, `destroyThresholdPercent`, `cooldownMs` e
-`maxAgents` no código se você embarca o orchestrator; o CLI expõe só
-o toggle on/off.
+`maxAgents` no código se você embarca o orchestrator; o CLI expõe
+`--concurrency=N` e `--no-auto-scale`.
 
 ---
 
@@ -485,6 +494,22 @@ O orchestrator marca o cartão como falho, dropa seu worktree, e
 (dependendo do `maxRetries`) re-sobe a tarefa num worktree fresh em
 cima do mesmo HEAD de integração. Se retries esgotam, a execução
 continua sem aquele cartão e a falha fica preservada no resumo.
+
+**Por que o cartão de um agente voltou pra TODO com um badge `↻`?**
+A guarda de memória sempre-ativa disparou: em ~95% de RAM (ou CPU)
+ela mata o agente **mais novo** — o que tem menos trabalho feito —
+pra que o trabalho dos agentes mais antigos sobreviva. O cartão volta
+pra coluna TODO com um contador de requeue `↻N` e a tarefa recomeça
+do zero quando a memória liberar. A guarda fica ativa nos dois modos
+de concorrência. O auto-scale memória-aware é o padrão; pine um
+número fixo de agentes com `--concurrency=N` ou `--no-auto-scale`
+(ou `"concurrency": N` num config headless).
+
+**Posso rodar o huu no CI (GitHub Actions / GitLab)?**
+Sim — um runner de CI já é um container efêmero, então pule o wrapper
+Docker com `HUU_NO_DOCKER=1` (ou `--no-docker`) e conduza a execução
+com `huu auto`. Receitas completas, incluindo upload de
+`.huu/audits/` como artefato: [`docs/ci.pt-BR.md`](ci.pt-BR.md).
 
 **E se dois agentes tocam no mesmo arquivo?**
 É sinal de que o pipeline foi mal projetado: em um pipeline
