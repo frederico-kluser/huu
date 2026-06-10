@@ -15,6 +15,8 @@ interface Props {
   repoRoot: string;
   onSave: (step: CheckStep) => void;
   onCancel: () => void;
+  /** Backend-aware context for feasibility analysis (Azure routing). */
+  llmContext?: import('../../lib/llm-client-factory.js').LlmClientContext;
 }
 
 type Field = 'name' | 'condition' | 'maxRuns' | 'outcomes' | 'feasibility';
@@ -38,6 +40,7 @@ export function CheckStepEditor({
   repoRoot,
   onSave,
   onCancel,
+  llmContext,
 }: Props): React.JSX.Element {
   const [step, setStep] = useState<CheckStep>(initialStep);
   const [field, setField] = useState<Field>('name');
@@ -82,6 +85,7 @@ export function CheckStepEditor({
         pipeline,
         apiKey,
         repoRoot,
+        llmContext,
       });
       setFeasibility(result);
       if (result.instructionDraft) {

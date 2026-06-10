@@ -159,7 +159,7 @@ Usage:
   huu init-docker [...]     Scaffold compose.huu.yaml into the current repo
   huu status [...]          Inspect the latest run via .huu/debug-*.log
   huu prune [...]           List/kill orphan huu containers + stale cidfiles
-  huu --backend=<kind>      Pick agent backend: pi (default), copilot, stub
+  huu --backend=<kind>      Pick agent backend: pi (default), copilot, azure, stub
   huu --copilot             Alias for --backend=copilot
   huu --stub                Alias for --backend=stub (no real LLM)
   huu --yolo                Skip Docker, run native on the host (agent sees your shell creds)
@@ -478,8 +478,14 @@ async function main(): Promise<void> {
 
     const bundle = selectBackend(runConfig.backend);
     let apiKey = '';
+    let endpoint: string | undefined;
     if (bundle.requiresApiKey) {
-      const specName = runConfig.backend === 'copilot' ? 'copilot' : 'openrouter';
+      const specName =
+        runConfig.backend === 'copilot'
+          ? 'copilot'
+          : runConfig.backend === 'azure'
+            ? 'azureApiKey'
+            : 'openrouter';
       const spec = findSpec(specName);
       if (spec) apiKey = resolveApiKey(spec);
       if (!apiKey) {
@@ -492,12 +498,26 @@ async function main(): Promise<void> {
         );
         process.exit(1);
       }
+
+      // Azure also requires an endpoint URL.
+      if (runConfig.backend === 'azure') {
+        const endpointSpec = findSpec('azureEndpoint');
+        if (endpointSpec) endpoint = resolveApiKey(endpointSpec) || undefined;
+        if (!endpoint) {
+          console.error(
+            'huu auto: azure backend requires an endpoint URL but ' +
+              'AZURE_OPENAI_BASE_URL is not set. Export it or persist it via the TUI first.',
+          );
+          process.exit(1);
+        }
+      }
     }
 
     const appConfig: AppConfig = {
       apiKey: apiKey || 'stub',
       modelId: runConfig.modelId,
       backend: runConfig.backend,
+      endpoint,
     };
 
     const code = await runHeadless({

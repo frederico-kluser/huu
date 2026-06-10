@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { buildProjectDigest } from './project-digest.js';
 import {
@@ -15,12 +14,11 @@ import {
 import { fallbackCoreItems, resolveSelections } from './recon-resolve.js';
 import { runReconSelector } from './recon-selector.js';
 import { log as dlog } from './debug-logger.js';
-
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const OPENROUTER_HEADERS = {
-  'HTTP-Referer': 'https://github.com/frederico-kluser/huu',
-  'X-OpenRouter-Title': 'huu',
-};
+import {
+  buildChatClient,
+  defaultHelperModel,
+  type LlmClientContext,
+} from './llm-client-factory.js';
 
 /**
  * Default recon model — minimax is fast, cheap, and supports function calling
@@ -59,6 +57,12 @@ export interface RunProjectReconOptions {
   modelId?: string;
   onUpdate: (update: ReconUpdate) => void;
   signal?: AbortSignal;
+  /**
+   * Backend-aware context. When provided, routes through the user's chosen
+   * backend (e.g. Azure). Required when `--backend=azure` is in use,
+   * otherwise recon agents leak charges to OpenRouter.
+   */
+  llmContext?: LlmClientContext;
 }
 
 export interface SelectAndRunReconOptions {
@@ -71,6 +75,8 @@ export interface SelectAndRunReconOptions {
   onItemsResolved?: (items: readonly ReconRunItem[]) => void;
   onUpdate: (update: ReconUpdate) => void;
   signal?: AbortSignal;
+  /** See `RunProjectReconOptions.llmContext`. */
+  llmContext?: LlmClientContext;
 }
 
 export {
@@ -116,7 +122,9 @@ export async function runProjectRecon(
 ): Promise<ReconAgentResult[]> {
   const items = opts.items ?? fallbackCoreItems();
   const stub =
-    process.env.HUU_LANGCHAIN_STUB === '1' || opts.apiKey.trim() === 'stub';
+    process.env.HUU_LANGCHAIN_STUB === '1' ||
+    opts.apiKey.trim() === 'stub' ||
+    opts.llmContext?.backend === 'stub';
 
   for (const item of items) {
     opts.onUpdate({ agentId: item.tag, status: 'running' });
@@ -125,30 +133,47 @@ export async function runProjectRecon(
   if (stub) return runStubRecon(opts, items);
 
   const apiKey = opts.apiKey.trim();
-  if (!apiKey) {
-    const message = 'OpenRouter API key missing.';
+  const ctxBackend = opts.llmContext?.backend ?? 'pi';
+
+  // Validate credentials up-front so we fail fast with a single, clear
+  // error instead of N parallel per-item failures.
+  const hasAzureCreds =
+    ctxBackend === 'azure' &&
+    Boolean(opts.llmContext?.azureApiKey) &&
+    Boolean(opts.llmContext?.azureEndpoint);
+  const hasOpenRouterCreds =
+    ctxBackend !== 'azure' && (apiKey.length > 0 || Boolean(opts.llmContext?.openrouterApiKey));
+  if (!hasAzureCreds && !hasOpenRouterCreds) {
+    const message =
+      ctxBackend === 'azure'
+        ? 'Azure API key/endpoint missing.'
+        : 'OpenRouter API key missing. Set OPENROUTER_API_KEY or mount /run/secrets/openrouter_api_key.';
     for (const item of items) {
       opts.onUpdate({ agentId: item.tag, status: 'error', error: message });
     }
     throw new Error(message);
   }
-  const modelId = (opts.modelId ?? RECON_MODEL).trim();
+
+  const ctxBackendFinal = ctxBackend;
+  const fallbackModel =
+    ctxBackendFinal === 'azure' ? defaultHelperModel('azure') : RECON_MODEL;
+  const modelId = (opts.modelId ?? fallbackModel).trim();
 
   // Digest is built once and shared across all items — both faster and more
   // consistent than letting each agent see a different snapshot.
   const digest = buildProjectDigest(opts.repoRoot);
 
+  const ctx: LlmClientContext = opts.llmContext ?? {
+    backend: 'pi',
+    openrouterApiKey: apiKey,
+  };
+
   const promises = items.map(async (item): Promise<ReconAgentResult> => {
     try {
-      const chat = new ChatOpenAI({
-        model: modelId,
+      const chat = buildChatClient(ctx, {
+        modelId,
         temperature: 0,
         maxTokens: 1200,
-        configuration: {
-          baseURL: OPENROUTER_BASE_URL,
-          apiKey,
-          defaultHeaders: OPENROUTER_HEADERS,
-        },
       });
       const structured = chat.withStructuredOutput(ReconBulletsSchema, {
         name: 'ReconBullets',
@@ -199,6 +224,7 @@ export async function selectAndRunRecon(
       intent: opts.intent,
       modelId: opts.modelId,
       signal: opts.signal,
+      llmContext: opts.llmContext,
     });
     const resolved = resolveSelections(raw);
     items = resolved.items.length > 0 ? resolved.items : fallbackCoreItems();
@@ -222,6 +248,7 @@ export async function selectAndRunRecon(
     modelId: opts.modelId,
     onUpdate: opts.onUpdate,
     signal: opts.signal,
+    llmContext: opts.llmContext,
   });
   return { items, results };
 }

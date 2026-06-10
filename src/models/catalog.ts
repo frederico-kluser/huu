@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import {
   RecommendedModelsFileSchema,
   type ModelEntry,
@@ -94,6 +95,104 @@ const DEFAULT_COPILOT_MODELS: readonly ModelEntry[] = [
 const RECOMMENDED_MODELS_FILE = 'recommended-models.json';
 
 /**
+ * Azure AI Foundry built-in catalog.
+ *
+ * Covers the most common OpenAI deployments and Marketplace models.
+ * Model IDs are Azure deployment names (no provider/ prefix).
+ *
+ * Pricing is omitted for Marketplace models (Azure Foundry bills per
+ * token at the provider's rate but doesn't expose pricing via the
+ * models endpoint). OpenAI models show list prices for orientation;
+ * actual billing depends on your Azure commitment tier.
+ */
+const DEFAULT_AZURE_MODELS: readonly ModelEntry[] = [
+  {
+    id: 'gpt-4o',
+    label: 'GPT-4o',
+    inputPrice: 2.5,
+    outputPrice: 10,
+    description: 'Workhorse multimodal OpenAI no Azure. Excelente relação custo-benefício.',
+    bestFor: ['coding', 'agentic'],
+    tier: 'workhorse',
+    provider: 'azure',
+  },
+  {
+    id: 'gpt-4o-mini',
+    label: 'GPT-4o Mini',
+    inputPrice: 0.15,
+    outputPrice: 0.6,
+    description: 'Rápido e barato para fan-out per-file no Azure.',
+    bestFor: ['fast', 'cheap'],
+    tier: 'fast',
+    provider: 'azure',
+  },
+  {
+    id: 'gpt-5',
+    label: 'GPT-5',
+    description: 'Flagship OpenAI no Azure — máxima capacidade.',
+    bestFor: ['reasoning', 'agentic', 'general'],
+    tier: 'flagship',
+    provider: 'azure',
+  },
+  {
+    id: 'gpt-5-mini',
+    label: 'GPT-5 Mini',
+    description: 'Leve do GPT-5 no Azure — rápido para tarefas de código simples.',
+    bestFor: ['fast', 'coding'],
+    tier: 'fast',
+    provider: 'azure',
+  },
+  {
+    id: 'o3',
+    label: 'o3',
+    description: 'Raciocínio profundo OpenAI no Azure. Melhor para lógica complexa.',
+    bestFor: ['reasoning', 'coding'],
+    tier: 'flagship',
+    provider: 'azure',
+  },
+  {
+    id: 'o4-mini',
+    label: 'o4-mini',
+    description: 'Raciocínio rápido e eficiente no Azure.',
+    bestFor: ['reasoning', 'fast'],
+    tier: 'workhorse',
+    provider: 'azure',
+  },
+  {
+    id: 'phi-4',
+    label: 'Phi-4',
+    description: 'Modelo Microsoft compacto e eficiente. Ótimo para tarefas de código simples.',
+    bestFor: ['fast', 'cheap', 'coding'],
+    tier: 'fast',
+    provider: 'azure',
+  },
+  {
+    id: 'phi-4-mini',
+    label: 'Phi-4 Mini',
+    description: 'Microsoft ultra rápido para fan-out e tarefas triviais.',
+    bestFor: ['fast', 'cheap'],
+    tier: 'fast',
+    provider: 'azure',
+  },
+  {
+    id: 'Llama-3.3-70B-Instruct',
+    label: 'Llama 3.3 70B',
+    description: 'Meta Llama 3.3 70B via Azure AI Foundry Marketplace.',
+    bestFor: ['coding', 'agentic'],
+    tier: 'workhorse',
+    provider: 'azure',
+  },
+  {
+    id: 'DeepSeek-R1',
+    label: 'DeepSeek R1',
+    description: 'Raciocínio DeepSeek via Azure Marketplace. Forte em lógica e matemática.',
+    bestFor: ['reasoning', 'coding'],
+    tier: 'flagship',
+    provider: 'azure',
+  },
+];
+
+/**
  * Returns the merged catalog (file override + Copilot built-ins). When
  * `backend` is provided, the result is filtered to only models that
  * backend can serve. Models without an explicit `provider` are treated
@@ -118,7 +217,7 @@ export function loadRecommendedModels(
     }
   }
 
-  const all: ModelEntry[] = [...openrouterEntries, ...DEFAULT_COPILOT_MODELS];
+  const all: ModelEntry[] = [...openrouterEntries, ...DEFAULT_COPILOT_MODELS, ...loadAzureModels(projectRoot)];
 
   // No filter when backend is undefined OR 'stub'. Stub never calls a
   // provider, so picking a Copilot model under --stub --copilot
@@ -133,8 +232,45 @@ function providerFor(m: ModelEntry): ModelProvider {
   return m.provider ?? 'openrouter';
 }
 
-function backendToProvider(backend: 'pi' | 'copilot'): ModelProvider {
-  return backend === 'copilot' ? 'copilot' : 'openrouter';
+function backendToProvider(backend: 'pi' | 'copilot' | 'azure'): ModelProvider {
+  if (backend === 'copilot') return 'copilot';
+  if (backend === 'azure') return 'azure';
+  return 'openrouter';
+}
+
+/**
+ * Azure deployments are user-specific: the catalog is just a fallback.
+ * Users can fully customize the model picker by editing either:
+ *   - `<projectRoot>/azure-models.json` (per-project)
+ *   - `~/.huu/azure-models.json`        (global)
+ *
+ * Both files use the same shape as `recommended-models.json` (the schema
+ * already accepts `provider: "azure"`). The per-project file wins if both
+ * exist. When no override file is present, `DEFAULT_AZURE_MODELS` is used.
+ *
+ * Each entry's `id` MUST match the deployment name in your Azure resource —
+ * NOT the underlying model name. E.g. if you named your deployment
+ * "my-gpt4o", set `id: "my-gpt4o"`.
+ */
+export function loadAzureModels(projectRoot: string): readonly ModelEntry[] {
+  const candidates = [
+    join(projectRoot, 'azure-models.json'),
+    join(homedir(), '.huu', 'azure-models.json'),
+  ];
+  for (const filePath of candidates) {
+    if (!existsSync(filePath)) continue;
+    try {
+      const raw = readFileSync(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      const models = RecommendedModelsFileSchema.parse(parsed).models;
+      // Force provider=azure regardless of what the file declares, so a
+      // misfiled openrouter entry doesn't bleed into the Azure picker.
+      return models.map((m) => ({ ...m, provider: 'azure' as const }));
+    } catch {
+      // fall through to next candidate / defaults
+    }
+  }
+  return DEFAULT_AZURE_MODELS;
 }
 
 export function formatPrice(price: number | undefined | null): string {

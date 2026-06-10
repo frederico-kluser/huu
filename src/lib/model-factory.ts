@@ -34,6 +34,11 @@ export function supportsThinking(modelId: string): boolean {
     'z-ai/glm-4.6',
     'x-ai/grok-4',
     'xiaomi/mimo',
+    // Azure bare model IDs (no provider prefix)
+    'o1',
+    'o3',
+    'o4',
+    'DeepSeek-R1',
   ];
   return thinkingPrefixes.some((p) => modelId.startsWith(p));
 }

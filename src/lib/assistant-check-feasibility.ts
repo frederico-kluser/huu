@@ -1,18 +1,15 @@
 import { z } from 'zod';
 import type { CheckStep, Pipeline } from './types.js';
 import {
-  createAssistantChat,
   HumanMessage,
   SystemMessage,
   type BaseMessage,
 } from './assistant-client.js';
-import { ChatOpenAI } from '@langchain/openai';
-
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const OPENROUTER_HEADERS = {
-  'HTTP-Referer': 'https://github.com/frederico-kluser/huu',
-  'X-OpenRouter-Title': 'huu',
-};
+import {
+  buildChatClient,
+  defaultHelperModel,
+  type LlmClientContext,
+} from './llm-client-factory.js';
 
 export const FeasibilitySchema = z.object({
   feasible: z.boolean(),
@@ -29,6 +26,8 @@ export interface FeasibilityInput {
   apiKey: string;
   repoRoot: string;
   modelId?: string;
+  /** Backend-aware context. Required for `--backend=azure`. */
+  llmContext?: LlmClientContext;
 }
 
 /**
@@ -47,30 +46,35 @@ export interface FeasibilityInput {
 export async function analyzeCheckFeasibility(
   input: FeasibilityInput,
 ): Promise<FeasibilityResult> {
-  if (input.apiKey === 'stub' || process.env.HUU_LANGCHAIN_STUB === '1') {
+  const stub =
+    input.apiKey === 'stub' ||
+    process.env.HUU_LANGCHAIN_STUB === '1' ||
+    input.llmContext?.backend === 'stub';
+  if (stub) {
     return stubFeasibility(input.step);
   }
 
   const apiKey = input.apiKey.trim();
-  if (!apiKey) {
+  const ctxBackend = input.llmContext?.backend ?? 'pi';
+  const fallbackModel =
+    ctxBackend === 'azure' ? defaultHelperModel('azure') : 'moonshotai/kimi-k2.6';
+  const modelId = (input.modelId ?? fallbackModel).trim();
+
+  const ctx: LlmClientContext = input.llmContext ?? {
+    backend: 'pi',
+    openrouterApiKey: apiKey,
+  };
+  let chat;
+  try {
+    chat = buildChatClient(ctx, { modelId, temperature: 0.2 });
+  } catch (err) {
     return {
       feasible: false,
-      reason: 'no OpenRouter API key configured; cannot analyze feasibility',
+      reason: err instanceof Error ? err.message : String(err),
       instructionDraft: '',
-      warnings: ['set OPENROUTER_API_KEY or use --stub'],
+      warnings: ['set the required API key/endpoint or use --stub'],
     };
   }
-
-  const modelId = (input.modelId ?? 'moonshotai/kimi-k2.6').trim();
-  const chat = new ChatOpenAI({
-    model: modelId,
-    temperature: 0.2,
-    configuration: {
-      baseURL: OPENROUTER_BASE_URL,
-      apiKey,
-      defaultHeaders: OPENROUTER_HEADERS,
-    },
-  });
   const structured = chat.withStructuredOutput(FeasibilitySchema, {
     name: 'CheckFeasibility',
     method: 'functionCalling',

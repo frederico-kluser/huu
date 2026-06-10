@@ -2,6 +2,7 @@ import type { AgentFactory } from '../types.js';
 import { piAgentFactory } from './pi/factory.js';
 import { stubAgentFactory } from './stub/factory.js';
 import { copilotAgentFactory } from './copilot/factory.js';
+import { azureAgentFactory } from './azure/factory.js';
 
 /**
  * Single dispatch table from "what kind of agent is the user choosing"
@@ -12,9 +13,9 @@ import { copilotAgentFactory } from './copilot/factory.js';
  * the `AppConfig.backend` field, so changing one means changing both
  * intentionally.
  */
-export type AgentBackendKind = 'pi' | 'copilot' | 'stub';
+export type AgentBackendKind = 'pi' | 'copilot' | 'azure' | 'stub';
 
-export const ALL_BACKENDS: ReadonlyArray<AgentBackendKind> = ['pi', 'copilot', 'stub'];
+export const ALL_BACKENDS: ReadonlyArray<AgentBackendKind> = ['pi', 'copilot', 'azure', 'stub'];
 
 export interface BackendBundle {
   /** Factory used for regular per-task agents. */
@@ -79,6 +80,17 @@ export function selectBackend(kind: AgentBackendKind): BackendBundle {
         apiKeySpecName: 'copilot',
         userSelectable: true,
       };
+    case 'azure':
+      return {
+        agentFactory: azureAgentFactory,
+        conflictResolverFactory: azureAgentFactory,
+        label: 'Azure AI Foundry',
+        description:
+          'Azure AI Foundry endpoint (any deployment). Requires API key + endpoint URL from the portal.',
+        requiresApiKey: true,
+        apiKeySpecName: 'azureApiKey',
+        userSelectable: true,
+      };
     case 'stub':
       return {
         agentFactory: stubAgentFactory,
@@ -108,6 +120,7 @@ export function parseBackendKind(s: string): AgentBackendKind | null {
   if (lower === 'copilot' || lower === 'gh-copilot' || lower === 'github-copilot') {
     return 'copilot';
   }
+  if (lower === 'azure' || lower === 'azure-openai' || lower === 'azure-foundry') return 'azure';
   if (lower === 'stub' || lower === 'fake' || lower === 'mock') return 'stub';
   return null;
 }

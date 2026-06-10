@@ -7,8 +7,8 @@ import {
 
 describe('backend registry', () => {
   describe('ALL_BACKENDS', () => {
-    it('lists exactly pi, copilot, stub', () => {
-      expect([...ALL_BACKENDS].sort()).toEqual(['copilot', 'pi', 'stub']);
+    it('lists exactly pi, copilot, azure, stub', () => {
+      expect([...ALL_BACKENDS].sort()).toEqual(['azure', 'copilot', 'pi', 'stub']);
     });
   });
 

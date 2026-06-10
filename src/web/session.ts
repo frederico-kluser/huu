@@ -367,6 +367,29 @@ export class WebSession {
     this.dispatch({ type: 'apiKey.submit', resolvedApiKey });
   }
 
+  /**
+   * Build a backend-aware LlmClientContext for helper LLM calls (assistant,
+   * recon). When backend === 'azure', this routes helpers through the user's
+   * Azure endpoint instead of OpenRouter, preventing wrong-account charges.
+   */
+  private buildHelperLlmContext(): import('../lib/llm-client-factory.js').LlmClientContext {
+    const backendKind = this.state.backendKind;
+    if (backendKind === 'azure') {
+      const azureKey = findSpec('azureApiKey');
+      const azureEndpoint = findSpec('azureEndpoint');
+      return {
+        backend: 'azure',
+        azureApiKey: azureKey ? resolveApiKey(azureKey) : '',
+        azureEndpoint: azureEndpoint ? resolveApiKey(azureEndpoint) : '',
+      };
+    }
+    const openrouter = findSpec('openrouter');
+    return {
+      backend: backendKind,
+      openrouterApiKey: openrouter ? resolveApiKey(openrouter) : '',
+    };
+  }
+
   private async handleAssistantPrompt(prompt: string): Promise<void> {
     try {
       const pipeline = await streamAssistant({
@@ -374,6 +397,7 @@ export class WebSession {
         prompt,
         cwd: this.deps.cwd,
         onChunk: (chunk) => this.send({ type: 'assistant.chunk', chunk }),
+        llmContext: this.buildHelperLlmContext(),
       });
       this.send({ type: 'assistant.done', pipeline });
       // Advance the FSM so a subsequent `screen` message reflects the
@@ -398,6 +422,7 @@ export class WebSession {
         repoRoot: this.deps.cwd,
         onChunk: (chunk) => this.send({ type: 'recon.chunk', chunk }),
         signal: this.reconAbort.signal,
+        llmContext: this.buildHelperLlmContext(),
       });
       this.send({ type: 'recon.done', result });
     } catch (err) {
