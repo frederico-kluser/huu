@@ -34,8 +34,13 @@ interface Props {
   agentFactory: AgentFactory;
   /** Optional LLM resolver for merge conflicts. When omitted, conflicts abort the run. */
   conflictResolverFactory?: AgentFactory;
-  /** When true, enables resource-bound auto-scaling of concurrency. */
+  /**
+   * Memory-aware dynamic concurrency (default true). False pins the pool
+   * at `initialConcurrency`; the memory guard stays active either way.
+   */
   autoScale?: boolean;
+  /** Initial/pinned concurrency (--concurrency=N). */
+  initialConcurrency?: number;
   onComplete: (result: OrchestratorResult) => void;
   onAbort: () => void;
 }
@@ -47,6 +52,7 @@ export function RunDashboard({
   agentFactory,
   conflictResolverFactory,
   autoScale,
+  initialConcurrency,
   onComplete,
   onAbort,
 }: Props): React.JSX.Element {
@@ -59,6 +65,7 @@ export function RunDashboard({
       new Orchestrator(config, pipeline, cwd, agentFactory, {
         conflictResolverFactory,
         autoScale,
+        initialConcurrency,
       }),
   );
   const [state, setState] = useState<OrchestratorState | null>(null);
@@ -421,7 +428,20 @@ export function RunDashboard({
               AUTO {state.autoScale.state}
             </Text>
             <Text dimColor>  ·  </Text>
-            <Text>CPU {state.autoScale.cpuPercent}% RAM {state.autoScale.ramPercent}%</Text>
+            <Text>
+              CPU {state.autoScale.cpuPercent}% RAM {state.autoScale.ramPercent}%
+              {' '}· ~{state.autoScale.observedAgentMemoryMb}MB/agent · free {state.autoScale.ramAvailableMb}MB
+            </Text>
+          </>
+        )}
+        {state.autoScale && !state.autoScale.enabled && (
+          <>
+            <Text dimColor>  ·  </Text>
+            <Text dimColor bold>GUARD</Text>
+            {state.autoScale.guardKillCount > 0 && (
+              <Text color="yellow"> {state.autoScale.guardKillCount} killed</Text>
+            )}
+            <Text dimColor>  ·  RAM {state.autoScale.ramPercent}%</Text>
           </>
         )}
       </Box>
@@ -454,7 +474,7 @@ export function RunDashboard({
       </Box>
       <Box paddingX={1} width="100%">
         <Text dimColor>
-          <Text bold>+</Text>/<Text bold>-</Text> concurrency · <Text bold>↑↓←→</Text> navigate · <Text bold>ENTER</Text> details · <Text bold>F</Text> filter logs ({logFilter !== null ? `A${logFilter}` : 'all'}) · <Text bold>A</Text> toggle auto-scale · <Text bold>Q</Text> abort (press twice to force-exit)
+          <Text bold>+</Text>/<Text bold>-</Text> concurrency (pins manual) · <Text bold>↑↓←→</Text> navigate · <Text bold>ENTER</Text> details · <Text bold>F</Text> filter logs ({logFilter !== null ? `A${logFilter}` : 'all'}) · <Text bold>A</Text> toggle auto-scale · <Text bold>Q</Text> abort (press twice to force-exit)
         </Text>
       </Box>
     </Box>

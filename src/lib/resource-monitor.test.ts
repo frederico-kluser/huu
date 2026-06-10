@@ -49,9 +49,16 @@ describe('getSystemMetrics', () => {
     expect(m).toHaveProperty('ramPercent');
     expect(m).toHaveProperty('ramUsedBytes');
     expect(m).toHaveProperty('ramTotalBytes');
+    expect(m).toHaveProperty('ramAvailableBytes');
     expect(m).toHaveProperty('processRssBytes');
     expect(m).toHaveProperty('loadAvg1');
     expect(m).toHaveProperty('containerAware');
+  });
+
+  it('keeps ramAvailableBytes within [0, ramTotalBytes]', () => {
+    const m = getSystemMetrics();
+    expect(m.ramAvailableBytes).toBeGreaterThanOrEqual(0);
+    expect(m.ramAvailableBytes).toBeLessThanOrEqual(m.ramTotalBytes);
   });
 
   it('returns numbers in expected ranges', () => {
@@ -178,7 +185,77 @@ describe('getSystemMetrics', () => {
 
     expect(m.ramTotalBytes).toBe(16 * 1024 ** 3);
     expect(m.ramUsedBytes).toBe(8 * 1024 ** 3);
+    expect(m.ramAvailableBytes).toBe(8 * 1024 ** 3);
     expect(m.containerAware).toBe(false);
+
+    constrainedSpy.mockRestore();
+  });
+
+  it('prefers /proc/meminfo MemAvailable over freemem on Linux hosts', () => {
+    const constrainedSpy = vi
+      .spyOn(process, 'constrainedMemory')
+      .mockReturnValue(0);
+
+    (fs.existsSync as unknown as Mock).mockImplementation(
+      (path: string) => path === '/proc/meminfo',
+    );
+    (fs.readFileSync as unknown as Mock).mockImplementation((path: string) => {
+      if (path === '/proc/meminfo') {
+        return 'MemTotal:       16777216 kB\nMemFree:         1048576 kB\nMemAvailable:   12582912 kB\n';
+      }
+      throw new Error('ENOENT');
+    });
+
+    const m = getSystemMetrics();
+
+    // 12582912 kB = 12 GiB available; used = total − available.
+    expect(m.ramAvailableBytes).toBe(12 * 1024 ** 3);
+    expect(m.ramUsedBytes).toBe(4 * 1024 ** 3);
+    expect(m.containerAware).toBe(false);
+
+    constrainedSpy.mockRestore();
+  });
+
+  it('derives availableBytes from the cgroup v2 limit minus current', () => {
+    const constrainedSpy = vi
+      .spyOn(process, 'constrainedMemory')
+      .mockReturnValue(0);
+
+    (fs.existsSync as unknown as Mock).mockImplementation((path: string) =>
+      path === '/sys/fs/cgroup/memory.max' || path === '/sys/fs/cgroup/memory.current',
+    );
+    (fs.readFileSync as unknown as Mock).mockImplementation((path: string) => {
+      if (path === '/sys/fs/cgroup/memory.max') return '4294967296\n';
+      if (path === '/sys/fs/cgroup/memory.current') return '1073741824\n';
+      throw new Error('ENOENT');
+    });
+
+    const m = getSystemMetrics();
+
+    expect(m.ramAvailableBytes).toBe(3 * 1024 ** 3);
+
+    constrainedSpy.mockRestore();
+  });
+
+  it('uses cgroup current as "used" in the constrainedMemory branch when readable', () => {
+    const constrainedSpy = vi
+      .spyOn(process, 'constrainedMemory')
+      .mockReturnValue(4 * 1024 ** 3);
+
+    (fs.existsSync as unknown as Mock).mockImplementation(
+      (path: string) => path === '/sys/fs/cgroup/memory.current',
+    );
+    (fs.readFileSync as unknown as Mock).mockImplementation((path: string) => {
+      if (path === '/sys/fs/cgroup/memory.current') return '2147483648\n';
+      throw new Error('ENOENT');
+    });
+
+    const m = getSystemMetrics();
+
+    expect(m.ramTotalBytes).toBe(4 * 1024 ** 3);
+    expect(m.ramUsedBytes).toBe(2 * 1024 ** 3);
+    expect(m.ramAvailableBytes).toBe(2 * 1024 ** 3);
+    expect(m.containerAware).toBe(true);
 
     constrainedSpy.mockRestore();
   });

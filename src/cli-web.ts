@@ -22,6 +22,8 @@ export interface RunWebOptions {
   autoStart?: boolean;
   backendKind?: AgentBackendKind;
   autoScale?: boolean;
+  /** Initial/pinned concurrency (--concurrency=N). */
+  concurrency?: number;
   openBrowser?: boolean;
   portOverride?: number;
 }
@@ -78,6 +80,7 @@ export async function runWebMode(opts: RunWebOptions): Promise<void> {
         cwd: opts.cwd,
         initialBackend: opts.backendKind,
         autoScale: opts.autoScale,
+        concurrency: opts.concurrency,
         initialPipeline: opts.initialPipeline,
         autoStart: opts.autoStart,
       });

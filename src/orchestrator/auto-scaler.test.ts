@@ -3,11 +3,14 @@ import type { SystemMetrics } from '../lib/resource-monitor.js';
 import { AutoScaler } from './auto-scaler.js';
 
 function makeMetrics(partial: Partial<SystemMetrics> = {}): SystemMetrics {
+  const ramTotalBytes = partial.ramTotalBytes ?? 16 * 1024 ** 3;
+  const ramUsedBytes = partial.ramUsedBytes ?? 8 * 1024 ** 3;
   return {
     cpuPercent: 50,
     ramPercent: 50,
-    ramUsedBytes: 8 * 1024 ** 3,
-    ramTotalBytes: 16 * 1024 ** 3,
+    ramUsedBytes,
+    ramTotalBytes,
+    ramAvailableBytes: Math.max(0, ramTotalBytes - ramUsedBytes),
     processRssBytes: 123456789,
     loadAvg1: 1.5,
     containerAware: false,
@@ -219,20 +222,34 @@ describe('AutoScaler', () => {
     });
   });
 
-  describe('targetConcurrency — kickstart', () => {
-    it('calculates kickstart from ramTotalBytes / (agentMemoryEstimateMb * 1024^2)', () => {
+  describe('targetConcurrency — memory headroom', () => {
+    // 16 GiB total, 8 GiB available: margin = max(10% of 16 GiB, 512 MiB)
+    // = 1.6 GiB → headroom = 6.4 GiB → floor(6.4 GiB / 250 MiB) = 26.
+    it('admits floor(headroom / observedAgentBytes) on top of active agents', () => {
       const scaler = createScaler(
-        makeMetrics({ ramTotalBytes: 16 * 1024 ** 3 }),
+        makeMetrics({ ramTotalBytes: 16 * 1024 ** 3, ramUsedBytes: 8 * 1024 ** 3 }),
         { agentMemoryEstimateMb: 250 },
       );
       scaler.start();
-      expect(scaler.targetConcurrency()).toBe(65);
+      expect(scaler.targetConcurrency()).toBe(26);
       scaler.stop();
     });
 
-    it('clamps to maxAgents when kickstart exceeds it', () => {
+    it('adds the headroom admission on top of currently active agents', () => {
       const scaler = createScaler(
-        makeMetrics({ ramTotalBytes: 64 * 1024 ** 3 }),
+        makeMetrics({ ramTotalBytes: 16 * 1024 ** 3, ramUsedBytes: 8 * 1024 ** 3 }),
+        { agentMemoryEstimateMb: 250 },
+      );
+      scaler.start();
+      scaler.notifyAgentSpawned();
+      scaler.notifyAgentSpawned();
+      expect(scaler.targetConcurrency()).toBe(28);
+      scaler.stop();
+    });
+
+    it('clamps to maxAgents when headroom admits more', () => {
+      const scaler = createScaler(
+        makeMetrics({ ramTotalBytes: 64 * 1024 ** 3, ramUsedBytes: 0 }),
         { agentMemoryEstimateMb: 250, maxAgents: 50 },
       );
       scaler.start();
@@ -240,9 +257,9 @@ describe('AutoScaler', () => {
       scaler.stop();
     });
 
-    it('clamps to pendingTaskCount when kickstart exceeds it', () => {
+    it('caps at active + pendingTaskCount when work is queued', () => {
       const scaler = createScaler(
-        makeMetrics({ ramTotalBytes: 16 * 1024 ** 3 }),
+        makeMetrics({ ramTotalBytes: 16 * 1024 ** 3, ramUsedBytes: 8 * 1024 ** 3 }),
         { agentMemoryEstimateMb: 250 },
       );
       scaler.start();
@@ -251,13 +268,140 @@ describe('AutoScaler', () => {
       scaler.stop();
     });
 
-    it('clamps to minimum of 1', () => {
+    it('clamps to minimum of 1 when no headroom remains', () => {
       const scaler = createScaler(
-        makeMetrics({ ramTotalBytes: 128 * 1024 ** 2 }),
+        makeMetrics({ ramTotalBytes: 128 * 1024 ** 2, ramUsedBytes: 100 * 1024 ** 2 }),
         { agentMemoryEstimateMb: 250 },
       );
       scaler.start();
       expect(scaler.targetConcurrency()).toBe(1);
+      scaler.stop();
+    });
+
+    it('keeps at least the 512 MiB margin floor on small machines', () => {
+      // 2 GiB total, fully available: percent margin would be 204 MiB but the
+      // 512 MiB floor wins → headroom = 1.5 GiB → floor(1536 / 250) = 6.
+      const scaler = createScaler(
+        makeMetrics({ ramTotalBytes: 2 * 1024 ** 3, ramUsedBytes: 0 }),
+        { agentMemoryEstimateMb: 250 },
+      );
+      scaler.start();
+      expect(scaler.targetConcurrency()).toBe(6);
+      scaler.stop();
+    });
+  });
+
+  describe('observed agent memory (EMA)', () => {
+    it('seeds the estimate from agentMemoryEstimateMb', () => {
+      const scaler = createScaler(makeMetrics(), { agentMemoryEstimateMb: 250 });
+      expect(scaler.observedAgentMemoryMb()).toBe(250);
+    });
+
+    it('converges toward (used − baseline) / activeAgents', () => {
+      const metricsRef = { current: makeMetrics({ ramUsedBytes: 4 * 1024 ** 3 }) };
+      const scaler = new AutoScaler({ resourceMonitor: () => metricsRef.current });
+      scaler.start(); // baseline re-captured at 4 GiB (0 active agents)
+      scaler.notifyAgentSpawned();
+      scaler.notifyAgentSpawned();
+
+      // Two agents push usage up by 1 GiB → sample = 512 MiB/agent.
+      metricsRef.current = makeMetrics({ ramUsedBytes: 5 * 1024 ** 3 });
+      vi.advanceTimersByTime(1_000);
+
+      // EMA: 0.2 × 512 + 0.8 × 250 = 302.4 MiB
+      expect(scaler.observedAgentMemoryMb()).toBe(302);
+      scaler.stop();
+    });
+
+    it('clamps the estimate to maxAgentMemoryMb', () => {
+      const metricsRef = { current: makeMetrics({ ramUsedBytes: 4 * 1024 ** 3 }) };
+      const scaler = new AutoScaler({
+        resourceMonitor: () => metricsRef.current,
+        emaAlpha: 1,
+      });
+      scaler.start();
+      scaler.notifyAgentSpawned();
+
+      metricsRef.current = makeMetrics({
+        ramTotalBytes: 200 * 1024 ** 3,
+        ramUsedBytes: 104 * 1024 ** 3, // +100 GiB over baseline for 1 agent
+      });
+      vi.advanceTimersByTime(1_000);
+
+      expect(scaler.observedAgentMemoryMb()).toBe(2048);
+      scaler.stop();
+    });
+
+    it('ignores negative samples and re-baselines when the pool drains', () => {
+      const metricsRef = { current: makeMetrics({ ramUsedBytes: 6 * 1024 ** 3 }) };
+      const scaler = new AutoScaler({ resourceMonitor: () => metricsRef.current });
+      scaler.start();
+      scaler.notifyAgentSpawned();
+
+      // Usage DROPS below baseline — sample is negative, estimate unchanged.
+      metricsRef.current = makeMetrics({ ramUsedBytes: 5 * 1024 ** 3 });
+      vi.advanceTimersByTime(1_000);
+      expect(scaler.observedAgentMemoryMb()).toBe(250);
+
+      // Pool drains → baseline re-captured at the new (lower) usage.
+      scaler.notifyAgentCompleted();
+      vi.advanceTimersByTime(1_000);
+      scaler.notifyAgentSpawned();
+      metricsRef.current = makeMetrics({ ramUsedBytes: 5 * 1024 ** 3 + 500 * 1024 ** 2 });
+      vi.advanceTimersByTime(1_000);
+
+      // EMA: 0.2 × 500 + 0.8 × 250 = 300 MiB
+      expect(scaler.observedAgentMemoryMb()).toBe(300);
+      scaler.stop();
+    });
+  });
+
+  describe('manual mode (guard-only)', () => {
+    it('does not gate spawning below the destroy threshold', () => {
+      const scaler = createScaler(makeMetrics({ cpuPercent: 92, ramPercent: 92 }));
+      scaler.setMode('manual');
+      scaler.start();
+      expect(scaler.shouldSpawn()).toBe(true);
+      scaler.stop();
+    });
+
+    it('blocks spawning at the destroy threshold', () => {
+      const scaler = createScaler(makeMetrics({ cpuPercent: 50, ramPercent: 96 }));
+      scaler.setMode('manual');
+      scaler.start();
+      expect(scaler.shouldSpawn()).toBe(false);
+      scaler.stop();
+    });
+
+    it('still destroys at the destroy threshold (always-on memory guard)', () => {
+      const scaler = createScaler(makeMetrics({ cpuPercent: 50, ramPercent: 96 }));
+      scaler.setMode('manual');
+      scaler.start();
+      scaler.notifyAgentSpawned();
+      expect(scaler.shouldDestroy()).toBe(true);
+      scaler.stop();
+    });
+
+    it('reports mode and enabled=false while manual', () => {
+      const scaler = createScaler(makeMetrics());
+      scaler.setMode('manual');
+      scaler.start();
+      const status = scaler.getStatus();
+      expect(status.mode).toBe('manual');
+      expect(status.enabled).toBe(false);
+      scaler.stop();
+    });
+  });
+
+  describe('guard kill count', () => {
+    it('increments on every notifyAgentDestroyed', () => {
+      const scaler = createScaler(makeMetrics());
+      scaler.start();
+      scaler.notifyAgentSpawned();
+      scaler.notifyAgentSpawned();
+      scaler.notifyAgentDestroyed();
+      scaler.notifyAgentDestroyed();
+      expect(scaler.getStatus().guardKillCount).toBe(2);
       scaler.stop();
     });
   });
@@ -286,7 +430,7 @@ describe('AutoScaler', () => {
     it('updates internal pending count', () => {
       const scaler = createScaler(makeMetrics({ ramTotalBytes: 16 * 1024 ** 3 }));
       scaler.start();
-      expect(scaler.targetConcurrency()).toBe(65);
+      expect(scaler.targetConcurrency()).toBe(26);
       scaler.stop();
     });
 

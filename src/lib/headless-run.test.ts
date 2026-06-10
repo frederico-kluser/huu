@@ -109,6 +109,63 @@ describe('runHeadless', () => {
     expect(parsedLines.some((e) => e.type === 'state')).toBe(true);
   });
 
+  it('pins manual mode when the config sets concurrency (back-compat)', async () => {
+    const pipeline: Pipeline = {
+      name: 'h',
+      steps: [{ type: 'work', name: 'one', prompt: 'p', files: [] }],
+    };
+    await runHeadless({
+      pipeline,
+      config: { apiKey: 'stub', modelId: 'stub', backend: 'stub' },
+      cwd: scratch,
+      agentFactory: okFactory,
+      concurrency: 1,
+      emitIntervalMs: 10,
+    });
+    const lines = stderrChunks.join('').split('\n').filter(Boolean);
+    const states = lines.map((l) => JSON.parse(l)).filter((e) => e.type === 'state');
+    expect(states.length).toBeGreaterThan(0);
+    expect(states.every((e) => e.autoScale === 'manual')).toBe(true);
+  });
+
+  it('defaults to auto-scale when the config sets no concurrency', async () => {
+    const pipeline: Pipeline = {
+      name: 'h',
+      steps: [{ type: 'work', name: 'one', prompt: 'p', files: [] }],
+    };
+    await runHeadless({
+      pipeline,
+      config: { apiKey: 'stub', modelId: 'stub', backend: 'stub' },
+      cwd: scratch,
+      agentFactory: okFactory,
+      emitIntervalMs: 10,
+    });
+    const lines = stderrChunks.join('').split('\n').filter(Boolean);
+    const states = lines.map((l) => JSON.parse(l)).filter((e) => e.type === 'state');
+    expect(states.length).toBeGreaterThan(0);
+    expect(states.every((e) => e.autoScale === 'auto')).toBe(true);
+  });
+
+  it('an explicit autoScale: true keeps auto mode even with concurrency set', async () => {
+    const pipeline: Pipeline = {
+      name: 'h',
+      steps: [{ type: 'work', name: 'one', prompt: 'p', files: [] }],
+    };
+    await runHeadless({
+      pipeline,
+      config: { apiKey: 'stub', modelId: 'stub', backend: 'stub' },
+      cwd: scratch,
+      agentFactory: okFactory,
+      concurrency: 2,
+      autoScale: true,
+      emitIntervalMs: 10,
+    });
+    const lines = stderrChunks.join('').split('\n').filter(Boolean);
+    const states = lines.map((l) => JSON.parse(l)).filter((e) => e.type === 'state');
+    expect(states.length).toBeGreaterThan(0);
+    expect(states.every((e) => e.autoScale === 'auto')).toBe(true);
+  });
+
   it('returns 1 with structured error JSON when the orchestrator throws (e.g. non-git cwd)', async () => {
     const pipeline: Pipeline = {
       name: 'h',

@@ -34,6 +34,23 @@ describe('RunConfigSchema', () => {
     });
     expect(r.success).toBe(true);
   });
+
+  it('accepts autoScale and leaves it undefined when absent', () => {
+    const withFlag = RunConfigSchema.safeParse({ modelId: 'x/y', autoScale: true });
+    expect(withFlag.success).toBe(true);
+    if (withFlag.success) expect(withFlag.data.autoScale).toBe(true);
+
+    const without = RunConfigSchema.safeParse({ modelId: 'x/y' });
+    expect(without.success).toBe(true);
+    // No zod default on purpose — runHeadless derives the default from
+    // `concurrency` so old configs keep their exact manual behavior.
+    if (without.success) expect(without.data.autoScale).toBeUndefined();
+  });
+
+  it('rejects a non-boolean autoScale', () => {
+    const r = RunConfigSchema.safeParse({ modelId: 'x/y', autoScale: 'yes' });
+    expect(r.success).toBe(false);
+  });
 });
 
 describe('applyRunConfig', () => {

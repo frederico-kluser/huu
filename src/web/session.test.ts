@@ -125,6 +125,30 @@ describe('WebSession', () => {
     void session.dispose();
   });
 
+  it('run.setConcurrency without a run emits NO_RUN (routing works)', () => {
+    const { conn, sent, simulate } = mockConn();
+    const session = new WebSession(conn, { cwd: process.cwd() });
+    const before = sent.length;
+    simulate({ type: 'run.setConcurrency', concurrency: 4 });
+    const after = sent.slice(before);
+    const err = after.find((m) => m.type === 'error');
+    expect(err).toBeDefined();
+    expect((err as { type: 'error'; code?: string }).code).toBe('NO_RUN');
+    void session.dispose();
+  });
+
+  it('run.setAutoScale without a run emits NO_RUN (routing works)', () => {
+    const { conn, sent, simulate } = mockConn();
+    const session = new WebSession(conn, { cwd: process.cwd() });
+    const before = sent.length;
+    simulate({ type: 'run.setAutoScale', enabled: false });
+    const after = sent.slice(before);
+    const err = after.find((m) => m.type === 'error');
+    expect(err).toBeDefined();
+    expect((err as { type: 'error'; code?: string }).code).toBe('NO_RUN');
+    void session.dispose();
+  });
+
   it('emits error on a malformed pipeline.import without crashing', () => {
     const { conn, sent, simulate } = mockConn();
     const session = new WebSession(conn, { cwd: process.cwd() });

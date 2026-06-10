@@ -276,6 +276,10 @@ export type AgentLifecyclePhase =
   | 'done'
   | 'no_changes'
   | 'error'
+  /**
+   * @deprecated No longer produced — guard-killed agents reset to 'pending'
+   * (see AgentStatus.requeues). Kept so old manifests still parse.
+   */
   | 'killed_by_autoscaler';
 
 export type PushStatus = 'pending' | 'pushing' | 'pushed' | 'skipped' | 'failed';
@@ -315,17 +319,39 @@ export interface AgentStatus {
   startedAt?: number;
   finishedAt?: number;
   createdAt?: number;
+  /**
+   * Times the memory guard killed this agent's task and requeued it back to
+   * the TODO column. Work restarts from zero on the next spawn.
+   */
+  requeues?: number;
+  /**
+   * @deprecated No longer produced — the memory guard now resets the card to
+   * `pending` (see `requeues`). Kept so old manifests/run-logs still parse.
+   */
   killedByAutoScaler?: boolean;
 }
 
 // --- Orchestrator state ---
 
 export interface AutoScaleStatus {
+  /** True while the scaler drives the concurrency target (mode === 'auto'). */
   enabled: boolean;
+  /**
+   * 'auto' adapts concurrency to real memory headroom; 'manual' keeps the
+   * user-pinned concurrency but the memory guard (kill newest at the destroy
+   * threshold, requeue to TODO) stays active.
+   */
+  mode: 'auto' | 'manual';
   state: 'NORMAL' | 'SCALING_UP' | 'BACKING_OFF' | 'COOLDOWN' | 'DESTROYING';
   cooldownRemainingMs: number;
   cpuPercent: number;
   ramPercent: number;
+  /** EMA-observed per-agent memory footprint, in MiB (seeded at 250). */
+  observedAgentMemoryMb: number;
+  /** Memory still claimable before the limit, in MiB (cgroup/MemAvailable-aware). */
+  ramAvailableMb: number;
+  /** Agents killed by the memory guard so far in this run. */
+  guardKillCount: number;
 }
 
 export interface OrchestratorState {

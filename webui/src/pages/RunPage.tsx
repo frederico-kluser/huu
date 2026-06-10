@@ -42,11 +42,30 @@ export function RunPage() {
             </span>
           </div>
           <CostDisplay usd={state.totalCost} />
-          {autoScale?.enabled ? (
-            <Badge tone={autoScale.state === 'NORMAL' ? 'info' : 'warning'}>
-              <Zap className="mr-1 inline-block h-3 w-3" />
-              auto-scale: {autoScale.state.toLowerCase()}
-            </Badge>
+          {autoScale ? (
+            <button
+              type="button"
+              disabled={disabled}
+              title={
+                autoScale.enabled
+                  ? `Memory-aware concurrency · ~${autoScale.observedAgentMemoryMb}MB/agent · ${autoScale.ramAvailableMb}MB free — click to pin manual`
+                  : 'Concurrency pinned (memory guard stays on) — click to re-enable auto-scale'
+              }
+              onClick={() => send({ type: 'run.setAutoScale', enabled: !autoScale.enabled })}
+              className="cursor-pointer disabled:cursor-default"
+            >
+              {autoScale.enabled ? (
+                <Badge tone={autoScale.state === 'NORMAL' ? 'info' : 'warning'}>
+                  <Zap className="mr-1 inline-block h-3 w-3" />
+                  auto-scale: {autoScale.state.toLowerCase()} · ~{autoScale.observedAgentMemoryMb}MB/agent
+                </Badge>
+              ) : (
+                <Badge tone={autoScale.guardKillCount > 0 ? 'warning' : 'neutral'}>
+                  guard: RAM {Math.round(autoScale.ramPercent)}%
+                  {autoScale.guardKillCount > 0 ? ` · ${autoScale.guardKillCount} killed` : ''}
+                </Badge>
+              )}
+            </button>
           ) : null}
         </div>
         <div className="flex items-center gap-2">
