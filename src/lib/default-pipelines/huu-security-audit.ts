@@ -1,16 +1,21 @@
-// Security-audit pipeline. OWASP Top 10:2021 + CWE Top 25 (2024) +
-// dependency CVE scan + secrets sweep. REPORT-ONLY.
+// Security-audit pipeline. OWASP Top 10:2025 + CWE Top 25 (2025) +
+// dependency CVE scan + secrets sweep + supply-chain/CI posture. REPORT-ONLY.
+// A judge CheckStep validates the report before the run finishes.
 //
 // References:
-// - OWASP Top 10: https://owasp.org/Top10/2021/
-// - OWASP Cheat Sheet Series (per-category prevention): https://cheatsheetseries.owasp.org/IndexTopTen.html
-// - CWE Top 25 2024: https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html
-// - Secrets scanning tools: gitleaks, trufflehog, detect-secrets.
+// - OWASP Top 10 (2025): https://owasp.org/Top10/2025/
+// - OWASP Cheat Sheet Series (per-category prevention): https://cheatsheetseries.owasp.org/
+// - CWE Top 25 2025: https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html
+// - SLSA v1.2 (supply chain levels): https://slsa.dev/spec/v1.2/
+// - OpenSSF Scorecard checks: https://github.com/ossf/scorecard/blob/main/docs/checks.md
+// - GitHub Actions pwn requests: https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/
+// - Secrets scanning tools: gitleaks (v8.19+ `git`/`dir` subcommands), trufflehog, detect-secrets.
 
 import type { Pipeline } from '../types.js';
 import {
   knowledgeProtocol,
   persistenceCheck,
+  reportJudgeCondition,
   KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
   KNOWLEDGE_ORDERING_NOTE,
 } from './knowledge-protocol.js';
@@ -20,7 +25,7 @@ export const DEFAULT_PIPELINE_NAME = 'huu Security Audit';
 
 const FAQ_PATH = './.huu/audits/security-faq.json';
 const FAQ_SCHEMA_LINE =
-  '{ "summary": "<=256>", "knowledge": "<=5000>", "path": "<file or \'global\'>", "category": "secret|owasp-a01..a10|cve|misc", "cwe_id": "CWE-XXX or null", "severity": "info|warn|critical", "cheatsheet": "<URL>" }';
+  '{ "summary": "<=256>", "knowledge": "<=5000>", "path": "<file or \'global\'>", "category": "secret|owasp-a01..a10|cve|supply-chain|misc", "cwe_id": "CWE-XXX or null", "severity": "info|warn|critical", "cheatsheet": "<URL>" }';
 
 const STEP1_PROMPT = `You are huu's security-audit bootstrap agent. Goal: detect the stack, make ephemeral security scanners available, write \`.huu/audits/security.md\` scaffold, initialize \`.huu/audits/security-faq.json\`.
 
@@ -38,6 +43,7 @@ Identify presence of:
 - \`pom.xml\`, \`build.gradle\` (Maven/Gradle).
 - \`Gemfile.lock\`.
 - \`composer.lock\`.
+- CI workflows: \`.github/workflows/*.yml\`, \`.gitlab-ci.yml\`, \`Jenkinsfile\`, \`azure-pipelines.yml\` (input for the supply-chain step).
 
 Identify the source languages by file extension count (similar to the Quality Audit pipeline's step 1).
 
@@ -45,63 +51,70 @@ Identify the source languages by file extension count (similar to the Quality Au
 Each install attempt is independent; STOP at first success per tool family; NEVER \`sudo\`. If all install attempts for a tool family fail, append an info-severity FAQ finding and continue with grep heuristics.
 
 **Secret scanning**
-- \`gitleaks version\` — already installed?
+- \`gitleaks version\` — already installed? (v8.19+ uses the \`git\`/\`dir\` subcommands; the old \`detect\` still works but is deprecated.)
 - \`brew install gitleaks\` (mac/linuxbrew).
 - \`curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/.github/install.sh | sh -s -- -b /tmp/huu-bin\` (vendored install).
-- Fallback: \`npx --yes @gitleaks/cli@latest version\` if a node wrapper exists.
-- Else \`pipx install detect-secrets\`.
+- Else \`pipx install detect-secrets\`, or \`trufflehog\` if already present (do NOT use its live credential verification — see hard rules).
 
 **SAST**
 - \`pipx install semgrep\` (or \`brew install semgrep\`).
-- If install succeeds, use ruleset \`p/owasp-top-ten\` (or \`p/security-audit\`).
+- If install succeeds, the per-file step uses \`semgrep scan --config p/owasp-top-ten\` (registry ruleset that maps findings to Top 10 ids; \`p/cwe-top-25\` and \`p/security-audit\` are good companions).
 
 **Dependency CVE**
 - Node: \`npm audit\` (built-in; just need lockfile).
 - Python: \`pipx install pip-audit\`.
 - Rust: \`cargo install --locked cargo-audit\`.
-- Go: \`go install golang.org/x/vuln/cmd/govulncheck@latest\`.
-- Cross-language: \`pipx install osv-scanner\` (Google OSV).
+- Go: \`go install golang.org/x/vuln/cmd/govulncheck@latest\` (into \`$HOME/.huu/bin\` via GOBIN).
+- Cross-language: osv-scanner (Google OSV; v2 syntax is \`osv-scanner scan source -r .\`).
 
 === STEP 3 — Write .huu/audits/security.md scaffold ===
 Path: \`./.huu/audits/security.md\`.
 
 # .huu/audits/security.md — Security audit
 
-> Report-only audit aligned to OWASP Top 10:2021 + CWE Top 25 (2024) + dependency CVEs + secret-leak scan. No code was modified.
-> References: https://owasp.org/Top10/2021/ ; https://cheatsheetseries.owasp.org/IndexTopTen.html ; https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html
+> Report-only audit aligned to OWASP Top 10:2025 + CWE Top 25 (2025) + dependency CVEs + secret-leak scan + supply-chain posture (SLSA v1.2 / OpenSSF Scorecard informed). No code was modified.
+> References: https://owasp.org/Top10/2025/ ; https://cheatsheetseries.owasp.org/ ; https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html ; https://slsa.dev/spec/v1.2/
 
 ## 1. Scope
 - Stack detected: <languages>
 - Manifests found: <list>
+- CI workflows found: <list>
 - Tools active: <list>
 - Tools unavailable: <list with reasons>
 
 ## 2. Secrets sweep
 (filled in by step 2)
 
-## 3. OWASP Top 10 per-file findings
+## 3. OWASP Top 10:2025 findings
 (filled in by step 3)
 
 ## 4. Dependency CVEs
 (filled in by step 4)
 
-## 5. Summary by severity
+## 5. Supply chain & CI posture
 (filled in by step 5)
 
-## 6. Remediation roadmap
-(filled in by step 5)
+## 6. Summary by severity
+(filled in by step 6)
+
+## 7. Remediation roadmap
+(filled in by step 6)
+
+## 8. Validation
+(filled in by the final step after the judge approves)
 
 === STEP 4 — Initialize .huu/audits/security-faq.json ===
 Schema:
 \`\`\`json
-{ "summary": "<=256>", "knowledge": "<=5000>", "path": "<file or 'global'>", "category": "secret|owasp-a01|owasp-a02|owasp-a03|owasp-a04|owasp-a05|owasp-a06|owasp-a07|owasp-a08|owasp-a09|owasp-a10|cve|misc", "cwe_id": "CWE-XXX or null", "severity": "info|warn|critical", "cheatsheet": "<URL>" }
+{ "summary": "<=256>", "knowledge": "<=5000>", "path": "<file or 'global'>", "category": "secret|owasp-a01|owasp-a02|owasp-a03|owasp-a04|owasp-a05|owasp-a06|owasp-a07|owasp-a08|owasp-a09|owasp-a10|cve|supply-chain|misc", "cwe_id": "CWE-XXX or null", "severity": "info|warn|critical", "cheatsheet": "<URL>" }
 \`\`\`
+Category ids follow OWASP Top 10:2025 (A03 = Software Supply Chain Failures, A10 = Mishandling of Exceptional Conditions; SSRF lives under A01 since 2025).
 ${KNOWLEDGE_OPTIONAL_FIELDS_NOTE}
 
 === HARD RULES ===
 - DO NOT modify production source code.
 - DO NOT exfiltrate any secrets you find — redact them in findings (first 4 + last 4 chars only).
-- DO NOT call external services beyond the listed scanners (e.g. don't curl arbitrary URLs from secrets).`;
+- DO NOT call external services beyond the listed scanners (e.g. don't curl arbitrary URLs from secrets, and never use trufflehog's live credential verification).`;
 
 const STEP2_PROMPT = `You are at step 2 — secrets sweep (whole-project). Goal: find committed secrets in current files AND in git history, redact them, append findings, populate section "2. Secrets sweep" of \`.huu/audits/security.md\`. NO code changes.
 
@@ -109,19 +122,17 @@ ${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
 In particular: step 1 recorded which scanners are actually available (and which install attempts failed) — read those findings instead of re-probing every tool.
 
 === STEP 1 — Run gitleaks (preferred) ===
-If gitleaks is available:
+gitleaks v8.19+ splits the scan modes into subcommands. Working tree:
 \`\`\`bash
-gitleaks detect --redact --report-format json --report-path ./.huu/audits/.tmp/security/gitleaks.json --no-banner
+gitleaks dir . --redact --report-format json --report-path ./.huu/audits/.tmp/security/gitleaks.json --no-banner
 \`\`\`
 
-Add \`--source .\` if the repo isn't the cwd.
-
-Also scan git history:
+Full git history (all refs):
 \`\`\`bash
-gitleaks detect --redact --report-format json --report-path ./.huu/audits/.tmp/security/gitleaks-history.json --no-banner --log-opts="--all"
+gitleaks git . --redact --report-format json --report-path ./.huu/audits/.tmp/security/gitleaks-history.json --no-banner --log-opts="--all"
 \`\`\`
 
-Parse the JSON reports.
+(On an older gitleaks without the subcommands, fall back to \`gitleaks detect --redact ...\` and \`--log-opts="--all"\`.) Parse the JSON reports.
 
 === STEP 2 — Fallback grep patterns (if gitleaks unavailable) ===
 Search across the working tree (skipping \`.git\`, \`node_modules\`, \`dist\`, \`build\`, \`vendor\`, \`target\`) for high-signal regexes:
@@ -165,70 +176,75 @@ Top findings:
 - DO NOT attempt to "validate" found secrets by calling the related service.
 - DO NOT remove the secrets from source files in this step (that's a remediation decision for a human).`;
 
-const STEP3_PROMPT = `You are at step 3 — OWASP Top 10 per-file sweep for \`$file\`. Goal: scan \`$file\` for OWASP Top 10:2021 patterns, append findings to \`.huu/audits/security-faq.json\`. NO code changes.
+const STEP3_PROMPT = `You are at step 3 — OWASP Top 10:2025 sweep for \`$file\`. Goal: scan \`$file\` for OWASP Top 10:2025 patterns, append findings to \`.huu/audits/security-faq.json\`. NO code changes.
 
 === STEP 0 — SCOPE NOTE + SKIP RULE ===
-This step spawns one agent per selected file. The pipeline caps total nodes at \`maxNodeExecutions: 50\` (~45 files on a 5-step pipeline). If you are auditing a larger repo, narrow your file selection with Smart Select in the file picker.
+This step spawns one agent per selected file. The pipeline caps total nodes at \`maxNodeExecutions: 50\`. If you are auditing a larger repo, narrow your file selection with Smart Select in the file picker.
 
 SKIP IMMEDIATELY (no findings, no FAQ append) if \`$file\` matches: \`node_modules/\`, \`dist/\`, \`build/\`, \`out/\`, \`coverage/\`, \`.git/\`, \`vendor/\`, \`target/\`, \`__pycache__/\`, \`*.generated.*\`, \`*.min.js\`, \`*.min.css\`, \`*.d.ts\`, \`*.lock\`, \`*.snap\`.
 
-=== OWASP Top 10:2021 checklist ===
-For each category, the patterns to flag in \`$file\`. Where Semgrep is available (check .huu/audits/security.md section 1), prefer running \`semgrep --config p/owasp-top-ten "$file"\` and merge with the heuristic findings below.
+=== OWASP Top 10:2025 checklist ===
+(2025 reshuffle: Security Misconfiguration is now A02; Software Supply Chain Failures (A03) and Mishandling of Exceptional Conditions (A10) are NEW; SSRF merged into A01. Source: https://owasp.org/Top10/2025/)
+For each category, the patterns to flag in \`$file\`. Where Semgrep is available (check .huu/audits/security.md section 1), prefer running \`semgrep scan --config p/owasp-top-ten --json "$file"\` and merge with the heuristic findings below.
 
-**A01 — Broken Access Control** (CWE-284, CWE-285, CWE-639)
+**A01:2025 — Broken Access Control** (CWE-284, CWE-285, CWE-639, CWE-862, CWE-918)
 - HTTP handlers that read a user-supplied ID and return data without an authz check (\`req.params.id\`, \`request.GET['id']\` going straight into DB without a "current user owns this" check).
-- IDOR signals: \`/api/users/:id\` patterns where the handler doesn't verify ownership.
+- IDOR signals: \`/api/users/:id\` patterns where the handler doesn't verify ownership (CWE-639 is in the 2025 CWE Top 25).
 - Hardcoded role bypass: \`if (user.email === "admin@*")\`.
-- Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html
+- SSRF (merged here in 2025): user-controlled URL into a server-side fetch — \`fetch(req.body.url)\`, \`requests.get(request.GET['url'])\`, \`HttpClient.GetAsync(userUrl)\` (CWE-918).
+- Cheat sheets: https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html ; https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
 
-**A02 — Cryptographic Failures** (CWE-327, CWE-329, CWE-330)
-- Weak hashes: \`md5(\`, \`sha1(\`, \`crypto.createHash("md5")\`, \`hashlib.md5\`.
-- Weak ciphers: \`DES\`, \`3DES\`, \`RC4\`, \`AES.*ECB\`.
-- Hardcoded keys / IVs / salts (string literals near \`createCipheriv\`, \`Cipher(key=\`).
-- TLS misconfiguration: \`rejectUnauthorized: false\`, \`verify=False\`, \`InsecureSkipVerify: true\`, \`TLSv1\`/\`TLSv1.1\`.
-- Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html
-
-**A03 — Injection** (CWE-79, CWE-89, CWE-78, CWE-94)
-- SQL: string concatenation / template literals with raw values into queries (\`query("SELECT * FROM users WHERE id=" + id)\`, f-string SQL).
-- OS Command: \`exec\`, \`spawn\`, \`shell=True\`, \`os.system(...)\` with user input.
-- XSS: \`innerHTML =\`, \`dangerouslySetInnerHTML\`, \`document.write(\`, \`v-html\`, Django \`mark_safe\` on user input.
-- Code injection: \`eval(\`, \`Function(\`, \`new Function(\`, Python \`exec(\`, Ruby \`eval(\`.
-- Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Injection_Prevention_Cheat_Sheet.html
-
-**A04 — Insecure Design** (CWE-209, CWE-256, CWE-501)
-- Hard to spot statically; flag suspicious comments like \`TODO: add auth\`, \`FIXME: trust user input\`, \`HACK: skip validation\`.
-- Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html
-
-**A05 — Security Misconfiguration** (CWE-16, CWE-2)
+**A02:2025 — Security Misconfiguration** (CWE-16, CWE-2)
 - \`DEBUG = True\` (Django/Flask) in production config files.
 - Open CORS: \`Access-Control-Allow-Origin: *\` combined with \`Access-Control-Allow-Credentials: true\`.
 - Default credentials: \`password = "password"\`, \`admin/admin\`.
 - Detailed error pages leaked: \`stack=err.stack\` returned to response.
 - Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html
 
-**A06 — Vulnerable and Outdated Components** (CWE-1104)
-- This is mostly the job of step 4 (CVE scan). At per-file level, flag manual fetches from unpinned CDNs: \`<script src="https://cdn.../latest/...">\`.
-- Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Vulnerable_Dependency_Management_Cheat_Sheet.html
+**A03:2025 — Software Supply Chain Failures** (CWE-1104, CWE-829)
+- Per-file signals only (step 5 audits the CI/workflow posture project-wide): manual fetches from unpinned CDNs (\`<script src="https://cdn.../latest/...">\`), \`curl ... | bash\` install patterns, imports of abandoned/typosquat-looking packages.
+- Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Software_Supply_Chain_Security_Cheat_Sheet.html
 
-**A07 — Identification and Authentication Failures** (CWE-287, CWE-307)
+**A04:2025 — Cryptographic Failures** (CWE-327, CWE-329, CWE-330)
+- Weak hashes: \`md5(\`, \`sha1(\`, \`crypto.createHash("md5")\`, \`hashlib.md5\`.
+- Weak ciphers: \`DES\`, \`3DES\`, \`RC4\`, \`AES.*ECB\`.
+- Hardcoded keys / IVs / salts (string literals near \`createCipheriv\`, \`Cipher(key=\`).
+- TLS misconfiguration: \`rejectUnauthorized: false\`, \`verify=False\`, \`InsecureSkipVerify: true\`, \`TLSv1\`/\`TLSv1.1\`.
+- Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html
+
+**A05:2025 — Injection** (CWE-79, CWE-89, CWE-78, CWE-94 — the top 4 of the CWE Top 25 2025 all live here or in A01)
+- SQL: string concatenation / template literals with raw values into queries (\`query("SELECT * FROM users WHERE id=" + id)\`, f-string SQL).
+- OS Command: \`exec\`, \`spawn\`, \`shell=True\`, \`os.system(...)\` with user input.
+- XSS: \`innerHTML =\`, \`dangerouslySetInnerHTML\`, \`document.write(\`, \`v-html\`, Django \`mark_safe\` on user input.
+- Code injection: \`eval(\`, \`Function(\`, \`new Function(\`, Python \`exec(\`, Ruby \`eval(\`.
+- Path traversal (CWE-22, #6 in CWE Top 25 2025): user input joined into fs paths without normalization (\`path.join(base, req.params.name)\`, \`open(f"uploads/{name}")\`).
+- Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Injection_Prevention_Cheat_Sheet.html
+
+**A06:2025 — Insecure Design** (CWE-209, CWE-256, CWE-501)
+- Hard to spot statically; flag suspicious comments like \`TODO: add auth\`, \`FIXME: trust user input\`, \`HACK: skip validation\`.
+- Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html
+
+**A07:2025 — Authentication Failures** (CWE-287, CWE-307)
 - Plain text password storage: \`user.password = body.password\` without a hash function.
 - Weak password validation: regex allowing short or trivial passwords.
 - Session cookies without \`httpOnly\` / \`secure\` / \`SameSite\`.
-- Missing rate limit middleware on \`/login\` / \`/auth\` routes.
+- Missing rate limit middleware on \`/login\` / \`/auth\` routes (CWE-307).
 - Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
 
-**A08 — Software and Data Integrity Failures** (CWE-502)
+**A08:2025 — Software or Data Integrity Failures** (CWE-502)
 - Unsafe deserialization: \`pickle.load\`, \`yaml.load\` (without \`SafeLoader\`), \`Marshal.load\`, \`ObjectInputStream.readObject\`, \`JSON.parse\` of attacker-controlled input feeding \`new Function\`.
 - Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
 
-**A09 — Security Logging and Monitoring Failures** (CWE-778)
+**A09:2025 — Security Logging and Alerting Failures** (CWE-778)
 - Logging that includes PII or secrets: \`logger.info("user: \\\${user}")\` where \`user\` includes password / token field.
 - Missing audit trail on sensitive ops: \`deleteUser\`, \`grantAdmin\`, etc. without a log line.
 - Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
 
-**A10 — Server-Side Request Forgery** (CWE-918)
-- User-controlled URL into a server-side fetch: \`fetch(req.body.url)\`, \`requests.get(request.GET['url'])\`, \`HttpClient.GetAsync(userUrl)\`.
-- Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
+**A10:2025 — Mishandling of Exceptional Conditions** (NEW in 2025; CWE-755, CWE-754, CWE-390)
+- Swallowed exceptions: empty \`catch {}\` / \`except: pass\` around security-relevant operations (auth, payment, permission checks).
+- Fail-open patterns: \`catch (e) { return true; }\` or defaulting to "allow" when a check throws.
+- Unchecked return values of security APIs (e.g. ignoring \`verify()\` results).
+- Cheat sheet: https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html
 
 === STEP 1 — Read inputs ===
 - \`./.huu/audits/security.md\` (note which tools are available).
@@ -237,18 +253,18 @@ For each category, the patterns to flag in \`$file\`. Where Semgrep is available
 
 === STEP 2 — Run Semgrep on \`$file\` if available ===
 \`\`\`bash
-semgrep --config p/owasp-top-ten --json "$file" > ./.huu/audits/.tmp/security/semgrep.json
+semgrep scan --config p/owasp-top-ten --json "$file" > ./.huu/audits/.tmp/security/semgrep.json
 \`\`\`
-Parse the JSON and merge findings.
+Parse the JSON and merge findings. (Semgrep's ruleset still tags some findings with 2021 ids; re-map them — e.g. injection → owasp-a05, misconfiguration → owasp-a02, SSRF → owasp-a01.)
 
 === STEP 3 — Run the OWASP heuristics above ===
 For EACH match across all 10 categories:
 \`\`\`json
-{ "summary": "$file:<line>: A03 Injection — SQL string concat", "knowledge": "<the offending code, why it's flagged, link to OWASP Cheat Sheet>", "path": "$file", "category": "owasp-a03", "cwe_id": "CWE-89", "severity": "warn|critical", "cheatsheet": "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html" }
+{ "summary": "$file:<line>: A05 Injection — SQL string concat", "knowledge": "<the offending code, why it's flagged, link to OWASP Cheat Sheet>", "path": "$file", "category": "owasp-a05", "cwe_id": "CWE-89", "severity": "warn|critical", "cheatsheet": "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html" }
 \`\`\`
 
 Severity rules:
-- critical: confirmed injection vector or hardcoded secret-like pattern OR plain-text password persistence.
+- critical: confirmed injection vector or hardcoded secret-like pattern OR plain-text password persistence OR fail-open exception handling on an auth path.
 - warn: pattern is suspect but needs human confirmation (e.g. \`innerHTML =\` might be safe if input is already escaped).
 - info: low-confidence patterns (\`TODO: add auth\` style).
 
@@ -263,7 +279,7 @@ Severity rules:
 const STEP4_PROMPT = `You are at step 4 — dependency CVE scan (whole-project). Goal: scan each manifest for known-vulnerable dependencies, append findings, populate section "4. Dependency CVEs" of \`.huu/audits/security.md\`.
 
 ${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
-In particular: if step 3 flagged owasp-a06 findings (unpinned CDN fetches, vendored libs), cross-reference them — a CVE in a package that step 3 already flagged at a call site deserves "priority": 1.
+In particular: if step 3 flagged owasp-a03 findings (unpinned CDN fetches, curl|bash installs), cross-reference them — a CVE in a package that step 3 already flagged at a call site deserves "priority": 1.
 
 === STEP 1 — Detect manifests ===
 From step 1, you already know which manifests exist. For each, pick the most authoritative scanner.
@@ -273,20 +289,21 @@ From step 1, you already know which manifests exist. For each, pick the most aut
 - If that fails (no lockfile), try \`npx --yes audit-ci --report-type=full\`.
 
 **Python**
-- \`pip-audit --strict --format json > ./.huu/audits/.tmp/security/pip-audit.json\`.
+- \`pip-audit --strict --format json > ./.huu/audits/.tmp/security/pip-audit.json\` (add \`-r requirements.txt\` when there's no installed env).
 - If pip-audit unavailable: \`safety check --json > ./.huu/audits/.tmp/security/safety.json\`.
 
 **Rust**
-- \`cargo audit --json > ./.huu/audits/.tmp/security/cargo-audit.json\`.
+- \`cargo audit --json > ./.huu/audits/.tmp/security/cargo-audit.json\` (reads Cargo.lock against the RustSec DB).
 
 **Go**
-- \`govulncheck -json ./... > ./.huu/audits/.tmp/security/govulncheck.json\`.
+- \`govulncheck -format json ./... > ./.huu/audits/.tmp/security/govulncheck.json\`.
 
 **Cross-language**
-- If \`osv-scanner\` is available, run it against the whole repo as a second pass:
+- If \`osv-scanner\` is available (v2), run it against the whole repo as a second pass:
   \`\`\`bash
-  osv-scanner --format json --output ./.huu/audits/.tmp/security/osv.json -r .
+  osv-scanner scan source -r . --format json --output ./.huu/audits/.tmp/security/osv.json
   \`\`\`
+  (v1 fallback: \`osv-scanner --format json --output <path> -r .\`.)
 
 === STEP 2 — Parse outputs ===
 For each scanner, extract:
@@ -327,74 +344,136 @@ Top critical findings:
 \`\`\`
 
 === Cleanup ===
-- Delete the \`.huu-*-audit.json\` / \`.huu-osv.json\` / \`.huu-safety.json\` working files after parsing.
+- Delete the working JSON files under \`./.huu/audits/.tmp/security/\` after parsing.
 
 === HARD RULES ===
 - DO NOT modify any manifest or lockfile (no auto-upgrade).
 - DO NOT call \`npm install\` or any package manager beyond the audit commands.
 - If a scanner is unavailable for a stack, write an info-severity FAQ entry and continue.`;
 
-const STEP5_PROMPT = `You are the final agent — step 5. Goal: consolidate all findings in \`.huu/audits/security-faq.json\` into a remediation roadmap, populate sections "5. Summary by severity" and "6. Remediation roadmap" of \`.huu/audits/security.md\`. Report-only — README is never touched.
+const STEP5_PROMPT = `You are at step 5 — supply chain & CI posture (whole-project). Goal: audit the repo's software-supply-chain hygiene (OWASP A03:2025), informed by SLSA v1.2 and the OpenSSF Scorecard checks. Append findings, populate section "5. Supply chain & CI posture" of \`.huu/audits/security.md\`. NO code changes.
+
+${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
+
+=== Checklist (each item → one finding when it fails) ===
+References: https://slsa.dev/spec/v1.2/ ; https://github.com/ossf/scorecard/blob/main/docs/checks.md ; https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/
+
+**Dependency pinning (Scorecard: Pinned-Dependencies)**
+- Every manifest has its lockfile COMMITTED (package-lock.json/pnpm-lock.yaml/yarn.lock, Cargo.lock, go.sum, poetry.lock/uv.lock, Gemfile.lock, composer.lock). Missing lockfile → warn.
+- Dockerfiles: base images pinned by digest (\`@sha256:\`) or at least a full version tag — \`FROM node:latest\` → warn.
+- Shell/build scripts: \`curl ... | bash\` / \`wget ... | sh\` installs → warn (critical if the URL is http:// or unversioned).
+
+**CI workflow poisoning ("pwn requests") — GitHub Actions**
+- \`pull_request_target\` or \`workflow_run\` triggers combined with a checkout of the PR head (\`ref: github.event.pull_request.head.sha\` / \`.ref\`) → critical (privileged context running attacker code).
+- Untrusted interpolation: \`\${{ github.event.pull_request.title }}\`, \`.body\`, \`.head_ref\`, issue titles, comment bodies expanded inside \`run:\` blocks → critical (script injection).
+- Actions referenced by mutable tag (\`uses: some/action@v3\`) instead of a full commit SHA → info (warn for actions with secrets access).
+- Workflows without a top-level \`permissions:\` block, or with \`permissions: write-all\` → warn (least-privilege GITHUB_TOKEN).
+
+**Repository posture (Scorecard-style)**
+- Committed binary artifacts (\`*.exe\`, \`*.jar\`, \`*.so\`, \`*.dylib\`, \`*.wasm\` outside vendored dirs) → warn (Binary-Artifacts).
+- \`SECURITY.md\` missing → info (Security-Policy).
+- No SBOM and no release signing evidence → info (note only; SLSA Build L1 starts at provenance existing).
+
+For each failed item:
+\`\`\`json
+{ "summary": "CI: pull_request_target + PR-head checkout in .github/workflows/ci.yml", "knowledge": "<the offending lines, why this is exploitable, link>", "path": ".github/workflows/ci.yml", "category": "supply-chain", "cwe_id": "CWE-829", "severity": "critical", "cheatsheet": "https://cheatsheetseries.owasp.org/cheatsheets/CI_CD_Security_Cheat_Sheet.html" }
+\`\`\`
+
+=== Update section "5. Supply chain & CI posture" ===
+\`\`\`
+Lockfiles: <present/missing per manifest>
+Image pinning: <ok | N unpinned FROMs>
+GitHub Actions: <N> workflows · SHA-pinned actions: <X>/<Y> · permissions blocks: <present/missing>
+Pwn-request exposure: <none found | N findings (critical)>
+Posture: SECURITY.md <yes/no> · binary artifacts <none | list>
+SLSA orientation: build provenance <none observed | partial> (Build L0–L3, Source L1–L3 — see https://slsa.dev/spec/v1.2/)
+\`\`\`
+
+=== HARD RULES ===
+- DO NOT modify workflows, Dockerfiles, or manifests — detection only.
+- DO NOT fetch remote actions or images to inspect them; static repo content only.`;
+
+const STEP6_PROMPT = `You are at step 6 — consolidation. Goal: consolidate all findings in \`.huu/audits/security-faq.json\` into a remediation roadmap, populate sections "6. Summary by severity" and "7. Remediation roadmap" of \`.huu/audits/security.md\`. Report-only — README is never touched.
 
 === STEP 1 — Read inputs ===
-- \`./.huu/audits/security.md\` (sections 1–4 populated).
+- \`./.huu/audits/security.md\` (sections 1–5 populated).
 - \`./.huu/audits/security-faq.json\` (all findings).
 
 === STEP 2 — Count by severity and category ===
 Aggregate:
 - Total findings.
 - Counts by severity: critical / warn / info.
-- Counts by OWASP category (A01..A10).
-- Counts by category type: secret / owasp / cve / misc.
+- Counts by OWASP category (A01..A10, 2025 ids).
+- Counts by category type: secret / owasp / cve / supply-chain / misc.
+The table counts MUST match the FAQ entries exactly — the validation judge recounts them.
 
-=== STEP 3 — Write section "5. Summary by severity" ===
+=== STEP 3 — Write section "6. Summary by severity" ===
 
 \`\`\`
-| Severity | Secrets | OWASP | CVEs | Total |
-|---|---|---|---|---|
-| critical | 2 | 4 | 1 | 7 |
-| warn | 3 | 18 | 6 | 27 |
-| info | 0 | 5 | 12 | 17 |
-| TOTAL | 5 | 27 | 19 | 51 |
+| Severity | Secrets | OWASP | CVEs | Supply chain | Total |
+|---|---|---|---|---|---|
+| critical | 2 | 4 | 1 | 1 | 8 |
+| warn | 3 | 18 | 6 | 2 | 29 |
+| info | 0 | 5 | 12 | 3 | 20 |
+| TOTAL | 5 | 27 | 19 | 6 | 57 |
 
-OWASP Top 10 breakdown:
-- A01 Broken Access Control: 0
-- A02 Cryptographic Failures: 3 (1 critical)
-- A03 Injection: 4 (2 critical)
-- A04 Insecure Design: 1
-- A05 Security Misconfiguration: 8 (1 critical)
-- A06 Vulnerable / Outdated Components: see section 4
-- A07 Identification and Authentication Failures: 2
-- A08 Software and Data Integrity Failures: 0
-- A09 Security Logging and Monitoring Failures: 4
-- A10 SSRF: 1 (1 critical)
+OWASP Top 10:2025 breakdown:
+- A01 Broken Access Control (incl. SSRF): 1 (1 critical)
+- A02 Security Misconfiguration: 8 (1 critical)
+- A03 Software Supply Chain Failures: 6
+- A04 Cryptographic Failures: 3 (1 critical)
+- A05 Injection: 4 (2 critical)
+- A06 Insecure Design: 1
+- A07 Authentication Failures: 2
+- A08 Software or Data Integrity Failures: 0
+- A09 Security Logging and Alerting Failures: 4
+- A10 Mishandling of Exceptional Conditions: 2
 \`\`\`
 
-=== STEP 4 — Write section "6. Remediation roadmap" ===
+=== STEP 4 — Write section "7. Remediation roadmap" ===
 Order findings into a prioritized roadmap. For each item, link to the OWASP Cheat Sheet that explains the fix.
 ${KNOWLEDGE_ORDERING_NOTE}
 
 ### Tier 1 — Fix immediately (critical severity)
 1. Rotate the AWS access key in src/config.ts:42 and remove from git history (BFG / git filter-repo). https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html
 2. Parameterize SQL in src/db/users.ts:88 (currently string concat). https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
-3. Upgrade lodash to 4.17.21+ (CVE-2019-10744).
+3. Remove the PR-head checkout from the pull_request_target workflow. https://cheatsheetseries.owasp.org/cheatsheets/CI_CD_Security_Cheat_Sheet.html
 ...
 
 ### Tier 2 — Fix within sprint (warn)
 - Replace md5 with sha256 in src/auth/legacy-tokens.ts.
 - Enable HttpOnly + SameSite=Strict on the session cookie.
+- Pin GitHub Actions to commit SHAs.
 - ...
 
 ### Tier 3 — Hygiene (info)
 - Pin transitive dependencies.
 - Add a SECURITY.md.
-- Set up Dependabot / OSV-Scanner in CI.
+- Set up Dependabot / OSV-Scanner in CI; consider SLSA provenance for releases.
 
 === HARD RULES ===
 - DO NOT modify any production file. The only output is \`.huu/audits/security.md\`.
 - DO NOT add a README badge. If the user wants a security grade in their README, they can copy the grade from the report manually.
 - DO NOT rotate any secrets — that requires service-side action.
 - DO NOT auto-upgrade dependencies — that needs human review and testing.`;
+
+const STEP8_PROMPT = `You are the final agent — step 8 (post-validation). The judge approved the report. Goal: stamp section "8. Validation" of \`.huu/audits/security.md\` and leave the working tree clean.
+
+=== STEP 1 — Stamp the validation section ===
+Replace the "## 8. Validation" placeholder with:
+\`\`\`
+Validated: <UTC timestamp> · findings: <total> (critical <X> / warn <Y> / info <Z>) · sections 1–7 complete · secrets redacted.
+Validation gate: judge CheckStep ("approved" required to reach this step; "rework" loops back to consolidation, max 2 judge runs).
+\`\`\`
+Numbers MUST come from re-reading \`.huu/audits/security-faq.json\` — do not invent them. Be idempotent: if the section is already stamped (a rework loop ran twice), overwrite it with fresh numbers.
+
+=== STEP 2 — Exit hygiene ===
+- Delete any leftovers under \`./.huu/audits/.tmp/security/\` (keep the directory).
+- Confirm \`git status --porcelain\` shows changes only under \`.huu/\` (plus at most the permitted \`.gitignore\` adjustment).
+
+=== HARD RULES ===
+- DO NOT modify the findings or the roadmap — stamp only.
+- DO NOT touch production files.`;
 
 export function getDefaultPipeline(): Pipeline {
   return {
@@ -418,7 +497,7 @@ export function getDefaultPipeline(): Pipeline {
       },
       {
         type: 'work',
-        name: '3. OWASP Top 10 per-file scan: $file',
+        name: '3. OWASP Top 10:2025 scan for $file',
         prompt: STEP3_PROMPT,
         files: [],
         scope: 'per-file',
@@ -432,8 +511,47 @@ export function getDefaultPipeline(): Pipeline {
       },
       {
         type: 'work',
-        name: '5. Remediation roadmap',
+        name: '5. Supply chain & CI posture',
         prompt: STEP5_PROMPT,
+        files: [],
+        scope: 'project',
+      },
+      {
+        type: 'work',
+        name: '6. Remediation roadmap',
+        prompt: STEP6_PROMPT,
+        files: [],
+        scope: 'project',
+      },
+      {
+        type: 'check',
+        name: '7. Validate report',
+        condition: reportJudgeCondition({
+          reportPath: '.huu/audits/security.md',
+          faqPath: '.huu/audits/security-faq.json',
+          requiredSections: [
+            '1. Scope',
+            '2. Secrets sweep',
+            '3. OWASP Top 10:2025 findings',
+            '4. Dependency CVEs',
+            '5. Supply chain & CI posture',
+            '6. Summary by severity',
+            '7. Remediation roadmap',
+          ],
+          extraClauses: [
+            'every secret in the report and the FAQ is redacted to first-4 + last-4 characters — grep for plausible full-length keys (AKIA[0-9A-Z]{16}, ghp_..., xox.-...) and fail if any full secret appears.',
+          ],
+        }),
+        maxRuns: 2,
+        outcomes: [
+          { label: 'approved', nextStepName: '8. Finalize report', default: true },
+          { label: 'rework', nextStepName: '6. Remediation roadmap' },
+        ],
+      },
+      {
+        type: 'work',
+        name: '8. Finalize report',
+        prompt: STEP8_PROMPT,
         files: [],
         scope: 'project',
       },

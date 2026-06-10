@@ -1,16 +1,22 @@
 // Refactoring pipeline. Fowler refactoring catalog + Mikado method graph +
-// characterization-test baseline. REPORT-ONLY by default (no code rewrites)
-// — the deliverable is a Mikado-style improvement plan, not the refactor
-// itself, because safe refactoring requires step-by-step human review.
+// characterization-test baseline + churn×complexity target ranking.
+// REPORT-ONLY by default (no code rewrites) — the deliverable is a
+// Mikado-style improvement plan, not the refactor itself, because safe
+// refactoring requires step-by-step human review.
+// A judge CheckStep validates the report before the run finishes.
 //
 // References:
 // - Fowler refactoring catalog: https://refactoring.com/catalog/
 // - Mikado method: https://www.manning.com/books/the-mikado-method
 // - Strangler Fig: https://martinfowler.com/bliki/StranglerFigApplication.html
+// - Characterization tests (Feathers): https://michaelfeathers.silvrback.com/characterization-testing
+// - Hotspot prioritization (Tornhill, "Your Code as a Crime Scene"):
+//   https://docs.enterprise.codescene.io/versions/4.0.16/guides/technical/hotspots.html
 
 import type { Pipeline } from '../types.js';
 import {
   persistenceCheck,
+  reportJudgeCondition,
   KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
   KNOWLEDGE_ORDERING_NOTE,
 } from './knowledge-protocol.js';
@@ -44,6 +50,8 @@ Run the test command and capture:
 
 If tests pass: this is the characterization baseline. If tests already fail: STILL proceed — note in the FAQ that baseline was red, and any refactoring recommendation must be conditioned on "fix the failing tests first".
 
+Why this gate exists (Feathers, "Working Effectively with Legacy Code"): characterization tests "document your system's actual behavior, not the behavior you wish it had" — once in production, the system IS its own specification, including bug-as-feature behavior users depend on. Refactoring without them means changes to behavior go undetected.
+
 === STEP 3 — Write .huu/audits/refactor.md scaffold ===
 Path: \`./.huu/audits/refactor.md\`.
 
@@ -69,6 +77,9 @@ Path: \`./.huu/audits/refactor.md\`.
 
 ## 5. Recommended Fowler refactorings
 (filled in by step 5)
+
+## 6. Validation
+(filled in by the final step after the judge approves)
 
 === STEP 4 — Initialize .huu/audits/refactor-faq.json ===
 Schema:
@@ -133,40 +144,52 @@ Skip files matching: \`*.generated.*\`, \`*.min.js\`, \`dist/*\`, \`build/*\`, \
 - Append-only to FAQ.
 - Re-read FAQ before each append (parallel agents).`;
 
-const STEP3_PROMPT = `You are at step 3 — pick the top 5 refactoring targets. Goal: read \`.huu/audits/refactor-faq.json\`, rank smells, and write section "3. Top 5 targets" of \`.huu/audits/refactor.md\`.
+const STEP3_PROMPT = `You are at step 3 — pick the top 5 refactoring targets. Goal: read \`.huu/audits/refactor-faq.json\`, rank smells by SMELL WEIGHT × CHURN (the hotspot method), and write section "3. Top 5 targets" of \`.huu/audits/refactor.md\`.
+
+=== WHY CHURN MATTERS ===
+A smelly file nobody touches costs nothing; a smelly file changed weekly taxes every change. Tornhill's hotspot method (churn × complexity) is the evidence-based prioritizer — CodeScene's field data shows prioritized hotspots are ~5.5% of a codebase yet concentrate ~23% of fixed bugs. Reference: "Your Code as a Crime Scene" (2nd ed.).
 
 === STEP 1 — Read all findings ===
 - \`./.huu/audits/refactor-faq.json\`.
 - \`./.huu/audits/refactor.md\`.
 
-=== STEP 2 — Rank ===
-Score each finding:
-- critical = 5 points.
-- warn = 2 points.
-- info = 0 points.
+=== STEP 2 — Mine churn ===
+\`\`\`bash
+git log --format=format: --name-only --since=12.month \\
+  | grep -v '^$' | sort | uniq -c | sort -nr \\
+  > ./.huu/audits/.tmp/refactor/churn.txt
+\`\`\`
+(Drop \`--since\` when the repo is younger than 12 months.)
 
-Aggregate per file. Top 5 files by total score = the top 5 targets. Within each, pick the single highest-severity smell as the headline. Break ties by "priority" (1 first) then "fixability" (trivial first) when the findings carry those fields.
+=== STEP 3 — Rank ===
+Per file:
+- smell_weight = 5 × critical + 2 × warn (info = 0).
+- churn = commit count from step 2 (0 when absent from the log).
+- target_score = smell_weight × (1 + churn / max_churn) — a churned file scores up to 2× the same smells in a dormant file.
 
-=== STEP 3 — Write section "3. Top 5 targets" ===
+Top 5 files by target_score = the top 5 targets. Within each, pick the single highest-severity smell as the headline. Break ties by "priority" (1 first) then "fixability" (trivial first) when the findings carry those fields.
+
+=== STEP 4 — Write section "3. Top 5 targets" ===
 Replace the placeholder with:
 
 \`\`\`
-Each target is a file with the highest combined smell weight.
-For each, the table shows the headline smell, the Fowler refactoring, and a rough impact rating.
-
-| # | File | Headline smell | Fowler refactoring | Smells in file | Impact |
-|---|---|---|---|---|---|
-| 1 | src/orchestrator/runner.ts | Long function (210 LOC) | Extract Function | 8 (3 critical / 5 warn) | high |
-| 2 | ... | | | | |
+Ranking method: smell weight × churn (hotspot prioritization — Tornhill).
+| # | File | Headline smell | Fowler refactoring | Smells in file | Churn (12mo) | Score | Impact |
+|---|---|---|---|---|---|---|---|
+| 1 | src/orchestrator/runner.ts | Long function (210 LOC) | Extract Function | 8 (3 critical / 5 warn) | 87 | 38.2 | high |
+| 2 | ... | | | | | | |
 \`\`\`
 
 Impact heuristic:
-- high: > 3 critical smells in the same file OR the file is on the hot path (entry point, exported from index).
+- high: > 3 critical smells in the same file OR top-decile churn.
 - medium: 1–3 critical OR > 5 warns.
-- low: only warns.
+- low: only warns and low churn.
+
+=== Cleanup ===
+Delete \`./.huu/audits/.tmp/refactor/churn.txt\` after writing the section.
 
 === HARD RULES ===
-- DO NOT modify source code.
+- DO NOT modify source code. Read-only git commands only.
 - DO NOT alter findings in the FAQ.
 - Update ONLY section "3" of \`.huu/audits/refactor.md\`.`;
 
@@ -259,7 +282,27 @@ Recommended pace: 1 leaf per PR (Mikado discipline); never bundle prerequisite +
 === HARD RULES ===
 - DO NOT modify any source code.
 - DO NOT add a "Refactor everything now" recommendation — Mikado discipline is leaf-by-leaf.
-- The final report must be self-contained (a human can read it without rerunning the audit).`;
+- The final report must be self-contained (a human can read it without rerunning the audit).
+- The counts you cite MUST match the FAQ entries exactly — the validation judge recounts them.`;
+
+const STEP7_PROMPT = `You are the final agent — step 7 (post-validation). The judge approved the plan. Goal: stamp section "6. Validation" of \`.huu/audits/refactor.md\` and leave the working tree clean.
+
+=== STEP 1 — Stamp the validation section ===
+Replace the "## 6. Validation" placeholder with:
+\`\`\`
+Validated: <UTC timestamp> · smells: <total> (critical <X> / warn <Y> / info <Z>) · baseline: <green|red|none> · sections 1–5 complete.
+Mikado caveat preserved: the graphs are STATIC plans (reasoned, not try-and-revert verified).
+Validation gate: judge CheckStep ("approved" required to reach this step; "rework" loops back to the recommendation list, max 2 judge runs).
+\`\`\`
+Numbers MUST come from re-reading \`.huu/audits/refactor-faq.json\` and the report — do not invent them. Be idempotent: if the section is already stamped (a rework loop ran twice), overwrite it with fresh numbers.
+
+=== STEP 2 — Exit hygiene ===
+- Delete any leftovers under \`./.huu/audits/.tmp/refactor/\` (keep the directory).
+- Confirm \`git status --porcelain\` shows changes only under \`.huu/\` (plus at most the permitted \`.gitignore\` adjustment).
+
+=== HARD RULES ===
+- DO NOT modify the findings, the graphs, or the recommendations — stamp only.
+- DO NOT touch production files.`;
 
 export function getDefaultPipeline(): Pipeline {
   return {
@@ -299,6 +342,36 @@ export function getDefaultPipeline(): Pipeline {
         type: 'work',
         name: '5. Final Fowler recommendation list',
         prompt: STEP5_PROMPT,
+        files: [],
+        scope: 'project',
+      },
+      {
+        type: 'check',
+        name: '6. Validate report',
+        condition: reportJudgeCondition({
+          reportPath: '.huu/audits/refactor.md',
+          faqPath: '.huu/audits/refactor-faq.json',
+          requiredSections: [
+            '1. Baseline',
+            '2. Code smells catalog (per-file)',
+            '3. Top 5 targets',
+            '4. Mikado graph',
+            '5. Recommended Fowler refactorings',
+          ],
+          extraClauses: [
+            'every top-5 target from section 3 has its own Mikado graph in section 4, each graph ends with an explicit leaf-first execution order, and section 4 keeps the STATIC-plan caveat (the graphs were reasoned, not try-and-revert verified).',
+          ],
+        }),
+        maxRuns: 2,
+        outcomes: [
+          { label: 'approved', nextStepName: '7. Finalize report', default: true },
+          { label: 'rework', nextStepName: '5. Final Fowler recommendation list' },
+        ],
+      },
+      {
+        type: 'work',
+        name: '7. Finalize report',
+        prompt: STEP7_PROMPT,
         files: [],
         scope: 'project',
       },

@@ -2,6 +2,16 @@
 // here; `lib/pipeline-bootstrap.ts` materializes it into the user's repo at
 // `pipelines/huu-test-suite.pipeline.json` on first run.
 //
+// Test-quality grounding baked into the prompts:
+// - Assertions that survive mutation testing (test behavior, not
+//   implementation; no change-detector tests): Google Testing Blog +
+//   https://testing.googleblog.com/2021/04/mutation-testing.html
+// - Anti-flakiness rules (no sleeps, no network, frozen clocks, fixed
+//   seeds, isolation): https://martinfowler.com/articles/nonDeterminism.html
+// - Hermetic unit tests (Google "small" size: single process, no I/O):
+//   https://abseil.io/resources/swe-book/html/ch11.html
+// - Mutation tools (optional follow-up): https://stryker-mutator.io/
+//
 // IMPORTANT: keep this file pure (no fs / no env). It is imported on the
 // hot path of `App` mount, before any side effects.
 
@@ -73,6 +83,20 @@ Required content (English, concise, no fluff):
 - Setup files / fixtures: <e.g.: vitest.config.ts setupFiles, conftest.py>
 - What to avoid: <e.g.: real I/O, network, system time, global state>
 
+## Determinism rules (every generated test MUST follow these)
+Derived from Fowler's "Eradicating Non-Determinism in Tests" and Google's flaky-test taxonomy:
+- No bare sleeps — poll with timeout or use the runner's fake timers.
+- No real network — test doubles / fixtures only.
+- Wrap the clock — inject or freeze time; never assert on \`Date.now()\` drift.
+- Fix every RNG seed.
+- Isolated state — fresh tmp dirs per test, no order dependence, no shared mutable globals.
+- Unit tests are "small" (Google sizes): single process, no disk/network I/O — hermetic.
+
+## Going beyond coverage (optional follow-up, not run by this pipeline)
+Line coverage only proves code RAN, not that assertions would catch a bug. Mutation testing measures that directly:
+- JS/TS: \`npm init stryker@latest\` then \`npx stryker run\` (https://stryker-mutator.io/)
+- Python: \`mutmut run\` · JVM: PIT (https://pitest.org/)
+
 ## How to measure coverage
 \`\`\`bash
 <exact command — e.g.: npx vitest run --coverage; pytest --cov; go test -cover; cargo tarpaulin; mvn jacoco:report>
@@ -132,8 +156,13 @@ c) Write tests covering:
    - Main behavior of each public export.
    - At least 1 edge case (empty, null/undefined/None, limit).
    - At least 1 error path (expected exception).
-d) MOCK external dependencies (network, fs, db, time). Tests must be fast, isolated, and deterministic.
-e) Run the test file with the single-file command from huu-tests.md.
+d) ASSERTION QUALITY (what makes a test survive mutation testing):
+   - Test BEHAVIOR through the public surface, not implementation details — the test should not need to change when internals are refactored.
+   - One logical behavior per test, with a name that states the expectation.
+   - Assert concrete VALUES/effects, never "no throw" alone, never snapshot-the-output-and-call-it-done (a change-detector test passes for correct AND incorrect code — negative value).
+   - Mental check per assertion: "if the logic under test were subtly wrong (off-by-one, inverted condition), would this assertion fail?"
+e) MOCK external dependencies (network, fs, db, time). Follow the Determinism rules section of huu-tests.md — no sleeps, frozen clocks, fixed seeds, isolated state.
+f) Run the test file with the single-file command from huu-tests.md.
 
 === STEP 5 — Error recovery + feed the FAQ ===
 For EACH failure found:
@@ -184,8 +213,9 @@ Follow the convention documented in huu-tests.md. Examples:
    - Main behavior of each public export.
    - At least 1 edge case per public export (empty, null/undefined/None, limit).
    - Error paths (expected exceptions).
-4. MOCK external dependencies (network, fs, db, time, APIs). Unit tests — fast, isolated, deterministic.
-5. Run with single-file command from huu-tests.md.
+4. ASSERTION QUALITY: test behavior through the public surface (not internals); one logical behavior per test; assert concrete values/effects — never "no throw" alone, never snapshot-only change-detector tests. Per assertion ask: "would this fail if the logic were subtly wrong?"
+5. MOCK external dependencies (network, fs, db, time, APIs). Unit tests are hermetic — single process, no real I/O. Follow huu-tests.md's Determinism rules: no sleeps, frozen clocks, fixed seeds, isolated tmp dirs, no order dependence.
+6. Run with single-file command from huu-tests.md.
 
 === STEP 5 — Error recovery + APPEND to FAQ ===
 For each failure:

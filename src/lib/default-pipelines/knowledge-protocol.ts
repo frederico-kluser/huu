@@ -51,3 +51,35 @@ The deliverables under \`.huu/${subdir}/\` must survive the stage merge, so they
 Run: \`git check-ignore -q .huu/${subdir} && echo IGNORED || echo OK\`
 If IGNORED: the committed \`.gitignore\` excludes \`.huu/\`. Apply the MINIMAL rewrite — replace the line \`.huu/\` (or \`.huu\`) with \`.huu/*\` and add \`!.huu/${subdir}/\` on the next line. Git cannot re-include below an excluded DIRECTORY, but \`.huu/*\` only excludes the entries, so the negation works. This one-line edit is the ONLY permitted change outside \`.huu/${subdir}/\` in this pipeline. If OK: leave \`.gitignore\` alone.`;
 }
+
+/**
+ * Natural-language condition for the report-validation judge appended to
+ * every report-only audit. The judge runs in the integration worktree with
+ * shell access; the condition tells it exactly what evidence to gather so
+ * the verdict is reproducible. Kept in one place so all five audits demand
+ * the same bar.
+ */
+export function reportJudgeCondition(opts: {
+  /** e.g. `.huu/audits/security.md` */
+  reportPath: string;
+  /** e.g. `.huu/audits/security-faq.json` */
+  faqPath: string;
+  /** Section headings that must exist and be non-placeholder. */
+  requiredSections: string[];
+  /** Extra audit-specific clauses (e.g. "all secrets are redacted"). */
+  extraClauses?: string[];
+}): string {
+  const sections = opts.requiredSections.map((s) => `"${s}"`).join(', ');
+  const extra = (opts.extraClauses ?? [])
+    .map((c, i) => `${5 + i}) ${c}`)
+    .join(' ');
+  return (
+    `The report at \`${opts.reportPath}\` is complete and internally consistent. Verify ALL of: ` +
+    `1) the file exists and every required section (${sections}) is present and contains real content — no "(filled in by step N)" or TODO placeholders left. ` +
+    `2) \`${opts.faqPath}\` parses as a JSON array and the counts cited in the report's summary tables match the actual entries (severity totals, category totals). ` +
+    `3) recommendations are ordered critical → warn → info, and within each severity respect the optional "priority"/"fixability" fields when present. ` +
+    `4) \`git status --porcelain\` shows NO modified files outside \`.huu/\` except at most one \`.gitignore\` whose diff only rewrites a \`.huu/\` exclusion into \`.huu/*\` + a negation line (report-only contract). ` +
+    `${extra} ` +
+    `This is run $runs of this validation. If every clause holds, answer "approved"; if any fails, answer "rework" and say precisely which clause failed and why in the reason.`
+  );
+}

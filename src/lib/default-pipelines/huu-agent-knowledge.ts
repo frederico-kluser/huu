@@ -171,11 +171,13 @@ NOTE: a validation step runs after you and may send the pipeline BACK here with 
 If topics.json is missing: abort with a clear error.
 
 === STEP 2 — Spec constraints (apply to EVERY skill you write) ===
-- Frontmatter \`name\`: MUST equal the parent directory name; 1–64 chars; \`^[a-z0-9]+(-[a-z0-9]+)*$\`.
-- Frontmatter \`description\`: 1–1024 chars; states WHAT the skill does AND WHEN to load it; includes the trigger keywords an agent would think of.
-- Body: < 500 lines (target < 5000 tokens). Move overflow to \`references/<topic-detail>.md\` inside the skill directory and link it from the body — references stay ONE level deep.
+- Frontmatter \`name\`: MUST equal the parent directory name; 1–64 chars; \`^[a-z0-9]+(-[a-z0-9]+)*$\` (lowercase, digits, single hyphens — no leading/trailing/consecutive hyphens).
+- Frontmatter \`description\`: 1–1024 chars; states WHAT the skill does AND WHEN to load it; includes the trigger keywords an agent would think of. The name+description pair is the ONLY thing agents see before deciding to load a skill (progressive disclosure level 1, ~100 tokens) — write it like a routing rule, not a blurb.
+- Optional frontmatter fields the spec allows (use only when warranted): \`license\`, \`compatibility\` (1–500 chars, env requirements — most skills don't need it), \`metadata\` (string map), \`allowed-tools\` (experimental).
+- Body: < 500 lines (target < 5000 tokens; progressive disclosure level 2). Move overflow to \`references/<topic-detail>.md\` inside the skill directory and link it from the body — references stay ONE level deep (level 3, loaded only as needed).
 - Body structure (adapt as needed): ## Scope · ## Key files (paths a reader can open) · ## How things work (the distilled findings) · ## Boundaries (Do / Don't) · ## Gotchas.
 - Every fact must be traceable: keep the concrete file paths from the findings. No generic filler an LLM could have written without reading this repo.
+- Prefer pointing at runnable project commands/scripts over re-deriving procedures in prose (Anthropic skill-authoring guidance: deterministic operations belong in scripts, not token generation).
 
 === STEP 3 — Write one skill per topic ===
 For each entry in topics.json: \`mkdir -p .agents/skills/<name>\` then write \`.agents/skills/<name>/SKILL.md\`:
