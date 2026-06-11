@@ -64,7 +64,13 @@ const STATE_FLUSH_INTERVAL_MS = 125;
 export interface WebSessionDeps {
   cwd: string;
   initialBackend?: AgentBackendKind;
+  /**
+   * Memory-aware dynamic concurrency (default true). False pins the pool
+   * at `concurrency`; the memory guard stays active either way.
+   */
   autoScale?: boolean;
+  /** Initial/pinned concurrency (--concurrency=N). */
+  concurrency?: number;
   /**
    * Pre-seed the session with a pipeline loaded by the CLI (`huu run
    * <pipeline.json> --web`). Threaded into `initialState(...)` so the
@@ -258,6 +264,8 @@ export class WebSession {
           return this.handleRunAbort();
         case 'run.setConcurrency':
           return this.handleSetConcurrency(msg.concurrency);
+        case 'run.setAutoScale':
+          return this.handleSetAutoScale(msg.enabled);
         case 'ping':
           // Silent keepalive — the transport heartbeat (ws ping/pong)
           // already drives liveness. We deliberately do NOT echo the
@@ -463,6 +471,7 @@ export class WebSession {
     const orch = new Orchestrator(config, pipeline, this.deps.cwd, this.factory, {
       conflictResolverFactory: this.resolverFactory,
       autoScale: this.deps.autoScale,
+      initialConcurrency: this.deps.concurrency,
     });
     this.orch = orch;
 
@@ -533,7 +542,22 @@ export class WebSession {
       this.sendError('no run in progress', 'NO_RUN');
       return;
     }
+    // Parity with the TUI +/- keys: an explicit concurrency choice pins
+    // manual mode (the memory guard stays active inside the orchestrator).
+    this.orch.disableAutoScale();
     this.orch.setConcurrency(Math.floor(value));
+  }
+
+  private handleSetAutoScale(enabled: boolean): void {
+    if (!this.orch) {
+      this.sendError('no run in progress', 'NO_RUN');
+      return;
+    }
+    if (enabled) {
+      this.orch.enableAutoScale();
+    } else {
+      this.orch.disableAutoScale();
+    }
   }
 }
 

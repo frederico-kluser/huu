@@ -87,6 +87,7 @@ export type ClientMessage =
   | { type: 'run.start'; modelId: string; apiKey: string }
   | { type: 'run.abort' }
   | { type: 'run.setConcurrency'; concurrency: number }
+  | { type: 'run.setAutoScale'; enabled: boolean }
   | { type: 'ping' };
 
 // --- Type guards ---
@@ -108,6 +109,7 @@ const CLIENT_MSG_TYPES: ReadonlySet<string> = new Set([
   'run.start',
   'run.abort',
   'run.setConcurrency',
+  'run.setAutoScale',
   'ping',
 ]);
 

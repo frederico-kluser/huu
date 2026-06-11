@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { AgentStatus, Pipeline, StageIntegration } from '../../lib/types.js';
+import type { AgentStatus, CheckRun, Pipeline, StageIntegration } from '../../lib/types.js';
 import { theme } from '../theme.js';
 
 // In-house kanban renderer. Replaces `ink-kanban-board` to keep the run
@@ -105,6 +105,46 @@ function pickIntegrationColumn(e: StageIntegration): 'todo' | 'doing' | 'done' {
   return 'done';
 }
 
+// `theme.ai` for the deliberating judge — the check evaluator is an LLM
+// agent, i.e. AI-driven UI per the theme rule.
+function checkStatus(e: CheckRun): CardStatus {
+  switch (e.phase) {
+    case 'judging':
+      return { label: 'JUDGING', color: theme.ai };
+    case 'done':
+      return e.fromJudge
+        ? { label: (e.outcomeLabel ?? 'DONE').toUpperCase(), color: 'green' }
+        : { label: `DEFAULT: ${e.outcomeLabel ?? '?'}`, color: 'yellow' };
+    case 'error':
+      return { label: 'FAILED', color: 'red' };
+  }
+}
+
+function pickCheckColumn(e: CheckRun): 'todo' | 'doing' | 'done' {
+  return e.phase === 'judging' ? 'doing' : 'done';
+}
+
+function buildCheckCard(e: CheckRun): BoardCard {
+  const modelShort = e.modelId.includes('/') ? e.modelId.split('/').pop() : e.modelId;
+  const subtitle =
+    e.phase === 'done' && e.reason
+      ? `[check] ${truncate(e.reason, 38)}`
+      : `[check] ${truncate(e.condition, 38)}`;
+  return {
+    key: `check-${e.visitIndex}`,
+    title: `judge: ${truncate(e.stepName, 22)}${e.runs > 1 ? ` ×${e.runs}` : ''}`,
+    subtitle,
+    status: checkStatus(e),
+    branchShort: undefined,
+    modelShort: modelShort ?? undefined,
+    filesModifiedCount: 0,
+    errorLine: e.error ? truncate(e.error, 80) : undefined,
+    lastLog: e.lastLog ? truncate(e.lastLog, 80) : undefined,
+    startedAt: e.startedAt,
+    finishedAt: e.finishedAt,
+  };
+}
+
 function buildIntegrationCard(e: StageIntegration, isOverride: boolean): BoardCard {
   const modelShort = e.modelId.includes('/') ? e.modelId.split('/').pop() : e.modelId;
   const total = e.branchesMerged.length + e.branchesPending.length;
@@ -158,11 +198,14 @@ function buildCard(
   const log = lastLog ?? agent.logs[agent.logs.length - 1];
 
   const retryBadge = agent.attempt && agent.attempt > 1 ? ' (retry)' : '';
+  // Memory-guard requeues go in the TITLE, not a new line — cardHeight()
+  // budgets packCards by rendered rows and must stay in sync.
+  const requeueBadge = agent.requeues && agent.requeues > 0 ? ` ↻${agent.requeues}` : '';
   return {
     key: String(agent.agentId),
     title: `#${agent.agentId} ${truncate(agent.stageName, 24)}${
       isOverride ? ' (step)' : ''
-    }${retryBadge}`,
+    }${retryBadge}${requeueBadge}`,
     subtitle,
     status,
     branchShort,
@@ -191,6 +234,12 @@ export interface RunKanbanProps {
    */
   stageIntegrations?: ReadonlyArray<StageIntegration>;
   /**
+   * Per-check-visit judge history. Each entry renders as a display-only
+   * card (key `check-<visitIndex>`, never focusable) — DOING while the
+   * judge deliberates, DONE with the chosen outcome label.
+   */
+  checkRuns?: ReadonlyArray<CheckRun>;
+  /**
    * Maximum rows of card content the column body may render. The board
    * subtracts column chrome (border + title + margin) and overall page chrome
    * (header/footer/metrics bar) before passing this in. When a column would
@@ -208,6 +257,7 @@ function RunKanbanInner({
   nowMs,
   lastLogByAgent,
   stageIntegrations,
+  checkRuns,
   maxCardRows,
 }: RunKanbanProps): React.JSX.Element {
   const todo: BoardCard[] = [];
@@ -237,6 +287,14 @@ function RunKanbanInner({
     const col = pickIntegrationColumn(entry);
     if (col === 'todo') todo.push(card);
     else if (col === 'doing') doing.push(card);
+    else done.push(card);
+  }
+
+  // Judge cards last — same packCards anchoring rationale as merges.
+  for (const entry of checkRuns ?? []) {
+    const card = buildCheckCard(entry);
+    const col = pickCheckColumn(entry);
+    if (col === 'doing') doing.push(card);
     else done.push(card);
   }
 

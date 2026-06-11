@@ -38,8 +38,14 @@ export const RunConfigSchema = z.object({
   maxRetries: z.number().int().min(0).optional(),
   /** Hard cap on total node visits. Falls back to pipeline value. */
   maxNodeExecutions: z.number().int().positive().optional(),
-  /** Initial worker concurrency. */
+  /** Initial worker concurrency. When set (and autoScale is absent), pins manual mode. */
   concurrency: z.number().int().positive().optional(),
+  /**
+   * Memory-aware dynamic concurrency. Defaults: true when `concurrency`
+   * is absent, false when it is set (an explicit concurrency means the
+   * user wants that exact pool size). The memory guard runs either way.
+   */
+  autoScale: z.boolean().optional(),
 });
 
 export type RunConfig = z.infer<typeof RunConfigSchema>;

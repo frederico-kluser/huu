@@ -20,7 +20,7 @@ import { preflightGitOnHost } from './lib/git-preflight.js';
 {
   const rawArgs = process.argv.slice(2);
   const wantsWeb = rawArgs.includes('--web');
-  const wantsYolo = rawArgs.includes('--yolo');
+  const wantsYolo = rawArgs.includes('--yolo') || rawArgs.includes('--no-docker');
   if (wantsWeb && !wantsYolo && process.env.HUU_IN_CONTAINER !== '1') {
     process.stderr.write(
       'huu: --web requires --yolo in Phase 1 (Docker port-publishing for the web UI is not implemented yet).\n',
@@ -163,7 +163,10 @@ Usage:
   huu --copilot             Alias for --backend=copilot
   huu --stub                Alias for --backend=stub (no real LLM)
   huu --yolo                Skip Docker, run native on the host (agent sees your shell creds)
-  huu --auto-scale          Enable auto-scaling mode (resource-bound concurrency)
+  huu --no-docker           Alias for --yolo / HUU_NO_DOCKER=1 — neutral spelling for CI runners
+  huu --concurrency=<n>     Pin manual concurrency at n (disables memory-based auto-scale)
+  huu --no-auto-scale       Disable memory-based auto-scale (on by default; guard stays on)
+  huu --auto-scale          Deprecated: auto-scale is now the default
   huu --help                Show this help
 
 Web UI flags:
@@ -343,8 +346,22 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const useStub = args.includes('--stub');
   const useCopilot = args.includes('--copilot');
-  const useYolo = args.includes('--yolo');
-  const autoScale = args.includes('--auto-scale');
+  const useYolo = args.includes('--yolo') || args.includes('--no-docker');
+  const concurrencyArg = args
+    .filter((a) => a.startsWith('--concurrency='))
+    .map((a) => Number(a.slice('--concurrency='.length)))
+    .filter((n) => Number.isFinite(n) && n >= 1)
+    .map((n) => Math.floor(n))
+    .pop();
+  // Memory-aware auto-scale is the DEFAULT. --no-auto-scale pins manual
+  // concurrency; --concurrency=N alone also pins manual at N (adding the
+  // legacy --auto-scale flag keeps auto mode and only seeds the start
+  // value). The memory guard runs in both modes.
+  const autoScale = args.includes('--no-auto-scale')
+    ? false
+    : concurrencyArg !== undefined
+      ? args.includes('--auto-scale')
+      : true;
   const useWeb = args.includes('--web');
   const useNoOpen = args.includes('--no-open');
   const webPortArg = args
@@ -382,10 +399,13 @@ async function main(): Promise<void> {
       a !== '--stub' &&
       a !== '--copilot' &&
       a !== '--yolo' &&
+      a !== '--no-docker' &&
       a !== '--auto-scale' &&
+      a !== '--no-auto-scale' &&
       a !== '--web' &&
       a !== '--no-open' &&
       !a.startsWith('--backend=') &&
+      !a.startsWith('--concurrency=') &&
       !a.startsWith('--web-port='),
   );
 
@@ -527,6 +547,7 @@ async function main(): Promise<void> {
       agentFactory: bundle.agentFactory,
       conflictResolverFactory: bundle.conflictResolverFactory,
       concurrency: runConfig.concurrency,
+      autoScale: runConfig.autoScale,
     });
     process.exit(code);
   }
@@ -570,6 +591,7 @@ async function main(): Promise<void> {
       autoStart,
       backendKind: lockedBackend,
       autoScale,
+      concurrency: concurrencyArg,
       openBrowser: !useNoOpen,
       portOverride: Number.isFinite(webPortArg) ? webPortArg : undefined,
     });
@@ -592,6 +614,7 @@ async function main(): Promise<void> {
       backend={lockedBackend}
       autoStart={autoStart}
       autoScale={autoScale}
+      concurrency={concurrencyArg}
     />,
     { patchConsole: false },
   );

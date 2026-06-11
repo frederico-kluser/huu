@@ -324,6 +324,37 @@ The judge is responsible for the actual arithmetic; huu only does string substit
 }
 ```
 
+### Idiom: judge-validates-report
+
+The five bundled report-only audits (Docs / Quality / Performance / Refactor / Security) all end with the same pattern: a **final check step** whose `condition` demands the report be complete and internally consistent — required sections present with real content (no placeholders), FAQ JSON counts matching the report's summary tables, recommendations ordered critical → warn → info, and `git status` clean outside `.huu/`. The shared condition text is built by `reportJudgeCondition()` in `src/lib/default-pipelines/knowledge-protocol.ts` so all five audits demand the same bar.
+
+Two outcomes, `maxRuns: 2`:
+
+- `approved` (**`default: true`**) → a terminal work step that stamps the validation section of the report.
+- `rework` → back to the consolidation step, which rebuilds the report on top of the accumulated commits.
+
+```json
+{
+  "type": "check",
+  "name": "7. Validate report",
+  "condition": "The report at `.huu/audits/docs.md` is complete and internally consistent. Verify ALL of: 1) every required section is present with real content … 4) `git status --porcelain` shows NO modified files outside `.huu/` … This is run $runs of this validation. If every clause holds, answer \"approved\"; if any fails, answer \"rework\".",
+  "maxRuns": 2,
+  "outcomes": [
+    { "label": "approved", "nextStepName": "8. Finalize report", "default": true },
+    { "label": "rework", "nextStepName": "6. Consolidate report and cleanup" }
+  ]
+},
+{
+  "type": "work",
+  "name": "8. Finalize report",
+  "prompt": "The judge approved the report. Stamp the Validation section with the final numbers and leave the working tree clean.",
+  "files": [],
+  "scope": "project"
+}
+```
+
+**Why `approved` must carry `default: true`.** The default outcome fires whenever the judge cannot produce a usable verdict — stub mode, judge failure, an unknown label, or the `maxRuns` cap. If `rework` were the default, every one of those degraded paths would loop backwards (stub runs would bounce between consolidation and the check until `maxNodeExecutions` killed the run). With `approved` as the default, a broken judge degrades to "ship the report as-is" — the safe direction for a report-only pipeline.
+
 ### Validation rules (enforced at parse time)
 
 - All step `name`s must be **unique** across the pipeline.

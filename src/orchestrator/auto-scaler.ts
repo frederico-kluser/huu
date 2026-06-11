@@ -3,13 +3,29 @@ import type { AutoScaleStatus } from '../lib/types.js';
 
 export interface AutoScalerConfig {
   resourceMonitor: () => SystemMetrics;
+  /** Seed for the observed per-agent memory estimate (MiB). Default 250. */
   agentMemoryEstimateMb?: number;
   stopThresholdPercent?: number;
   destroyThresholdPercent?: number;
   cooldownMs?: number;
   reEvaluationMs?: number;
   maxAgents?: number;
+  /** Memory kept untouched as headroom margin, % of total. Default 10. */
+  safetyMarginPercent?: number;
+  /** Lower clamp for the observed per-agent estimate (MiB). Default 128. */
+  minAgentMemoryMb?: number;
+  /** Upper clamp for the observed per-agent estimate (MiB). Default 2048. */
+  maxAgentMemoryMb?: number;
+  /** EMA smoothing factor for the observed estimate. Default 0.2. */
+  emaAlpha?: number;
 }
+
+/**
+ * 'auto'   — the scaler drives the concurrency target from memory headroom.
+ * 'manual' — the user pins concurrency; only the memory guard stays active
+ *            (block spawns and kill the newest agent at the destroy threshold).
+ */
+export type AutoScaleMode = 'auto' | 'manual';
 
 type AutoScaleState = 'NORMAL' | 'SCALING_UP' | 'BACKING_OFF' | 'COOLDOWN' | 'DESTROYING';
 
@@ -19,19 +35,35 @@ const DEFAULT_DESTROY_THRESHOLD = 95;
 const DEFAULT_COOLDOWN_MS = 30_000;
 const DEFAULT_RE_EVALUATION_MS = 5_000;
 const DEFAULT_MAX_AGENTS = 200;
+const DEFAULT_SAFETY_MARGIN_PERCENT = 10;
+const DEFAULT_MIN_AGENT_MEMORY_MB = 128;
+const DEFAULT_MAX_AGENT_MEMORY_MB = 2048;
+const DEFAULT_EMA_ALPHA = 0.2;
+/** The percent margin never shrinks below this absolute floor. */
+const MIN_SAFETY_MARGIN_BYTES = 512 * 1024 * 1024;
 const POLL_INTERVAL_MS = 1_000;
+const MIB = 1024 * 1024;
 
 export class AutoScaler {
   private config: Required<AutoScalerConfig>;
   private currentMetrics: SystemMetrics;
   private state: AutoScaleState = 'NORMAL';
   private enabled = false;
+  private mode: AutoScaleMode = 'auto';
   private activeAgentCount = 0;
   private pendingTaskCount = 0;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private cooldownTimer: ReturnType<typeof setTimeout> | null = null;
   private cooldownEndAt = 0;
   private destroyedAt = 0;
+  /**
+   * RAM in use when no agents were running — everything above it is
+   * attributed to the agents. Re-captured whenever the pool drains to zero.
+   */
+  private baselineUsedBytes: number | null = null;
+  /** EMA of the observed per-agent memory footprint, in bytes. */
+  private observedAgentBytes: number;
+  private guardKillCount = 0;
 
   constructor(config: AutoScalerConfig) {
     this.config = {
@@ -42,13 +74,19 @@ export class AutoScaler {
       cooldownMs: config.cooldownMs ?? DEFAULT_COOLDOWN_MS,
       reEvaluationMs: config.reEvaluationMs ?? DEFAULT_RE_EVALUATION_MS,
       maxAgents: config.maxAgents ?? DEFAULT_MAX_AGENTS,
+      safetyMarginPercent: config.safetyMarginPercent ?? DEFAULT_SAFETY_MARGIN_PERCENT,
+      minAgentMemoryMb: config.minAgentMemoryMb ?? DEFAULT_MIN_AGENT_MEMORY_MB,
+      maxAgentMemoryMb: config.maxAgentMemoryMb ?? DEFAULT_MAX_AGENT_MEMORY_MB,
+      emaAlpha: config.emaAlpha ?? DEFAULT_EMA_ALPHA,
     };
     this.currentMetrics = config.resourceMonitor();
+    this.observedAgentBytes = this.config.agentMemoryEstimateMb * MIB;
   }
 
   start(): void {
     if (this.enabled) return;
     this.enabled = true;
+    this.baselineUsedBytes = this.currentMetrics.ramUsedBytes;
     this.pollMetrics();
     this.pollTimer = setInterval(() => this.pollMetrics(), POLL_INTERVAL_MS);
   }
@@ -66,12 +104,26 @@ export class AutoScaler {
     this.state = 'NORMAL';
     this.cooldownEndAt = 0;
     this.destroyedAt = 0;
+    this.baselineUsedBytes = null;
+  }
+
+  setMode(mode: AutoScaleMode): void {
+    this.mode = mode;
+  }
+
+  getMode(): AutoScaleMode {
+    return this.mode;
   }
 
   shouldSpawn(): boolean {
-    if (!this.enabled) return false;
-    if (this.state === 'COOLDOWN') return false;
+    if (!this.enabled) return true; // not polling — never gate the pool
     const { cpuPercent, ramPercent } = this.currentMetrics;
+    if (this.mode === 'manual') {
+      // Guard-only: respect the user's concurrency choice unless memory is
+      // already at the destroy threshold (spawning would kill someone else).
+      return ramPercent < this.config.destroyThresholdPercent;
+    }
+    if (this.state === 'COOLDOWN') return false;
     const { stopThresholdPercent } = this.config;
     if (cpuPercent >= stopThresholdPercent || ramPercent >= stopThresholdPercent) {
       return false;
@@ -87,21 +139,40 @@ export class AutoScaler {
     return cpuPercent >= destroyThresholdPercent || ramPercent >= destroyThresholdPercent;
   }
 
+  /**
+   * Memory-headroom admission: how many agents fit in the claimable memory
+   * after reserving a safety margin, on top of the ones already running.
+   *
+   *   margin     = max(total × safetyMarginPercent, 512 MiB)
+   *   headroom   = max(0, available − margin)
+   *   additional = floor(headroom / observedAgentBytes)
+   *
+   * Capped by pending work (never over-provision idle slots) and maxAgents;
+   * never below 1 so the run always makes progress.
+   */
   targetConcurrency(): number {
-    const { ramTotalBytes } = this.currentMetrics;
-    const { agentMemoryEstimateMb, maxAgents } = this.config;
-    const agentBytes = agentMemoryEstimateMb * 1024 * 1024;
-    const kickstart = Math.floor(ramTotalBytes / agentBytes);
-    // When no tasks are queued, use kickstart as the target (clamped to maxAgents).
-    // When tasks are queued, cap at pendingTaskCount to avoid over-provisioning.
+    const { ramTotalBytes, ramAvailableBytes } = this.currentMetrics;
+    const { safetyMarginPercent, maxAgents } = this.config;
+    const margin = Math.max(
+      ramTotalBytes * (safetyMarginPercent / 100),
+      MIN_SAFETY_MARGIN_BYTES,
+    );
+    const headroom = Math.max(0, ramAvailableBytes - margin);
+    const additional = Math.floor(headroom / this.observedAgentBytes);
     const ceiling = this.pendingTaskCount > 0
-      ? Math.min(this.pendingTaskCount, maxAgents)
+      ? Math.min(this.activeAgentCount + this.pendingTaskCount, maxAgents)
       : maxAgents;
-    return Math.max(1, Math.min(kickstart, ceiling));
+    return Math.max(1, Math.min(this.activeAgentCount + additional, ceiling));
+  }
+
+  /** Observed per-agent memory footprint in MiB (EMA, clamped). */
+  observedAgentMemoryMb(): number {
+    return Math.round(this.observedAgentBytes / MIB);
   }
 
   notifyAgentDestroyed(): void {
     this.activeAgentCount = Math.max(0, this.activeAgentCount - 1);
+    this.guardKillCount++;
     this.state = 'COOLDOWN';
     this.destroyedAt = Date.now();
     this.cooldownEndAt = Date.now() + this.config.cooldownMs;
@@ -132,16 +203,21 @@ export class AutoScaler {
     const now = Date.now();
     const cooldownRemainingMs = this.cooldownEndAt > now ? this.cooldownEndAt - now : 0;
     return {
-      enabled: this.enabled,
+      enabled: this.enabled && this.mode === 'auto',
+      mode: this.mode,
       state: this.state,
       cooldownRemainingMs,
       cpuPercent: this.currentMetrics.cpuPercent,
       ramPercent: this.currentMetrics.ramPercent,
+      observedAgentMemoryMb: this.observedAgentMemoryMb(),
+      ramAvailableMb: Math.round(this.currentMetrics.ramAvailableBytes / MIB),
+      guardKillCount: this.guardKillCount,
     };
   }
 
   private pollMetrics(): void {
     this.currentMetrics = this.config.resourceMonitor();
+    this.sampleObservedAgentMemory();
     const { cpuPercent, ramPercent } = this.currentMetrics;
     const { stopThresholdPercent, destroyThresholdPercent } = this.config;
 
@@ -161,5 +237,30 @@ export class AutoScaler {
     } else {
       this.state = 'NORMAL';
     }
+  }
+
+  /**
+   * Feed the EMA with (used − baseline) / activeAgents. The baseline is the
+   * usage with zero agents running, re-captured whenever the pool drains so
+   * unrelated host activity doesn't permanently skew the attribution.
+   */
+  private sampleObservedAgentMemory(): void {
+    const { ramUsedBytes } = this.currentMetrics;
+    if (this.activeAgentCount <= 0) {
+      this.baselineUsedBytes = ramUsedBytes;
+      return;
+    }
+    if (this.baselineUsedBytes === null) {
+      this.baselineUsedBytes = ramUsedBytes;
+      return;
+    }
+    const sample = (ramUsedBytes - this.baselineUsedBytes) / this.activeAgentCount;
+    if (sample <= 0) return;
+    const { emaAlpha, minAgentMemoryMb, maxAgentMemoryMb } = this.config;
+    const next = emaAlpha * sample + (1 - emaAlpha) * this.observedAgentBytes;
+    this.observedAgentBytes = Math.min(
+      maxAgentMemoryMb * MIB,
+      Math.max(minAgentMemoryMb * MIB, next),
+    );
   }
 }

@@ -57,8 +57,13 @@ interface AppProps {
   backend?: AgentBackendKind;
   /** When true and initialPipeline is set, jumps straight from welcome → editor. */
   autoStart?: boolean;
-  /** When true, enables resource-bound auto-scaling of concurrency. */
+  /**
+   * Memory-aware dynamic concurrency (default true). False pins the pool
+   * at `concurrency`; the memory guard stays active either way.
+   */
   autoScale?: boolean;
+  /** Initial/pinned concurrency (--concurrency=N). */
+  concurrency?: number;
 }
 
 const FULL_CLEAR = '\x1b[3J';
@@ -71,6 +76,7 @@ export function App({
   backend: initialBackend,
   autoStart,
   autoScale,
+  concurrency,
 }: AppProps): React.JSX.Element {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -674,6 +680,7 @@ export function App({
         agentFactory={factory}
         conflictResolverFactory={resolverFactory}
         autoScale={autoScale}
+        initialConcurrency={concurrency}
         onComplete={(result) => dispatch({ type: 'run.complete', result })}
         onAbort={() => dispatch({ type: 'run.abort' })}
       />

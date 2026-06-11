@@ -6,7 +6,7 @@ This document describes the layered structure of `huu` and the design decisions 
 
 ```
 src/
-├── cli.tsx                    # entry CLI (argv, --help, --yolo, --auto-scale, terminal restoration)
+├── cli.tsx                    # entry CLI (argv, --help, --yolo/--no-docker, --concurrency/--no-auto-scale, terminal restoration)
 ├── app.tsx                    # screen router (welcome / assistant / editor / run / summary)
 ├── lib/
 │   ├── types.ts               # Pipeline, AgentStatus, RunManifest, AutoScaleStatus, defaults

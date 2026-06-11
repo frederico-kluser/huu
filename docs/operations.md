@@ -297,7 +297,7 @@ short-circuits the requirement check.
 | `HUU_CHECK_PUSH` | no | When set, preflight verifies the configured remote is reachable before the run starts. |
 | `HUU_IN_CONTAINER` | no | Set to `1` automatically by the official Docker image. Used by the wrapper to short-circuit the auto-Docker re-exec (so the same binary runs the TUI directly inside the container). |
 | `HUU_IMAGE` | no | Override the container image used by the auto-Docker wrapper. Default: `ghcr.io/frederico-kluser/huu:latest`. Useful for pinning a release or pointing at a private mirror. |
-| `HUU_NO_DOCKER` | no | When set to `1` or `true`, skip the auto-Docker re-exec and run huu natively. Requires the local `npm install` of huu's deps. Mainly useful for huu development itself. |
+| `HUU_NO_DOCKER` | no | When set to `1` or `true`, skip the auto-Docker re-exec and run huu natively. Equivalent to the `--no-docker` flag (the CI-neutral alias of `--yolo`). Requires the local `npm install` of huu's deps. Useful for huu development itself and for CI runners — see [`docs/ci.md`](ci.md). |
 | `HUU_DOCKER_NETWORK` | no | Pass-through value for `docker run --network=<value>`. By default huu auto-creates `huu-net-mtu<N>` when on a VPN (default-route MTU < 1500); set this to override (e.g., `host`, or the name of a pre-existing user-managed network). |
 | `HUU_DOCKER_PASS_ENV` | no | Whitespace-separated list of additional env var names to forward into the container. The wrapper always forwards `OPENROUTER_API_KEY`, `OPENROUTER_API_KEY_FILE`, `HUU_CHECK_PUSH`, `HUU_WORKTREE_BASE`, `HUU_HOST_HOME`, and `TERM` — use this to add custom names. |
 | `HUU_HOST_HOME` | no | Set automatically by the wrapper to the host's home directory. Inside the container, `getHuuHome()` reads it so writes to `~/.huu/` and the default `~/Downloads/` export target land on the host's bind-mounted filesystem. Unset outside Docker. |
@@ -342,13 +342,19 @@ the key, columns degrade to `—` placeholders without blocking selection.
 
 ## Auto-scaling concurrency
 
-Concurrency starts at `10` and is live-tunable with `+`/`-` on the run
-dashboard. For overnight runs where you don't want to babysit the
-slider, pass `--auto-scale` (or press `A` on the dashboard) to enable
-**resource-bound auto-scaling**.
+**Memory-aware auto-scaling is on by default.** The auto-scaler sizes
+concurrency to the real memory headroom: it tracks each agent's actual
+footprint (moving average, seeded at 250 MB) and admits new agents only
+while they fit in the available memory minus a safety margin —
+cgroup-aware, so inside a container it respects the container's limit,
+not the host's. Pass `--concurrency=N` or `--no-auto-scale` to pin
+**manual mode** instead (live-tunable with `+`/`-` on the run
+dashboard; `A` re-enables auto). In headless configs, setting
+`"concurrency"` pins manual; omit it for auto.
 
 The auto-scaler watches CPU and RAM via `lib/resource-monitor.ts` and
-moves between five states, surfaced as `AUTO <STATE>` in the header:
+moves between five states, surfaced in the header as
+`AUTO <STATE> · CPU/RAM · ~<N>MB/agent · free <N>MB`:
 
 - **NORMAL** — under both thresholds, willing to spawn more agents up
   to the queue depth.
@@ -357,19 +363,23 @@ moves between five states, surfaced as `AUTO <STATE>` in the header:
   refuses new spawns but leaves running agents alone.
 - **DESTROYING** — usage above the destroy threshold (default 95%);
   kills the **newest** agent (`killed_by_autoscaler` phase) to recover
-  headroom. Killed cards are requeued and tried again later.
+  headroom. The killed card returns to the TODO column with a `↻N`
+  requeue counter and the task restarts from zero later — older agents'
+  work is never lost.
 - **COOLDOWN** — 30s pause after a destroy or backoff event so the
   system doesn't oscillate.
 
 Manual `+`/`-` on the dashboard automatically disables auto-scale —
-press `A` to turn it back on. The status block also shows live `CPU%`
-and `RAM%`, mirroring the `SystemMetricsBar` so you don't have to
-correlate two readouts.
+press `A` to turn it back on. The **memory guard stays active in manual
+mode** (the header swaps the `AUTO` chip for a `GUARD` chip with the
+kill count). The status block also shows live `CPU%` and `RAM%`,
+mirroring the `SystemMetricsBar` so you don't have to correlate two
+readouts.
 
 Override defaults by setting `agentMemoryEstimateMb`,
 `stopThresholdPercent`, `destroyThresholdPercent`, `cooldownMs`, and
 `maxAgents` in code if you embed the orchestrator; the CLI exposes
-only the on/off toggle.
+`--concurrency=N` and `--no-auto-scale`.
 
 ---
 
@@ -477,6 +487,21 @@ The orchestrator marks the card as failed, drops its worktree, and
 the same integration HEAD. If retries are exhausted, the run
 continues without that card and the failure is preserved in the
 summary.
+
+**Why did an agent's card jump back to TODO with a `↻` badge?**
+The always-on memory guard fired: at ~95% RAM (or CPU) it kills the
+**newest** agent — the one with the least work done — so the older
+agents' work survives. The card returns to the TODO column with a `↻N`
+requeue counter and the task restarts from zero once memory frees up.
+The guard is active in both concurrency modes. Memory-aware auto-scale
+is the default; pin a fixed agent count with `--concurrency=N` or
+`--no-auto-scale` (or `"concurrency": N` in a headless config).
+
+**Can I run huu in CI (GitHub Actions / GitLab)?**
+Yes — a CI runner is already an ephemeral container, so skip the
+Docker wrapper with `HUU_NO_DOCKER=1` (or `--no-docker`) and drive the
+run with `huu auto`. Full recipes, including artifact upload of
+`.huu/audits/`: [`docs/ci.md`](ci.md).
 
 **What if two agents touch the same file?**
 A sign the pipeline was misdesigned: in a healthy pipeline, each task

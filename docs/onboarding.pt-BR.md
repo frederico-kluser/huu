@@ -5,6 +5,11 @@
 Este é o tutorial longo do `huu`. O [README](../README.md) é o pitch e
 um gostinho rápido — aqui é o passo-a-passo.
 
+O huu desenha pipelines que fazem agentes que pensam seguirem um
+processo determinístico — feito pra auditorias, geração de testes,
+extração de conhecimento e qualquer processo em esteira com
+previsibilidade real de valor, não pra desenvolver features novas.
+
 ## Sumário
 
 - [Instalação](#instalação)
@@ -73,7 +78,11 @@ Execuções nativas expõem suas credenciais de shell pro agente LLM
 (`~/.ssh`, `~/.aws`, …) e exigem o `npm install` local das deps do huu. Um
 warning de uma linha aparece no stderr a cada vez. Use Docker pra qualquer
 coisa real; `--yolo` é pro desenvolvimento do `huu` em si e smoke checks
-rápidos.
+rápidos. `--no-docker` (ou `HUU_NO_DOCKER=1`) é o alias de grafia
+neutra do mesmo bypass, pensado pra CI — um runner de CI já é um
+container efêmero, então a grafia de aviso não faz sentido lá. Veja
+[`docs/ci.pt-BR.md`](ci.pt-BR.md) pras receitas de GitHub Actions /
+GitLab.
 
 Mais sobre modos de execução Docker (compose, isolated-volume, secrets,
 VPN/MTU): [`docs/operations.pt-BR.md#docker`](operations.pt-BR.md#docker).
@@ -135,8 +144,9 @@ O que você vai ver numa execução real:
    recentes fixados no topo e métricas ao vivo do Artificial Analysis
    quando `ARTIFICIAL_ANALYSIS_API_KEY` está setado).
 3. Um kanban ao vivo com um cartão por agente — fase, tokens, custo,
-   arquivo atual. Pressione `A` pra alternar auto-scaling limitado por
-   recursos a qualquer momento.
+   arquivo atual. O auto-scaling memória-aware é o padrão; `+`/`-`
+   pinam concorrência manual e `A` religa o auto-scale a qualquer
+   momento.
 4. Depois que todos os estágios terminam: uma tela de resumo, mais
    transcrições por agente em `.huu/<runId>-execution-...log`.
 5. No disco: um novo branch `huu/<runId>/integration` com o trabalho
@@ -391,6 +401,13 @@ viram warnings no stderr, não falhas silenciosas). O array mapeado
 sobrescreve os `files` daquele step. Steps não mencionados mantêm os
 files definidos no pipeline.
 
+Setar `"concurrency": N` **pina o modo manual** em N agentes. Omita pra
+ter o auto-scale memória-aware padrão, que adapta a concorrência ao
+headroom real de memória (cgroup-aware — respeita o limite do
+container); `"autoScale": true` força o auto explicitamente. A guarda
+de memória fica sempre ativa nos dois modos. Pra dimensionar em runners
+de CI, veja [`docs/ci.pt-BR.md`](ci.pt-BR.md).
+
 A API key resolve pela mesma cadeia da TUI:
 `/run/secrets/openrouter_api_key` → `OPENROUTER_API_KEY_FILE` →
 `OPENROUTER_API_KEY` → store global persistido. Então
@@ -473,7 +490,13 @@ editar um preserva suas mudanças entre launches.
 | **huu Quality Audit** | Estilo Sonar: complexidade ciclomática / cognitiva, tamanho de função/arquivo, contagem de parâmetros, profundidade de aninhamento, duplicação, código morto. | [SonarSource](https://www.sonarsource.com/resources/library/cyclomatic-complexity/) + smells do Fowler |
 | **huu Performance Audit** | Varredura estática de hotspots (N+1, big-O, I/O sync, sinais de memory leak), Core Web Vitals pra frontends, checklist USE pra backends/CLIs. | [Método USE](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
 | **huu Refactor Plan** | Baseline de testes de caracterização, catálogo de smells do Fowler por arquivo, ranking top-5 de targets, grafo de dependências estilo Mikado estático, recomendações finais. Só plano — sem reescrita de código. | [Catálogo Fowler](https://refactoring.com/catalog/) + [Método Mikado](https://www.manning.com/books/the-mikado-method) |
-| **huu Security Audit** | Varredura de secrets com gitleaks/trufflehog, scan OWASP Top 10:2021 por arquivo, scan de CVE de dependências, roadmap de remediação alinhado com CWE Top 25:2024. | [OWASP Top 10](https://owasp.org/Top10/2021/) + [CWE Top 25](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) |
+| **huu Security Audit** | Varredura de secrets com gitleaks, scan OWASP Top 10:2025 por arquivo, scan de CVE de dependências, checagem de supply chain & postura de CI, roadmap de remediação alinhado com CWE Top 25:2025. | [OWASP Top 10](https://owasp.org/Top10/2025/) + [CWE Top 25](https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html) |
+
+As cinco auditorias agora **terminam com um step juiz que valida o
+relatório** — um node `check` que verifica se o relatório está completo
+e internamente consistente, voltando uma vez pra retrabalho quando não
+está — e a auditoria de segurança segue o OWASP Top 10:2025. A tabela
+no [`AGENTS.md`](../AGENTS.md) é a fonte detalhada por pipeline.
 
 **Contrato de apenas-relatório pras cinco auditorias.** Elas escrevem
 APENAS em `.huu/audits/<topico>.md` e `.huu/audits/<topico>-faq.json`,

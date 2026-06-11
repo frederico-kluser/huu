@@ -1,15 +1,21 @@
 // Performance-audit pipeline. Static hotspot detection (N+1, big-O, sync I/O,
-// memory leak signals) + frontend Core Web Vitals (if applicable) + USE
-// method checklist for backend/CLI projects. REPORT-ONLY.
+// memory leak signals, unbounded concurrency, missing caching) + frontend
+// Core Web Vitals (if applicable) + USE method checklist for backend/CLI
+// projects. REPORT-ONLY. A judge CheckStep validates the report.
 //
 // Methodologies:
-// - Brendan Gregg USE method (Utilization / Saturation / Errors per resource).
-// - Google Core Web Vitals: LCP <=2.5s, INP <=200ms, CLS <=0.1.
+// - Brendan Gregg USE method: https://www.brendangregg.com/usemethod.html
+// - Google Core Web Vitals (p75, mobile/desktop): LCP <=2.5s, INP <=200ms
+//   (replaced FID in March 2024), CLS <=0.1. https://web.dev/articles/vitals
+//   Lab caveat: Lighthouse cannot measure INP — TBT is the lab proxy.
+// - Azure Architecture performance antipatterns (chatty I/O, no caching,
+//   improper instantiation): https://learn.microsoft.com/en-us/azure/architecture/antipatterns/
 
 import type { Pipeline } from '../types.js';
 import {
   knowledgeProtocol,
   persistenceCheck,
+  reportJudgeCondition,
   KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
   KNOWLEDGE_ORDERING_NOTE,
 } from './knowledge-protocol.js';
@@ -91,6 +97,9 @@ Path: \`./.huu/audits/performance.md\`. Required structure:
 ## 6. Recommendations
 (filled in by step 5)
 
+## 7. Validation
+(filled in by the final step after the judge approves)
+
 === STEP 4 — Initialize .huu/audits/performance-faq.json ===
 \`./.huu/audits/performance-faq.json\`. Standard idempotency rules. Schema:
 \`\`\`json
@@ -152,6 +161,16 @@ SKIP IMMEDIATELY (no findings, no FAQ append) if \`$file\` matches: \`node_modul
 - Regex compilation inside a loop (move to module scope).
 - Severity: warn unless on user input → critical.
 
+**Unbounded concurrency** (Azure antipatterns: improper instantiation)
+- \`Promise.all(items.map(...))\` over an unbounded/user-controlled list (no p-limit/chunking).
+- A new client per request: \`new S3Client()\` / \`new PrismaClient()\` / \`http.Agent\` constructed inside a handler instead of module scope.
+- Severity: warn; critical when the list size is user-controlled.
+
+**Missing caching / extraneous fetching** (Azure antipatterns: no-caching, extraneous fetching)
+- The same remote/DB fetch repeated with identical arguments inside one request lifecycle.
+- \`SELECT *\` / full-collection fetches followed by in-memory filtering of a handful of fields; endpoints returning unbounded lists with no pagination.
+- Severity: warn.
+
 === STEP 3 — Append findings ===
 For EACH match found:
 \`\`\`json
@@ -187,12 +206,12 @@ If \`@lhci/cli\` was installed in step 1:
 - Identify the dev/preview server command (\`npm run preview\`, \`npx serve dist\`, etc.).
 - Start it in the background on a free port.
 - Run: \`npx --yes lighthouse "http://localhost:<port>" --output=json --output-path=./.huu/audits/.tmp/performance/lighthouse.json --chrome-flags="--headless --no-sandbox --disable-gpu"\`.
-- Parse \`.huu-lighthouse.json\` to extract \`audits.largest-contentful-paint.numericValue\`, \`audits.interaction-to-next-paint\` (if present), \`audits.cumulative-layout-shift.numericValue\`, \`audits.first-contentful-paint.numericValue\`.
+- Parse the JSON to extract \`audits.largest-contentful-paint.numericValue\`, \`audits.total-blocking-time.numericValue\`, \`audits.cumulative-layout-shift.numericValue\`, \`audits.first-contentful-paint.numericValue\`.
 - Stop the background server.
 
-Targets (Google's published thresholds, https://web.dev/articles/vitals):
+Targets (Google's published thresholds, assessed at the 75th percentile in the field, https://web.dev/articles/vitals):
 - LCP: good <= 2500 ms, poor > 4000 ms.
-- INP: good <= 200 ms, poor > 500 ms.
+- INP: good <= 200 ms, poor > 500 ms. **Lab caveat (web.dev): Lighthouse cannot measure INP (no real user input) — report Total Blocking Time (TBT) as the lab PROXY for INP (good <= 200 ms, poor > 600 ms) and say so explicitly in the scorecard. A real INP number requires field/RUM data (CrUX).**
 - CLS: good <= 0.1, poor > 0.25.
 - FCP: good <= 1800 ms, poor > 3000 ms.
 
@@ -283,6 +302,8 @@ Start at 100. Subtract per finding:
 - warn: -2 (cap -30).
 - info: 0.
 
+The counts you cite MUST match the FAQ entries exactly — the validation judge recounts them.
+
 === STEP 3 — Populate section "6. Recommendations" ===
 Group by category, prioritize by severity.
 ${KNOWLEDGE_ORDERING_NOTE}
@@ -305,6 +326,25 @@ ${KNOWLEDGE_ORDERING_NOTE}
 - DO NOT modify any production file. The only output is \`.huu/audits/performance.md\`.
 - If you computed a composite score, mention it as a markdown line in the report itself. Do NOT add a README badge.
 - DO NOT skip the report even if there are no critical findings — write "No critical findings — keep the audit alive in CI" recommendation.`;
+
+const STEP7_PROMPT = `You are the final agent — step 7 (post-validation). The judge approved the report. Goal: stamp section "7. Validation" of \`.huu/audits/performance.md\` and leave the working tree clean.
+
+=== STEP 1 — Stamp the validation section ===
+Replace the "## 7. Validation" placeholder with:
+\`\`\`
+Validated: <UTC timestamp> · findings: <total> (critical <X> / warn <Y> / info <Z>) · composite score <N>/100 · sections 1–6 complete.
+Lab metrics caveat preserved: INP reported via its lab proxy (TBT) when only Lighthouse data was available.
+Validation gate: judge CheckStep ("approved" required to reach this step; "rework" loops back to consolidation, max 2 judge runs).
+\`\`\`
+Numbers MUST come from re-reading \`.huu/audits/performance-faq.json\` and the report — do not invent them. Be idempotent: if the section is already stamped (a rework loop ran twice), overwrite it with fresh numbers.
+
+=== STEP 2 — Exit hygiene ===
+- Delete any leftovers under \`./.huu/audits/.tmp/performance/\` (keep the directory).
+- Confirm \`git status --porcelain\` shows changes only under \`.huu/\` (plus at most the permitted \`.gitignore\` adjustment).
+
+=== HARD RULES ===
+- DO NOT modify the findings or the recommendations — stamp only.
+- DO NOT touch production files.`;
 
 export function getDefaultPipeline(): Pipeline {
   return {
@@ -344,6 +384,37 @@ export function getDefaultPipeline(): Pipeline {
         type: 'work',
         name: '5. Composite score + recommendations',
         prompt: STEP5_PROMPT,
+        files: [],
+        scope: 'project',
+      },
+      {
+        type: 'check',
+        name: '6. Validate report',
+        condition: reportJudgeCondition({
+          reportPath: '.huu/audits/performance.md',
+          faqPath: '.huu/audits/performance-faq.json',
+          requiredSections: [
+            '1. Classification',
+            '2. Static hotspot scan',
+            '3. Frontend metrics (Core Web Vitals)',
+            '4. USE checklist (Brendan Gregg)',
+            '5. Bundle / artifact weight',
+            '6. Recommendations',
+          ],
+          extraClauses: [
+            'sections 3/4/5 explicitly say "N/A — <reason>" when the classification makes them inapplicable (a placeholder left blank is a failure, an explicit N/A is not), and any lab-only Core Web Vitals scorecard labels INP as the TBT proxy.',
+          ],
+        }),
+        maxRuns: 2,
+        outcomes: [
+          { label: 'approved', nextStepName: '7. Finalize report', default: true },
+          { label: 'rework', nextStepName: '5. Composite score + recommendations' },
+        ],
+      },
+      {
+        type: 'work',
+        name: '7. Finalize report',
+        prompt: STEP7_PROMPT,
         files: [],
         scope: 'project',
       },

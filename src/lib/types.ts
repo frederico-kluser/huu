@@ -221,6 +221,8 @@ export interface RunManifest {
   executionTrace?: ExecutionTraceEntry[];
   /** Per-stage-visit merge history (mirrors `OrchestratorState.stageIntegrations`). */
   stageIntegrations?: StageIntegration[];
+  /** Per-check-visit judge history (mirrors `OrchestratorState.checkRuns`). */
+  checkRuns?: CheckRun[];
 }
 
 export interface ExecutionTraceEntry {
@@ -276,6 +278,10 @@ export type AgentLifecyclePhase =
   | 'done'
   | 'no_changes'
   | 'error'
+  /**
+   * @deprecated No longer produced — guard-killed agents reset to 'pending'
+   * (see AgentStatus.requeues). Kept so old manifests still parse.
+   */
   | 'killed_by_autoscaler';
 
 export type PushStatus = 'pending' | 'pushing' | 'pushed' | 'skipped' | 'failed';
@@ -315,17 +321,39 @@ export interface AgentStatus {
   startedAt?: number;
   finishedAt?: number;
   createdAt?: number;
+  /**
+   * Times the memory guard killed this agent's task and requeued it back to
+   * the TODO column. Work restarts from zero on the next spawn.
+   */
+  requeues?: number;
+  /**
+   * @deprecated No longer produced — the memory guard now resets the card to
+   * `pending` (see `requeues`). Kept so old manifests/run-logs still parse.
+   */
   killedByAutoScaler?: boolean;
 }
 
 // --- Orchestrator state ---
 
 export interface AutoScaleStatus {
+  /** True while the scaler drives the concurrency target (mode === 'auto'). */
   enabled: boolean;
+  /**
+   * 'auto' adapts concurrency to real memory headroom; 'manual' keeps the
+   * user-pinned concurrency but the memory guard (kill newest at the destroy
+   * threshold, requeue to TODO) stays active.
+   */
+  mode: 'auto' | 'manual';
   state: 'NORMAL' | 'SCALING_UP' | 'BACKING_OFF' | 'COOLDOWN' | 'DESTROYING';
   cooldownRemainingMs: number;
   cpuPercent: number;
   ramPercent: number;
+  /** EMA-observed per-agent memory footprint, in MiB (seeded at 250). */
+  observedAgentMemoryMb: number;
+  /** Memory still claimable before the limit, in MiB (cgroup/MemAvailable-aware). */
+  ramAvailableMb: number;
+  /** Agents killed by the memory guard so far in this run. */
+  guardKillCount: number;
 }
 
 export interface OrchestratorState {
@@ -339,6 +367,8 @@ export interface OrchestratorState {
   integrationStatus: IntegrationStatus;
   /** Per-stage-visit merge history — drives the kanban merge cards. */
   stageIntegrations: StageIntegration[];
+  /** Per-check-visit judge history — drives the kanban judge cards. */
+  checkRuns: CheckRun[];
   startedAt: number;
   elapsedMs: number;
   concurrency: number;
@@ -399,6 +429,40 @@ export interface StageIntegration {
   error?: string;
   startedAt?: number;
   finishedAt?: number;
+}
+
+export type CheckRunPhase = 'judging' | 'done' | 'error';
+
+/**
+ * Per-CheckStep-visit judge record. One entry is created for every check
+ * visit (loops create fresh entries) so the dashboards can render the judge
+ * as a kanban card — DOING while it deliberates, DONE with the chosen
+ * outcome label — instead of the check being visible only in the logs.
+ */
+export interface CheckRun {
+  /** visitIndex of the CheckStep visit — unique even with loops. */
+  visitIndex: number;
+  /** Index of the check step in `pipeline.steps`. */
+  stepIndex: number;
+  stepName: string;
+  /** 1-based per-step iteration counter at this visit (= `$runs`). */
+  runs: number;
+  maxRuns?: number;
+  phase: CheckRunPhase;
+  /** Effective judge model: `step.modelId ?? config.modelId`. */
+  modelId: string;
+  /** Condition after `$runs` substitution (as the judge saw it). */
+  condition: string;
+  outcomeLabel?: string;
+  nextStepName?: string;
+  /** True when the verdict came from the LLM; false = default outcome (judge failed / maxRuns). */
+  fromJudge?: boolean;
+  /** Free-text reason from the judge, if any. */
+  reason?: string;
+  lastLog?: string;
+  startedAt: number;
+  finishedAt?: number;
+  error?: string;
 }
 
 export interface LogEntry {

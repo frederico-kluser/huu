@@ -73,11 +73,15 @@ Portuguese, matching the recon prompts). Below is the complete map.
 
 ## Run dashboard
 
-- `+` / `-` adjust concurrency live (default `10`); manual changes
-  automatically disable auto-scale until you re-enable with `A`
-- `A` toggle resource-bound auto-scaling. When enabled, the header shows
+- `+` / `-` adjust concurrency live **and pin manual mode**
+  (memory-aware auto-scale is on by default); the always-on memory
+  guard stays active in manual — the header swaps the `AUTO` chip for
+  a `GUARD` chip with the kill count
+- `A` toggle auto-scale back on. In auto mode the header shows
   `AUTO <NORMAL|SCALING_UP|BACKING_OFF|COOLDOWN|DESTROYING>` plus live
-  `CPU%`/`RAM%`. Also enabled at startup via `huu --auto-scale`.
+  `CPU%`/`RAM%`, the observed `~<N>MB/agent` footprint, and free
+  memory. Pin manual at startup with `huu --concurrency=N` or
+  `huu --no-auto-scale`.
 - `↑↓←→` navigate cards · `ENTER` open card details
 - `F` filter logs to a single agent (cycles through agents and back to "all")
 - `Q` abort the run · press `Q` twice to force-exit the dashboard immediately

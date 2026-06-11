@@ -1,12 +1,14 @@
 import { useMemo } from 'react';
-import { AgentStatusPill, IntegrationPill } from '@/molecules';
+import { AgentStatusPill, CheckRunPill, IntegrationPill } from '@/molecules';
 import { cn } from '@/lib/cn';
-import type { AgentLifecyclePhase, AgentStatus, StageIntegration } from '@/lib/domain-types';
+import type { AgentLifecyclePhase, AgentStatus, CheckRun, StageIntegration } from '@/lib/domain-types';
 
 export interface KanbanBoardProps {
   agents: AgentStatus[];
   /** Per-stage merge history — rendered as display-only cards. */
   integrations?: StageIntegration[];
+  /** Per-check-visit judge history — rendered as display-only cards. */
+  checkRuns?: CheckRun[];
   onAgentClick?: (agent: AgentStatus) => void;
   className?: string;
 }
@@ -42,8 +44,21 @@ function integrationColumn(phase: StageIntegration['phase']): string {
   }
 }
 
+// Judge runs: deliberating judges sit in `streaming` (an LLM is working),
+// finished ones land in done/error like everything else.
+function checkRunColumn(phase: CheckRun['phase']): string {
+  switch (phase) {
+    case 'judging':
+      return 'streaming';
+    case 'error':
+      return 'error';
+    default:
+      return 'done';
+  }
+}
+
 /** Kanban view of agents grouped by lifecycle phase. Horizontal scroll on mobile. */
-export function KanbanBoard({ agents, integrations, onAgentClick, className }: KanbanBoardProps) {
+export function KanbanBoard({ agents, integrations, checkRuns, onAgentClick, className }: KanbanBoardProps) {
   const grouped = useMemo(() => {
     const map = new Map<string, AgentStatus[]>();
     for (const col of COLUMNS) map.set(col.id, []);
@@ -63,11 +78,21 @@ export function KanbanBoard({ agents, integrations, onAgentClick, className }: K
     return map;
   }, [integrations]);
 
+  const groupedCheckRuns = useMemo(() => {
+    const map = new Map<string, CheckRun[]>();
+    for (const col of COLUMNS) map.set(col.id, []);
+    for (const entry of checkRuns ?? []) {
+      map.get(checkRunColumn(entry.phase))?.push(entry);
+    }
+    return map;
+  }, [checkRuns]);
+
   return (
     <div className={cn('flex gap-3 overflow-x-auto pb-2', className)}>
       {COLUMNS.map((col) => {
         const list = grouped.get(col.id) ?? [];
         const merges = groupedIntegrations.get(col.id) ?? [];
+        const judges = groupedCheckRuns.get(col.id) ?? [];
         return (
           <section
             key={col.id}
@@ -76,10 +101,10 @@ export function KanbanBoard({ agents, integrations, onAgentClick, className }: K
           >
             <header className="flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-foreground/60">
               <span>{col.label}</span>
-              <span className="font-mono">{list.length + merges.length}</span>
+              <span className="font-mono">{list.length + merges.length + judges.length}</span>
             </header>
             <div className="flex flex-col gap-2">
-              {list.length === 0 && merges.length === 0 ? (
+              {list.length === 0 && merges.length === 0 && judges.length === 0 ? (
                 <div className="rounded-md border border-dashed border-foreground/10 p-3 text-center text-xs text-foreground/40">
                   empty
                 </div>
@@ -90,6 +115,9 @@ export function KanbanBoard({ agents, integrations, onAgentClick, className }: K
                   ))}
                   {merges.map((m) => (
                     <IntegrationPill key={`merge-${m.visitIndex}`} integration={m} />
+                  ))}
+                  {judges.map((j) => (
+                    <CheckRunPill key={`check-${j.visitIndex}`} checkRun={j} />
                   ))}
                 </>
               )}

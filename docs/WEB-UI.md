@@ -67,7 +67,7 @@ O navegador abre automaticamente nessa URL. Se não abrir (ou se você está em 
 - `huu run <pipeline.json> --web --yolo` — abre direto no editor com a pipeline carregada
 - `huu --web --yolo --stub` — modo dry-run sem LLM
 - `huu --web --yolo --copilot` / `--backend=copilot` — backend fixo
-- `huu --web --yolo --auto-scale` — autoscaling de concorrência
+- `huu --web --yolo --concurrency=4` — pina concorrência manual (o auto-scale memória-aware é o padrão; o header do run tem controle de concorrência + toggle de auto-scale)
 
 ### Encerrar o servidor
 
@@ -124,10 +124,10 @@ O navegador abre automaticamente nessa URL. Se não abrir (ou se você está em 
                                           │  ├─ lib/use-ws.ts           │
                                           │  ├─ lib/ws-context.tsx      │
                                           │  ├─ atoms (11)              │
-                                          │  ├─ molecules (10)          │
+                                          │  ├─ molecules (12)          │
                                           │  ├─ organisms (9)           │
                                           │  ├─ templates (3)           │
-                                          │  ├─ pages (15, 1 por Screen)│
+                                          │  ├─ pages (16, 1 por Screen)│
                                           │  └─ Router.tsx              │
                                           └─────────────────────────────┘
 ```
@@ -153,25 +153,33 @@ O navegador abre automaticamente nessa URL. Se não abrir (ou se você está em 
 | Ícones | lucide-react |
 | Utilities | clsx + tailwind-merge (`cn` helper) |
 
-### Atomic Design — 48 componentes
+### Atomic Design — 51 componentes
 
 ```
 webui/src/
 ├── atoms/        # 11 — Badge, Button, IconButton, Input, Kbd, Select,
 │                 #      Spinner, Textarea, Toast, ToastHost, Tooltip
-├── molecules/    # 10 — AgentStatusPill, BackendCard, ConcurrencyControl,
-│                 #      CostDisplay, FileChip, LogLine, ModelCard,
+├── molecules/    # 12 — AgentStatusPill, BackendCard, CheckRunPill,
+│                 #      ConcurrencyControl, CostDisplay, FileChip,
+│                 #      IntegrationPill, LogLine, ModelCard,
 │                 #      PipelineCard, StepRow, TokenCounter
 ├── organisms/    # 9  — AssistantChat, FileMultiSelect, Header, KanbanBoard,
 │                 #      LogPanel, ModelSelectorList, PipelineList, Sidebar,
 │                 #      StepEditor
 ├── templates/    # 3  — AppShell, FullscreenModal, SplitPanel
-└── pages/        # 15 — Welcome, PipelineAssistant, PipelineEditor,
+└── pages/        # 16 — Welcome, PipelineAssistant, PipelineEditor,
                   #      PipelineImport, PipelineImportPaste,
                   #      PipelineImportCustom, PipelineExport,
                   #      SavedPipelines, BackendSelector, ModelSelector,
-                  #      ApiKey, TimeoutPrompt, Run, Summary, Waiting
+                  #      ApiKey, TimeoutPrompt, Run, Summary, Waiting, Faq
 ```
+
+`CheckRunPill` (ao lado do `IntegrationPill` no kanban) renderiza os
+judges de CheckStep: magenta (`--ai`) enquanto julga, label verde do
+outcome quando o juiz decide, `DEFAULT: <label>` em amarelo no
+fallback. `AgentStatusPill` exibe um badge de requeue `↻N` quando a
+guarda de memória mata o agente e devolve a task pra TODO. O tipo
+derivado `CheckRun` vive em `webui/src/lib/domain-types.ts`.
 
 ### Tema
 
@@ -194,13 +202,17 @@ Dark mode default via `<html class="dark">`. Toggle em `webui/src/lib/use-theme.
 
 Definido em `src/web/ws-protocol.ts` (sem imports de Node — consumido também pelo front via path alias `@shared/`).
 
-### Cliente → Servidor (17 tipos)
+### Cliente → Servidor (18 tipos)
 
-`nav`, `pipeline.save`, `pipeline.delete`, `pipeline.import`, `pipeline.export`, `pipeline.requestList`, `backend.select`, `model.requestCatalog`, `model.select`, `apiKey.submit`, `files.scan`, `assistant.prompt`, `recon.start`, `run.start`, `run.abort`, `run.setConcurrency`, `ping`
+`nav`, `pipeline.save`, `pipeline.delete`, `pipeline.import`, `pipeline.export`, `pipeline.requestList`, `backend.select`, `model.requestCatalog`, `model.select`, `apiKey.submit`, `files.scan`, `assistant.prompt`, `recon.start`, `run.start`, `run.abort`, `run.setConcurrency`, `run.setAutoScale`, `ping`
+
+Durante um run: `{ type: 'run.setConcurrency', concurrency: N }` ajusta a concorrência **e pina o modo manual** no servidor (o auto-scale memória-aware é o padrão); `{ type: 'run.setAutoScale', enabled: boolean }` religa/desliga o auto-scale.
 
 ### Servidor → Cliente (13 tipos)
 
 `hello`, `screen`, `state`, `pipelines`, `models`, `files`, `assistant.chunk`, `assistant.done`, `recon.chunk`, `recon.done`, `apiKey.required`, `result`, `error`
+
+O payload de `state` é o `OrchestratorState` coalescido (8 Hz) — incluindo `checkRuns`, o histórico dos judges de CheckStep (uma entrada por visita ao check: fase `judging|done|error`, `outcomeLabel`, `fromJudge`, `modelId`, condição, razão, último log e timestamps), que alimenta os cards de judge no kanban e é persistido em `RunManifest.checkRuns`.
 
 ### Validação
 

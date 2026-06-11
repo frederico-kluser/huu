@@ -18,6 +18,7 @@ function mkState(overrides: Partial<OrchestratorState> = {}): OrchestratorState 
       conflicts: [],
     },
     stageIntegrations: [],
+    checkRuns: [],
     startedAt: 0,
     elapsedMs: 0,
     concurrency: 1,

@@ -25,6 +25,12 @@ export interface RunHeadlessArgs {
   conflictResolverFactory?: AgentFactory;
   /** Initial worker concurrency (forwarded to Orchestrator). */
   concurrency?: number;
+  /**
+   * Memory-aware dynamic concurrency. Default derivation keeps old
+   * configs byte-compatible: a config that sets `concurrency` pins
+   * manual mode; a config that sets neither gets auto-scale.
+   */
+  autoScale?: boolean;
   /** Throttle interval for NDJSON state events. Default 250 ms. */
   emitIntervalMs?: number;
 }
@@ -37,12 +43,14 @@ export async function runHeadless(args: RunHeadlessArgs): Promise<number> {
     agentFactory,
     conflictResolverFactory,
     concurrency,
+    autoScale,
     emitIntervalMs = 250,
   } = args;
 
   const orch = new Orchestrator(config, pipeline, cwd, agentFactory, {
     initialConcurrency: concurrency,
     conflictResolverFactory,
+    autoScale: autoScale ?? concurrency === undefined,
   });
 
   // Throttled state mirror — without this, the orchestrator's emit
@@ -71,6 +79,8 @@ export async function runHeadless(args: RunHeadlessArgs): Promise<number> {
       tasks: `${s.completedTasks}/${s.totalTasks}`,
       activeAgents: s.activeAgentCount,
       pendingTasks: s.pendingTaskCount,
+      concurrency: s.concurrency,
+      autoScale: s.autoScale?.mode,
       elapsedMs: s.elapsedMs,
       cost: Number(s.totalCost.toFixed(6)),
     });

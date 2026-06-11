@@ -48,7 +48,8 @@ terminal interface.
 - **FileMultiSelect** — interactive file tree; Space toggle, A select all, C clear, / filter
 - **ModelSelectorOverlay** — quick-pick (recents + favorites + recommended) + lazy table view
 - **ApiKeyPrompt** — API key input with mask (`*`)
-- **RunDashboard** — KanbanBoard with agent cards; concurrency adjustment (`+`/`-`)
+- **RunDashboard** — KanbanBoard with agent cards; `+`/`-` adjust concurrency **and pin manual mode** (memory-aware auto-scale is the default), `A` re-enables auto. Header chips: auto mode renders `AUTO <state> · CPU/RAM · ~<N>MB/agent · free <N>MB`; manual mode renders a dim `GUARD` chip with the memory-guard kill count (the guard runs in both modes).
+- **RunKanban** — packs agent, merge (`buildIntegrationCard`), and judge cards. CheckStep visits render via `buildCheckCard` from `OrchestratorState.checkRuns`: title `judge: <step>`, `theme.ai` (magenta) while `judging` (LLM-driven UI per the theme rule), green outcome label when `fromJudge`, yellow `DEFAULT: <label>` on fallback.
 - **AgentDetailModal** — timeline, logs, agent modified files
 
 ### Keyboard Handling
@@ -61,6 +62,7 @@ terminal interface.
 - The entire UI is in English (messages, labels, shortcuts), although the README and some comments are in Portuguese.
 - `useTerminalClear` clears scrollback on mount/unmount to avoid ghost lines.
 - `agent-card-adapter.ts` maps `AgentStatus` → `KanbanCardData` (columns: todo/doing/done).
+- The memory-guard requeue badge (`↻N` from `agent.requeues`) lives in the card **TITLE**, not on a new line — `cardHeight()` budgets `packCards` by rendered rows and must stay in sync with what `Card` actually renders. Adding a row to a card without updating `cardHeight()` makes columns overflow `maxCardRows`.
 - RunDashboard instantiates `Orchestrator` in `useMemo` and starts it in `useEffect`.
 - There is no state management library — only React state + prop drilling.
 - There are no error boundaries in React components — handler errors may crash the TUI.

@@ -1,7 +1,15 @@
 // Documentation-audit pipeline. Classifies docs by the Diátaxis framework
-// (Tutorials / How-To / Reference / Explanation), scores README quality
-// against the Awesome-README rubric, and flags stale or contradictory docs.
-// REPORT-ONLY — no code changes.
+// (Tutorials / How-To / Reference / Explanation, via the Diátaxis compass),
+// scores README quality against standard-readme + Awesome-README, and flags
+// stale or contradictory docs. REPORT-ONLY — no code changes. A judge
+// CheckStep validates the report before the run finishes.
+//
+// References:
+// - Diátaxis (incl. the compass): https://diataxis.fr/ ; https://diataxis.fr/compass/
+// - standard-readme spec: https://github.com/RichardLitt/standard-readme/blob/master/spec.md
+// - Awesome README: https://github.com/matiassingers/awesome-readme
+// - Badge impact (ICSE 2018, npm): https://cmustrudel.github.io/papers/icse18badges.pdf
+// - Docs as code: https://www.writethedocs.org/guide/docs-as-code/
 //
 // IMPORTANT: keep this file pure (no fs / no env). Imported on the hot path
 // of `App` mount via the default-pipelines registry.
@@ -10,6 +18,7 @@ import type { Pipeline } from '../types.js';
 import {
   knowledgeProtocol,
   persistenceCheck,
+  reportJudgeCondition,
   KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
   KNOWLEDGE_ORDERING_NOTE,
 } from './knowledge-protocol.js';
@@ -75,6 +84,9 @@ Path: \`./.huu/audits/docs.md\`. Required structure (English, no fluff):
 ## 6. Recommendations
 (filled in by step 6)
 
+## 7. Validation
+(filled in by the final step after the judge approves)
+
 === STEP 4 — Initialize .huu/audits/docs-faq.json ===
 Path: \`./.huu/audits/docs-faq.json\`.
 If absent: write \`[]\` + trailing newline.
@@ -95,11 +107,16 @@ ${KNOWLEDGE_OPTIONAL_FIELDS_NOTE}
 const STEP2_PROMPT = `You are at step 2 — Diátaxis classification. Goal: classify every doc enumerated in \`.huu/audits/.tmp/docs/files.txt\` against the Diátaxis quadrants, append findings to \`.huu/audits/docs-faq.json\`, and populate section "2. Diátaxis classification" of \`.huu/audits/docs.md\`.
 
 === Diátaxis primer (https://diataxis.fr/) ===
-Four orthogonal documentation kinds:
-- **Tutorial** — learning-oriented; guides a beginner through doing something, hand-held; focus on the user's skill development.
-- **How-To Guide** — task-oriented; addresses a real-world problem for a competent user; focus on the goal, not the learning.
-- **Reference** — information-oriented; neutral, structured, mirrors the architecture of the thing described (API specs, CLI flags, config schemas).
+Four orthogonal documentation kinds, one per user need:
+- **Tutorial** — learning-oriented; a lesson that takes a student by the hand through a learning experience.
+- **How-To Guide** — goal-oriented; addresses a real-world problem for a competent user with practical directions.
+- **Reference** — information-oriented; neutral technical description (facts) the user consults to do things correctly (API specs, CLI flags, config schemas).
 - **Explanation** — understanding-oriented; context, background, "why" decisions were made (ADRs, architecture overviews, design rationale).
+
+Classify with the **Diátaxis compass** (https://diataxis.fr/compass/) — two questions per doc:
+1. Does the content inform **action** (practical steps) or **cognition** (theoretical knowledge)?
+2. Does it serve the **acquisition** of skill (study) or its **application** (work)?
+action+acquisition → tutorial · action+application → how-to · cognition+application → reference · cognition+acquisition → explanation.
 
 Plus a fifth bucket:
 - **Unclassified** — doesn't fit cleanly; could be a mix or marketing.
@@ -151,7 +168,7 @@ Diátaxis anti-patterns flagged: X (see findings in .huu/audits/docs-faq.json)
 - Update ONLY section "2" of \`.huu/audits/docs.md\` — leave the other sections untouched.
 - DO NOT modify the docs themselves.`;
 
-const STEP3_PROMPT = `You are at step 3 — README quality scorecard. Goal: score the project's README against the Awesome-README rubric (https://github.com/matiassingers/awesome-readme), append findings, and populate section "3. README scorecard" of \`.huu/audits/docs.md\`.
+const STEP3_PROMPT = `You are at step 3 — README quality scorecard. Goal: score the project's README against a rubric grounded in standard-readme (https://github.com/RichardLitt/standard-readme/blob/master/spec.md) and Awesome-README (https://github.com/matiassingers/awesome-readme), append findings, and populate section "3. README scorecard" of \`.huu/audits/docs.md\`.
 
 ${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
 In particular: step 2 already classified the README under category "diataxis" — read that finding first; a README flagged as a tutorial/reference mix should lose points on the relevant checks below, citing the prior finding.
@@ -162,16 +179,18 @@ Search case-insensitively for \`README*\` at the repo root. If multiple (e.g. RE
 === STEP 2 — Rubric (10 checks, 10 pts each — score out of 100) ===
 For each, give 10 if present and well-done, 5 if present but weak, 0 if absent.
 
-1. **Title** — clear project name as an H1.
-2. **One-line description** — a single concise sentence under the title that answers "what is this".
-3. **Badges** — at least one (build/version/coverage/license) near the top.
-4. **Visual demo** — screenshot, GIF, ASCII art, or diagram showing the product in action.
-5. **Installation** — a copy-pasteable install/setup section.
-6. **Usage / examples** — at least one real, runnable example (not a stub).
+1. **Title** — clear project name as an H1 (standard-readme: required, file named README.md).
+2. **One-line description** — a single concise sentence under the title that answers "what is this" (standard-readme: required).
+3. **Badges** — at least one ASSESSMENT badge (build/coverage) near the top. (ICSE 2018 npm study: build/coverage badges correlate with larger test suites; "assessment" badges signal quality better than popularity ones.)
+4. **Visual demo** — screenshot, GIF, ASCII art, or diagram showing the product in action (the single most recurring element across Awesome-README entries).
+5. **Installation** — a copy-pasteable install/setup section (standard-readme: required for non-doc repos).
+6. **Usage / examples** — at least one real, runnable example (standard-readme: required; code examples should lint).
 7. **Features** — bulleted list of key capabilities.
-8. **Documentation links** — links to further docs (tutorials, API, etc.).
-9. **Contributing** — a section or link explaining how to contribute.
-10. **License** — explicit license mention near the bottom.
+8. **Documentation links** — links to further docs (tutorials, API, etc.; a TOC when the README exceeds ~100 lines — standard-readme rule).
+9. **Contributing** — a section or link explaining how to contribute (standard-readme: required).
+10. **License** — explicit license mention near the bottom (standard-readme: required).
+
+Also note (no points, one line in the report): does the section ORDER roughly follow standard-readme (title → description → TOC → install → usage → contributing → license)?
 
 Total score → 0–100. Color grade:
 - >= 80 → \`green\`
@@ -342,7 +361,26 @@ ${KNOWLEDGE_ORDERING_NOTE}
 === HARD RULES ===
 - DO NOT modify any docs other than \`.huu/audits/docs.md\` itself.
 - DO NOT modify source code.
-- Final \`.huu/audits/docs.md\` should be a complete, self-contained report a human can read top-to-bottom.`;
+- Final \`.huu/audits/docs.md\` should be a complete, self-contained report a human can read top-to-bottom.
+- The counts you cite MUST match the FAQ entries exactly — the validation judge recounts them.`;
+
+const STEP8_PROMPT = `You are the final agent — step 8 (post-validation). The judge approved the report. Goal: stamp section "7. Validation" of \`.huu/audits/docs.md\` and leave the working tree clean.
+
+=== STEP 1 — Stamp the validation section ===
+Replace the "## 7. Validation" placeholder with:
+\`\`\`
+Validated: <UTC timestamp> · findings: <total> (critical <X> / warn <Y> / info <Z>) · README score <N>/100 · sections 1–6 complete.
+Validation gate: judge CheckStep ("approved" required to reach this step; "rework" loops back to consolidation, max 2 judge runs).
+\`\`\`
+Numbers MUST come from re-reading \`.huu/audits/docs-faq.json\` and the report — do not invent them. Be idempotent: if the section is already stamped (a rework loop ran twice), overwrite it with fresh numbers.
+
+=== STEP 2 — Exit hygiene ===
+- Confirm \`./.huu/audits/.tmp/docs/\` holds no leftovers (step 6 deletes files.txt; remove anything else, keep the directory).
+- Confirm \`git status --porcelain\` shows changes only under \`.huu/\` (plus at most the permitted \`.gitignore\` adjustment).
+
+=== HARD RULES ===
+- DO NOT modify the findings or the recommendations — stamp only.
+- DO NOT touch production files or the project's docs.`;
 
 export function getDefaultPipeline(): Pipeline {
   return {
@@ -389,6 +427,37 @@ export function getDefaultPipeline(): Pipeline {
         type: 'work',
         name: '6. Consolidate report and cleanup',
         prompt: STEP6_PROMPT,
+        files: [],
+        scope: 'project',
+      },
+      {
+        type: 'check',
+        name: '7. Validate report',
+        condition: reportJudgeCondition({
+          reportPath: '.huu/audits/docs.md',
+          faqPath: '.huu/audits/docs-faq.json',
+          requiredSections: [
+            '1. Inventory',
+            '2. Diátaxis classification',
+            '3. README scorecard',
+            '4. Staleness scan',
+            '5. API doc coverage',
+            '6. Recommendations',
+          ],
+          extraClauses: [
+            'the Diátaxis summary block in section 2 accounts for every file listed in the classification table, and the README scorecard total equals the sum of its 10 checks.',
+          ],
+        }),
+        maxRuns: 2,
+        outcomes: [
+          { label: 'approved', nextStepName: '8. Finalize report', default: true },
+          { label: 'rework', nextStepName: '6. Consolidate report and cleanup' },
+        ],
+      },
+      {
+        type: 'work',
+        name: '8. Finalize report',
+        prompt: STEP8_PROMPT,
         files: [],
         scope: 'project',
       },

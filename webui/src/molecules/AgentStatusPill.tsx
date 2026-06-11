@@ -74,7 +74,12 @@ export function AgentStatusPill({ agent, onClick, className }: AgentStatusPillPr
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-medium">Agent {agent.agentId}</span>
-        <Badge tone={phaseTone[agent.phase] ?? 'neutral'}>{agent.phase}</Badge>
+        <span className="flex items-center gap-1">
+          {agent.requeues && agent.requeues > 0 ? (
+            <Badge tone="warning">{`requeued ×${agent.requeues}`}</Badge>
+          ) : null}
+          <Badge tone={phaseTone[agent.phase] ?? 'neutral'}>{agent.phase}</Badge>
+        </span>
       </div>
       {agent.currentFile ? (
         <div className="truncate text-xs text-foreground/60" title={agent.currentFile}>

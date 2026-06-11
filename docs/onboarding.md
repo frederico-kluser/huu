@@ -5,6 +5,11 @@
 This is the long-form tutorial for `huu`. The [README](../README.md) is the
 pitch and a quick taste — this is the walkthrough.
 
+huu designs pipelines that make thinking agents follow a deterministic
+process — built for audits, test generation, knowledge extraction, and
+any assembly-line process with real, predictable value, not for
+building new features.
+
 ## Table of contents
 
 - [Install](#install)
@@ -73,6 +78,10 @@ Native runs expose your shell credentials to the LLM agent (`~/.ssh`,
 `~/.aws`, …) and require the local `npm install` of huu's deps. A one-line
 warning prints to stderr each time. Use Docker for anything real;
 `--yolo` is for `huu` development itself and quick smoke checks.
+`--no-docker` (or `HUU_NO_DOCKER=1`) is the CI-neutral alias of the
+same bypass — a CI runner is already an ephemeral container, so the
+warning spelling makes no sense there. See [`docs/ci.md`](ci.md) for
+the GitHub Actions / GitLab recipes.
 
 For more on Docker run modes (compose, isolated-volume mode, secrets,
 VPN/MTU), see [`docs/operations.md#docker`](operations.md#docker).
@@ -133,7 +142,8 @@ What you'll see on a real run:
    recents pinned to the top and live metrics from Artificial Analysis
    when `ARTIFICIAL_ANALYSIS_API_KEY` is set).
 3. A live kanban with one card per agent — phase, tokens, cost, current
-   file. Press `A` to toggle resource-bound auto-scaling at any time.
+   file. Memory-aware auto-scaling is on by default; `+`/`-` pin manual
+   concurrency and `A` turns auto-scale back on at any time.
 4. After all stages finish: a summary screen, plus per-agent
    transcripts under `.huu/<runId>-execution-...log`.
 5. On disk: a new branch `huu/<runId>/integration` with the merged work,
@@ -376,6 +386,13 @@ as warnings on stderr, not silent failures). The mapped array overrides
 that step's `files`. Steps not mentioned keep their pipeline-defined
 files.
 
+Setting `"concurrency": N` **pins manual mode** at N agents. Omit it to
+get the default memory-aware auto-scale, which adapts concurrency to
+the real memory headroom (cgroup-aware — it respects the container's
+limit); `"autoScale": true` forces auto explicitly. The memory guard is
+always on in both modes. For sizing on CI runners, see
+[`docs/ci.md`](ci.md).
+
 API key resolution follows the same chain as the TUI:
 `/run/secrets/openrouter_api_key` → `OPENROUTER_API_KEY_FILE` →
 `OPENROUTER_API_KEY` → persisted global store. So
@@ -456,7 +473,13 @@ existing file, so editing one preserves your changes across launches.
 | **huu Quality Audit** | Sonar-style: cyclomatic / cognitive complexity, function/file size, parameter count, nesting depth, duplication, dead code. | [SonarSource](https://www.sonarsource.com/resources/library/cyclomatic-complexity/) + Fowler smells |
 | **huu Performance Audit** | Static hotspot scan (N+1, big-O, sync I/O, memory leak signals), Core Web Vitals for frontends, USE-method checklist for backends/CLIs. | [USE method](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
 | **huu Refactor Plan** | Characterization-test baseline, per-file Fowler smell catalog, top-5 target ranking, static Mikado-style dependency graph, final Fowler-catalog recommendations. Plan-only — no code rewrites. | [Fowler refactoring catalog](https://refactoring.com/catalog/) + [Mikado method](https://www.manning.com/books/the-mikado-method) |
-| **huu Security Audit** | gitleaks/trufflehog secrets sweep, OWASP Top 10:2021 per-file scan, dependency CVE scan, CWE Top 25:2024-aligned remediation roadmap. | [OWASP Top 10](https://owasp.org/Top10/2021/) + [CWE Top 25](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html) |
+| **huu Security Audit** | gitleaks secrets sweep, OWASP Top 10:2025 per-file scan, dependency CVE scan, supply-chain & CI posture check, CWE Top 25:2025-aligned remediation roadmap. | [OWASP Top 10](https://owasp.org/Top10/2025/) + [CWE Top 25](https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html) |
+
+The five audits now **end with a report-validating judge step** — a
+`check` node that verifies the report is complete and internally
+consistent, looping back once for rework when it isn't — and the
+security audit follows OWASP Top 10:2025. The table in
+[`AGENTS.md`](../AGENTS.md) is the detailed per-pipeline source.
 
 **Report-only contract for the five audits.** They write ONLY to
 `.huu/audits/<topic>.md` and `.huu/audits/<topic>-faq.json`, plus at

@@ -20,6 +20,13 @@ captures the invariants that gate must preserve.
 **Do:**
 - Keep the re-exec decision (`decideReexec` in `lib/docker-reexec.ts`) pure
   — argv + env in, decision out. No side effects.
+- Know the bypass list in `decideReexec`, in order: `HUU_IN_CONTAINER=1`,
+  `--yolo`, `--no-docker` (the neutral spelling of `--yolo` for CI
+  runners, where the runner is already an ephemeral container and
+  Docker-in-Docker is unavailable — see `docs/ci.md` for the GitHub
+  Actions / GitLab recipes), `HUU_NO_DOCKER=1|true`, `--help`/`-h`, and
+  the `NATIVE_ONLY_SUBCOMMANDS` set. The flags are checked before the
+  env var on purpose: an explicit flag must win over stale shell state.
 - Trap SIGINT/SIGTERM/SIGHUP in the wrapper and `docker kill --signal …`
   the container via the recorded cidfile. Don't rely on docker's own
   `--sig-proxy` (moby#28872 documents the breakage with `-it`).
