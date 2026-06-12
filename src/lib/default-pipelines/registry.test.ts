@@ -74,6 +74,24 @@ describe('default-pipelines registry', () => {
     }
   });
 
+  it('Knowledge System check defaults advance the graph (stub-safe termination)', () => {
+    const mod = DEFAULT_PIPELINES.find((m) => m.DEFAULT_PIPELINE_NAME === 'huu Knowledge System');
+    expect(mod).toBeDefined();
+    const p = mod!.getDefaultPipeline();
+    const indexByName = new Map(p.steps.map((s, i) => [s.name, i]));
+    const checks = checkSteps(p);
+    expect(checks.length).toBeGreaterThanOrEqual(2);
+    for (const check of checks) {
+      const def = check.outcomes.find((o) => o.default);
+      expect(def, check.name).toBeDefined();
+      // A backward-pointing default would loop every stub/smoke run until
+      // maxRuns — the default outcome must always move the cursor FORWARD.
+      expect(indexByName.get(def!.nextStepName), check.name).toBeGreaterThan(
+        indexByName.get(check.name)!,
+      );
+    }
+  });
+
   it('every pipeline keeps the safety caps (maxRetries ≤ 3, maxNodeExecutions ≤ 50)', () => {
     for (const mod of DEFAULT_PIPELINES) {
       const p = mod.getDefaultPipeline();

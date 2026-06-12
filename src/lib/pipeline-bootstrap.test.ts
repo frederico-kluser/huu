@@ -168,35 +168,56 @@ describe('ensureAllDefaultPipelines', () => {
     }
   });
 
-  it('no project-scope step references the $file token', () => {
+  it('no single-task step references the $file token', () => {
     for (const mod of DEFAULT_PIPELINES) {
       const p = mod.getDefaultPipeline();
       for (const step of p.steps) {
         if (step.type === 'check') continue;
-        if (step.scope === 'per-file') continue;
+        // per-file and memory steps fan out one agent per file — $file (and
+        // $hint, for memory) are exactly how those prompts are parameterized.
+        if (step.scope === 'per-file' || step.scope === 'memory') continue;
         expect(
           step.prompt.includes('$file'),
-          `${mod.DEFAULT_PIPELINE_NAME} / ${step.name}: project-scope step must not contain $file`,
+          `${mod.DEFAULT_PIPELINE_NAME} / ${step.name}: single-task step must not contain $file`,
         ).toBe(false);
       }
     }
   });
 
-  it('huu Agent Knowledge: validation check loops to materialize and terminates on approved', () => {
-    const mod = DEFAULT_PIPELINES.find((m) => m.DEFAULT_PIPELINE_NAME === 'huu Agent Knowledge')!;
+  it('huu Knowledge System: both check loops terminate on their forward default', () => {
+    const mod = DEFAULT_PIPELINES.find(
+      (m) => m.DEFAULT_PIPELINE_NAME === 'huu Knowledge System',
+    )!;
     const p = mod.getDefaultPipeline();
-    const check = p.steps.find((s) => s.type === 'check');
-    expect(check).toBeDefined();
-    if (check?.type !== 'check') throw new Error('unreachable');
-    expect(check.maxRuns).toBe(3);
-    const approved = check.outcomes.find((o) => o.label === 'approved')!;
-    const rework = check.outcomes.find((o) => o.label === 'rework')!;
-    // `approved` must be the default so judge failures / --stub terminate
-    // the loop instead of bouncing back to materialize until maxRuns.
+    const checks = p.steps.filter((s) => s.type === 'check');
+    expect(checks).toHaveLength(2);
+    const [materialized, gate] = checks;
+    if (materialized?.type !== 'check' || gate?.type !== 'check') throw new Error('unreachable');
+
+    // Skill-materialization loop: `done` must be the default so judge
+    // failures / --stub move FORWARD instead of bouncing back to the
+    // dossier fan-out until maxRuns.
+    expect(materialized.maxRuns).toBe(4);
+    const done = materialized.outcomes.find((o) => o.label === 'done')!;
+    expect(done.default).toBe(true);
+    expect(done.nextStepName).toBe('7. Wire the routing surface');
+    expect(materialized.outcomes.find((o) => o.label === 'continue')!.nextStepName).toBe(
+      '5. Materialize skill from dossier',
+    );
+
+    // Routing-quality gate: `approved` default → seal; `rework` → sharpen.
+    expect(gate.maxRuns).toBe(3);
+    const approved = gate.outcomes.find((o) => o.label === 'approved')!;
     expect(approved.default).toBe(true);
-    expect(approved.nextStepName).toBe('6. Finalize knowledge base');
-    expect(rework.nextStepName).toBe('4. Materialize .agents/skills/');
-    expect(p.steps.map((s) => s.name)).toContain(approved.nextStepName);
-    expect(p.steps.map((s) => s.name)).toContain(rework.nextStepName);
+    expect(approved.nextStepName).toBe('11. Finalize: seal + curation handoff');
+    expect(gate.outcomes.find((o) => o.label === 'rework')!.nextStepName).toBe(
+      '10. Sharpen failing descriptions',
+    );
+
+    const names = p.steps.map((s) => s.name);
+    for (const check of checks) {
+      if (check.type !== 'check') continue;
+      for (const o of check.outcomes) expect(names).toContain(o.nextStepName);
+    }
   });
 });
