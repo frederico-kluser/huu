@@ -254,6 +254,12 @@ export interface RunManifest {
   startedAt: number;
   finishedAt?: number;
   status: RunStatus;
+  /**
+   * ACTIONABLE failure summary (first fatal error wins): what broke + what
+   * to do next. Surfaced by the summary screen, the headless final JSON and
+   * the web result frame. Undefined on success.
+   */
+  errorReason?: string;
   agentEntries: AgentManifestEntry[];
   stageBaseCommits?: string[];
   totalStages?: number;

@@ -109,6 +109,9 @@ export async function runHeadless(args: RunHeadlessArgs): Promise<number> {
           integrationBranch: result.manifest.integrationBranch,
           baseCommit: result.manifest.baseCommit,
           status: result.manifest.status,
+          ...(result.manifest.errorReason !== undefined
+            ? { errorReason: result.manifest.errorReason }
+            : {}),
           totalCost: Number(result.totalCost.toFixed(6)),
           durationMs: result.duration,
           filesModified: result.filesModified,

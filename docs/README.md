@@ -14,6 +14,7 @@ determinístico ao fim de cada estágio.
 | Operar no dia a dia (Docker, env vars, FAQ, roadmap) | [Operações](operations.pt-BR.md) · [EN](operations.md) |
 | Escrever meu próprio pipeline JSON | [Guia do schema](pipeline-json-guide.md) |
 | Fazer uma etapa descobrir os arquivos da próxima (scope `memory`) | [Scope memory](memory-scope.pt-BR.md) · [EN](memory-scope.md) |
+| Entender por que um run falhou (sintoma → causa → ação) | [Troubleshooting](troubleshooting.pt-BR.md) · [EN](troubleshooting.md) |
 | Rodar auditorias na esteira (GitHub Actions / GitLab) | [CI](ci.pt-BR.md) · [EN](ci.md) |
 
 ## Referência
@@ -23,6 +24,7 @@ determinístico ao fim de cada estágio.
 | Arquitetura em camadas e regras de import | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Schema JSON do pipeline (referência completa) | [pipeline-json-guide.md](pipeline-json-guide.md) |
 | Scope `memory` — fan-out dirigido por arquivo de memória (`huu-memory-v1`, `$hint`) | [memory-scope.md](memory-scope.md) · [pt-BR](memory-scope.pt-BR.md) |
+| Troubleshooting — todos os modos de falha com ação corretiva | [troubleshooting.md](troubleshooting.md) · [pt-BR](troubleshooting.pt-BR.md) |
 | CI sem Docker (`--no-docker`, `huu auto`, receitas prontas) | [ci.md](ci.md) · [pt-BR](ci.pt-BR.md) |
 | Controle do Pi Coding Agent (modelo mental, CLI, env, sessão) | [pi-coding-agent.md](pi-coding-agent.md) |
 | Modo Web UI (`huu --web`) | [WEB-UI.md](WEB-UI.md) |

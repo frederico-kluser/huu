@@ -666,23 +666,17 @@ export class Orchestrator {
       while (currentStepName !== null) {
         if (this.aborted) break;
         if (visitIndex >= maxNodeExecutions) {
-          this.status = 'error';
-          this.log({
-            level: 'error',
-            message: `pipeline exceeded maxNodeExecutions=${maxNodeExecutions}; aborting to prevent runaway loop`,
-          });
-          this.emit();
+          this.recordRunError(
+            `pipeline exceeded maxNodeExecutions=${maxNodeExecutions} — raise pipeline.maxNodeExecutions, or break the loop: a check whose chosen outcome keeps pointing BACKWARDS re-runs forever (docs/troubleshooting.md#runaway-loop)`,
+          );
           break;
         }
 
         const stepIdx = stepIndexByName.get(currentStepName);
         if (stepIdx === undefined) {
-          this.status = 'error';
-          this.log({
-            level: 'error',
-            message: `internal: cursor pointed to unknown step "${currentStepName}"`,
-          });
-          this.emit();
+          this.recordRunError(
+            `cursor pointed to unknown step "${currentStepName}" — a next/outcome references a missing or renamed step; fix the pipeline JSON (re-importing it surfaces the exact field via topology validation)`,
+          );
           break;
         }
         const step = this.pipeline.steps[stepIdx]!;
@@ -763,9 +757,13 @@ export class Orchestrator {
         }
       }
 
-      if (this.status !== 'error' && !this.aborted) {
+      // Read through a widened binding: the error assignments now live in
+      // recordRunError()/mergeStepVisit(), so flow analysis would otherwise
+      // narrow this.status to 'running' here and reject the comparison.
+      const statusAfterRun = this.status as OrchestratorState['status'];
+      if (statusAfterRun !== 'error' && !this.aborted) {
         this.status = 'done';
-      } else if (this.aborted && this.status !== 'error') {
+      } else if (this.aborted && statusAfterRun !== 'error') {
         this.status = 'done';
       }
       // Sweep merge cards that never reached a terminal phase (abort or
@@ -802,8 +800,12 @@ export class Orchestrator {
         integration: this.integrationStatus,
       };
     } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
       this.status = 'error';
-      this.log({ level: 'error', message: err instanceof Error ? err.message : String(err) });
+      if (this.manifest && this.manifest.errorReason === undefined) {
+        this.manifest.errorReason = reason;
+      }
+      this.log({ level: 'error', message: reason });
       if (this.manifest) {
         this.manifest.finishedAt = this.manifest.finishedAt ?? Date.now();
         this.manifest.status = 'error';
@@ -1555,6 +1557,21 @@ export class Orchestrator {
     this.emit();
   }
 
+  /**
+   * Mark the run failed with an ACTIONABLE reason — what broke AND what to
+   * do next. The FIRST fatal reason wins (later cascading errors don't
+   * overwrite the root cause); it travels on the manifest to the summary
+   * screen, the headless final JSON and the web result frame.
+   */
+  private recordRunError(reason: string): void {
+    this.status = 'error';
+    if (this.manifest && this.manifest.errorReason === undefined) {
+      this.manifest.errorReason = reason;
+    }
+    this.log({ level: 'error', message: reason });
+    this.emit();
+  }
+
   // --- Step-visit bodies (shared by the legacy cursor and DAG waves) ---
 
   /**
@@ -1592,12 +1609,9 @@ export class Orchestrator {
         });
       } catch (err) {
         // Corrupt memory file: never legitimate — fail the run loudly.
-        this.status = 'error';
-        this.log({
-          level: 'error',
-          message: `memory scope "${workStep.name}": ${err instanceof MemoryFileError ? err.message : String(err)}`,
-        });
-        this.emit();
+        this.recordRunError(
+          `memory scope "${workStep.name}": ${err instanceof MemoryFileError ? err.message : String(err)} — the producer wrote an invalid huu-memory-v1 file; tighten its prompt, or declare \`produces\` on it so huu appends the exact format contract (docs/memory-scope.md → Troubleshooting)`,
+        );
         return { tasks: [], fatal: true };
       }
     }
@@ -1741,10 +1755,10 @@ export class Orchestrator {
     this.upsertStageIntegration(visitIndex, { phase: 'merging', startedAt: Date.now() });
     const merged = await this.runStageIntegration(stageTasks, visitIndex);
     if (!merged && !this.continueOnConflict) {
-      this.status = 'error';
-      this.log({ level: 'error', message: 'stage integration failed (conflicts unresolved)' });
       traceEntry.finishedAt = Date.now();
-      this.emit();
+      this.recordRunError(
+        `stage integration failed: unresolved merge conflicts in "${workStep.name}" — parallel agents edited the same lines. Narrow each task's write surface (per-file prompts should write ONLY to $file), or set pipeline.integrationModelId to a stronger conflict-resolver model. Note: the stub backend never resolves conflicts by design (docs/troubleshooting.md#merge-conflicts)`,
+      );
       return false;
     }
 
@@ -1756,13 +1770,10 @@ export class Orchestrator {
       this.manifest!.stageBaseCommits!.push(this.stageBaseRef);
       traceEntry.commitAfter = this.stageBaseRef;
     } catch (err) {
-      this.status = 'error';
-      this.log({
-        level: 'error',
-        message: `cannot read integration HEAD after step ${visitIndex} ("${workStep.name}"): ${err instanceof Error ? err.message : String(err)}. Next step cannot branch from a known-good base; aborting run.`,
-      });
       traceEntry.finishedAt = Date.now();
-      this.emit();
+      this.recordRunError(
+        `cannot read integration HEAD after step ${visitIndex} ("${workStep.name}"): ${err instanceof Error ? err.message : String(err)}. The next step cannot branch from a known-good base; aborting. If a previous run left orphan worktrees behind, run \`huu prune\` and retry (docs/troubleshooting.md#git-state)`,
+      );
       return false;
     }
     traceEntry.finishedAt = Date.now();
@@ -1826,12 +1837,9 @@ export class Orchestrator {
         break;
       }
       if (visitIndex + ready.length > maxNodeExecutions) {
-        this.status = 'error';
-        this.log({
-          level: 'error',
-          message: `pipeline exceeded maxNodeExecutions=${maxNodeExecutions}; aborting to prevent runaway loop`,
-        });
-        this.emit();
+        this.recordRunError(
+          `pipeline exceeded maxNodeExecutions=${maxNodeExecutions} — raise pipeline.maxNodeExecutions, or break the activation loop: an outcome/next that keeps re-pending its downstream cone re-runs it every wave (docs/troubleshooting.md#runaway-loop)`,
+        );
         return;
       }
       wave += 1;

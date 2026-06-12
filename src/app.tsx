@@ -691,10 +691,35 @@ export function App({
     const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
     const ss = String(seconds % 60).padStart(2, '0');
     const committed = r.agents.filter((a) => a.commitSha).length;
+    // Honest verdict colors: red = the RUN failed (manifest carries the
+    // actionable reason); yellow = run completed but some agents errored;
+    // green = clean.
+    const failedAgents = r.agents.filter((a) => a.state === 'error');
+    const runFailed = r.manifest.status === 'error';
+    const verdictColor = runFailed ? 'red' : failedAgents.length > 0 ? 'yellow' : 'green';
+    const verdictText = runFailed
+      ? 'Run failed'
+      : failedAgents.length > 0
+        ? `Run finished — ${failedAgents.length} agent${failedAgents.length === 1 ? '' : 's'} failed`
+        : 'Run finished';
     body = (
       <Box flexDirection="column" width="100%">
-        <Box borderStyle="round" borderColor="green" paddingX={1} flexDirection="column" width="100%">
-          <Text bold color="green">Run finished</Text>
+        <Box borderStyle="round" borderColor={verdictColor} paddingX={1} flexDirection="column" width="100%">
+          <Text bold color={verdictColor}>{verdictText}</Text>
+
+          {runFailed && r.manifest.errorReason && (
+            <Box marginTop={1} flexDirection="column">
+              <Text color="red" wrap="wrap">⚠ {r.manifest.errorReason}</Text>
+            </Box>
+          )}
+          {!runFailed && failedAgents.length > 0 && (
+            <Box marginTop={1} flexDirection="column">
+              <Text color="yellow" wrap="wrap">
+                ⚠ first failure ({failedAgents[0]!.errorKind ?? 'failed'}): {failedAgents[0]!.error ?? 'unknown'}
+              </Text>
+              <Text dimColor wrap="wrap">full agent logs: .huu/ run logs · per-card details on the dashboard (ENTER on a card)</Text>
+            </Box>
+          )}
 
           <Box marginTop={1} flexDirection="column">
             <Box>
