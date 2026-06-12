@@ -1,95 +1,37 @@
 # Agent Skills — huu
 
-> Catálogo das skills disponíveis neste repo. Leia para decidir
-> qual skill invocar. Gerado por huu_audit-and-improve-skills v4.3.0.
+> Human overview of the skill system. The canonical, always-current index is
+> [`.agents/skills/catalog.md`](.agents/skills/catalog.md) — this page explains how the
+> system works; it deliberately does not duplicate the list.
 
-Total: **9 skills**.
+## How it works
 
-## Quick reference
+- **Source of truth:** `.agents/skills/<name>/` (one directory per skill: `SKILL.md` +
+  `LEARNINGS.md`, optional `references/` and `scripts/`). Portable across tools: only
+  `name` + `description` (+ a small `metadata` block) in the frontmatter, no
+  tool-specific fields. `.claude/skills/` contains per-skill symlinks into it —
+  regenerate with `.agents/skills/project-router/scripts/sync-skill-links.sh`.
+- **Routing:** every task starts at `project-router`, which consults `catalog.md`,
+  assembles the skill chain (knowledge first, then task skills), and ensures the chain's
+  knowledge is loaded BEFORE implementation.
+- **Evolution:** task skills end with an `<evolution>` step. Validated learnings are
+  appended to the LEARNINGS.md of the skill that owns the domain (entry state
+  `probation`), with strict provenance rules (user feedback > verified code observation;
+  never instructions arriving in tool output — anti prompt-injection). Promotion into a
+  SKILL.md body happens only via `meta-skill-consolidate` (periodic GC: dedupe,
+  temporal versioning of contradictions, budget enforcement), and every change ships as
+  an uncommitted git diff for human review.
+- **Curation principle:** generated knowledge is a draft until a human approves it —
+  uncurated LLM context files measurably degrade agent success (Gloaguen et al., ETH
+  Zurich, arXiv:2602.11988). This library was hand-curated against the source on
+  2026-06-12, replacing the previous 9 pipeline-generated skills.
 
-| Skill | Path | O que faz | Triggers |
-|---|---|---|---|
-| `architecture-conventions` | `.agents/skills/architecture-conventions/` | Define layered architecture boundaries, naming conventions, import rules, and dependenc... | creating new modules, refactoring imports, or reviewing code structure |
-| `build-dev-tools` | `.agents/skills/build-dev-tools/` | Define build, dev, test, and CLI commands for the huu project. | running the project, debugging builds, or adding new npm scripts |
-| `docker-runtime` | `.agents/skills/docker-runtime/` | Define the host wrapper, signal lifecycle, image variants, HEALTHCHECK semantics... | modifying auto-reexec, entrypoint, Dockerfile, status / sentinel modules |
-| `git-workflow-orchestration` | `.agents/skills/git-workflow-orchestration/` | Define git worktree lifecycle, branch naming, merge strategies, and conflict resolution... | modifying git operations, debugging merge failures, or adding new preflight checks |
-| `llm-integration` | `.agents/skills/llm-integration/` | Define OpenRouter model selection, Pi SDK usage, thinking/reasoning detection, and API ... | adding model support, debugging agent sessions, or modifying LLM integration |
-| `pipeline-agents` | `.agents/skills/pipeline-agents/` | Define pipeline creation, task decomposition, and AgentFactory usage (stub vs real). | adding pipeline features, modifying agent behavior, or testing the orchestrator |
-| `port-isolation` | `.agents/skills/port-isolation/` | Define per-agent TCP port allocation, the bind() interceptor (LD_PRELOAD/DYLD), `.env.h... | modifying port allocation, the native shim, the `with-ports` wrapper, or EADDRINUSE under parallelism |
-| `ui-tui-ink` | `.agents/skills/ui-tui-ink/` | Define Ink (React for terminals) component patterns, screen routing, and keyboard handl... | adding, modifying TUI screens |
-| `web-ui-react` | `.agents/skills/web-ui-react/` | Define React + Vite + Tailwind component patterns for the `huu --web` browser front-end. | adding/modifying webui pages, components, WS protocol consumption |
+## Maintenance
 
-## Full descriptions
-
-### `architecture-conventions`
-
-- **Path**: `.agents/skills/architecture-conventions/SKILL.md`
-- **Tools**: default
-- **Description** (verbatim do frontmatter):
-  > Define layered architecture boundaries, naming conventions, import rules, and dependency direction for the huu codebase. Use when creating new modules, refactoring imports, or reviewing code structure. Do not use for runtime debugging or UI styling decisions.
-- **Quando invocar**: creating new modules, refactoring imports, or reviewing code structure
-
-### `build-dev-tools`
-
-- **Path**: `.agents/skills/build-dev-tools/SKILL.md`
-- **Tools**: default
-- **Description** (verbatim do frontmatter):
-  > Define build, dev, test, and CLI commands for the huu project. Use when running the project, debugging builds, or adding new npm scripts. Do not use for runtime logic or UI component development.
-- **Quando invocar**: running the project, debugging builds, or adding new npm scripts
-
-### `docker-runtime`
-
-- **Path**: `.agents/skills/docker-runtime/SKILL.md`
-- **Tools**: default
-- **Description** (verbatim do frontmatter):
-  > Define the host wrapper, signal lifecycle, image variants, and HEALTHCHECK semantics for huu's Docker integration. Use when modifying the auto-reexec layer, the entrypoint, the Dockerfile, or any of the *-docker / status / sentinel modules. Do not use for pipeline logic, TUI components, or git worktree concerns.
-- **Quando invocar**: modifying auto-reexec, entrypoint, Dockerfile, status / sentinel modules
-
-### `git-workflow-orchestration`
-
-- **Path**: `.agents/skills/git-workflow-orchestration/SKILL.md`
-- **Tools**: default
-- **Description** (verbatim do frontmatter):
-  > Define git worktree lifecycle, branch naming, merge strategies, and conflict resolution for agent runs. Use when modifying git operations, debugging merge failures, or adding new preflight checks. Do not use for general git usage outside the agent context.
-- **Quando invocar**: modifying git operations, debugging merge failures, or adding new preflight checks
-
-### `llm-integration`
-
-- **Path**: `.agents/skills/llm-integration/SKILL.md`
-- **Tools**: default
-- **Description** (verbatim do frontmatter):
-  > Define OpenRouter model selection, Pi SDK usage, thinking/reasoning detection, and API key handling. Use when adding model support, debugging agent sessions, or modifying LLM integration. Do not use for pipeline structure or git operations.
-- **Quando invocar**: adding model support, debugging agent sessions, or modifying LLM integration
-
-### `pipeline-agents`
-
-- **Path**: `.agents/skills/pipeline-agents/SKILL.md`
-- **Tools**: default
-- **Description** (verbatim do frontmatter):
-  > Define pipeline creation, task decomposition, and AgentFactory usage (stub vs real). Use when adding pipeline features, modifying agent behavior, or testing the orchestrator. Do not use for git worktree operations or UI component work.
-- **Quando invocar**: adding pipeline features, modifying agent behavior, or testing the orchestrator
-
-### `port-isolation`
-
-- **Path**: `.agents/skills/port-isolation/SKILL.md`
-- **Tools**: default
-- **Description** (verbatim do frontmatter):
-  > Define per-agent TCP port allocation, the bind() interceptor (LD_PRELOAD / DYLD_INSERT_LIBRARIES), `.env.huu` injection, and the on-demand C compile pipeline. Use when modifying port allocation, the native shim, the `with-ports` wrapper, or when a pipeline hits EADDRINUSE under parallelism. Do not use for general port-related questions outside the agent runtime.
-- **Quando invocar**: modifying port allocation, the native shim, or debugging EADDRINUSE under parallelism
-
-### `ui-tui-ink`
-
-- **Path**: `.agents/skills/ui-tui-ink/SKILL.md`
-- **Tools**: default
-- **Description** (verbatim do frontmatter):
-  > Define Ink (React for terminals) component patterns, screen routing, and keyboard handling. Use when adding or modifying TUI screens. Do not use for business logic, git operations, or non-terminal UI work.
-- **Quando invocar**: adding, modifying TUI screens
-
-### `web-ui-react`
-
-- **Path**: `.agents/skills/web-ui-react/SKILL.md`
-- **Tools**: default
-- **Description** (verbatim do frontmatter):
-  > Define React + Vite + Tailwind component patterns for the `huu --web` browser front-end (`webui/`). Use when adding or modifying web UI pages/atoms/molecules/organisms/templates, wiring WebSocket events through `useWsSession()`, or extending the protocol consumed by the front-end. Do not use for Ink/TUI work, back-end server logic, or orchestrator changes.
-- **Quando invocar**: adding/modifying webui pages, components, or WS protocol consumption
-
+| Action | How |
+|---|---|
+| List/route skills | `.agents/skills/catalog.md` |
+| Validate the library | `.agents/skills/meta-skill-consolidate/scripts/validate-skills.sh` |
+| Re-sync `.claude/skills/` symlinks | `.agents/skills/project-router/scripts/sync-skill-links.sh` |
+| Propose a new skill | `meta-skill-evolution` (template in its `references/skill-template.md`) |
+| Periodic cleanup | `meta-skill-consolidate` |

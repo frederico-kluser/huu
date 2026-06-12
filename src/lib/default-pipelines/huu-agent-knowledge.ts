@@ -1,7 +1,10 @@
 // Agent-Knowledge pipeline. Studies the project progressively (recon →
 // per-file deep study → topic synthesis) and MATERIALIZES the accumulated
 // knowledge as Agent Skills under `.agents/skills/` — one skill per topic
-// plus a central router skill any future agent loads first. This is a
+// plus a central router. ROUTER-AWARE: when the target repo already has a
+// router skill / catalog (e.g. a hand-written `project-router` with
+// `catalog.md`), the pipeline EXTENDS that routing surface instead of
+// creating a competing `project-knowledge` router. This is a
 // SETUP pipeline (like huu Test Suite), not an audit: it mutates the repo
 // by design (`.agents/skills/**`, `.huu/knowledge/**`, and at most one
 // `.gitignore` adjustment so the knowledge base survives the merge).
@@ -142,13 +145,20 @@ Constraints per topic:
 - \`description\` draft: 1–1024 chars stating WHAT the skill covers and WHEN an agent should load it, with concrete trigger keywords.
 - Coverage: >= 90% of findings must map to at least one topic. List the orphans explicitly.
 
+=== STEP 2.5 — Detect an existing router (router-aware mode) ===
+Check whether the repo ALREADY has a routing surface that predates this run:
+- \`.agents/skills/catalog.md\` exists → mode "extend", surface ".agents/skills/catalog.md".
+- Otherwise, a \`.agents/skills/*/SKILL.md\` whose frontmatter declares \`metadata.type: router\` (or is named \`project-router\`, or \`project-knowledge\` from an earlier run) → mode "extend", surface = that SKILL.md (its routing table).
+- Otherwise → mode "create", name "project-knowledge", surface null.
+Why this matters: two routers competing for "load me first" makes routing ambiguous for every future agent — extend, don't duplicate.
+
 === STEP 3 — Write .huu/knowledge/topics.json ===
 \`\`\`json
 {
   "topics": [
     { "name": "<slug>", "description": "<draft what+when>", "files": ["<key source paths>"], "keyFindings": ["<summary of each finding folded into this topic>"] }
   ],
-  "router": { "name": "project-knowledge" },
+  "router": { "mode": "<create|extend>", "name": "<project-knowledge, or the existing router's name>", "surface": "<null when creating; when extending, the file routing entries must be appended to>" },
   "orphans": ["<summaries of findings left out, if any>"]
 }
 \`\`\`
@@ -189,7 +199,13 @@ description: <refined from the draft: what + when + keywords>
 
 <body per STEP 2, compiled from this topic's keyFindings + the relevant atlas sections>
 
-=== STEP 4 — Write the central router skill ===
+=== STEP 4 — Route: extend the existing router OR create one ===
+Read \`router.mode\` from \`.huu/knowledge/topics.json\`.
+
+MODE "extend" (the repo already has a routing surface — \`router.surface\`):
+Append ONE routing entry per topic skill generated in STEP 3 to that surface, matching its existing format exactly (e.g. one \`- [name](name/SKILL.md) ... — when-to-load hook\` line in a catalog.md, or one row in the router's routing table). Do NOT create \`.agents/skills/project-knowledge/\`; do NOT restructure, reorder or rewrite anything else in the existing router — your touched lines are limited to the appended entries. Skip the rest of this STEP 4.
+
+MODE "create" (no router found):
 Path: \`.agents/skills/project-knowledge/SKILL.md\`. This is the skill every future agent should load FIRST — its description must make that irresistible and its body must route to the right topic skill. Frontmatter description (substitute the topic list):
 
 "Master index of generated knowledge for this repository. Load this FIRST for any task in this codebase — implementing features, fixing bugs, refactoring, writing tests, reviewing code, or answering questions about architecture, conventions, build, or domain logic. It routes you to the right topic skill: <topic-1>, <topic-2>, <...>. Do not use for questions unrelated to this repository."
@@ -204,19 +220,19 @@ Body structure:
 Router constraints: same frontmatter rules; the routing table MUST list every topic skill generated in STEP 3 (no more, no less).
 
 === STEP 5 — Self-check before finishing ===
-For each \`.agents/skills/*/SKILL.md\` you wrote: frontmatter parses as YAML; name == directory; name matches the regex; description length 1–1024; body < 500 lines; router table covers all topics. Fix anything that fails NOW — a judge will verify after you.
+For each \`.agents/skills/*/SKILL.md\` you wrote: frontmatter parses as YAML; name == directory; name matches the regex; description length 1–1024; body < 500 lines. Routing coverage per \`router.mode\`: "create" → project-knowledge's table lists every generated topic; "extend" → the surface file lists every generated topic and the rest of it is untouched. Fix anything that fails NOW — a judge will verify after you.
 
 === HARD RULES ===
 - Allowed writes: \`.agents/skills/**\` only. Do NOT touch \`.huu/knowledge/**\` (read-only here), production source, or manifests.
-- Do NOT overwrite skills that existed BEFORE this run (e.g. hand-written ones) — only create/update the directories named in topics.json + \`project-knowledge\`.
+- Do NOT overwrite skills that existed BEFORE this run (e.g. hand-written ones) — only create/update the directories named in topics.json, plus \`project-knowledge\` (mode "create") or appended routing entries in \`router.surface\` (mode "extend").
 - No secrets in skill bodies: if a finding contains tokens/credentials, redact to \`<redacted>\`.`;
 
-const CHECK_CONDITION = `Inspect every skill directory that this run generated (the ones named in .huu/knowledge/topics.json plus project-knowledge) under .agents/skills/. The skills are VALID when ALL hold: (1) each directory contains a SKILL.md whose YAML frontmatter parses and has exactly the required fields name and description (optional fields allowed); (2) each frontmatter name is identical to its parent directory name, is 1-64 chars, and matches ^[a-z0-9]+(-[a-z0-9]+)*$; (3) each description is 1-1024 chars and states both what the skill covers and when to load it; (4) each SKILL.md body is under 500 lines, and any referenced files exist inside the skill directory; (5) .agents/skills/project-knowledge/SKILL.md exists and its routing table lists every generated topic skill exactly once. If $runs >= 3, lean approved unless a skill is structurally broken (unparseable frontmatter or name/directory mismatch). Emit "approved" if valid, "rework" if not — and when emitting rework, spell out per-skill exactly what failed so the materialize step can fix it.`;
+const CHECK_CONDITION = `Inspect every skill directory that this run generated (the ones named in .huu/knowledge/topics.json plus project-knowledge) under .agents/skills/. The skills are VALID when ALL hold: (1) each directory contains a SKILL.md whose YAML frontmatter parses and has exactly the required fields name and description (optional fields allowed); (2) each frontmatter name is identical to its parent directory name, is 1-64 chars, and matches ^[a-z0-9]+(-[a-z0-9]+)*$; (3) each description is 1-1024 chars and states both what the skill covers and when to load it; (4) each SKILL.md body is under 500 lines, and any referenced files exist inside the skill directory; (5) routing coverage matches the router.mode recorded in .huu/knowledge/topics.json — mode "create": .agents/skills/project-knowledge/SKILL.md exists and its routing table lists every generated topic skill exactly once; mode "extend": the file named in router.surface lists every generated topic skill exactly once and the pre-existing router content around the appended entries is intact. If $runs >= 3, lean approved unless a skill is structurally broken (unparseable frontmatter or name/directory mismatch). Emit "approved" if valid, "rework" if not — and when emitting rework, spell out per-skill exactly what failed so the materialize step can fix it.`;
 
 const STEP6_PROMPT = `You are the final agent — step 6. Goal: seal the knowledge base and leave a self-explanatory trail.
 
 === STEP 1 — Final router-coverage pass ===
-List the topic skills generated by this run (from \`.huu/knowledge/topics.json\`) and re-read \`.agents/skills/project-knowledge/SKILL.md\`. If any generated topic skill is missing from the routing table (or a listed one doesn't exist), fix the ROUTER (table only — do not rewrite topic skills here).
+List the topic skills generated by this run (from \`.huu/knowledge/topics.json\`) and re-read the routing surface (router.mode "create" → \`.agents/skills/project-knowledge/SKILL.md\`; "extend" → the file in router.surface). If any generated topic skill is missing from it (or a listed entry doesn't exist), fix the ROUTING ENTRIES only — do not rewrite topic skills or the host router's other content.
 
 === STEP 2 — Seal .huu/knowledge/atlas.md ===
 Append a final section:
@@ -230,7 +246,7 @@ Append a final section:
 Print to the log: every path written under \`.agents/skills/\` this run, total skills, total findings, and the router description (so the run log shows what future agents will see).
 
 === HARD RULES ===
-- Allowed writes: \`.agents/skills/project-knowledge/SKILL.md\` (router fixes only) + \`.huu/knowledge/atlas.md\` (append section 8 only).
+- Allowed writes: the routing surface from topics.json (routing entries only) + \`.huu/knowledge/atlas.md\` (append section 8 only).
 - \`.huu/knowledge/\` stays in the repo on purpose — it is the raw, append-only knowledge base that future runs extend; the skills are its compiled form.
 - DO NOT touch production source, manifests, or other docs.`;
 

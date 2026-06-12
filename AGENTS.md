@@ -33,21 +33,23 @@ npm run typecheck
 
 ## Agent Skills
 
-Detailed domain-specific guidance lives in `.agents/skills/`:
+Every task in this repo routes through the skill system under
+`.agents/skills/` (source of truth, mirrored into `.claude/skills/` via
+per-skill symlinks — regenerate with
+`.agents/skills/project-router/scripts/sync-skill-links.sh`).
 
-| Skill | Domain |
-|---|---|
-| `architecture-conventions` | Layered architecture, naming, imports, dependency rules |
-| `git-workflow-orchestration` | Worktree lifecycle, branch naming, merge, conflict resolution |
-| `pipeline-agents` | Pipeline creation, task decomposition, AgentFactory usage |
-| `port-isolation` | Per-agent port allocation, bind() shim (LD_PRELOAD/DYLD), `.env.huu`, native compile |
-| `ui-tui-ink` | Ink (React for terminals) component patterns, screen routing |
-| `web-ui-react` | Browser front-end for `huu --web` (Vite + React + Tailwind, Atomic Design) |
-| `build-dev-tools` | Build, dev, test commands and tooling config |
-| `llm-integration` | OpenRouter model selection, Pi SDK, thinking detection |
-| `docker-runtime` | Host wrapper, signal lifecycle, image variants, HEALTHCHECK |
+Start at **`project-router`**: it classifies the task, assembles the skill
+chain from `.agents/skills/catalog.md` (the canonical routing index), loads
+the knowledge BEFORE implementation, and guarantees each task skill runs its
+`<evolution>` step at the end — learnings land in per-skill `LEARNINGS.md`
+(probation) and are promoted into skill bodies only by
+`meta-skill-consolidate`, always as uncommitted diffs for human review.
 
-Consult the relevant skill before starting any task.
+17 skills: 1 router · 8 knowledge (architecture, orchestrator, git
+worktrees, LLM backends, ports, Docker, tests, docs) · 6 task (pipelines,
+default pipelines, TUI, web mode, commit gate, release) · 2 meta
+(evolution, consolidate). The catalog is canonical — consult it, not this
+paragraph, for the current list.
 
 ### Web UI mode (`huu --web`)
 
@@ -75,6 +77,7 @@ Alternate entry point that swaps Ink (TUI) for a browser front-end while reusing
               orchestrator/backends/ (pluggable agent SDKs:
                 pi/      — @mariozechner/pi-coding-agent (default, OpenRouter)
                 copilot/ — @github/copilot-sdk (GitHub subscription)
+                azure/   — Azure AI Foundry (see docs/azure-backend.md)
                 stub/    — no-LLM mock for smoke tests
                 registry.ts — single dispatch from kind → factory)
                 ↓
@@ -104,7 +107,7 @@ of the TUI code loads. Inside the container, `HUU_IN_CONTAINER=1` (set by
 the Dockerfile) short-circuits the gate so the same binary runs the TUI
 directly. Native bypasses: `--yolo`, `--no-docker` (neutral CI spelling),
 or `HUU_NO_DOCKER=1` — see `docs/ci.md` for the GitHub Actions / GitLab
-recipes. See the `docker-runtime` skill for the full lifecycle.
+recipes. See the `running-in-docker` skill for the full lifecycle.
 
 ### Dynamic concurrency (memory-aware, default ON)
 
@@ -134,7 +137,7 @@ default pipelines into `pipelines/` on first run. Each one is idempotent
 | Pipeline | What it does | Methodology |
 |---|---|---|
 | `huu Test Suite` (`_default`) | Stack detection → test runner setup → unit tests for 3 representative files + user-selected files → prune failing blocks → add coverage badge to README. Prompts bake in mutation-surviving assertion rules and an anti-flaky determinism ruleset. | Google Testing Blog (behavior, not implementation) + [Fowler non-determinism](https://martinfowler.com/articles/nonDeterminism.html) + [Stryker](https://stryker-mutator.io/) follow-up |
-| `huu Agent Knowledge` | Recon → per-file deep study converging into `.huu/knowledge/` (atlas + findings) → topic synthesis → materializes Agent Skills under `.agents/skills/` (one per topic + a `project-knowledge` router skill) → judge validates frontmatter/naming/router coverage, looping back on `rework`. Setup pipeline — mutates the repo. | [Agent Skills spec](https://agentskills.io/specification) + progressive knowledge |
+| `huu Agent Knowledge` | Recon → per-file deep study converging into `.huu/knowledge/` (atlas + findings) → topic synthesis → materializes Agent Skills under `.agents/skills/` (one per topic; router-aware — extends an existing router/`catalog.md` when the repo has one, else creates `project-knowledge`) → judge validates frontmatter/naming/router coverage, looping back on `rework`. Setup pipeline — mutates the repo. | [Agent Skills spec](https://agentskills.io/specification) + progressive knowledge |
 | `huu Docs Audit` | Inventories every doc, classifies via the Diátaxis compass, scores the README (standard-readme grounded), flags stale references, measures inline API-doc coverage. Report-only + judge gate. | [Diátaxis](https://diataxis.fr/) + [standard-readme](https://github.com/RichardLitt/standard-readme) |
 | `huu Quality Audit` | Sonar-style report: cyclomatic + cognitive complexity, size metrics, churn×complexity hotspots (git-log mining), duplication, dead code, hotspot-weighted composite score. Report-only + judge gate. | [SonarSource cognitive complexity](https://www.sonarsource.com/docs/CognitiveComplexity.pdf) + [Tornhill hotspots](https://docs.enterprise.codescene.io/versions/4.0.16/guides/technical/hotspots.html) |
 | `huu Performance Audit` | Static hotspot scan (N+1, big-O, sync I/O, memory leaks, unbounded concurrency, missing caching), Core Web Vitals scorecard (INP via TBT lab proxy, caveat explicit), USE-method checklist. Report-only + judge gate. | [USE method](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
@@ -269,8 +272,9 @@ accumulating commits. Schema: `huu-pipeline-v2` (v1 still accepted,
 `Pipeline.maxNodeExecutions` (default 50), `CheckStep.maxRuns`
 (default 5), and the `default: true` outcome (exactly one per check)
 fires on judge failure / unknown label / cap. See
-`.agents/skills/pipeline-agents/SKILL.md` and
+`.agents/skills/authoring-pipelines/SKILL.md` and
 `docs/pipeline-json-guide.md` (`#conditional-steps-check-nodes`).
 
 ## References (load on demand)
-- Skill catalog: `agent-skills.md`
+- Skill catalog (canonical): `.agents/skills/catalog.md` — router: `project-router`
+- Human overview of the skill system: `agent-skills.md`

@@ -1,0 +1,38 @@
+# huu skill catalog
+
+> llms.txt-style index. The project-router consults this file to assemble skill chains.
+> Source of truth: `.agents/skills/` (each skill: `SKILL.md` + `LEARNINGS.md`). Portable via per-skill
+> symlinks in `.claude/skills/`. Task skills end with an `<evolution>` step; knowledge skills receive
+> learnings routed by domain ownership.
+
+## Router
+
+- [project-router](project-router/SKILL.md) `router` — entry point for EVERY task; classifies, assembles the chain, enforces evolution.
+## Knowledge skills
+
+- [following-architecture-conventions](following-architecture-conventions/SKILL.md) `knowledge` — layers, downward-only imports, ESM `.js`, named exports, style; load before writing any TS in src/ or webui/.
+- [working-on-orchestrator](working-on-orchestrator/SKILL.md) `knowledge` — run lifecycle, AutoScaler math, memory-guard requeue (`killedAgentIds`), CheckStep judge 9998, checkRuns; for any src/orchestrator change.
+- [orchestrating-git-worktrees](orchestrating-git-worktrees/SKILL.md) `knowledge` — worktree/branch naming (branch-namer), ascending --no-ff merges, never-rewind invariant, preflight, conflict policy; for src/git work and ANY stage-merge behavior change.
+- [integrating-llm-backends](integrating-llm-backends/SKILL.md) `knowledge` — backend registry (pi/copilot/azure/stub), BackendBundle, API-key chain, model catalogs, new-backend checklist.
+- [isolating-agent-ports](isolating-agent-ports/SKILL.md) `knowledge` — port windows from 55100, .env.huu, with-ports sourcing gotcha, shim compile cache; for port collisions and shim work.
+- [running-in-docker](running-in-docker/SKILL.md) `knowledge` — decideReexec bypass order, cidfile/prune, image/network/secrets, health sentinel, smoke suite; for wrapper/container/CI work.
+- [writing-tests](writing-tests/SKILL.md) `knowledge` — vitest colocated, real git in temp dirs, stub factories, regression-tests-as-spec; load before touching any test, and include in any chain that changes runtime code.
+- [writing-project-docs](writing-project-docs/SKILL.md) `knowledge` — pt-BR/EN twin files, docs/ layout, Keep-a-Changelog, identity framing; for any markdown work.
+
+## Task skills (end with `<evolution>`)
+
+- [authoring-pipelines](authoring-pipelines/SKILL.md) `task` — pipeline JSON v2 schema + design + stub dry-run; for any *.pipeline.json.
+- [editing-default-pipelines](editing-default-pipelines/SKILL.md) `task` — the 7 bundled defaults, registry.test contract, knowledge-protocol helpers, never-overwrite trap.
+- [building-tui-screens](building-tui-screens/SKILL.md) `task` — FSM + app.tsx routing, theme.ai rule, cardHeight sync, useInput ref-stability; for Ink UI work.
+- [extending-web-mode](extending-web-mode/SKILL.md) `task` — ws-protocol + CLIENT_MSG_TYPES, session wiring, coalescer, Atomic Design tiers; for --web and webui work.
+- [committing-and-validating](committing-and-validating/SKILL.md) `task` — typecheck+test gate (no CI), Conventional Commits, smoke triggers; for every commit/push.
+- [releasing-versions](releasing-versions/SKILL.md) `task` — manual release steps, GHCR multi-arch publish, published-image smoke.
+
+## Meta skills
+
+- [meta-skill-evolution](meta-skill-evolution/SKILL.md) `meta` — update/create/discard decision for new learnings; anti-injection; always a reviewable diff.- [meta-skill-consolidate](meta-skill-consolidate/SKILL.md) `meta` — periodic GC: dedupe, temporal versioning, probation→promotion, token budgets.
+## Chain hints
+
+- Any code change → following-architecture-conventions + the domain skill → writing-tests → committing-and-validating.
+- TUI⇄web parity: building-tui-screens and extending-web-mode share the screen-fsm — load both when a screen exists on both fronts.
+- Pipeline work: authoring-pipelines for user JSONs; editing-default-pipelines when the change is under src/lib/default-pipelines/.
