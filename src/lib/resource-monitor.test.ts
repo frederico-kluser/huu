@@ -19,9 +19,21 @@ vi.mock('node:fs', () => {
   return { ...mocked, default: mocked };
 });
 
+vi.mock('node:child_process', () => {
+  const mocked = {
+    execFileSync: vi.fn(),
+  };
+  return { ...mocked, default: mocked };
+});
+
 import os from 'node:os';
 import fs from 'node:fs';
-import { getSystemMetrics, resetCpuSnapshot } from './resource-monitor.js';
+import { execFileSync } from 'node:child_process';
+import {
+  getSystemMetrics,
+  resetCpuSnapshot,
+  resetDarwinAvailableCache,
+} from './resource-monitor.js';
 
 function mockCpus(user: number, nice: number, sys: number, idle: number, irq: number) {
   (os.cpus as unknown as Mock).mockReturnValue([
@@ -40,8 +52,42 @@ describe('getSystemMetrics', () => {
     mockCpus(1000, 200, 500, 7000, 50);
 
     (fs.existsSync as unknown as Mock).mockReturnValue(false);
+    // vm_stat unavailable by default so the host fallback exercises
+    // freemem() like before the darwin path existed.
+    (execFileSync as unknown as Mock).mockImplementation(() => {
+      throw new Error('vm_stat unavailable (mock)');
+    });
     resetCpuSnapshot();
+    resetDarwinAvailableCache();
   });
+
+  it.runIf(process.platform === 'darwin')(
+    'on macOS, host fallback derives available from vm_stat reclaimable pages (not bare freemem)',
+    () => {
+      const constrainedSpy = vi.spyOn(process, 'constrainedMemory').mockReturnValue(0);
+      // 16 GiB page size 16384: free 100k + inactive 200k + purgeable 50k +
+      // speculative 50k pages = 400k pages = 6.25 GiB available.
+      (execFileSync as unknown as Mock).mockReturnValue(
+        'Mach Virtual Memory Statistics: (page size of 16384 bytes)\n' +
+          'Pages free:                              100000.\n' +
+          'Pages active:                            500000.\n' +
+          'Pages inactive:                          200000.\n' +
+          'Pages speculative:                        50000.\n' +
+          'Pages purgeable:                          50000.\n',
+      );
+
+      const m = getSystemMetrics();
+
+      expect(m.ramAvailableBytes).toBe(400_000 * 16384);
+      expect(m.containerAware).toBe(false);
+      // os.freemem() (8 GiB mock) was NOT the source — the reclaimable-page
+      // figure was. On a warmed-up Mac freemem() saturates ramPercent ≥95%
+      // and permanently gates AutoScaler.shouldSpawn().
+      expect(m.ramAvailableBytes).not.toBe(8 * 1024 ** 3);
+
+      constrainedSpy.mockRestore();
+    },
+  );
 
   it('returns all SystemMetrics fields', () => {
     const m = getSystemMetrics();

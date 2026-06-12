@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { cpus, totalmem, freemem, loadavg } from 'node:os';
 
 export interface SystemMetrics {
@@ -12,8 +13,11 @@ export interface SystemMetrics {
   ramTotalBytes: number;
   /**
    * RAM bytes still claimable before hitting the limit. On Linux hosts this
-   * is /proc/meminfo MemAvailable (accounts for reclaimable page cache);
-   * inside a cgroup it is limit − current; elsewhere os.freemem().
+   * is /proc/meminfo MemAvailable (accounts for reclaimable page cache); on
+   * macOS it is vm_stat's free+inactive+purgeable+speculative pages (the
+   * reclaimable-cache equivalent — os.freemem() alone saturates ramPercent
+   * on any warmed-up Mac); inside a cgroup it is limit − current; elsewhere
+   * os.freemem().
    */
   ramAvailableBytes: number;
   /** RSS of the current Node process. */
@@ -96,6 +100,49 @@ function readMemAvailableBytes(): number | null {
   }
 }
 
+let darwinAvailableCache: { at: number; bytes: number | null } | null = null;
+
+/**
+ * Reset the cached vm_stat reading. Test hook (same spirit as
+ * resetCpuSnapshot) — the 500ms TTL would otherwise leak one test's mocked
+ * vm_stat output into the next.
+ */
+export function resetDarwinAvailableCache(): void {
+  darwinAvailableCache = null;
+}
+
+/**
+ * macOS equivalent of Linux's MemAvailable: free + inactive + purgeable +
+ * speculative pages from `vm_stat`. os.freemem() on darwin counts ONLY
+ * truly-free pages — on any warmed-up Mac the file cache keeps that near
+ * zero, which made ramPercent saturate ≥95% and permanently gate
+ * `AutoScaler.shouldSpawn()` (no agent could EVER spawn on macOS hosts,
+ * and the memory guard kill-fired spuriously). Returns null off-darwin or
+ * when vm_stat is unavailable. Cached briefly so several per-tick
+ * consumers don't re-exec vm_stat.
+ */
+function readDarwinAvailableBytes(): number | null {
+  if (process.platform !== 'darwin') return null;
+  const now = Date.now();
+  if (darwinAvailableCache && now - darwinAvailableCache.at < 500) {
+    return darwinAvailableCache.bytes;
+  }
+  let bytes: number | null = null;
+  try {
+    const out = execFileSync('vm_stat', { encoding: 'utf8', timeout: 2000 });
+    const pageSize = Number(/page size of (\d+) bytes/.exec(out)?.[1] ?? 16384);
+    const pagesOf = (label: string): number =>
+      Number(new RegExp(`^Pages ${label}:\\s+(\\d+)`, 'm').exec(out)?.[1] ?? 0);
+    const pages =
+      pagesOf('free') + pagesOf('inactive') + pagesOf('purgeable') + pagesOf('speculative');
+    bytes = pages > 0 ? pages * pageSize : null;
+  } catch {
+    bytes = null;
+  }
+  darwinAvailableCache = { at: now, bytes };
+  return bytes;
+}
+
 /**
  * Read total, used, and available memory from the first source available in
  * this order:
@@ -104,7 +151,7 @@ function readMemAvailableBytes(): number | null {
  *   2. cgroup v2  (/sys/fs/cgroup/memory.{max,current})
  *   3. cgroup v1  (/sys/fs/cgroup/memory/memory.{limit_in_bytes,usage_in_bytes})
  *   4. host       (os.totalmem(); available = MemAvailable on Linux,
- *      os.freemem() elsewhere)
+ *      vm_stat-derived on macOS, os.freemem() elsewhere)
  *
  * Returns { totalBytes, usedBytes, availableBytes, containerAware }.
  */
@@ -175,7 +222,7 @@ function readContainerMemory(): {
   }
 
   const memTotal = totalmem();
-  const memAvailable = readMemAvailableBytes() ?? freemem();
+  const memAvailable = readMemAvailableBytes() ?? readDarwinAvailableBytes() ?? freemem();
   const memUsed = Math.max(0, memTotal - memAvailable);
   return {
     totalBytes: memTotal,
