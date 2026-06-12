@@ -52,8 +52,8 @@
     "access": "public"
   },
   "scripts": {
-    "dev": "tsx --watch src/cli.tsx",
-    "start": "tsx src/cli.tsx",
+    "dev": "HUU_NO_DOCKER=1 tsx --watch src/cli.tsx",
+    "start": "HUU_NO_DOCKER=1 tsx src/cli.tsx",
     "build": "npm run build:webui && tsc && chmod +x dist/cli.js",
     "build:webui": "npm run build -w webui",
     "build:link": "npm run build && npm link && tsx scripts/link-pipelines.ts",
