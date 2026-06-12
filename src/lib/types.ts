@@ -99,6 +99,15 @@ export interface WorkStep {
   produces?: string;
   /** Override the next step. Must match another step's `name`. Undefined = next in array. */
   next?: string;
+  /**
+   * DAG edges (GitHub-Actions `needs` style). Steps whose dependencies are
+   * all done run together in deterministic WAVES (one shared pool, merges
+   * in array order). Undefined = depends on the previous step in the array
+   * (full v2 back-compat); `[]` = root. May only reference EARLIER steps;
+   * loops stay exclusive to `next`/check outcomes (activation edges). The
+   * presence of ANY dependsOn switches the run into wave mode.
+   */
+  dependsOn?: string[];
 }
 
 /**
@@ -126,6 +135,8 @@ export interface CheckStep {
   maxRuns?: number;
   /** Optional per-step model override for the judge. */
   modelId?: string;
+  /** See WorkStep.dependsOn — checks join branches too (judged AFTER all deps merged). */
+  dependsOn?: string[];
 }
 
 export interface CheckOutcome {
@@ -413,6 +424,8 @@ export interface OrchestratorState {
   elapsedMs: number;
   concurrency: number;
   currentStage: number;
+  /** Wave counter — present only when the pipeline runs in DAG (dependsOn) mode. */
+  wave?: number;
   totalStages: number;
   pendingTaskCount: number;
   activeAgentCount: number;

@@ -138,16 +138,19 @@ describe('memory scope (filesFrom fan-out)', () => {
       const result = await orch.start();
 
       expect(result.manifest.status).toBe('done');
-      // One consumer agent per listed path, in list order.
-      expect(consumerTasks.map((t) => t.files[0])).toEqual(['a.ts', 'b.ts']);
+      // One consumer agent per listed path. Capture order follows agent
+      // COMPLETION (parallel pool) — assert by identity, not arrival.
+      const byFile = [...consumerTasks].sort((x, y) => x.files[0]!.localeCompare(y.files[0]!));
+      expect(byFile.map((t) => t.files[0])).toEqual(['a.ts', 'b.ts']);
       // The producer's per-entry hint rode along on the task...
-      expect(consumerTasks[0]!.hint).toBe('lead-A from the scanner');
-      expect(consumerTasks[1]!.hint).toBeUndefined();
+      expect(byFile[0]!.hint).toBe('lead-A from the scanner');
+      expect(byFile[1]!.hint).toBeUndefined();
       // ...and was substituted into the rendered prompt via $hint.
-      expect(consumerPrompts[0]).toContain('scanner note: lead-A from the scanner');
-      expect(consumerPrompts[0]).toContain('work on a.ts');
-      expect(consumerPrompts[1]).toContain('work on b.ts');
-      expect(consumerPrompts[1]).not.toContain('$hint');
+      const promptA = consumerPrompts.find((p) => p.includes('work on a.ts'))!;
+      const promptB = consumerPrompts.find((p) => p.includes('work on b.ts'))!;
+      expect(promptA).toContain('scanner note: lead-A from the scanner');
+      expect(promptB).toBeDefined();
+      expect(promptB).not.toContain('$hint');
       // The producer declared `produces` — huu appended the MEMORY CONTRACT
       // (exact path, format, the default cap) to its prompt at run time.
       expect(producerPrompts[0]).toContain('write the scan list');

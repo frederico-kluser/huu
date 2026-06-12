@@ -35,6 +35,8 @@ const WorkStepSchema = z.object({
   maxFiles: z.number().int().positive().max(100).optional(),
   /** Path of the huu-memory-v1 file this step promises to write (contract auto-appended at run time). */
   produces: z.string().min(1).optional(),
+  /** DAG edges (GitHub-Actions `needs` style) — earlier step names only. */
+  dependsOn: z.array(z.string().min(1)).optional(),
   next: z.string().min(1).optional(),
 });
 
@@ -52,6 +54,8 @@ const CheckStepSchema = z.object({
   outcomes: z.array(CheckOutcomeSchema).min(1),
   maxRuns: z.number().int().positive().optional(),
   modelId: z.string().min(1).optional(),
+  /** DAG edges (GitHub-Actions `needs` style) — earlier step names only. */
+  dependsOn: z.array(z.string().min(1)).optional(),
 });
 
 /**
@@ -195,6 +199,27 @@ export function validateTopology(
           ['steps', i, 'filesFrom'],
         );
       }
+    }
+
+    // DAG edges: every dependsOn entry must name an EARLIER step. The array
+    // stays the canonical merge/read order, which also makes dependency
+    // cycles structurally impossible — loops belong to next/outcomes
+    // (activation edges), never to dependsOn.
+    if (step.dependsOn !== undefined) {
+      step.dependsOn.forEach((dep, j) => {
+        const depIdx = names.get(dep);
+        if (depIdx === undefined) {
+          addError(
+            `step "${step.name}" dependsOn unknown step "${dep}"`,
+            ['steps', i, 'dependsOn', j],
+          );
+        } else if (depIdx >= i) {
+          addError(
+            `step "${step.name}" dependsOn "${dep}", which is not an EARLIER step — dependencies must point backwards in the array (loops use next/outcomes)`,
+            ['steps', i, 'dependsOn', j],
+          );
+        }
+      });
     }
   });
 

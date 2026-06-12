@@ -34,6 +34,7 @@ import { mergeAgentBranches } from '../git/integration-merge.js';
 import { decomposeTasks } from './task-decomposer.js';
 import { resolveMemoryFiles, MemoryFileError } from './memory-files.js';
 import { memoryContract, memoryCapForPath } from '../lib/memory-contract.js';
+import { hasDagEdges, computeWave, descendantsOf } from './wave-scheduler.js';
 import type { AgentEvent, AgentFactory, SpawnedAgent } from './types.js';
 import { generateRunId } from '../lib/run-id.js';
 import { RunLogger, RUN_LOG_DIR } from '../lib/run-logger.js';
@@ -197,6 +198,8 @@ export class Orchestrator {
   private completedTasks = 0;
   private totalTasksAcrossStages = 0;
   private currentStage = 0;
+  /** Wave counter — 0 in legacy (linear) mode, >0 while running DAG waves. */
+  private currentWave = 0;
   private totalStages: number;
   private instanceCount: number;
   private continueOnConflict: boolean;
@@ -315,6 +318,7 @@ export class Orchestrator {
       elapsedMs: this.startedAt > 0 ? Date.now() - this.startedAt : 0,
       concurrency: this.instanceCount,
       currentStage: this.currentStage,
+      ...(this.currentWave > 0 ? { wave: this.currentWave } : {}),
       totalStages: this.totalStages,
       pendingTaskCount: this.pendingTasks.length,
       activeAgentCount: this.activeAgents.size,
@@ -644,6 +648,21 @@ export class Orchestrator {
       let currentStepName: string | null = this.pipeline.steps[0]!.name;
       let visitIndex = 0;
 
+      if (hasDagEdges(this.pipeline.steps)) {
+        // DAG mode (any `dependsOn` present): deterministic waves replace
+        // the linear cursor entirely; the legacy while below is skipped.
+        // Pipelines without dependsOn keep the exact legacy behavior,
+        // including `next`-as-skip.
+        await this.runDagWaves({
+          runId,
+          integration,
+          tasksByStepName,
+          stepIndexByName,
+          maxNodeExecutions,
+        });
+        currentStepName = null;
+      }
+
       while (currentStepName !== null) {
         if (this.aborted) break;
         if (visitIndex >= maxNodeExecutions) {
@@ -683,95 +702,15 @@ export class Orchestrator {
 
         if (isCheckStep(step)) {
           // --- CheckStep: pure evaluator, no worktrees, no merges. ---
-          const judgeModelId = step.modelId ?? this.config.modelId;
-          const maxRuns = step.maxRuns;
-          if (maxRuns !== undefined && runs > maxRuns) {
-            const fallback = step.outcomes.find((o) => o.default) ?? step.outcomes[0]!;
-            this.log({
-              level: 'warn',
-              message: `check "${step.name}" hit maxRuns=${maxRuns}; using default outcome "${fallback.label}"`,
-            });
-            // Completed judge card so the forced default is visible on the
-            // board (DONE column) rather than the check silently skipping.
-            this.checkRuns.push({
-              visitIndex,
-              stepIndex: stepIdx,
-              stepName: step.name,
-              runs,
-              maxRuns,
-              phase: 'done',
-              modelId: judgeModelId,
-              condition: step.condition,
-              outcomeLabel: fallback.label,
-              nextStepName: fallback.nextStepName,
-              fromJudge: false,
-              reason: `maxRuns=${maxRuns} reached`,
-              startedAt: Date.now(),
-              finishedAt: Date.now(),
-            });
-            traceEntry.outcomeLabel = fallback.label;
-            traceEntry.nextStepName = fallback.nextStepName;
-            traceEntry.finishedAt = Date.now();
-            currentStepName = fallback.nextStepName;
-            this.emit();
-            continue;
-          }
-
-          this.log({
-            level: 'info',
-            message: `=== check ${visitIndex}: ${step.name} (run ${runs}${maxRuns ? `/${maxRuns}` : ''})`,
-          });
-          // Judge card — DOING column while the judge deliberates.
-          this.checkRuns.push({
-            visitIndex,
-            stepIndex: stepIdx,
-            stepName: step.name,
-            runs,
-            maxRuns,
-            phase: 'judging',
-            modelId: judgeModelId,
-            condition: step.condition,
-            startedAt: Date.now(),
-          });
-          this.emit();
-
-          const result = await evaluateCheckStep({
+          currentStepName = await this.runCheckVisit(
             step,
+            stepIdx,
+            visitIndex,
             runs,
-            repoRoot: this.preflight.repoRoot,
-            integrationWorktreePath: integration.worktreePath,
-            integrationBranch: integration.branchName,
+            integration,
             runId,
-            config: this.config,
-            factory: this.conflictResolverFactory ?? this.agentFactory,
-            onEvent: (agentId, event) => {
-              if (event.type === 'log') {
-                this.log({ level: event.level ?? 'info', message: event.message, agentId });
-                this.upsertCheckRun(visitIndex, { lastLog: event.message });
-              } else if (event.type === 'error') {
-                this.log({ level: 'error', message: event.message, agentId });
-                this.upsertCheckRun(visitIndex, { lastLog: event.message });
-              }
-            },
-          });
-          this.upsertCheckRun(visitIndex, {
-            phase: 'done',
-            condition: result.resolvedCondition,
-            outcomeLabel: result.label,
-            nextStepName: result.nextStepName,
-            fromJudge: result.fromJudge,
-            reason: result.reason,
-            finishedAt: Date.now(),
-          });
-          traceEntry.outcomeLabel = result.label;
-          traceEntry.nextStepName = result.nextStepName;
-          traceEntry.resolvedCondition = result.resolvedCondition;
-          traceEntry.finishedAt = Date.now();
-          this.log({
-            level: 'info',
-            message: `check "${step.name}" → ${result.label}${result.fromJudge ? '' : ' (default)'} → ${result.nextStepName}`,
-          });
-          currentStepName = result.nextStepName;
+            traceEntry,
+          );
           this.emit();
           continue;
         }
@@ -783,56 +722,9 @@ export class Orchestrator {
           // Revisit (loop) or first-time decomposition for a non-pre-decomposed
           // step: allocate fresh agent ids so branch names don't collide
           // with the previous iteration's commits.
-          let stepFiles = workStep.files;
-          let memoryHints: Map<string, string> | undefined;
-          if (workStep.scope === 'memory' && workStep.files.length === 0) {
-            // Resolve the file list the producing step left in the merged
-            // integration state. Read on EVERY visit so check-loop rewrites
-            // of the memory file take effect. (A non-empty workStep.files
-            // here means a run-config override won — handled above.)
-            try {
-              const resolved = resolveMemoryFiles(
-                workStep.filesFrom!,
-                this.manifest!.integrationWorktreePath,
-                workStep.maxFiles,
-              );
-              for (const warning of resolved.warnings) {
-                this.log({ level: 'warn', message: `memory scope "${workStep.name}": ${warning}` });
-              }
-              stepFiles = resolved.files;
-              memoryHints = resolved.hints;
-              this.log({
-                level: 'info',
-                message: `memory scope "${workStep.name}": ${stepFiles.length} task(s) from ${workStep.filesFrom}`,
-              });
-            } catch (err) {
-              // Corrupt memory file: never legitimate — fail the run loudly
-              // (same shape as the maxNodeExecutions abort above).
-              this.status = 'error';
-              this.log({
-                level: 'error',
-                message: `memory scope "${workStep.name}": ${err instanceof MemoryFileError ? err.message : String(err)}`,
-              });
-              this.emit();
-              break;
-            }
-          }
-          stageTasks = decomposeTasks(stepFiles, this.nextAgentId, stepIdx, workStep.name);
-          if (workStep.scope === 'memory' && stepFiles.length === 0) {
-            // Missing/empty memory file resolves to ZERO tasks (not one
-            // whole-project task — that would silently widen the blast
-            // radius the producer chose). The stage completes empty and the
-            // merge card is skipped, mirroring "no agent commits".
-            stageTasks = [];
-          }
-          this.nextAgentId += stageTasks.length;
-          for (const task of stageTasks) {
-            if (memoryHints) task.hint = memoryHints.get(task.files[0] ?? '');
-            task.branchName = agentBranchName(runId, task.agentId);
-            task.worktreePath = agentWorktreePath(this.preflight.repoRoot, runId, task.agentId);
-            this.agents.set(task.agentId, this.initialAgentStatus(task));
-          }
-          this.totalTasksAcrossStages += stageTasks.length;
+          const prep = this.prepareStageTasks(workStep, stepIdx, runId);
+          if (prep.fatal) break;
+          stageTasks = prep.tasks;
         }
 
         this.log({
@@ -854,54 +746,12 @@ export class Orchestrator {
         });
         this.emit();
 
-        await this.executeTaskPool(stageTasks, workStep);
+        await this.executeTaskPool(stageTasks);
 
         if (this.aborted) break;
 
-        // Stage integration
-        this.status = 'integrating';
-        this.upsertStageIntegration(visitIndex, { phase: 'merging', startedAt: Date.now() });
-        const merged = await this.runStageIntegration(stageTasks, visitIndex);
-        if (!merged && !this.continueOnConflict) {
-          this.status = 'error';
-          this.log({ level: 'error', message: 'stage integration failed (conflicts unresolved)' });
-          traceEntry.finishedAt = Date.now();
-          this.emit();
-          break;
-        }
-
-        // Update integration HEAD ref (worktree never rewinds — loops just
-        // re-run on top of current HEAD, accumulating commits).
-        const previousBaseRef = this.stageBaseRef;
-        try {
-          this.stageBaseRef = await this.worktreeManager.getGitClient().getHead(integration.worktreePath);
-          this.manifest.stageBaseCommits!.push(this.stageBaseRef);
-          traceEntry.commitAfter = this.stageBaseRef;
-        } catch (err) {
-          this.status = 'error';
-          this.log({
-            level: 'error',
-            message: `cannot read integration HEAD after step ${visitIndex} ("${workStep.name}"): ${err instanceof Error ? err.message : String(err)}. Next step cannot branch from a known-good base; aborting run.`,
-          });
-          traceEntry.finishedAt = Date.now();
-          this.emit();
-          break;
-        }
-        traceEntry.finishedAt = Date.now();
-        dlog('orch', 'step_advance', {
-          visitIndex,
-          stepName: workStep.name,
-          runs,
-          previousBaseRef,
-          newBaseRef: this.stageBaseRef,
-          stepTaskCount: stageTasks.length,
-        });
-        this.log({
-          level: 'info',
-          message: `step ${visitIndex} "${workStep.name}" done; next branches from ${this.stageBaseRef.slice(0, 8)} (was ${previousBaseRef.slice(0, 8)})`,
-        });
-        this.status = 'running';
-        this.emit();
+        const mergedOk = await this.mergeStepVisit(workStep, visitIndex, runs, stageTasks, integration, traceEntry);
+        if (!mergedOk) break;
 
         // Resolve next step: explicit `next` override > linear next > end.
         if (workStep.next !== undefined) {
@@ -1043,7 +893,7 @@ export class Orchestrator {
 
   // --- Worker pool ---
 
-  private async executeTaskPool(tasks: AgentTask[], step: PromptStep): Promise<void> {
+  private async executeTaskPool(tasks: AgentTask[]): Promise<void> {
     this.pendingTasks = [...tasks];
 
     while (
@@ -1092,7 +942,7 @@ export class Orchestrator {
         // factory shape, or getGitClient() blowing up). Without bumping
         // completedTasks and clearing every queue here, the pool's poll loop
         // could otherwise see a "ghost" task forever and never exit.
-        this.spawnAndRun(task, step).catch((err) => {
+        this.spawnAndRun(task).catch((err) => {
           this.spawningIds.delete(task.agentId);
           this.activeAgents.delete(task.agentId);
           this.finalizingIds.delete(task.agentId);
@@ -1121,7 +971,17 @@ export class Orchestrator {
     }
   }
 
-  private async spawnAndRun(task: AgentTask, step: PromptStep): Promise<void> {
+  private async spawnAndRun(task: AgentTask): Promise<void> {
+    // In wave (DAG) mode, tasks of SEVERAL steps share one pool — the
+    // owning step is resolved from the task itself (names are unique by
+    // topology validation). A miss is an internal bug: the throw lands in
+    // executeTaskPool's outer .catch safety net and errors the card.
+    const step = this.pipeline.steps.find(
+      (s): s is PromptStep => !isCheckStep(s) && s.name === task.stageName,
+    );
+    if (!step) {
+      throw new Error(`internal: task ${task.agentId} references unknown step "${task.stageName}"`);
+    }
     const maxRetries = this.pipeline.maxRetries ?? DEFAULT_MAX_RETRIES;
     const totalAttempts = 1 + maxRetries;
     const timeoutMs = computeCardTimeoutMs(task, this.pipeline);
@@ -1693,6 +1553,391 @@ export class Orchestrator {
         break;
     }
     this.emit();
+  }
+
+  // --- Step-visit bodies (shared by the legacy cursor and DAG waves) ---
+
+  /**
+   * Decompose a work step into tasks: memory resolution (filesFrom read
+   * from the integration worktree), agent-id/branch/worktree allocation and
+   * kanban card registration. `fatal: true` means the run was already moved
+   * to error state (corrupt memory file) and the caller must stop.
+   */
+  private prepareStageTasks(
+    workStep: WorkStep,
+    stepIdx: number,
+    runId: string,
+  ): { tasks: AgentTask[]; fatal: boolean } {
+    let stepFiles = workStep.files;
+    let memoryHints: Map<string, string> | undefined;
+    if (workStep.scope === 'memory' && workStep.files.length === 0) {
+      // Resolve the file list the producing step left in the merged
+      // integration state. Read on EVERY visit so check-loop rewrites
+      // of the memory file take effect. (A non-empty workStep.files
+      // here means a run-config override won.)
+      try {
+        const resolved = resolveMemoryFiles(
+          workStep.filesFrom!,
+          this.manifest!.integrationWorktreePath,
+          workStep.maxFiles,
+        );
+        for (const warning of resolved.warnings) {
+          this.log({ level: 'warn', message: `memory scope "${workStep.name}": ${warning}` });
+        }
+        stepFiles = resolved.files;
+        memoryHints = resolved.hints;
+        this.log({
+          level: 'info',
+          message: `memory scope "${workStep.name}": ${stepFiles.length} task(s) from ${workStep.filesFrom}`,
+        });
+      } catch (err) {
+        // Corrupt memory file: never legitimate — fail the run loudly.
+        this.status = 'error';
+        this.log({
+          level: 'error',
+          message: `memory scope "${workStep.name}": ${err instanceof MemoryFileError ? err.message : String(err)}`,
+        });
+        this.emit();
+        return { tasks: [], fatal: true };
+      }
+    }
+    let tasks = decomposeTasks(stepFiles, this.nextAgentId, stepIdx, workStep.name);
+    if (workStep.scope === 'memory' && stepFiles.length === 0) {
+      // Missing/empty memory file resolves to ZERO tasks (not one
+      // whole-project task — that would silently widen the blast
+      // radius the producer chose). The stage completes empty and the
+      // merge card is skipped, mirroring "no agent commits".
+      tasks = [];
+    }
+    this.nextAgentId += tasks.length;
+    for (const task of tasks) {
+      if (memoryHints) task.hint = memoryHints.get(task.files[0] ?? '');
+      task.branchName = agentBranchName(runId, task.agentId);
+      task.worktreePath = agentWorktreePath(this.preflight!.repoRoot, runId, task.agentId);
+      this.agents.set(task.agentId, this.initialAgentStatus(task));
+    }
+    this.totalTasksAcrossStages += tasks.length;
+    return { tasks, fatal: false };
+  }
+
+  /**
+   * One CheckStep visit: maxRuns fallback or live judge in the integration
+   * worktree. Pushes/updates the judge card + trace and returns the chosen
+   * outcome's nextStepName (legacy mode sets the cursor to it; DAG mode
+   * treats it as an activation edge).
+   */
+  private async runCheckVisit(
+    step: CheckStep,
+    stepIdx: number,
+    visitIndex: number,
+    runs: number,
+    integration: { worktreePath: string; branchName: string },
+    runId: string,
+    traceEntry: ExecutionTraceEntry,
+  ): Promise<string> {
+    const judgeModelId = step.modelId ?? this.config.modelId;
+    const maxRuns = step.maxRuns;
+    if (maxRuns !== undefined && runs > maxRuns) {
+      const fallback = step.outcomes.find((o) => o.default) ?? step.outcomes[0]!;
+      this.log({
+        level: 'warn',
+        message: `check "${step.name}" hit maxRuns=${maxRuns}; using default outcome "${fallback.label}"`,
+      });
+      // Completed judge card so the forced default is visible on the
+      // board (DONE column) rather than the check silently skipping.
+      this.checkRuns.push({
+        visitIndex,
+        stepIndex: stepIdx,
+        stepName: step.name,
+        runs,
+        maxRuns,
+        phase: 'done',
+        modelId: judgeModelId,
+        condition: step.condition,
+        outcomeLabel: fallback.label,
+        nextStepName: fallback.nextStepName,
+        fromJudge: false,
+        reason: `maxRuns=${maxRuns} reached`,
+        startedAt: Date.now(),
+        finishedAt: Date.now(),
+      });
+      traceEntry.outcomeLabel = fallback.label;
+      traceEntry.nextStepName = fallback.nextStepName;
+      traceEntry.finishedAt = Date.now();
+      return fallback.nextStepName;
+    }
+
+    this.log({
+      level: 'info',
+      message: `=== check ${visitIndex}: ${step.name} (run ${runs}${maxRuns ? `/${maxRuns}` : ''})`,
+    });
+    // Judge card — DOING column while the judge deliberates.
+    this.checkRuns.push({
+      visitIndex,
+      stepIndex: stepIdx,
+      stepName: step.name,
+      runs,
+      maxRuns,
+      phase: 'judging',
+      modelId: judgeModelId,
+      condition: step.condition,
+      startedAt: Date.now(),
+    });
+    this.emit();
+
+    const result = await evaluateCheckStep({
+      step,
+      runs,
+      repoRoot: this.preflight!.repoRoot,
+      integrationWorktreePath: integration.worktreePath,
+      integrationBranch: integration.branchName,
+      runId,
+      config: this.config,
+      factory: this.conflictResolverFactory ?? this.agentFactory,
+      onEvent: (agentId, event) => {
+        if (event.type === 'log') {
+          this.log({ level: event.level ?? 'info', message: event.message, agentId });
+          this.upsertCheckRun(visitIndex, { lastLog: event.message });
+        } else if (event.type === 'error') {
+          this.log({ level: 'error', message: event.message, agentId });
+          this.upsertCheckRun(visitIndex, { lastLog: event.message });
+        }
+      },
+    });
+    this.upsertCheckRun(visitIndex, {
+      phase: 'done',
+      condition: result.resolvedCondition,
+      outcomeLabel: result.label,
+      nextStepName: result.nextStepName,
+      fromJudge: result.fromJudge,
+      reason: result.reason,
+      finishedAt: Date.now(),
+    });
+    traceEntry.outcomeLabel = result.label;
+    traceEntry.nextStepName = result.nextStepName;
+    traceEntry.resolvedCondition = result.resolvedCondition;
+    traceEntry.finishedAt = Date.now();
+    this.log({
+      level: 'info',
+      message: `check "${step.name}" → ${result.label}${result.fromJudge ? '' : ' (default)'} → ${result.nextStepName}`,
+    });
+    return result.nextStepName;
+  }
+
+  /**
+   * The integration phase of one work-step visit: serial merge into the
+   * integration worktree + HEAD ref update. Returns false when the run was
+   * moved to error state (caller stops).
+   */
+  private async mergeStepVisit(
+    workStep: WorkStep,
+    visitIndex: number,
+    runs: number,
+    stageTasks: AgentTask[],
+    integration: { worktreePath: string },
+    traceEntry: ExecutionTraceEntry,
+  ): Promise<boolean> {
+    this.status = 'integrating';
+    this.upsertStageIntegration(visitIndex, { phase: 'merging', startedAt: Date.now() });
+    const merged = await this.runStageIntegration(stageTasks, visitIndex);
+    if (!merged && !this.continueOnConflict) {
+      this.status = 'error';
+      this.log({ level: 'error', message: 'stage integration failed (conflicts unresolved)' });
+      traceEntry.finishedAt = Date.now();
+      this.emit();
+      return false;
+    }
+
+    // Update integration HEAD ref (worktree never rewinds — loops just
+    // re-run on top of current HEAD, accumulating commits).
+    const previousBaseRef = this.stageBaseRef;
+    try {
+      this.stageBaseRef = await this.worktreeManager!.getGitClient().getHead(integration.worktreePath);
+      this.manifest!.stageBaseCommits!.push(this.stageBaseRef);
+      traceEntry.commitAfter = this.stageBaseRef;
+    } catch (err) {
+      this.status = 'error';
+      this.log({
+        level: 'error',
+        message: `cannot read integration HEAD after step ${visitIndex} ("${workStep.name}"): ${err instanceof Error ? err.message : String(err)}. Next step cannot branch from a known-good base; aborting run.`,
+      });
+      traceEntry.finishedAt = Date.now();
+      this.emit();
+      return false;
+    }
+    traceEntry.finishedAt = Date.now();
+    dlog('orch', 'step_advance', {
+      visitIndex,
+      stepName: workStep.name,
+      runs,
+      previousBaseRef,
+      newBaseRef: this.stageBaseRef,
+      stepTaskCount: stageTasks.length,
+    });
+    this.log({
+      level: 'info',
+      message: `step ${visitIndex} "${workStep.name}" done; next branches from ${this.stageBaseRef.slice(0, 8)} (was ${previousBaseRef.slice(0, 8)})`,
+    });
+    this.status = 'running';
+    this.emit();
+    return true;
+  }
+
+  /**
+   * DAG (wave) executor — BSP supersteps. Each wave runs every pending step
+   * whose effective deps are done: their tasks share ONE pool, then merge
+   * sequentially in ARRAY ORDER (deterministic: composition and merge order
+   * derive from the graph + array, never from timing). Ready checks run as
+   * singleton waves; check outcomes and work `next` act as ACTIVATION edges
+   * that re-pend their target plus its downstream cone.
+   */
+  private async runDagWaves(args: {
+    runId: string;
+    integration: { worktreePath: string; branchName: string };
+    tasksByStepName: Map<string, AgentTask[]>;
+    stepIndexByName: Map<string, number>;
+    maxNodeExecutions: number;
+  }): Promise<void> {
+    const { runId, integration, tasksByStepName, stepIndexByName, maxNodeExecutions } = args;
+    const steps = this.pipeline.steps;
+    const done = new Set<string>();
+    const pending = new Set(steps.map((s) => s.name));
+    let visitIndex = 0;
+    let wave = 0;
+
+    const activate = (target: string): void => {
+      if (!stepIndexByName.has(target)) {
+        this.log({ level: 'warn', message: `activation target "${target}" is not a step; ignoring` });
+        return;
+      }
+      for (const name of [target, ...descendantsOf(steps, target)]) {
+        done.delete(name);
+        pending.add(name);
+      }
+    };
+
+    while (pending.size > 0 && !this.aborted) {
+      const ready = computeWave(steps, done, pending);
+      if (ready.length === 0) {
+        this.log({
+          level: 'warn',
+          message: `no runnable step remains; skipping: ${[...pending].join(', ')}`,
+        });
+        break;
+      }
+      if (visitIndex + ready.length > maxNodeExecutions) {
+        this.status = 'error';
+        this.log({
+          level: 'error',
+          message: `pipeline exceeded maxNodeExecutions=${maxNodeExecutions}; aborting to prevent runaway loop`,
+        });
+        this.emit();
+        return;
+      }
+      wave += 1;
+      this.currentWave = wave;
+
+      const first = ready[0]!;
+      if (isCheckStep(first)) {
+        const stepIdx = stepIndexByName.get(first.name)!;
+        visitIndex += 1;
+        const runs = (this.runsByStep.get(first.name) ?? 0) + 1;
+        this.runsByStep.set(first.name, runs);
+        this.currentStage = visitIndex;
+        const traceEntry: ExecutionTraceEntry = {
+          visitIndex,
+          stepName: first.name,
+          stepType: 'check',
+          runs,
+          startedAt: Date.now(),
+        };
+        this.executionTrace.push(traceEntry);
+        const next = await this.runCheckVisit(
+          first, stepIdx, visitIndex, runs, integration, runId, traceEntry,
+        );
+        pending.delete(first.name);
+        done.add(first.name);
+        activate(next);
+        this.emit();
+        continue;
+      }
+
+      // Work wave: prepare every ready step, run ONE shared pool, then
+      // merge each step sequentially in array order.
+      interface WavePrep {
+        step: WorkStep;
+        stepIdx: number;
+        visitIndex: number;
+        runs: number;
+        tasks: AgentTask[];
+        traceEntry: ExecutionTraceEntry;
+      }
+      const preps: WavePrep[] = [];
+      let fatal = false;
+      for (const s of ready) {
+        const workStep = s as WorkStep;
+        const stepIdx = stepIndexByName.get(workStep.name)!;
+        visitIndex += 1;
+        const runs = (this.runsByStep.get(workStep.name) ?? 0) + 1;
+        this.runsByStep.set(workStep.name, runs);
+        this.currentStage = visitIndex;
+        const traceEntry: ExecutionTraceEntry = {
+          visitIndex,
+          stepName: workStep.name,
+          stepType: 'work',
+          runs,
+          startedAt: Date.now(),
+        };
+        this.executionTrace.push(traceEntry);
+        let tasks = runs === 1 ? tasksByStepName.get(workStep.name) : undefined;
+        if (!tasks) {
+          const prep = this.prepareStageTasks(workStep, stepIdx, runId);
+          if (prep.fatal) {
+            fatal = true;
+            break;
+          }
+          tasks = prep.tasks;
+        }
+        this.stageIntegrations.push({
+          visitIndex,
+          stepIndex: stepIdx,
+          stageName: workStep.name,
+          runs,
+          phase: 'pending',
+          modelId: this.pipeline.integrationModelId ?? this.config.modelId,
+          resolverUsed: false,
+          branchesMerged: [],
+          branchesPending: [],
+          conflicts: [],
+        });
+        preps.push({ step: workStep, stepIdx, visitIndex, runs, tasks, traceEntry });
+      }
+      if (fatal) return;
+
+      const union = preps.flatMap((p) => p.tasks);
+      this.log({
+        level: 'info',
+        message: `=== wave ${wave}: ${preps.map((p) => `"${p.step.name}"`).join(' + ')} — ${union.length} task(s), one pool`,
+      });
+      this.emit();
+
+      await this.executeTaskPool(union);
+      if (this.aborted) return;
+
+      for (const p of preps) {
+        const ok = await this.mergeStepVisit(
+          p.step, p.visitIndex, p.runs, p.tasks, integration, p.traceEntry,
+        );
+        if (!ok) return;
+        pending.delete(p.step.name);
+        done.add(p.step.name);
+        if (p.step.next !== undefined) {
+          // In DAG mode `next` is an activation edge (loops), never a skip.
+          activate(p.step.next);
+        }
+      }
+      this.emit();
+    }
   }
 
   // --- Helpers ---
