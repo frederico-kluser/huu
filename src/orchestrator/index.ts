@@ -33,6 +33,7 @@ import { agentBranchName, agentWorktreePath } from '../git/branch-namer.js';
 import { mergeAgentBranches } from '../git/integration-merge.js';
 import { decomposeTasks } from './task-decomposer.js';
 import { resolveMemoryFiles, MemoryFileError } from './memory-files.js';
+import { memoryContract, memoryCapForPath } from '../lib/memory-contract.js';
 import type { AgentEvent, AgentFactory, SpawnedAgent } from './types.js';
 import { generateRunId } from '../lib/run-id.js';
 import { RunLogger, RUN_LOG_DIR } from '../lib/run-logger.js';
@@ -1697,13 +1698,21 @@ export class Orchestrator {
   // --- Helpers ---
 
   private renderPrompt(step: PromptStep, task: AgentTask): string {
-    if (task.files.length === 0) return step.prompt;
-    // `$hint` carries the per-file context a memory-file producer attached
-    // to this path (empty for non-memory tasks) — replaced before `$file`
-    // so a hint containing the literal `$file` can't be re-expanded.
-    return step.prompt
-      .replaceAll('$hint', task.hint ?? '')
-      .replaceAll('$file', task.files[0]!);
+    let prompt = step.prompt;
+    if (task.files.length > 0) {
+      // `$hint` carries the per-file context a memory-file producer attached
+      // to this path (empty for non-memory tasks) — replaced before `$file`
+      // so a hint containing the literal `$file` can't be re-expanded.
+      prompt = prompt.replaceAll('$hint', task.hint ?? '').replaceAll('$file', task.files[0]!);
+    }
+    if (step.produces) {
+      // The producer promised a memory file: append the deterministic
+      // contract (exact path/format/cap) so the pipeline author never
+      // writes that boilerplate — and the cap always matches what the
+      // consuming step will actually enforce.
+      prompt += `\n\n${memoryContract(step.produces, memoryCapForPath(this.pipeline, step.produces))}`;
+    }
+    return prompt;
   }
 
   private buildSystemPromptHint(step: PromptStep, task: AgentTask): string {

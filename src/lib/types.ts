@@ -89,6 +89,14 @@ export interface WorkStep {
    * Defaults to {@link DEFAULT_MEMORY_MAX_FILES}.
    */
   maxFiles?: number;
+  /**
+   * Path of the huu-memory-v1 file this step PROMISES to write for a later
+   * `memory`-scope step. When set, huu appends a deterministic MEMORY
+   * CONTRACT block (exact path + format + cap + hint rule) to this step's
+   * prompt at run time — the pipeline author never writes that boilerplate.
+   * Optional: a producer prompt may also write the file manually.
+   */
+  produces?: string;
   /** Override the next step. Must match another step's `name`. Undefined = next in array. */
   next?: string;
 }

@@ -248,6 +248,7 @@ The `scope` field determines how a step is decomposed into parallel tasks:
 ```
 
 - **Use when**: an earlier step discovers the work units (scan, recon, diff, ranking) and the fan-out must follow that discovery with no human file-picking.
+- **`produces` (the producer side — recommended)**: declare `"produces": "<same path>"` on the EARLIER step and huu appends the exact **MEMORY CONTRACT** (path + JSON format + the consumer's cap + the hint rule) to that step's prompt at run time — the author never writes format boilerplate, and the saved JSON stays clean. Two steps producing the same path is a topology error. A producer prompt may still write the file manually (produces is optional).
 - Deep-dive guide (patterns, interfaces, troubleshooting): [memory-scope.md](memory-scope.md) · [pt-BR](memory-scope.pt-BR.md).
 
 ### Decision guide

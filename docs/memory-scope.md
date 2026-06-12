@@ -12,14 +12,33 @@ The `memory` scope adds the third and most powerful one: **an earlier step
 writes a `huu-memory-v1` JSON listing relative paths, and the consuming step
 fans out over them at run time** — the pipeline decides its own work.
 
-## The two sides of the contract
+## You don't need to know the format — declare the link (`produces`)
 
-There is no special "producer step type". The contract has two halves,
-configured in two different places, linked only by the file path:
+The recommended way to wire a memory pair is **declarative**: the producer
+step sets `"produces": "<path>"` and the consumer sets `filesFrom` to the
+same path. At run time huu **appends the MEMORY CONTRACT to the producer's
+prompt** — the exact path, the JSON format, the cap the consumer will
+enforce, and the hint rule. You never paste format boilerplate into a
+prompt, and the saved pipeline JSON stays clean:
+
+```json
+{ "name": "1. Scan", "prompt": "Find risky files; explain each pick in one line (it becomes the hint).", "files": [], "scope": "project", "produces": ".huu/scan-list.json" },
+{ "name": "2. Fix $file", "prompt": "Fix the issue in $file. Scanner's note: $hint", "files": [], "scope": "memory", "filesFrom": ".huu/scan-list.json" }
+```
+
+In the TUI you don't even type the path: on a memory step, the Files field
+opens a **link picker** listing every `produces` declared by earlier steps —
+or lets you pick an earlier step and huu wires BOTH sides (auto-named path)
+in one gesture. Two steps producing the same path is rejected at load time.
+
+## The two sides of the contract (manual mode still works)
+
+`produces` is optional — a producer prompt may also write the file by hand.
+The contract has two halves, linked only by the file path:
 
 | Side | Where it's configured | What you do |
 |---|---|---|
-| **Producer** (any earlier step) | In its **prompt** | Instruct the agent to write the memory file at an agreed path, in the exact format below |
+| **Producer** (any earlier step) | `produces: "<path>"` (recommended — contract auto-appended) OR instructions in its **prompt** | Promise/write the memory file at an agreed path |
 | **Consumer** | In the **step fields** | `scope: "memory"` + `filesFrom: "<same path>"` (+ optional `maxFiles`) |
 
 huu never checks that "someone promised to write the file" — it checks at

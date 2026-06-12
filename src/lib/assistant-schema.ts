@@ -20,6 +20,8 @@ export const PipelineStepSchema = z.object({
   scope: StepScopeSchema,
   /** memory scope only: repo-relative path of the huu-memory-v1 file an earlier step writes. */
   filesFrom: z.string().min(1).optional(),
+  /** Producer side of a memory link: huu appends the format contract to this prompt at run time. */
+  produces: z.string().min(1).optional(),
   modelId: z.string().min(1).optional(),
 }).refine((s) => s.scope !== 'memory' || Boolean(s.filesFrom), {
   message: 'scope "memory" requires filesFrom (path of the memory file an earlier step writes)',

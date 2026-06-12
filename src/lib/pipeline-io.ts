@@ -33,6 +33,8 @@ const WorkStepSchema = z.object({
   filesFrom: z.string().min(1).optional(),
   /** memory scope: fan-out width cap (default DEFAULT_MEMORY_MAX_FILES). */
   maxFiles: z.number().int().positive().max(100).optional(),
+  /** Path of the huu-memory-v1 file this step promises to write (contract auto-appended at run time). */
+  produces: z.string().min(1).optional(),
   next: z.string().min(1).optional(),
 });
 
@@ -125,6 +127,22 @@ export function validateTopology(
   });
 
   const exists = (name: string): boolean => names.has(name);
+
+  // Two steps promising to write the SAME memory file would race in the
+  // integration worktree — the later merge silently wins. Reject upfront.
+  const producesByPath = new Map<string, number>();
+  pipeline.steps.forEach((step, i) => {
+    if (step.type === 'check' || step.produces === undefined) return;
+    const prev = producesByPath.get(step.produces);
+    if (prev !== undefined) {
+      addError(
+        `steps "${pipeline.steps[prev]!.name}" and "${step.name}" both declare produces "${step.produces}" — each memory file needs exactly one producer`,
+        ['steps', i, 'produces'],
+      );
+    } else {
+      producesByPath.set(step.produces, i);
+    }
+  });
 
   pipeline.steps.forEach((step, i) => {
     if (step.type === 'check') {

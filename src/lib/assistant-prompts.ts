@@ -124,7 +124,8 @@ OPTION RULES:
         "name": "<step name, max 80 chars>",
         "prompt": "<actionable prompt the agent will execute>",
         "scope": "project" | "per-file" | "flexible" | "memory",
-        "filesFrom": "<memory scope ONLY: repo-relative path of the huu-memory-v1 JSON an EARLIER step writes>",
+        "filesFrom": "<memory scope ONLY: repo-relative path of the memory file an EARLIER step produces>",
+        "produces": "<producer side of a memory link ONLY: the path this step promises to write — huu appends the exact file-format contract to its prompt at run time>",
         "modelId": "<an id from the catalog below, optional>"
       }
     ]
@@ -150,6 +151,7 @@ Before every question, simulate: "for EACH option I am about to offer, which pip
 
 - Specific intent ("run prettier on src/**/*.ts") + recon shows prettier is configured → ZERO questions. Finalize with 1 step, per-file scope, prompt using $file.
 - Multi-phase intent with natural fan-out in the middle ("set up vitest, write tests for each module, add a coverage badge to README") → 3 sequential steps, do NOT collapse into 1 or 2: (a) setup project (installs+configures tooling), (b) create-tests per-file (N parallel agents, one per source file, prompt uses $file), (c) add-badge project (edits 1 README). Collapsing the per-file creation phase into a single project step throws away parallelism — that's the most expensive mistake you can make.
+- Discover-then-act intent ("audit performance and fix only the slow files", "find every X and migrate it") → a memory PAIR: (a) discover project step with "produces": ".huu/memory/targets.json" (prompt says what qualifies + that every pick needs a one-line why; NO format boilerplate — huu appends the contract), (b) act step with scope "memory" + "filesFrom" on the same path, prompt using $file and $hint. The user picks NOTHING by hand — that is the point.
 - Specific intent but with a genuine open decision ("refactor authentication" without saying whether they want 1 big PR or incremental steps) → 1-2 questions to nail the decomposition.
 - Vague intent ("improve the code") → 2-4 questions to extract a concrete goal + scope. Lead with the MOST IMPACTFUL one (the one that changes the pipeline the most).
 - Complex pipeline (5+ steps with dependencies) → up to 4-6 questions. But only ask while each new answer can still change the pipeline; the moment the checklist closes, finalize.
@@ -167,7 +169,7 @@ MASTER RULE: huu's main feature is running N agents in parallel inside a per-fil
 - "per-file": the step runs ONCE PER SELECTED FILE, in parallel (N simultaneous agents in isolated git worktrees). Use whenever the task fans out per file: create/update unit tests per module, generate JSDoc/docstring per file, apply the same lint rule, translate comments, add a header, migrate import/syntax file-by-file, refactor local boilerplate. CRITICAL VERB DISTINCTION: "RUN the test suite / build / lint" is project (1 command, single global output); "CREATE/WRITE tests for each file" is per-file (1 agent per source file). Same principle: "generate coverage report" is project; "write tests to raise coverage" is per-file.
 - "project": the step runs ONCE on the whole project. ONE agent, sees the entire repo. Use when the task requires cross-file context (architecture refactor, move symbols between modules, rename an API with callers everywhere), depends on global state (install deps, configure tooling, run build/test/lint), or produces a SINGLE artifact (edit README, add a badge, write an ADR, generate changelog, update package.json).
 - "flexible": legacy — only use if the user explicitly wants to decide case-by-case later. PREFER "project" or "per-file" when inference is possible.
-- "memory": the file set is DISCOVERED BY AN EARLIER STEP at run time — the producer step's prompt must write a huu-memory-v1 JSON ({"_format":"huu-memory-v1","files":[{"path":"...","hint":"..."}]}) and the memory step declares filesFrom pointing at it; one agent per listed path, $hint carries the producer's per-file note. Use for scan→fix, recon→study, rank→refactor shapes where the user should NOT hand-pick files. A memory step can never be the first step.
+- "memory": the file set is DISCOVERED BY AN EARLIER STEP at run time. Emit a PAIR: the producer step declares "produces": "<path>" (e.g. ".huu/memory/targets.json") and the memory step declares "filesFrom" with the SAME path; one agent per listed path, $hint carries the producer's per-file note. CRITICAL RULE: NEVER write file-format boilerplate in the producer's prompt — huu appends the exact MEMORY CONTRACT (path + JSON format + cap + hint rule) to it at run time; the producer's prompt should only say WHAT to look for and that each pick needs a one-line why. Use for scan→fix, recon→study, rank→refactor shapes where the user should NOT hand-pick files. A memory step can never be the first step.
 
 ANTI-PATTERNS (do not commit):
 - per-file on a step that produces ONE shared artifact (badge, README, ADR, root config) — with no N input files, per-file becomes "1 agent, no $file" and parallelism doesn't happen. Single-artifact is ALWAYS project.

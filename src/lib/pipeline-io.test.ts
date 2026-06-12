@@ -67,6 +67,31 @@ describe('pipeline-io', () => {
     expect(importPipeline(file)).toEqual(original);
   });
 
+  it('round-trips produces and rejects two steps producing the same path', () => {
+    const original: Pipeline = {
+      name: 'with-produces',
+      steps: [
+        { name: 'Scan', prompt: 'find targets', files: [], scope: 'project', produces: '.huu/t.json' },
+        { name: 'Fix', prompt: 'fix $file: $hint', files: [], scope: 'memory', filesFrom: '.huu/t.json' },
+      ],
+    };
+    const file = join(tmp, 'produces.pipeline.json');
+    exportPipeline(original, file);
+    expect(importPipeline(file)).toEqual(original);
+
+    expect(() =>
+      parsePipelineFromJson(
+        JSON.stringify({
+          name: 'dup-produces',
+          steps: [
+            { name: 'A', prompt: 'p', files: [], produces: '.huu/x.json' },
+            { name: 'B', prompt: 'p', files: [], produces: '.huu/x.json' },
+          ],
+        }),
+      ),
+    ).toThrow(/both declare produces/);
+  });
+
   it('rejects memory scope without filesFrom', () => {
     expect(() =>
       parsePipelineFromJson(

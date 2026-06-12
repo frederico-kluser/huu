@@ -33,15 +33,18 @@ function makeMemoryFlowFactory(opts: {
   factory: AgentFactory;
   consumerTasks: AgentTask[];
   consumerPrompts: string[];
+  producerPrompts: string[];
 } {
   const consumerTasks: AgentTask[] = [];
   const consumerPrompts: string[] = [];
+  const producerPrompts: string[] = [];
   const factory: AgentFactory = async (task, _config, _hint, cwd, onEvent) => ({
     agentId: task.agentId,
     task,
     async prompt(text?: string): Promise<void> {
       onEvent({ type: 'state_change', state: 'streaming' });
       if (task.stageName === 'one: produce list') {
+        producerPrompts.push(text ?? '');
         if (opts.producerWrites === 'valid') {
           mkdirSync(join(cwd, '.huu'), { recursive: true });
           writeFileSync(
@@ -75,14 +78,21 @@ function makeMemoryFlowFactory(opts: {
     async abort(): Promise<void> {},
     async dispose(): Promise<void> {},
   });
-  return { factory, consumerTasks, consumerPrompts };
+  return { factory, consumerTasks, consumerPrompts, producerPrompts };
 }
 
 function memoryPipeline(): Pipeline {
   return {
     name: 'memory-flow',
     steps: [
-      { type: 'work', name: 'one: produce list', prompt: 'write the scan list', files: [], scope: 'project' },
+      {
+        type: 'work',
+        name: 'one: produce list',
+        prompt: 'write the scan list',
+        files: [],
+        scope: 'project',
+        produces: '.huu/scan.json',
+      },
       {
         type: 'work',
         name: 'two: consume $file',
@@ -114,7 +124,7 @@ describe('memory scope (filesFrom fan-out)', () => {
   it(
     'fans out one agent per listed file, reading the list from the integration worktree, with $hint substituted',
     async () => {
-      const { factory, consumerTasks, consumerPrompts } = makeMemoryFlowFactory({
+      const { factory, consumerTasks, consumerPrompts, producerPrompts } = makeMemoryFlowFactory({
         producerWrites: 'valid',
       });
       const orch = new Orchestrator(
@@ -138,6 +148,13 @@ describe('memory scope (filesFrom fan-out)', () => {
       expect(consumerPrompts[0]).toContain('work on a.ts');
       expect(consumerPrompts[1]).toContain('work on b.ts');
       expect(consumerPrompts[1]).not.toContain('$hint');
+      // The producer declared `produces` — huu appended the MEMORY CONTRACT
+      // (exact path, format, the default cap) to its prompt at run time.
+      expect(producerPrompts[0]).toContain('write the scan list');
+      expect(producerPrompts[0]).toContain('MEMORY CONTRACT');
+      expect(producerPrompts[0]).toContain('`.huu/scan.json`');
+      expect(producerPrompts[0]).toContain('huu-memory-v1');
+      expect(producerPrompts[0]).toContain('at most 40 files');
     },
     60_000,
   );

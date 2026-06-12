@@ -106,11 +106,8 @@ Schema per entry (the contract for the WHOLE pipeline):
 \`\`\`
 Seed it with 5-10 project-level findings (path: null) covering: identity, build/test workflow, layering rule, the strongest conventions, and the most surprising gotcha from recon.
 
-=== STEP 4.5 — Write .huu/knowledge/study-list.json (YOU choose the study set) ===
-Pick the 12-27 files that CARRY the architecture: entry points, core modules, the files everything imports — not leaf utilities, not generated/vendored code. Write them as huu-memory-v1, one entry per file WITH a hint telling the study agent what to look for there:
-\`\`\`json
-{ "_format": "huu-memory-v1", "files": [ { "path": "<relative path>", "hint": "<one line: why this file matters / what to extract from it>", "priority": 10 } ] }
-\`\`\`
+=== STEP 4.5 — Choose the study set (the MEMORY CONTRACT below tells you the file and format) ===
+Pick the 12-27 files that CARRY the architecture: entry points, core modules, the files everything imports — not leaf utilities, not generated/vendored code. Write them to the memory file specified in the MEMORY CONTRACT appended at the end of this prompt, one entry per file WITH a hint telling the study agent what to look for there (why this file matters / what to extract from it).
 Step 2 fans out ONE agent per entry and your hint becomes that agent's \`$hint\`. The quality of this list bounds the quality of the whole knowledge base — choose deliberately, not exhaustively.
 
 === STEP 5 — Stamp the literal templates (copy VERBATIM — do not improvise) ===
@@ -309,11 +306,8 @@ name: <name> · type: <knowledge|task> · description draft: <from topics.json>
 ## 6. Self-check (the writer must verify before finishing)
 frontmatter parses · name == directory · regex passes · description 1-1024 · body < 500 lines · every fact carries a path
 
-=== STEP 3 — Write .huu/knowledge/dossier-list.json (huu-memory-v1) ===
-One entry per dossier — step 5 fans out ONE skill-writer agent per entry, and your hint becomes its \`$hint\`:
-\`\`\`json
-{ "_format": "huu-memory-v1", "files": [ { "path": ".huu/knowledge/dossiers/<name>.md", "hint": "<name> (<knowledge|task>)" } ] }
-\`\`\`
+=== STEP 3 — List the dossiers (the MEMORY CONTRACT below tells you the file and format) ===
+Write one entry per dossier to the memory file specified in the MEMORY CONTRACT appended at the end of this prompt. The path of each entry is the dossier file itself (.huu/knowledge/dossiers/<name>.md) and the hint is "<name> (<knowledge|task>)". Step 5 fans out ONE skill-writer agent per entry, and your hint becomes its \`$hint\`.
 
 === SELF-CHECK before finishing ===
 One dossier per topic, none missing; every dossier has the 6 numbered sections (templates section includes BOTH skill-template and learnings-header); dossier-list.json parses as huu-memory-v1 and lists every dossier exactly once.
@@ -435,6 +429,9 @@ export function getDefaultPipeline(): Pipeline {
         prompt: STEP1_PROMPT,
         files: [],
         scope: 'project',
+        // huu appends the study-list MEMORY CONTRACT to this prompt at run
+        // time (exact path + format + the cap step 2 enforces).
+        produces: '.huu/knowledge/study-list.json',
       },
       {
         type: 'work',
@@ -459,6 +456,8 @@ export function getDefaultPipeline(): Pipeline {
         prompt: STEP4_PROMPT,
         files: [],
         scope: 'project',
+        // Contract for the dossier fan-out, appended at run time.
+        produces: '.huu/knowledge/dossier-list.json',
       },
       {
         type: 'work',

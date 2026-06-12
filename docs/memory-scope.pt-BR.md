@@ -14,14 +14,34 @@ Os steps do huu tinham duas formas de receber arquivos: o projeto inteiro
 etapa consumidora fan-outa sobre eles em tempo de execução** — o pipeline
 decide o próprio trabalho.
 
-## Os dois lados do contrato
+## Você NÃO precisa saber o formato — declare o elo (`produces`)
 
-Não existe "tipo especial de etapa produtora". O contrato tem duas metades,
-configuradas em lugares diferentes, ligadas apenas pelo path do arquivo:
+O jeito recomendado de amarrar um par de memória é **declarativo**: a etapa
+produtora define `"produces": "<path>"` e a consumidora aponta `filesFrom`
+para o mesmo path. Em runtime o huu **appenda o MEMORY CONTRACT ao prompt da
+produtora** — o path exato, o formato JSON, o cap que a consumidora vai
+impor e a regra do hint. Você nunca cola boilerplate de formato num prompt,
+e o JSON salvo fica limpo:
+
+```json
+{ "name": "1. Scan", "prompt": "Encontre arquivos com risco; explique cada escolha em 1 linha (vira o hint).", "files": [], "scope": "project", "produces": ".huu/scan-list.json" },
+{ "name": "2. Corrigir $file", "prompt": "Corrija o problema em $file. Nota do scanner: $hint", "files": [], "scope": "memory", "filesFrom": ".huu/scan-list.json" }
+```
+
+Na TUI você nem digita o path: numa etapa memory, o campo Files abre um
+**link picker** listando todos os `produces` declarados por etapas
+anteriores — ou deixa você escolher uma etapa anterior e o huu amarra OS
+DOIS lados (path auto-nomeado) num gesto só. Duas etapas produzindo o mesmo
+path são rejeitadas no load.
+
+## Os dois lados do contrato (o modo manual continua valendo)
+
+`produces` é opcional — um prompt produtor também pode escrever o arquivo na
+mão. O contrato tem duas metades, ligadas apenas pelo path do arquivo:
 
 | Lado | Onde se configura | O que você faz |
 |---|---|---|
-| **Produtora** (qualquer etapa anterior) | No **prompt** | Instrui o agente a escrever o arquivo de memória num path combinado, no formato exato abaixo |
+| **Produtora** (qualquer etapa anterior) | `produces: "<path>"` (recomendado — contrato auto-appendado) OU instruções no **prompt** | Promete/escreve o arquivo de memória num path combinado |
 | **Consumidora** | Nos **campos do step** | `scope: "memory"` + `filesFrom: "<mesmo path>"` (+ `maxFiles` opcional) |
 
 O huu nunca valida que "alguém prometeu escrever o arquivo" — ele valida na
