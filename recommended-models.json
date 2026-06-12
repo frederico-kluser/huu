@@ -1,6 +1,33 @@
 {
   "models": [
     {
+      "id": "deepseek/deepseek-v4-pro",
+      "label": "DeepSeek V4 Pro",
+      "inputPrice": 0.435,
+      "outputPrice": 0.87,
+      "description": "★ planejamento — o melhor custo-benefício para o Pipeline Architect (esboços paralelos + seleção). Planejar é alavancagem: o plano guia o run inteiro.",
+      "bestFor": ["planning", "reasoning"],
+      "tier": "planning"
+    },
+    {
+      "id": "openai/gpt-5.4",
+      "label": "GPT-5.4",
+      "inputPrice": 2.5,
+      "outputPrice": 15.0,
+      "description": "★ planejamento — frontier para arquitetar pipelines complexas no Pipeline Architect.",
+      "bestFor": ["planning", "reasoning"],
+      "tier": "planning"
+    },
+    {
+      "id": "anthropic/claude-opus-4.6",
+      "label": "Claude Opus 4.6",
+      "inputPrice": 5.0,
+      "outputPrice": 25.0,
+      "description": "★ planejamento — frontier para arquitetar pipelines complexas no Pipeline Architect.",
+      "bestFor": ["planning", "reasoning"],
+      "tier": "planning"
+    },
+    {
       "id": "minimax/minimax-m2.7",
       "label": "MiniMax M2.7",
       "inputPrice": 0.134,

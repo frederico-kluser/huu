@@ -51,6 +51,85 @@ export type PipelineDraft = z.infer<typeof PipelineDraftSchema>;
 export type PipelineTurn = z.infer<typeof PipelineTurnSchema>;
 export type AssistantTurn = z.infer<typeof AssistantTurnSchema>;
 
+// --- Architect flow (sketch → select → expand → verify) -------------------
+//
+// Research-grounded shapes: parallel DIVERSE sketches (best-of-N beats
+// single-shot), one GENERATIVE selector (LLMs compare better than they
+// score), per-step prompt expansion, and a single mechanically-guided fix.
+
+/** One step of a structural blueprint — `summary` is NOT the final prompt. */
+export const BlueprintStepSchema = z.object({
+  name: z.string().min(1).max(80),
+  type: z.enum(['work', 'check']).default('work'),
+  /** What the step does / verifies, ≤300 chars. The prompt comes later (phase D). */
+  summary: z.string().min(1).max(300),
+  scope: StepScopeSchema.optional(),
+  filesFrom: z.string().min(1).optional(),
+  produces: z.string().min(1).optional(),
+  dependsOn: z.array(z.string().min(1)).optional(),
+  /** check only: natural-language judge condition (objectively checkable). */
+  condition: z.string().min(1).max(500).optional(),
+  /** check only: outcomes; exactly one default=true, pointing FORWARD. */
+  outcomes: z
+    .array(
+      z.object({
+        label: z.string().min(1).max(40),
+        nextStepName: z.string().min(1).max(80),
+        default: z.boolean().optional(),
+      }),
+    )
+    .max(4)
+    .optional(),
+  maxRuns: z.number().int().positive().max(5).optional(),
+  modelId: z.string().min(1).optional(),
+});
+
+/** Phase B: one structural sketch produced under a specific design lens. */
+export const SketchSchema = z.object({
+  lens: z.string().min(1).max(60),
+  rationale: z.string().min(1).max(400),
+  name: z.string().min(1).max(80),
+  steps: z.array(BlueprintStepSchema).min(1).max(20),
+});
+
+/** Phase C: generative selection + light fusion across candidates. */
+export const SelectionSchema = z.object({
+  /** Index of the winning candidate (0 = interviewer baseline when present). */
+  winner: z.number().int().min(0).max(3),
+  reasoning: z.string().min(1).max(600),
+  grafts: z
+    .array(
+      z.object({
+        fromCandidate: z.number().int().min(0).max(3),
+        what: z.string().min(1).max(200),
+      }),
+    )
+    .max(4)
+    .default([]),
+  name: z.string().min(1).max(80),
+  /** The fused blueprint that moves on to prompt expansion. */
+  steps: z.array(BlueprintStepSchema).min(1).max(20),
+});
+
+/** Phase D: the final prompt for ONE work step. */
+export const StepPromptSchema = z.object({
+  prompt: z.string().min(1),
+});
+
+/** Phase E fix: the full corrected pipeline (work prompts included). */
+export const ArchitectPipelineSchema = z.object({
+  name: z.string().min(1).max(80),
+  steps: z
+    .array(BlueprintStepSchema.extend({ prompt: z.string().min(1).optional() }))
+    .min(1)
+    .max(20),
+});
+
+export type BlueprintStep = z.infer<typeof BlueprintStepSchema>;
+export type Sketch = z.infer<typeof SketchSchema>;
+export type Selection = z.infer<typeof SelectionSchema>;
+export type ArchitectPipeline = z.infer<typeof ArchitectPipelineSchema>;
+
 /**
  * The contract requires the LAST option to be a free-text fallback so the user
  * never feels locked into the model's pre-formed choices. The Zod schema can't

@@ -15,6 +15,14 @@ Portuguese, matching the recon prompts). Below is the complete map.
 ## Pipeline assistant
 
 - Model picker is open first — same key map as the global model selector.
+  The chosen model runs the interview AND the **Architect flow** (3 parallel
+  blueprint sketches under different lenses → generative selection against a
+  mechanical rubric → per-step prompts written in parallel → real schema +
+  topology validation, one guided fix at most). Planning is maximum
+  leverage — `planning`-tier models (deepseek-v4-pro, kimi-k2.6, gpt-5.4,
+  claude-opus-4.6) are suggested on screen.
+- After the interview finalizes, the Architect phases stream live; the
+  finished pipeline lands in the editor as usual. `ESC` cancels.
 - On the intent screen: `ENTER` start the interview · `ESC` go back.
 - During recon: `ESC` cancel and return to the intent screen.
 - During an interview question: `1`–`9` select an option; the last option is always a free-text escape hatch.

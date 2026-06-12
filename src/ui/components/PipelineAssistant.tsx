@@ -15,9 +15,10 @@ import {
   buildInitialHumanMessage,
   FORCE_DONE_NUDGE,
 } from '../../lib/assistant-prompts.js';
+import { runArchitect, type ArchitectPhase } from '../../lib/assistant-architect.js';
 import { loadRecommendedModels } from '../../models/catalog.js';
 import type { AssistantTurn, PipelineDraft, QuestionTurn } from '../../lib/assistant-schema.js';
-import type { Pipeline, PromptStep } from '../../lib/types.js';
+import type { Pipeline } from '../../lib/types.js';
 import { ModelSelectorOverlay } from './ModelSelectorOverlay.js';
 import { ProjectRecon } from './ProjectRecon.js';
 import type { ReconAgentResult } from '../../lib/project-recon.js';
@@ -50,6 +51,7 @@ type Stage =
   | { kind: 'asking' }
   | { kind: 'answering'; turn: QuestionTurn }
   | { kind: 'free-text'; turn: QuestionTurn }
+  | { kind: 'architect'; phases: { phase: ArchitectPhase; detail: string }[] }
   | { kind: 'confirm-cancel'; previous: Stage }
   | { kind: 'error'; message: string };
 
@@ -60,17 +62,6 @@ interface ChatTurn {
 
 function turnLabel(turn: QuestionTurn): string {
   return turn.question;
-}
-
-function draftToPipeline(draft: PipelineDraft): Pipeline {
-  const steps: PromptStep[] = draft.steps.map((s) => ({
-    name: s.name,
-    prompt: s.prompt,
-    files: [],
-    scope: s.scope,
-    ...(s.modelId ? { modelId: s.modelId } : {}),
-  }));
-  return { name: draft.name, steps };
 }
 
 export function PipelineAssistant({
@@ -92,6 +83,59 @@ export function PipelineAssistant({
   const messagesRef = useRef<BaseMessage[]>([]);
   const chatRef = useRef<AssistantChat | null>(null);
   const cancelledRef = useRef(false);
+  const reconRef = useRef('');
+
+  // The interview's done-turn is the BASELINE candidate, not the product:
+  // the Architect flow (parallel sketches → generative selection → parallel
+  // prompt expansion → mechanical validation) produces the final pipeline.
+  const launchArchitect = useCallback(
+    (baseline: PipelineDraft): void => {
+      setStage({ kind: 'architect', phases: [] });
+      const transcript = messagesRef.current
+        .map((m) => {
+          const role = m instanceof HumanMessage ? 'user' : m instanceof AIMessage ? 'assistant' : null;
+          if (!role) return null;
+          const text = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+          return `${role}: ${text}`;
+        })
+        .filter((l): l is string => l !== null)
+        .join('\n');
+      void (async () => {
+        try {
+          const result = await runArchitect({
+            apiKey,
+            modelId,
+            llmContext,
+            intent,
+            transcript,
+            reconContext: reconRef.current,
+            baseline,
+            onPhase: (phase, detail) => {
+              if (cancelledRef.current) return;
+              setStage((s) =>
+                s.kind === 'architect'
+                  ? { kind: 'architect', phases: [...s.phases, { phase, detail }] }
+                  : s,
+              );
+            },
+          });
+          if (cancelledRef.current) return;
+          dlog('action', 'PipelineAssistant.architect_complete', {
+            steps: result.pipeline.steps.length,
+            winner: result.meta.winnerLens,
+            retried: result.meta.retried,
+          });
+          onComplete(result.pipeline);
+        } catch (err) {
+          if (cancelledRef.current) return;
+          const message = err instanceof Error ? err.message : String(err);
+          dlog('error', 'PipelineAssistant.architect_failed', { message });
+          setStage({ kind: 'error', message });
+        }
+      })();
+    },
+    [apiKey, modelId, llmContext, intent, onComplete],
+  );
 
   useEffect(() => {
     if (stdout.isTTY) stdout.write(FULL_CLEAR);
@@ -126,10 +170,10 @@ export function PipelineAssistant({
           // Push assistant message as JSON marker so the model can see the
           // synthesis if we ever extend this into a "review pipeline" loop.
           messagesRef.current.push(new AIMessage(JSON.stringify(reply)));
-          dlog('action', 'PipelineAssistant.complete', {
+          dlog('action', 'PipelineAssistant.interview_done', {
             steps: reply.pipeline.steps.length,
           });
-          onComplete(draftToPipeline(reply.pipeline));
+          launchArchitect(reply.pipeline);
           return;
         }
 
@@ -144,7 +188,7 @@ export function PipelineAssistant({
         setStage({ kind: 'error', message });
       }
     },
-    [onComplete, turnsAsked],
+    [launchArchitect, turnsAsked],
   );
 
   const startConversation = useCallback(
@@ -172,7 +216,8 @@ export function PipelineAssistant({
           const reply = await chatRef.current!.invokeStructured(messagesRef.current);
           if (cancelledRef.current) return;
           if (reply.done === true) {
-            onComplete(draftToPipeline(reply.pipeline));
+            messagesRef.current.push(new AIMessage(JSON.stringify(reply)));
+            launchArchitect(reply.pipeline);
             return;
           }
           messagesRef.current.push(new AIMessage(JSON.stringify(reply)));
@@ -187,7 +232,7 @@ export function PipelineAssistant({
         }
       })();
     },
-    [apiKey, onComplete, repoRoot],
+    [apiKey, launchArchitect, repoRoot],
   );
 
   // ProjectRecon owns its own keyboard handler — the parent's must stay quiet
@@ -198,6 +243,7 @@ export function PipelineAssistant({
   // every render. `intent` and `modelId` are frozen by the time we enter recon.
   const handleReconComplete = useCallback(
     ({ markdown }: { markdown: string; results: ReconAgentResult[] }) => {
+      reconRef.current = markdown;
       startConversation(modelId, intent, markdown);
     },
     [startConversation, modelId, intent],
@@ -252,7 +298,13 @@ export function PipelineAssistant({
       <Box flexDirection="column" width="100%">
         <Box borderStyle="round" borderColor={theme.ai} paddingX={1} flexDirection="column" width="100%">
           <Text bold color={theme.ai}>Pipeline Assistant</Text>
-          <Text dimColor>Pick the model that will run the interview (default: {DEFAULT_ASSISTANT_MODEL})</Text>
+          <Text dimColor>
+            This model runs the interview AND the architect (3 parallel sketches → selection → per-step prompts).
+          </Text>
+          <Text dimColor>
+            Planning is maximum leverage — a strong model here pays for the whole run. Suggested:{' '}
+            <Text color={theme.ai}>deepseek/deepseek-v4-pro</Text> · moonshotai/kimi-k2.6 · openai/gpt-5.4 · anthropic/claude-opus-4.6. Default: {DEFAULT_ASSISTANT_MODEL}
+          </Text>
         </Box>
         <Box marginTop={1}>
           <ModelSelectorOverlay
@@ -406,6 +458,38 @@ export function PipelineAssistant({
           <Box marginTop={1}>
             <Text dimColor>
               <Text bold>ENTER</Text> send · <Text bold>ESC</Text> cancel
+            </Text>
+          </Box>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (stage.kind === 'architect') {
+    return (
+      <Box flexDirection="column" width="100%">
+        <Box borderStyle="round" borderColor={theme.ai} paddingX={1} flexDirection="column" width="100%">
+          <Text bold color={theme.ai}>Pipeline Architect</Text>
+          <Text dimColor>Model: {modelId} · parallel sketches → selection → per-step prompts → validation</Text>
+
+          <Box marginTop={1} flexDirection="column">
+            {stage.phases.slice(-8).map((p, i, arr) => (
+              <Box key={i}>
+                {i === arr.length - 1 ? (
+                  <Spinner label={p.detail} color={theme.ai} />
+                ) : (
+                  <Text dimColor>✓ {p.detail}</Text>
+                )}
+              </Box>
+            ))}
+            {stage.phases.length === 0 && (
+              <Spinner label="starting the architect…" color={theme.ai} />
+            )}
+          </Box>
+
+          <Box marginTop={1}>
+            <Text dimColor>
+              <Text bold>ESC</Text> cancel
             </Text>
           </Box>
         </Box>

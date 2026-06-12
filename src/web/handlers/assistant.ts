@@ -14,13 +14,8 @@
 // throw with the question text so the caller can emit an error /
 // chunk explaining what the assistant would have asked next.
 
-import {
-  createAssistantChat,
-  HumanMessage,
-  SystemMessage,
-} from '../../lib/assistant-client.js';
-import { buildAssistantSystemPrompt } from '../../lib/assistant-prompts.js';
-import { loadRecommendedModels } from '../../models/catalog.js';
+import { DEFAULT_ASSISTANT_MODEL } from '../../lib/assistant-client.js';
+import { runArchitect } from '../../lib/assistant-architect.js';
 import type { Pipeline } from '../../lib/types.js';
 import type { LlmClientContext } from '../../lib/llm-client-factory.js';
 
@@ -35,57 +30,22 @@ export interface StreamAssistantOptions {
 }
 
 /**
- * Convert the assistant's `PipelineDraft` (steps without a `files`
- * field) into the runtime `Pipeline` shape the orchestrator expects.
- * Mirrors the conversion the TUI does inside PipelineAssistant.
+ * One-shot web path: skip the interview entirely and run the Architect
+ * flow on the raw intent (parallel sketches → generative selection →
+ * parallel prompt expansion → mechanical validation). Phase updates
+ * stream to the client as assistant chunks. Multi-turn interviewing
+ * over the web remains the TODO above.
  */
-function draftToPipeline(draft: {
-  name: string;
-  steps: ReadonlyArray<{
-    name: string;
-    prompt: string;
-    scope: 'project' | 'per-file' | 'flexible' | 'memory';
-    filesFrom?: string;
-    produces?: string;
-    dependsOn?: string[];
-    modelId?: string;
-  }>;
-}): Pipeline {
-  return {
-    name: draft.name,
-    steps: draft.steps.map((s) => ({
-      name: s.name,
-      prompt: s.prompt,
-      files: [],
-      scope: s.scope,
-      filesFrom: s.filesFrom,
-      produces: s.produces,
-      dependsOn: s.dependsOn,
-      modelId: s.modelId,
-    })),
-  };
-}
-
 export async function streamAssistant(
   opts: StreamAssistantOptions,
 ): Promise<Pipeline> {
-  const chat = createAssistantChat({ apiKey: opts.apiKey, llmContext: opts.llmContext });
-  const system = buildAssistantSystemPrompt({
-    models: loadRecommendedModels(opts.cwd),
+  const result = await runArchitect({
+    apiKey: opts.apiKey,
+    modelId: DEFAULT_ASSISTANT_MODEL,
+    llmContext: opts.llmContext,
+    intent: opts.prompt,
+    transcript: '',
+    onPhase: (_phase, detail) => opts.onChunk(detail),
   });
-  const turn = await chat.invokeStructured([
-    new SystemMessage(system),
-    new HumanMessage(opts.prompt),
-  ]);
-  if (turn.done) {
-    opts.onChunk('finalizing pipeline…');
-    return draftToPipeline(turn.pipeline);
-  }
-  // Single-turn limitation: surface the assistant's clarifying
-  // question to the caller and bail. A full multi-turn loop is the
-  // TODO above.
-  opts.onChunk(turn.question);
-  throw new Error(
-    `assistant requested clarification (multi-turn not yet supported over web): ${turn.question}`,
-  );
+  return result.pipeline;
 }

@@ -7,6 +7,37 @@ import type { ModelEntry } from '../contracts/models.js';
  */
 export const PARALLEL_RULE_SHORT = 'N independent → per-file. 1 shared → project';
 
+/**
+ * Shared scope/memory/dependsOn doctrine — used by the interview system
+ * prompt (phase A) AND by the architect's sketch/expansion prompts so the
+ * rules never drift between phases.
+ */
+export const SCOPE_AND_LINKS_GUIDE = `# How to choose the "scope" of each step
+
+MASTER RULE: huu's main feature is running N agents in parallel inside a per-file step. Whenever the step's work decomposes into independent units per file, CHOOSE per-file — parallelism is the default, project is the fallback. If you are unsure between the two, ask: "does this step produce N independent artifacts (one per file) or 1 shared artifact?". ${PARALLEL_RULE_SHORT}.
+
+- "per-file": the step runs ONCE PER SELECTED FILE, in parallel (N simultaneous agents in isolated git worktrees). Use whenever the task fans out per file: create/update unit tests per module, generate JSDoc/docstring per file, apply the same lint rule, translate comments, add a header, migrate import/syntax file-by-file, refactor local boilerplate. CRITICAL VERB DISTINCTION: "RUN the test suite / build / lint" is project (1 command, single global output); "CREATE/WRITE tests for each file" is per-file (1 agent per source file). Same principle: "generate coverage report" is project; "write tests to raise coverage" is per-file.
+- "project": the step runs ONCE on the whole project. ONE agent, sees the entire repo. Use when the task requires cross-file context (architecture refactor, move symbols between modules, rename an API with callers everywhere), depends on global state (install deps, configure tooling, run build/test/lint), or produces a SINGLE artifact (edit README, add a badge, write an ADR, generate changelog, update package.json).
+- "flexible": legacy — only use if the user explicitly wants to decide case-by-case later. PREFER "project" or "per-file" when inference is possible.
+- "memory": the file set is DISCOVERED BY AN EARLIER STEP at run time. Emit a PAIR: the producer step declares "produces": "<path>" (e.g. ".huu/memory/targets.json") and the memory step declares "filesFrom" with the SAME path; one agent per listed path, $hint carries the producer's per-file note. CRITICAL RULE: NEVER write file-format boilerplate in the producer's prompt — huu appends the exact MEMORY CONTRACT (path + JSON format + cap + hint rule) to it at run time; the producer's prompt should only say WHAT to look for and that each pick needs a one-line why. Use for scan→fix, recon→study, rank→refactor shapes where the user should NOT hand-pick files. A memory step can never be the first step.
+- "dependsOn" (parallel waves): independent branches declare dependsOn on their shared predecessor and a join step declares dependsOn on all branches (a DIAMOND); any dependsOn switches the run to deterministic waves. Dependencies may only point to EARLIER steps; loops use check outcomes (activation), never dependsOn. Do NOT serialize independent branches into a chain.
+
+ANTI-PATTERNS (do not commit):
+- per-file on a step that produces ONE shared artifact (badge, README, ADR, root config) — with no N input files, per-file becomes "1 agent, no $file" and parallelism doesn't happen. Single-artifact is ALWAYS project.
+- project on a step whose work is clearly file-by-file and independent (e.g.: "create unit tests", "add JSDoc to each export") — you're throwing the platform's parallelism away on purpose.
+- Collapsing multiple phases into one step to "simplify" — if the user described N distinct phases (setup → creation → verification), produce N steps. Each step has independent scope.
+
+THE FILE LIST IS NOT YOUR RESPONSIBILITY. The user selects files later in the pipeline editor. Do not ask about paths.`;
+
+/** Shared rules for writing a final step prompt (phase A finalize + phase D expansion). */
+export const STEP_PROMPT_GUIDE = `# How to write a good step "prompt"
+
+- Plain text (light markdown allowed). Direct and specific — the agent cannot ask for clarification.
+- For scope="per-file", use the literal token $file in the prompt — the orchestrator substitutes the real path per agent. Do NOT mention specific files.
+- For scope="memory", use $file AND $hint (the producer's one-line note about this file).
+- For scope="project", DO NOT use $file (no substitution). Quote paths only if the user mentioned them.
+- Include acceptance criteria when relevant.`;
+
 export interface AssistantPromptContext {
   /**
    * Catalog of recommended models the assistant can pick from when assigning
@@ -164,28 +195,9 @@ There is no fixed question limit, but each question has friction cost. Ask the m
 
 A pipeline has 1+ steps run in SERIES. Each step decomposes into N tasks run in PARALLEL in isolated git worktrees; at the end of the step the branches are merged into a central worktree. The next step starts from that merge.
 
-# How to choose the "scope" of each step
+${SCOPE_AND_LINKS_GUIDE}
 
-MASTER RULE: huu's main feature is running N agents in parallel inside a per-file step. Whenever the step's work decomposes into independent units per file, CHOOSE per-file — parallelism is the default, project is the fallback. If you are unsure between the two, ask: "does this step produce N independent artifacts (one per file) or 1 shared artifact?". ${PARALLEL_RULE_SHORT}.
-
-- "per-file": the step runs ONCE PER SELECTED FILE, in parallel (N simultaneous agents in isolated git worktrees). Use whenever the task fans out per file: create/update unit tests per module, generate JSDoc/docstring per file, apply the same lint rule, translate comments, add a header, migrate import/syntax file-by-file, refactor local boilerplate. CRITICAL VERB DISTINCTION: "RUN the test suite / build / lint" is project (1 command, single global output); "CREATE/WRITE tests for each file" is per-file (1 agent per source file). Same principle: "generate coverage report" is project; "write tests to raise coverage" is per-file.
-- "project": the step runs ONCE on the whole project. ONE agent, sees the entire repo. Use when the task requires cross-file context (architecture refactor, move symbols between modules, rename an API with callers everywhere), depends on global state (install deps, configure tooling, run build/test/lint), or produces a SINGLE artifact (edit README, add a badge, write an ADR, generate changelog, update package.json).
-- "flexible": legacy — only use if the user explicitly wants to decide case-by-case later. PREFER "project" or "per-file" when inference is possible.
-- "memory": the file set is DISCOVERED BY AN EARLIER STEP at run time. Emit a PAIR: the producer step declares "produces": "<path>" (e.g. ".huu/memory/targets.json") and the memory step declares "filesFrom" with the SAME path; one agent per listed path, $hint carries the producer's per-file note. CRITICAL RULE: NEVER write file-format boilerplate in the producer's prompt — huu appends the exact MEMORY CONTRACT (path + JSON format + cap + hint rule) to it at run time; the producer's prompt should only say WHAT to look for and that each pick needs a one-line why. Use for scan→fix, recon→study, rank→refactor shapes where the user should NOT hand-pick files. A memory step can never be the first step.
-
-ANTI-PATTERNS (do not commit):
-- per-file on a step that produces ONE shared artifact (badge, README, ADR, root config) — with no N input files, per-file becomes "1 agent, no $file" and parallelism doesn't happen. Single-artifact is ALWAYS project.
-- project on a step whose work is clearly file-by-file and independent (e.g.: "create unit tests", "add JSDoc to each export") — you're throwing the platform's parallelism away on purpose.
-- Collapsing multiple phases into one step to "simplify" — if the user described N distinct phases (setup → creation → verification), produce N steps. Each step has independent scope.
-
-THE FILE LIST IS NOT YOUR RESPONSIBILITY. The user selects files later in the pipeline editor. Do not ask about paths.
-
-# How to write a good step "prompt"
-
-- Plain text (light markdown allowed). Direct and specific — the agent cannot ask for clarification.
-- For scope="per-file", use the literal token $file in the prompt — the orchestrator substitutes the real path per agent. Do NOT mention specific files.
-- For scope="project", DO NOT use $file (no substitution). Quote paths only if the user mentioned them.
-- Include acceptance criteria when relevant.
+${STEP_PROMPT_GUIDE}
 
 # Available models catalog
 
@@ -193,9 +205,10 @@ You can assign a "modelId" per step from this list. Each entry has ID, label, pr
 
 ${modelCatalog}
 ${decisionMatrix ? `\n# Recommended model per scenario\n\n${decisionMatrix}\n` : ''}
-Selection guidelines (ONLY two models are available):
+Selection guidelines:
 - \`moonshotai/kimi-k2.6\` — for steps that demand THOUGHT: heavy coding, multi-file refactor, reasoning, dense logic, complex planning, cross-file context.
 - \`minimax/minimax-m2.7\` — for SIMPLE steps: per-file fan-out, lint, rename, JSDoc, translate, boilerplate, mechanical/repetitive tasks.
+- Entries tagged \`planning\` are for the ASSISTANT/ARCHITECT itself, not for pipeline steps — never assign them to a step.
 - ALWAYS assign a modelId to every step. Rule: if the step is simple/mechanical/per-file → minimax. If it demands reasoning/creativity/cross-file vision → kimi.
 - Never leave modelId empty.
 
@@ -212,6 +225,155 @@ Clear, professional English. No emojis. No fluff. Ask ONE thing per turn. Do not
  * checklist.
  */
 export const FORCE_DONE_NUDGE = `You have reached the question limit. Synthesize the final pipeline now based on what has already been discussed, returning a response in the (B) format with "done": true. Do not ask any more questions.`;
+
+// --- Architect flow prompts (sketch → select → expand → fix) --------------
+
+export interface ArchitectLens {
+  id: string;
+  title: string;
+  directive: string;
+}
+
+/**
+ * Three deliberately DIFFERENT design lenses — diversity is what makes
+ * best-of-N selection beat single-shot (research: parallel diverse
+ * candidates + generative selection > one attempt iterated).
+ */
+export const ARCHITECT_LENSES: ArchitectLens[] = [
+  {
+    id: 'parallelism',
+    title: 'maximize-parallelism',
+    directive:
+      'Squeeze every independent unit of work into fan-out and waves: per-file/memory wherever work decomposes per file, dependsOn diamonds wherever branches are independent, joins only where results genuinely combine. Wall-clock latency is the enemy.',
+  },
+  {
+    id: 'cost',
+    title: 'minimize-cost',
+    directive:
+      'The fewest steps and fewest agent invocations that still honour the goal completely. Merge only what is TRULY shared, prefer narrow blast radii, add checks only where a wrong result is expensive to discover late.',
+  },
+  {
+    id: 'verifiability',
+    title: 'maximize-verifiability',
+    directive:
+      'Gate every consequential phase: discovery feeds memory pairs (auditable lists with hints), check steps with objectively checkable conditions guard the transitions, every check has a safe FORWARD default and a bounded maxRuns. Trust is built mechanically, not by hope.',
+  },
+];
+
+const BLUEPRINT_SHAPE = `Each step: { "name", "type": "work"|"check", "summary" (<=300 chars — WHAT it does, NOT the final prompt), "scope" (work), "produces"/"filesFrom" (memory pairs), "dependsOn" (waves), "condition"+"outcomes"+"maxRuns" (checks; EXACTLY one outcome with "default": true pointing FORWARD) }.`;
+
+/** Phase B: one structural sketch under a lens (call 3× in parallel, temp ~0.7). */
+export function buildSketchPrompt(args: {
+  lens: ArchitectLens;
+  intent: string;
+  transcript: string;
+  reconContext?: string;
+  baselineJson?: string;
+}): string {
+  const recon = args.reconContext?.trim()
+    ? `\n# Project context (from recon agents)\n\n${args.reconContext.trim()}\n`
+    : '';
+  const baseline = args.baselineJson
+    ? `\n# Interviewer baseline (candidate 0)\n\nThe interviewing assistant sketched this pipeline. Treat it as ONE perspective — diverge from it wherever your lens demands; do not copy it:\n${args.baselineJson}\n`
+    : '';
+  return `You are a pipeline ARCHITECT for huu (LLM agents in parallel git worktrees). Produce ONE structural blueprint of the pipeline — names, shapes and links only. Final prompts are written later by another phase; your "summary" fields describe intent, not wording.
+
+# Your design lens: ${args.lens.title}
+${args.lens.directive}
+${recon}${baseline}
+# The user's goal
+
+${args.intent.trim()}
+
+# Interview answers (verbatim)
+
+${args.transcript.trim() || '(no questions were needed)'}
+
+${SCOPE_AND_LINKS_GUIDE}
+
+# Output
+
+A single blueprint. ${BLUEPRINT_SHAPE}
+Rules: 1-20 steps; dependsOn only references EARLIER steps; a memory step's filesFrom matches an earlier step's produces; never put format boilerplate in summaries; name steps imperatively and uniquely.`;
+}
+
+/**
+ * Phase C: generative selection (GenSelect) + light fusion. The selector
+ * COMPARES candidates against a mechanical rubric — it never rewrites from
+ * scratch (research: comparison beats scoring; rewriting reintroduces
+ * single-shot risk).
+ */
+export function buildSelectorPrompt(args: { intent: string; candidatesJson: string }): string {
+  return `You are the SELECTOR in huu's pipeline-architect flow. Several independent blueprints for the same goal follow. Compare them and produce the final fused blueprint.
+
+# The user's goal
+
+${args.intent.trim()}
+
+# Candidates (JSON array; index 0 may be the interviewer baseline)
+
+${args.candidatesJson}
+
+# Mechanical rubric — judge candidates against THESE aspects, in order
+
+1. No collapsed fan-out: work that decomposes per file is per-file or memory, never a single project step.
+2. Discovery feeds action through a memory PAIR (produces on the discoverer, filesFrom on the actor, same path).
+3. Independent branches form a dependsOn DIAMOND (parallel wave + join), never an artificial chain.
+4. Every check has an objectively checkable condition, EXACTLY one default:true outcome pointing FORWARD, and a bounded maxRuns.
+5. No per-file scope on single-artifact steps (README, badge, config).
+6. dependsOn only references earlier steps; memory steps are never first.
+7. Step count is proportionate to the goal (prefer <=12 unless the goal truly demands more).
+
+# Your output
+
+Pick the strongest candidate as "winner" (index). GRAFT at most small, specific ideas from the losers (each graft <=200 chars, recorded in "grafts"). Output the fused blueprint in "steps" — minimal edits to the winner, never a rewrite. ${BLUEPRINT_SHAPE}
+Also assign a "modelId" to every WORK step: \`minimax/minimax-m2.7\` for simple/mechanical/per-file work, \`moonshotai/kimi-k2.6\` for reasoning/cross-file work. Keep "reasoning" <=600 chars.`;
+}
+
+/** Phase D: write the FINAL prompt for one work step (call N× in parallel, temp ~0.2). */
+export function buildStepExpansionPrompt(args: {
+  intent: string;
+  reconContext?: string;
+  blueprintOutline: string;
+  stepJson: string;
+}): string {
+  const recon = args.reconContext?.trim()
+    ? `\n# Project context (from recon agents)\n\n${args.reconContext.trim()}\n`
+    : '';
+  return `You write the FINAL agent prompt for ONE step of a huu pipeline. The blueprint is fixed — do not change names, scopes or links; your only output is this step's prompt text.
+
+# The user's goal
+
+${args.intent.trim()}
+${recon}
+# The whole blueprint (for context — one line per step)
+
+${args.blueprintOutline}
+
+# The step you are writing the prompt for
+
+${args.stepJson}
+
+${STEP_PROMPT_GUIDE}
+
+Extra rules for this phase:
+- If the step has "produces": say WHAT qualifies for the list and that every pick needs a one-line why — NO file-format boilerplate (huu appends the exact MEMORY CONTRACT at run time).
+- If the step is part of an audit/report flow: include the REPORT-ONLY discipline (write only to the report path; touch nothing else).
+- The agent cannot ask questions: include concrete acceptance criteria.`;
+}
+
+/** Phase E: single mechanically-guided fix (zod/topology errors verbatim). */
+export function buildArchitectFixPrompt(args: { pipelineJson: string; errors: string }): string {
+  return `The pipeline below failed huu's mechanical validation. Fix ONLY what the errors name — minimal edits, no redesign — and return the corrected pipeline.
+
+# Validation errors (verbatim)
+
+${args.errors}
+
+# Pipeline
+
+${args.pipelineJson}`;
+}
 
 /**
  * Initial human message — wraps the user's intent and reminds the assistant
