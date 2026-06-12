@@ -251,6 +251,26 @@ The `scope` field determines how a step is decomposed into parallel tasks:
 - **`produces` (the producer side — recommended)**: declare `"produces": "<same path>"` on the EARLIER step and huu appends the exact **MEMORY CONTRACT** (path + JSON format + the consumer's cap + the hint rule) to that step's prompt at run time — the author never writes format boilerplate, and the saved JSON stays clean. Two steps producing the same path is a topology error. A producer prompt may still write the file manually (produces is optional).
 - Deep-dive guide (patterns, interfaces, troubleshooting): [memory-scope.md](memory-scope.md) · [pt-BR](memory-scope.pt-BR.md).
 
+---
+
+## Step dependencies & parallel waves (`dependsOn`)
+
+Steps can declare a dependency graph, GitHub-Actions `needs` style:
+
+```json
+{ "name": "1. Setup", "prompt": "...", "files": [], "scope": "project", "dependsOn": [] },
+{ "name": "2. Lint", "prompt": "...", "files": [], "scope": "project", "dependsOn": ["1. Setup"] },
+{ "name": "3. Security", "prompt": "...", "files": [], "scope": "project", "dependsOn": ["1. Setup"] },
+{ "name": "4. Join", "prompt": "combine both reports", "files": [], "scope": "project", "dependsOn": ["2. Lint", "3. Security"] }
+```
+
+- **Semantics**: the run executes in **deterministic waves** (BSP supersteps). Each wave runs every pending step whose dependencies are done — all their tasks share ONE worker pool (real parallelism across branches) — then merges them **sequentially in array order**. Wave composition and merge order derive only from the graph + the array, never from timing: the same pipeline always yields the same commit sequence.
+- **Defaults / compat**: omitting `dependsOn` means "depends on the previous step" — a plain v2 pipeline is a chain and behaves exactly as before. `"dependsOn": []` marks a root (runs in wave 1). The presence of ANY `dependsOn` switches the run to wave mode; without it the legacy linear cursor runs untouched (including `next`-as-skip).
+- **Rules**: dependencies may only reference **earlier** steps in the array (cycles are structurally impossible); loops belong to check `outcomes` and `next`, which in wave mode act as **activation edges** — they re-pend their target plus everything that depends on it ("rework redoes whatever depended on the reworked step").
+- **Checks as joins**: a `check` step with `dependsOn` on several branches is judged only after ALL of them merged — and always runs as a singleton wave (judges never overlap in the integration worktree).
+- **Memory links**: a `memory` step automatically depends on the step that `produces` its `filesFrom` (the declared link becomes a DAG edge — no need to repeat it).
+- Branches in the same wave start from the same integration HEAD and do NOT see each other's work; the join (next wave) sees all of it. Overlapping edits between parallel branches surface at merge time exactly like overlapping per-file edits do today.
+
 ### Decision guide
 
 Ask yourself: **"Does this step produce N independent outputs (one per file) or 1 shared output?"**

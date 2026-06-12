@@ -54,6 +54,9 @@ Portuguese, matching the recon prompts). Below is the complete map.
 - On the **Scope** row: `ENTER` opens a **scope list** with a one-line
   consequence per option, or jump directly with `P` (project), `F`
   (per-file), `X` (flexible), `M` (memory).
+- On the **Deps** row: `ENTER` opens the **dependency picker** (SPACE
+  toggles earlier steps · `D` default chain · `R` root). Declaring any
+  dependency switches the run into deterministic parallel waves.
   - `project` — runs once on the whole project. The Files row is locked.
   - `per-file` — runs once per selected file. The Files row demands a
     selection; `ENTER` (and `F`) on Files opens the picker.

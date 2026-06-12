@@ -9,10 +9,10 @@ import type { Pipeline, PromptStep, StepScope } from '../../lib/types.js';
 import { FileMultiSelect } from './FileMultiSelect.js';
 import { ModelSelectorOverlay } from './ModelSelectorOverlay.js';
 
-type Field = 'name' | 'prompt' | 'scope' | 'files' | 'model';
+type Field = 'name' | 'prompt' | 'scope' | 'deps' | 'files' | 'model';
 type EditorMode = 'selecting' | 'editing';
 /** Full-screen pick panels (recognition over recall — lists, not typing). */
-type Panel = 'none' | 'scope' | 'memory' | 'link';
+type Panel = 'none' | 'scope' | 'memory' | 'link' | 'deps';
 
 /** An earlier step in the pipeline, by its REAL pipeline index. */
 export interface PriorStepRef {
@@ -39,6 +39,8 @@ interface Props {
   priorSteps?: PriorStepRef[];
   /** Declare `produces` on an earlier step (the other half of a memory link). */
   onDeclareProducer?: (pipelineIndex: number, path: string) => void;
+  /** ALL earlier step names (work + check, array order) — feeds the dependsOn picker. */
+  priorStepNames?: string[];
 }
 
 const FULL_CLEAR = '\x1b[3J';
@@ -124,7 +126,56 @@ function ListPick(props: {
   );
 }
 
-export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave, onCancel, pipeline, apiKey, llmContext, priorSteps = [], onDeclareProducer }: Props): React.JSX.Element {
+/** Multi-select for dependsOn (SPACE toggles; D = default chain; R = root). */
+function DepsPick(props: {
+  title: string;
+  names: string[];
+  initial: string[] | undefined;
+  onApply: (deps: string[] | undefined) => void;
+  onCancel: () => void;
+}): React.JSX.Element {
+  const [selected, setSelected] = useState<Set<string>>(new Set(props.initial ?? []));
+  const [cursor, setCursor] = useState(0);
+  useInput((input, key) => {
+    if (key.escape) props.onCancel();
+    else if (key.upArrow) setCursor((c) => Math.max(0, c - 1));
+    else if (key.downArrow) setCursor((c) => Math.min(Math.max(0, props.names.length - 1), c + 1));
+    else if (input === ' ' && props.names.length > 0) {
+      const name = props.names[cursor]!;
+      setSelected((s) => {
+        const next = new Set(s);
+        if (next.has(name)) next.delete(name);
+        else next.add(name);
+        return next;
+      });
+    } else if (input === 'd' || input === 'D') props.onApply(undefined);
+    else if (input === 'r' || input === 'R') props.onApply([]);
+    else if (key.return) props.onApply(props.names.filter((n) => selected.has(n)));
+  });
+  return (
+    <Box flexDirection="column" width="100%">
+      <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
+        <Text bold color="cyan">{props.title}</Text>
+        <Box flexDirection="column" marginTop={1}>
+          {props.names.length === 0 ? (
+            <Text dimColor>(no earlier steps — this can only be a root)</Text>
+          ) : (
+            props.names.map((name, i) => (
+              <Text key={name} color={i === cursor ? 'cyan' : undefined} bold={i === cursor}>
+                {i === cursor ? '› ' : '  '}[{selected.has(name) ? 'x' : ' '}] {name}
+              </Text>
+            ))
+          )}
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>SPACE toggle · ENTER apply · D default (previous step) · R root (wave 1) · ESC cancel</Text>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave, onCancel, pipeline, apiKey, llmContext, priorSteps = [], onDeclareProducer, priorStepNames = [] }: Props): React.JSX.Element {
   const { stdout } = useStdout();
   const { setRawMode, isRawModeSupported } = useStdin();
   const [step, setStep] = useState<PromptStep>(initialStep);
@@ -221,7 +272,8 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
     if (key.upArrow) {
       setField((f) =>
         f === 'model' ? 'files' :
-        f === 'files' ? 'scope' :
+        f === 'files' ? 'deps' :
+        f === 'deps' ? 'scope' :
         f === 'scope' ? 'prompt' :
         f === 'prompt' ? 'name' :
         'name',
@@ -230,7 +282,8 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
       setField((f) =>
         f === 'name' ? 'prompt' :
         f === 'prompt' ? 'scope' :
-        f === 'scope' ? 'files' :
+        f === 'scope' ? 'deps' :
+        f === 'deps' ? 'files' :
         f === 'files' ? 'model' :
         'model',
       );
@@ -238,7 +291,8 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
       setField((f) =>
         f === 'name' ? 'prompt' :
         f === 'prompt' ? 'scope' :
-        f === 'scope' ? 'files' :
+        f === 'scope' ? 'deps' :
+        f === 'deps' ? 'files' :
         f === 'files' ? 'model' :
         'name',
       );
@@ -249,6 +303,8 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
         // Recognition over recall: a visible list with one-line
         // consequences instead of blind cycling.
         setPanel('scope');
+      } else if (field === 'deps') {
+        setPanel('deps');
       } else if (field === 'files') {
         if (scope === 'per-file') {
           setPickingFiles(true);
@@ -314,6 +370,26 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
         footer="↑↓ choose · ENTER apply · ESC keep current"
         onSelect={(i) => {
           applyScope(SCOPE_OPTIONS[i]!.scope);
+          setPanel('none');
+        }}
+        onCancel={() => setPanel('none')}
+      />
+    );
+  }
+
+  if (panel === 'deps') {
+    return (
+      <DepsPick
+        title={`Dependencies of step #${stepIndex + 1} — steps it must wait for (parallel waves)`}
+        names={priorStepNames}
+        initial={step.dependsOn}
+        onApply={(deps) => {
+          if (deps === undefined) {
+            const { dependsOn: _drop, ...rest } = step;
+            setStep(rest as PromptStep);
+          } else {
+            setStep({ ...step, dependsOn: deps });
+          }
           setPanel('none');
         }}
         onCancel={() => setPanel('none')}
@@ -436,6 +512,7 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
       case 'name': return 'ENTER edit name';
       case 'prompt': return 'ENTER edit inline · E open in $EDITOR (multiline)';
       case 'scope': return 'ENTER choose from list · P project · F per-file · X flexible · M memory';
+      case 'deps': return 'ENTER pick dependencies — declaring any dependsOn switches the run to parallel waves';
       case 'files':
         if (scope === 'project') return 'locked by scope — whole project';
         if (scope === 'memory') return `ENTER link a memory file${step.filesFrom ? ' · U unlink' : ''}${step.produces ? ' · O stop producing' : ''}`;
@@ -487,6 +564,18 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
           <Text color="cyan">{field === 'scope' ? '› ' : '  '}</Text>
           <Box width={10}><Text color={field === 'scope' ? 'cyan' : undefined}>Scope:</Text></Box>
           <Text color={scopeColor}>{scopeLabel(scope)}</Text>
+        </Box>
+
+        <Box marginTop={1}>
+          <Text color="cyan">{field === 'deps' ? '› ' : '  '}</Text>
+          <Box width={10}><Text color={field === 'deps' ? 'cyan' : undefined}>Deps:</Text></Box>
+          {step.dependsOn === undefined ? (
+            <Text dimColor>(previous step — default chain)</Text>
+          ) : step.dependsOn.length === 0 ? (
+            <Text color="cyanBright">(root — runs in wave 1)</Text>
+          ) : (
+            <Text color="cyanBright">needs: {step.dependsOn.join(', ')}</Text>
+          )}
         </Box>
 
         <Box marginTop={1} flexDirection="column">

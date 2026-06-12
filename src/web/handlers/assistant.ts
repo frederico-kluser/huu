@@ -47,6 +47,7 @@ function draftToPipeline(draft: {
     scope: 'project' | 'per-file' | 'flexible' | 'memory';
     filesFrom?: string;
     produces?: string;
+    dependsOn?: string[];
     modelId?: string;
   }>;
 }): Pipeline {
@@ -59,6 +60,7 @@ function draftToPipeline(draft: {
       scope: s.scope,
       filesFrom: s.filesFrom,
       produces: s.produces,
+      dependsOn: s.dependsOn,
       modelId: s.modelId,
     })),
   };

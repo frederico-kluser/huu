@@ -401,6 +401,12 @@ export function RunDashboard({
         <Text bold color="cyan">{pkg.name} v{pkg.version}</Text>
         <Text dimColor>  ·  </Text>
         <Text>stage <Text bold>{state.currentStage}/{state.totalStages}</Text></Text>
+        {state.wave !== undefined && (
+          <>
+            <Text dimColor>  ·  </Text>
+            <Text>◇ wave <Text bold color="cyanBright">{state.wave}</Text></Text>
+          </>
+        )}
         <Text dimColor>  ·  </Text>
         <Text>concurrency <Text bold color="yellow">{state.concurrency}</Text></Text>
         <Text dimColor>  ·  </Text>

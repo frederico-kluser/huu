@@ -63,11 +63,12 @@ type Mode =
   | { kind: 'naming-pipeline' }
   | { kind: 'editing-settings' };
 
-type Pattern = 'discover-act' | 'per-file' | 'audit-judge' | 'blank';
+type Pattern = 'discover-act' | 'per-file' | 'fan-join' | 'audit-judge' | 'blank';
 
 const PATTERNS: { id: Pattern; label: string; hint: string }[] = [
   { id: 'discover-act', label: '🔍 Discover → Act', hint: 'two linked steps: one finds the files, one fixes each in parallel ($hint carries why)' },
   { id: 'per-file', label: '📄 Per-file transform', hint: 'the same prompt over N files you pick, in parallel ($file)' },
+  { id: 'fan-join', label: '◇ Fan-out → Join (diamond)', hint: 'setup, then two branches IN PARALLEL (waves), then a join that sees both' },
   { id: 'audit-judge', label: '🧪 Audit with judge', hint: 'report-only audit + a check that loops back on rework' },
   { id: 'blank', label: '▢  Blank', hint: 'start from a single empty step' },
 ];
@@ -114,6 +115,45 @@ function scaffold(pattern: Pattern): Pipeline {
       ],
     };
   }
+  if (pattern === 'fan-join') {
+    return {
+      name: 'fan-out-join',
+      steps: [
+        {
+          type: 'work',
+          name: '1. Setup',
+          prompt: 'Prepare whatever both branches need: <e.g. install deps, write a shared plan file>.',
+          files: [],
+          scope: 'project',
+          dependsOn: [],
+        },
+        {
+          type: 'work',
+          name: '2. Branch A',
+          prompt: '<first independent analysis/transform — runs in parallel with Branch B>',
+          files: [],
+          scope: 'project',
+          dependsOn: ['1. Setup'],
+        },
+        {
+          type: 'work',
+          name: '3. Branch B',
+          prompt: '<second independent analysis/transform — runs in parallel with Branch A>',
+          files: [],
+          scope: 'project',
+          dependsOn: ['1. Setup'],
+        },
+        {
+          type: 'work',
+          name: '4. Join',
+          prompt: 'Combine the results of Branch A and Branch B into <the final artifact>. Both merges are visible in this worktree.',
+          files: [],
+          scope: 'project',
+          dependsOn: ['2. Branch A', '3. Branch B'],
+        },
+      ],
+    };
+  }
   if (pattern === 'audit-judge') {
     return {
       name: 'audit-with-judge',
@@ -153,6 +193,14 @@ function scaffold(pattern: Pattern): Pipeline {
 /** What is wrong with this step and WHICH KEY fixes it (actionable validation). */
 function stepProblem(step: PipelineStep, allSteps: PipelineStep[]): string | null {
   if (!step.name) return 'unnamed — ENTER, then edit Name';
+  if (step.dependsOn !== undefined) {
+    const selfIdx = allSteps.findIndex((s) => s.name === step.name);
+    for (const dep of step.dependsOn) {
+      const depIdx = allSteps.findIndex((s) => s.name === dep);
+      if (depIdx === -1) return `dependsOn unknown step "${dep}" — ENTER, then re-pick Deps`;
+      if (depIdx >= selfIdx) return `dependsOn "${dep}" is not an EARLIER step — ENTER, then re-pick Deps`;
+    }
+  }
   if (isCheckStep(step)) {
     if (!step.condition) return 'empty condition — ENTER, then edit Condition';
     const defaults = step.outcomes.filter((o) => o.default).length;
@@ -388,6 +436,7 @@ export function PipelineEditor({
             ),
           }));
         }}
+        priorStepNames={pipeline.steps.slice(0, mode.index).map((s) => s.name)}
       />
     );
   }
@@ -508,6 +557,14 @@ export function PipelineEditor({
                   <>
                     <Text dimColor>  ·  </Text>
                     <Text color="blueBright">→ {step.produces}</Text>
+                  </>
+                ) : null}
+                {step.dependsOn !== undefined ? (
+                  <>
+                    <Text dimColor>  ·  </Text>
+                    <Text color="cyanBright">
+                      ⇠ {step.dependsOn.length === 0 ? 'root' : step.dependsOn.join(', ')}
+                    </Text>
                   </>
                 ) : null}
                 <Text dimColor>  ·  </Text>

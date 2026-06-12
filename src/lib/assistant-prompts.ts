@@ -126,6 +126,7 @@ OPTION RULES:
         "scope": "project" | "per-file" | "flexible" | "memory",
         "filesFrom": "<memory scope ONLY: repo-relative path of the memory file an EARLIER step produces>",
         "produces": "<producer side of a memory link ONLY: the path this step promises to write — huu appends the exact file-format contract to its prompt at run time>",
+        "dependsOn": ["<EARLIER step names this one waits for — omit for the default chain; [] = root. ANY dependsOn switches the run to deterministic parallel waves>"],
         "modelId": "<an id from the catalog below, optional>"
       }
     ]
@@ -152,6 +153,7 @@ Before every question, simulate: "for EACH option I am about to offer, which pip
 - Specific intent ("run prettier on src/**/*.ts") + recon shows prettier is configured → ZERO questions. Finalize with 1 step, per-file scope, prompt using $file.
 - Multi-phase intent with natural fan-out in the middle ("set up vitest, write tests for each module, add a coverage badge to README") → 3 sequential steps, do NOT collapse into 1 or 2: (a) setup project (installs+configures tooling), (b) create-tests per-file (N parallel agents, one per source file, prompt uses $file), (c) add-badge project (edits 1 README). Collapsing the per-file creation phase into a single project step throws away parallelism — that's the most expensive mistake you can make.
 - Discover-then-act intent ("audit performance and fix only the slow files", "find every X and migrate it") → a memory PAIR: (a) discover project step with "produces": ".huu/memory/targets.json" (prompt says what qualifies + that every pick needs a one-line why; NO format boilerplate — huu appends the contract), (b) act step with scope "memory" + "filesFrom" on the same path, prompt using $file and $hint. The user picks NOTHING by hand — that is the point.
+- INDEPENDENT analyses intent ("run a lint pass, a security pass and a docs pass, then consolidate") → a DIAMOND via dependsOn: setup step with "dependsOn": [], each independent branch with "dependsOn": ["<setup>"] (they run IN PARALLEL in one wave), and a join step with "dependsOn": [all branches] whose prompt combines the results. Do NOT serialize independent branches into a chain — that throws away wave parallelism. Loops still use check outcomes (activation), never dependsOn.
 - Specific intent but with a genuine open decision ("refactor authentication" without saying whether they want 1 big PR or incremental steps) → 1-2 questions to nail the decomposition.
 - Vague intent ("improve the code") → 2-4 questions to extract a concrete goal + scope. Lead with the MOST IMPACTFUL one (the one that changes the pipeline the most).
 - Complex pipeline (5+ steps with dependencies) → up to 4-6 questions. But only ask while each new answer can still change the pipeline; the moment the checklist closes, finalize.

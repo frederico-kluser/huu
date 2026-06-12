@@ -277,7 +277,13 @@ fires on judge failure / unknown label / cap. Work steps also support
 `scope: "memory"` + `filesFrom`: the per-file fan-out is read at stage
 start from a huu-memory-v1 JSON an EARLIER step wrote into the
 integration worktree (per-entry `hint`s reach prompts via `$hint`;
-missing file → empty stage, corrupt file → run fails). See
+missing file → empty stage, corrupt file → run fails). Steps can also
+declare `dependsOn` (GitHub-Actions `needs` style): the run then executes
+in DETERMINISTIC WAVES — every ready step's tasks share one pool (parallel
+branches), merges happen sequentially in array order, ready checks run as
+singleton waves, and outcomes/`next` become activation edges that re-pend
+their downstream cone. No `dependsOn` → the legacy linear cursor runs
+unchanged. See
 `.agents/skills/authoring-pipelines/SKILL.md` and
 `docs/pipeline-json-guide.md` (`#conditional-steps-check-nodes`).
 
