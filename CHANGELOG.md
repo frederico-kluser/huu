@@ -5,7 +5,7 @@ All notable changes to `huu` are documented here.
 The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/).
 SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
-## [Unreleased]
+## [1.4.0] - 2026-06-12
 
 ### Added
 
@@ -346,7 +346,8 @@ Initial public release. Available on npm as `huu-pipe`
 - `safe.directory '*'` set system-wide in the image.
 
 
-[Unreleased]: https://github.com/frederico-kluser/huu/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/frederico-kluser/huu/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/frederico-kluser/huu/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.3.0
 [1.2.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.2.0
 [1.1.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.1.0
