@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const StepScopeSchema = z.enum(['project', 'per-file', 'flexible']);
+const StepScopeSchema = z.enum(['project', 'per-file', 'flexible', 'memory']);
 
 export const AssistantOptionSchema = z.object({
   label: z.string().min(1).max(120),
@@ -18,7 +18,12 @@ export const PipelineStepSchema = z.object({
   name: z.string().min(1).max(80),
   prompt: z.string().min(1),
   scope: StepScopeSchema,
+  /** memory scope only: repo-relative path of the huu-memory-v1 file an earlier step writes. */
+  filesFrom: z.string().min(1).optional(),
   modelId: z.string().min(1).optional(),
+}).refine((s) => s.scope !== 'memory' || Boolean(s.filesFrom), {
+  message: 'scope "memory" requires filesFrom (path of the memory file an earlier step writes)',
+  path: ['filesFrom'],
 });
 
 export const PipelineDraftSchema = z.object({

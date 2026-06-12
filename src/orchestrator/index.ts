@@ -32,6 +32,7 @@ import { WorktreeManager } from '../git/worktree-manager.js';
 import { agentBranchName, agentWorktreePath } from '../git/branch-namer.js';
 import { mergeAgentBranches } from '../git/integration-merge.js';
 import { decomposeTasks } from './task-decomposer.js';
+import { resolveMemoryFiles, MemoryFileError } from './memory-files.js';
 import type { AgentEvent, AgentFactory, SpawnedAgent } from './types.js';
 import { generateRunId } from '../lib/run-id.js';
 import { RunLogger, RUN_LOG_DIR } from '../lib/run-logger.js';
@@ -606,6 +607,12 @@ export class Orchestrator {
       for (let stageIdx = 0; stageIdx < this.pipeline.steps.length; stageIdx++) {
         const step = this.pipeline.steps[stageIdx]!;
         if (!isWorkStep(step)) continue;
+        // `memory` steps can't pre-decompose: their file list is written by
+        // an EARLIER step and only exists in the integration worktree once
+        // the cursor gets there. They materialize via the lazy branch below,
+        // exactly like loop revisits do. (Exception: a run-config override
+        // already injected concrete files — those pre-decompose normally.)
+        if (step.scope === 'memory' && step.files.length === 0) continue;
         const stageTasks = decomposeTasks(step.files, this.nextAgentId, stageIdx, step.name);
         this.nextAgentId += stageTasks.length;
         for (const task of stageTasks) {
@@ -775,9 +782,51 @@ export class Orchestrator {
           // Revisit (loop) or first-time decomposition for a non-pre-decomposed
           // step: allocate fresh agent ids so branch names don't collide
           // with the previous iteration's commits.
-          stageTasks = decomposeTasks(workStep.files, this.nextAgentId, stepIdx, workStep.name);
+          let stepFiles = workStep.files;
+          let memoryHints: Map<string, string> | undefined;
+          if (workStep.scope === 'memory' && workStep.files.length === 0) {
+            // Resolve the file list the producing step left in the merged
+            // integration state. Read on EVERY visit so check-loop rewrites
+            // of the memory file take effect. (A non-empty workStep.files
+            // here means a run-config override won — handled above.)
+            try {
+              const resolved = resolveMemoryFiles(
+                workStep.filesFrom!,
+                this.manifest!.integrationWorktreePath,
+                workStep.maxFiles,
+              );
+              for (const warning of resolved.warnings) {
+                this.log({ level: 'warn', message: `memory scope "${workStep.name}": ${warning}` });
+              }
+              stepFiles = resolved.files;
+              memoryHints = resolved.hints;
+              this.log({
+                level: 'info',
+                message: `memory scope "${workStep.name}": ${stepFiles.length} task(s) from ${workStep.filesFrom}`,
+              });
+            } catch (err) {
+              // Corrupt memory file: never legitimate — fail the run loudly
+              // (same shape as the maxNodeExecutions abort above).
+              this.status = 'error';
+              this.log({
+                level: 'error',
+                message: `memory scope "${workStep.name}": ${err instanceof MemoryFileError ? err.message : String(err)}`,
+              });
+              this.emit();
+              break;
+            }
+          }
+          stageTasks = decomposeTasks(stepFiles, this.nextAgentId, stepIdx, workStep.name);
+          if (workStep.scope === 'memory' && stepFiles.length === 0) {
+            // Missing/empty memory file resolves to ZERO tasks (not one
+            // whole-project task — that would silently widen the blast
+            // radius the producer chose). The stage completes empty and the
+            // merge card is skipped, mirroring "no agent commits".
+            stageTasks = [];
+          }
           this.nextAgentId += stageTasks.length;
           for (const task of stageTasks) {
+            if (memoryHints) task.hint = memoryHints.get(task.files[0] ?? '');
             task.branchName = agentBranchName(runId, task.agentId);
             task.worktreePath = agentWorktreePath(this.preflight.repoRoot, runId, task.agentId);
             this.agents.set(task.agentId, this.initialAgentStatus(task));
@@ -1649,7 +1698,12 @@ export class Orchestrator {
 
   private renderPrompt(step: PromptStep, task: AgentTask): string {
     if (task.files.length === 0) return step.prompt;
-    return step.prompt.replaceAll('$file', task.files[0]!);
+    // `$hint` carries the per-file context a memory-file producer attached
+    // to this path (empty for non-memory tasks) — replaced before `$file`
+    // so a hint containing the literal `$file` can't be re-expanded.
+    return step.prompt
+      .replaceAll('$hint', task.hint ?? '')
+      .replaceAll('$file', task.files[0]!);
   }
 
   private buildSystemPromptHint(step: PromptStep, task: AgentTask): string {

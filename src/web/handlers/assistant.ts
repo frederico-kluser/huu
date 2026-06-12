@@ -44,7 +44,8 @@ function draftToPipeline(draft: {
   steps: ReadonlyArray<{
     name: string;
     prompt: string;
-    scope: 'project' | 'per-file' | 'flexible';
+    scope: 'project' | 'per-file' | 'flexible' | 'memory';
+    filesFrom?: string;
     modelId?: string;
   }>;
 }): Pipeline {
@@ -55,6 +56,7 @@ function draftToPipeline(draft: {
       prompt: s.prompt,
       files: [],
       scope: s.scope,
+      filesFrom: s.filesFrom,
       modelId: s.modelId,
     })),
   };

@@ -123,7 +123,8 @@ OPTION RULES:
       {
         "name": "<step name, max 80 chars>",
         "prompt": "<actionable prompt the agent will execute>",
-        "scope": "project" | "per-file" | "flexible",
+        "scope": "project" | "per-file" | "flexible" | "memory",
+        "filesFrom": "<memory scope ONLY: repo-relative path of the huu-memory-v1 JSON an EARLIER step writes>",
         "modelId": "<an id from the catalog below, optional>"
       }
     ]
@@ -166,6 +167,7 @@ MASTER RULE: huu's main feature is running N agents in parallel inside a per-fil
 - "per-file": the step runs ONCE PER SELECTED FILE, in parallel (N simultaneous agents in isolated git worktrees). Use whenever the task fans out per file: create/update unit tests per module, generate JSDoc/docstring per file, apply the same lint rule, translate comments, add a header, migrate import/syntax file-by-file, refactor local boilerplate. CRITICAL VERB DISTINCTION: "RUN the test suite / build / lint" is project (1 command, single global output); "CREATE/WRITE tests for each file" is per-file (1 agent per source file). Same principle: "generate coverage report" is project; "write tests to raise coverage" is per-file.
 - "project": the step runs ONCE on the whole project. ONE agent, sees the entire repo. Use when the task requires cross-file context (architecture refactor, move symbols between modules, rename an API with callers everywhere), depends on global state (install deps, configure tooling, run build/test/lint), or produces a SINGLE artifact (edit README, add a badge, write an ADR, generate changelog, update package.json).
 - "flexible": legacy — only use if the user explicitly wants to decide case-by-case later. PREFER "project" or "per-file" when inference is possible.
+- "memory": the file set is DISCOVERED BY AN EARLIER STEP at run time — the producer step's prompt must write a huu-memory-v1 JSON ({"_format":"huu-memory-v1","files":[{"path":"...","hint":"..."}]}) and the memory step declares filesFrom pointing at it; one agent per listed path, $hint carries the producer's per-file note. Use for scan→fix, recon→study, rank→refactor shapes where the user should NOT hand-pick files. A memory step can never be the first step.
 
 ANTI-PATTERNS (do not commit):
 - per-file on a step that produces ONE shared artifact (badge, README, ADR, root config) — with no N input files, per-file becomes "1 agent, no $file" and parallelism doesn't happen. Single-artifact is ALWAYS project.

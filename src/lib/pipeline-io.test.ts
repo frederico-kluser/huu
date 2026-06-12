@@ -47,6 +47,62 @@ describe('pipeline-io', () => {
     expect(importPipeline(file)).toEqual(original);
   });
 
+  it('round-trips memory scope with filesFrom and maxFiles', () => {
+    const original: Pipeline = {
+      name: 'with-memory',
+      steps: [
+        { name: 'Scan', prompt: 'write the list', files: [], scope: 'project' },
+        {
+          name: 'Fix',
+          prompt: 'fix $file — note: $hint',
+          files: [],
+          scope: 'memory',
+          filesFrom: '.huu/list.json',
+          maxFiles: 12,
+        },
+      ],
+    };
+    const file = join(tmp, 'memory.pipeline.json');
+    exportPipeline(original, file);
+    expect(importPipeline(file)).toEqual(original);
+  });
+
+  it('rejects memory scope without filesFrom', () => {
+    expect(() =>
+      parsePipelineFromJson(
+        JSON.stringify({
+          name: 'bad-memory',
+          steps: [
+            { name: 'A', prompt: 'p', files: [] },
+            { name: 'B', prompt: 'p', files: [], scope: 'memory' },
+          ],
+        }),
+      ),
+    ).toThrow(/filesFrom/);
+  });
+
+  it('rejects memory scope on the first step (no producer ran yet)', () => {
+    expect(() =>
+      parsePipelineFromJson(
+        JSON.stringify({
+          name: 'bad-first',
+          steps: [{ name: 'A', prompt: 'p', files: [], scope: 'memory', filesFrom: 'x.json' }],
+        }),
+      ),
+    ).toThrow(/first step/);
+  });
+
+  it('rejects filesFrom on non-memory scopes', () => {
+    expect(() =>
+      parsePipelineFromJson(
+        JSON.stringify({
+          name: 'bad-filesfrom',
+          steps: [{ name: 'A', prompt: 'p', files: [], scope: 'project', filesFrom: 'x.json' }],
+        }),
+      ),
+    ).toThrow(/filesFrom/);
+  });
+
   it('round-trips integrationModelId and portAllocation', () => {
     const original: Pipeline = {
       name: 'with-integration-model',

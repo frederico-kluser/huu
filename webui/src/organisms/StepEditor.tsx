@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { Button, Select, Textarea } from '@/atoms';
+import { Button, Input, Select, Textarea } from '@/atoms';
 import { StepRow } from '@/molecules';
 import { cn } from '@/lib/cn';
 import type { ModelCatalogEntry, PromptStep } from '@/lib/domain-types';
@@ -87,11 +87,45 @@ export function StepEditor({ steps, onChange, onPickFiles, models, className }: 
             onChange={(e) => update(editingIndex, { prompt: e.currentTarget.value })}
             placeholder="Describe what this step should do…"
           />
+          <Select
+            label="Scope"
+            value={editing.scope ?? 'flexible'}
+            onChange={(e) => {
+              const scope = e.target.value as NonNullable<PromptStep['scope']>;
+              // project locks to whole-repo; memory gets its files from the
+              // filesFrom memory file at run time — both clear the files array.
+              if (scope === 'project' || scope === 'memory') {
+                update(editingIndex, { scope, files: [] });
+              } else {
+                update(editingIndex, { scope });
+              }
+            }}
+            options={[
+              { value: 'flexible', label: 'flexible — choose files at edit time' },
+              { value: 'project', label: 'project — one agent, whole repo' },
+              { value: 'per-file', label: 'per-file — one agent per picked file' },
+              { value: 'memory', label: "memory — paths from an earlier step's memory file" },
+            ]}
+          />
+          {(editing.scope ?? 'flexible') === 'memory' ? (
+            <Input
+              label="Memory file (filesFrom — huu-memory-v1 written by an earlier step)"
+              value={editing.filesFrom ?? ''}
+              onChange={(e) =>
+                update(editingIndex, { filesFrom: e.currentTarget.value || undefined })
+              }
+              placeholder=".huu/knowledge/study-list.json"
+            />
+          ) : null}
           <div className="flex items-end gap-2">
             <Button
               variant="secondary"
               onClick={() => onPickFiles?.(editingIndex)}
-              disabled={!onPickFiles}
+              disabled={
+                !onPickFiles ||
+                editing.scope === 'project' ||
+                editing.scope === 'memory'
+              }
             >
               Pick files ({editing.files.length})
             </Button>

@@ -39,8 +39,21 @@ export interface AppConfig {
  *                disallows the whole-project shortcut.
  * - `flexible` — user picks at edit time (whole-project or N files). This is
  *                the legacy behavior. `undefined` is treated as `flexible`.
+ * - `memory`   — one task per file listed in a huu-memory-v1 JSON written by
+ *                an EARLIER step (`filesFrom`, read from the integration
+ *                worktree when the cursor reaches this step). The pipeline —
+ *                not the user — decides the file set at run time. A missing
+ *                memory file resolves to zero tasks (the stage completes
+ *                empty, loudly); a corrupt one fails the run.
  */
-export type StepScope = 'project' | 'per-file' | 'flexible';
+export type StepScope = 'project' | 'per-file' | 'flexible' | 'memory';
+
+/**
+ * Width cap for `memory`-scope fan-outs when the step doesn't set
+ * `maxFiles`. Node-execution accounting counts step VISITS (not per-file
+ * tasks), so the real bound here is cost/pool width, not the node cap.
+ */
+export const DEFAULT_MEMORY_MAX_FILES = 40;
 
 /**
  * Work step — agents that actually modify the worktree.
@@ -63,6 +76,19 @@ export interface WorkStep {
   modelId?: string;
   /** See StepScope. Undefined = `flexible` (back-compat with v0.3.x pipelines). */
   scope?: StepScope;
+  /**
+   * `memory` scope only: repo-relative path of the huu-memory-v1 JSON an
+   * earlier step writes (e.g. `.huu/knowledge/study-list.json`). Read from
+   * the integration worktree at stage start, so check-loop rewrites are
+   * picked up. Required when scope === 'memory'; invalid otherwise.
+   */
+  filesFrom?: string;
+  /**
+   * `memory` scope only: cap on how many listed files become tasks
+   * (priority desc, then list order; excess is dropped with a warning).
+   * Defaults to {@link DEFAULT_MEMORY_MAX_FILES}.
+   */
+  maxFiles?: number;
   /** Override the next step. Must match another step's `name`. Undefined = next in array. */
   next?: string;
 }
@@ -295,6 +321,12 @@ export interface AgentTask {
   worktreePath: string;
   stageIndex: number;
   stageName: string;
+  /**
+   * `memory` scope only: the hint the producing step attached to this
+   * task's file in the huu-memory-v1 entry. Substituted into the step
+   * prompt via the `$hint` token (empty string when absent).
+   */
+  hint?: string;
 }
 
 export interface AgentStatus {

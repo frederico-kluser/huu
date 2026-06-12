@@ -1,8 +1,8 @@
 ---
 name: authoring-pipelines
-description: Guides writing huu pipeline JSON (huu-pipeline-v2) — WorkStep/CheckStep fields, scope semantics, outcome routing with exactly one default, the numeric safety caps and validateTopology rules, plus how to dry-run with the stub backend. Use when creating or editing any *.pipeline.json, designing pipeline stages, or deciding which step shape fits a job.
+description: Guides writing huu pipeline JSON (huu-pipeline-v2) — WorkStep/CheckStep fields, scope semantics including the memory scope (filesFrom fan-out driven by a huu-memory-v1 file an earlier step writes, with $hint), outcome routing with exactly one default, the numeric safety caps and validateTopology rules, plus how to dry-run with the stub backend. Use when creating or editing any *.pipeline.json, designing pipeline stages, or deciding which step shape fits a job.
 metadata:
-  version: 0.1.0
+  version: 0.2.0
   type: task
 ---
 
@@ -21,6 +21,7 @@ Creating or editing `*.pipeline.json` (user pipelines under `pipelines/`, exampl
   - `'project'` → whole-repo single task (the editor locks Files to `[]`)
   - `'per-file'` → one task per file; file picking is mandatory
   - `'flexible'` / omitted → legacy free-form (files `[]` = one whole-project round)
+  - `'memory'` + `filesFrom` → one task per path listed in a `huu-memory-v1` JSON an EARLIER step writes (`{"_format":"huu-memory-v1","files":[{"path","hint?","priority?"}]}`), read from the integration worktree when the cursor arrives — the pipeline picks the files, not the user. Per-entry hints reach the prompt via the `$hint` token. Rules: never the first step (schema-enforced); missing file → zero tasks, stage completes empty (stub-safe); corrupt file → run fails; `maxFiles` (default 40) caps width, priority desc then list order; a headless `config.files` override wins. Tell the producer step the exact format AND the cap in its prompt. Deep dive: `docs/memory-scope.md`.
 - CheckStep: `type:'check'` (required), `condition` (supports the `$runs` visit-count token), `outcomes[]` of `{label, nextStepName, default?}`. Exactly ONE outcome per check has `default: true` — `validateTopology` rejects zero or several. The default outcome fires on judge failure, unknown label, or the `maxRuns` cap, so make it the SAFE path (usually "approved"/"proceed"), never the loop.
 - Defaults/caps (types.ts:125-190): `maxRuns` 5 · `maxNodeExecutions` 50 · card timeout 600 000 ms · single-file card timeout 300 000 ms · `maxRetries` 1.
 - `validateTopology` also enforces: unique step names; every `next`/`nextStepName` resolves. Errors surface as Zod issues on load.

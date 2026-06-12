@@ -20,7 +20,7 @@ export {
   pipelineExistsInMemory,
 };
 
-const StepScopeSchema = z.enum(['project', 'per-file', 'flexible']);
+const StepScopeSchema = z.enum(['project', 'per-file', 'flexible', 'memory']);
 
 const WorkStepSchema = z.object({
   type: z.literal('work').optional(),
@@ -29,6 +29,10 @@ const WorkStepSchema = z.object({
   files: z.array(z.string()).default([]),
   modelId: z.string().min(1).optional(),
   scope: StepScopeSchema.optional(),
+  /** memory scope: repo-relative path of the huu-memory-v1 file an earlier step writes. */
+  filesFrom: z.string().min(1).optional(),
+  /** memory scope: fan-out width cap (default DEFAULT_MEMORY_MAX_FILES). */
+  maxFiles: z.number().int().positive().max(100).optional(),
   next: z.string().min(1).optional(),
 });
 
@@ -147,8 +151,32 @@ export function validateTopology(
           );
         }
       });
-    } else if (step.next !== undefined && !exists(step.next)) {
-      addError(`work step "${step.name}".next → unknown step "${step.next}"`, ['steps', i, 'next']);
+    } else {
+      if (step.next !== undefined && !exists(step.next)) {
+        addError(`work step "${step.name}".next → unknown step "${step.next}"`, ['steps', i, 'next']);
+      }
+      // `memory` scope contract: the file list comes from a huu-memory-v1
+      // JSON an EARLIER step writes, so the step needs `filesFrom` and
+      // cannot be the pipeline's first step (nothing ran yet to write it).
+      if (step.scope === 'memory') {
+        if (!step.filesFrom) {
+          addError(
+            `work step "${step.name}" has scope "memory" but no filesFrom (path of the memory file an earlier step writes)`,
+            ['steps', i, 'filesFrom'],
+          );
+        }
+        if (i === 0) {
+          addError(
+            `work step "${step.name}" has scope "memory" but is the first step — no earlier step can have written its memory file`,
+            ['steps', i, 'scope'],
+          );
+        }
+      } else if (step.filesFrom !== undefined) {
+        addError(
+          `work step "${step.name}" sets filesFrom but its scope is not "memory"`,
+          ['steps', i, 'filesFrom'],
+        );
+      }
     }
   });
 

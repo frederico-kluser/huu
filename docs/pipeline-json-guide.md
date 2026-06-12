@@ -220,6 +220,36 @@ The `scope` field determines how a step is decomposed into parallel tasks:
 - Legacy mode. The user chooses between whole-project and per-file when editing the pipeline in the TUI.
 - **Prefer explicit `"project"` or `"per-file"`** when the scope is clear.
 
+### `"memory"` — Files decided by an EARLIER step at run time
+
+- The step declares `"filesFrom": "<repo-relative path>"` pointing at a **memory file** a previous step writes. When the cursor reaches the step, huu reads that file from the integration worktree (so check-loop rewrites are picked up) and spawns **one agent per listed path** — the pipeline, not the user, decides the file set.
+- `files` stays `[]` in the JSON. In headless runs, a `config.files` entry for the step overrides the memory file (escape hatch).
+- Per-entry `hint`s are substituted into the prompt via the **`$hint`** token (`$file` works as usual) — the producing step hands each agent targeted context, not just a path.
+- A **missing** memory file resolves to zero tasks (the stage completes empty, with a loud warning); a **corrupt** one (bad JSON / wrong `_format` / no usable path) fails the run. `maxFiles` (default 40) caps the fan-out width; entries run by `priority` desc, then list order.
+- Cannot be the FIRST step — nothing ran yet to write the file (schema-enforced).
+
+**Memory file format (`huu-memory-v1`):**
+
+```json
+{
+  "_format": "huu-memory-v1",
+  "files": [
+    { "path": "src/lib/types.ts", "hint": "extract the step contract here", "priority": 10 },
+    "src/cli.tsx"
+  ]
+}
+```
+
+**Example:**
+
+```json
+{ "name": "1. Scan for risky files", "prompt": "Find risky files and write .huu/scan-list.json (huu-memory-v1) listing them with a one-line hint each.", "files": [], "scope": "project" },
+{ "name": "2. Fix $file", "prompt": "Fix the issue in $file. The scanner's note about this file: $hint", "files": [], "scope": "memory", "filesFrom": ".huu/scan-list.json" }
+```
+
+- **Use when**: an earlier step discovers the work units (scan, recon, diff, ranking) and the fan-out must follow that discovery with no human file-picking.
+- Deep-dive guide (patterns, interfaces, troubleshooting): [memory-scope.md](memory-scope.md) · [pt-BR](memory-scope.pt-BR.md).
+
 ### Decision guide
 
 Ask yourself: **"Does this step produce N independent outputs (one per file) or 1 shared output?"**
@@ -228,6 +258,7 @@ Ask yourself: **"Does this step produce N independent outputs (one per file) or 
 |---|---|
 | N independent outputs → | `"per-file"` |
 | 1 shared output → | `"project"` |
+| The file set is discovered by an EARLIER step → | `"memory"` + `filesFrom` |
 | Genuinely ambiguous → | `"flexible"` |
 
 ---

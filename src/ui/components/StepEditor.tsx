@@ -26,7 +26,7 @@ interface Props {
 
 const FULL_CLEAR = '\x1b[3J';
 
-const SCOPE_CYCLE: StepScope[] = ['flexible', 'project', 'per-file'];
+const SCOPE_CYCLE: StepScope[] = ['flexible', 'project', 'per-file', 'memory'];
 function nextScope(current: StepScope): StepScope {
   const i = SCOPE_CYCLE.indexOf(current);
   return SCOPE_CYCLE[(i + 1) % SCOPE_CYCLE.length]!;
@@ -37,6 +37,7 @@ function scopeLabel(scope: StepScope): string {
     case 'project': return 'whole project (locked)';
     case 'per-file': return 'per file (must pick files)';
     case 'flexible': return 'flexible (choose at edit time)';
+    case 'memory': return 'memory file (paths from an earlier step)';
   }
 }
 
@@ -67,6 +68,7 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
   const filesValid =
     scope === 'project' ? true :
     scope === 'per-file' ? step.files.length > 0 :
+    scope === 'memory' ? Boolean(step.filesFrom) :
     filesChosen;
   const canSave = Boolean(step.name && step.prompt && filesValid);
 
@@ -77,6 +79,11 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
     } else if (s === 'per-file') {
       setStep({ ...step, scope: s });
       setFilesChosen(step.files.length > 0);
+    } else if (s === 'memory') {
+      // Files come from the memory file at run time — the editor only
+      // needs the filesFrom path; the files array stays empty.
+      setStep({ ...step, scope: s, files: [] });
+      setFilesChosen(true);
     } else {
       setStep({ ...step, scope: s });
     }
@@ -133,11 +140,14 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
       } else if (field === 'files') {
         // ENTER opens the picker when scope is per-file (forced) or flexible
         // and files have already been chosen explicitly. For 'project', the
-        // selection is locked to whole-project — ENTER is a no-op.
+        // selection is locked to whole-project — ENTER is a no-op. For
+        // 'memory', ENTER edits the filesFrom path instead of any picker.
         if (scope === 'per-file') {
           setPickingFiles(true);
         } else if (scope === 'flexible' && filesChosen) {
           setPickingFiles(true);
+        } else if (scope === 'memory') {
+          setEditorMode('editing');
         }
       } else if (field === 'model') {
         setPickingModel(true);
@@ -146,9 +156,10 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
       if (input === 'p' || input === 'P') applyScope('project');
       else if (input === 'f' || input === 'F') applyScope('per-file');
       else if (input === 'x' || input === 'X') applyScope('flexible');
+      else if (input === 'm' || input === 'M') applyScope('memory');
     } else if (field === 'files') {
-      if (scope === 'project') {
-        // Locked: F/W disabled.
+      if (scope === 'project' || scope === 'memory') {
+        // project: locked. memory: the path is edited via ENTER, no picker.
       } else if (scope === 'per-file') {
         // Only F (or ENTER) opens picker; W is disabled because per-file
         // requires actual files.
@@ -219,6 +230,7 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
   const scopeColor =
     scope === 'project' ? 'cyanBright' :
     scope === 'per-file' ? 'blue' :
+    scope === 'memory' ? 'blueBright' :
     'yellow';
 
     return (
@@ -264,14 +276,30 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
           <Box width={10}><Text color={field === 'scope' ? 'cyan' : undefined}>Scope:</Text></Box>
           <Text color={scopeColor}>{scopeLabel(scope)}</Text>
           {field === 'scope' && (
-            <Text dimColor>   <Text bold>ENTER</Text> cycle · <Text bold>P</Text> project · <Text bold>F</Text> per-file · <Text bold>X</Text> flexible</Text>
+            <Text dimColor>   <Text bold>ENTER</Text> cycle · <Text bold>P</Text> project · <Text bold>F</Text> per-file · <Text bold>X</Text> flexible · <Text bold>M</Text> memory</Text>
           )}
         </Box>
 
         <Box marginTop={1}>
           <Text color="cyan">{field === 'files' ? '› ' : '  '}</Text>
           <Box width={10}><Text color={field === 'files' ? 'cyan' : undefined}>Files:</Text></Box>
-          {scope === 'project' ? (
+          {scope === 'memory' ? (
+            field === 'files' && editorMode === 'editing' ? (
+              <TextInput
+                value={step.filesFrom ?? ''}
+                onChange={(v) => setStep({ ...step, filesFrom: v || undefined })}
+                onSubmit={() => {
+                  setEditorMode('selecting');
+                  setField('model');
+                }}
+                placeholder=".huu/knowledge/study-list.json"
+              />
+            ) : step.filesFrom ? (
+              <Text color="green">from memory file: {step.filesFrom}</Text>
+            ) : (
+              <Text color="red">(no memory file — press <Text bold>ENTER</Text> to set the filesFrom path)</Text>
+            )
+          ) : scope === 'project' ? (
             <Text color="yellow">[whole project — locked by scope]</Text>
           ) : scope === 'per-file' ? (
             step.files.length === 0 ? (
@@ -291,6 +319,9 @@ export function StepEditor({ initialStep, stepIndex, allSteps, repoRoot, onSave,
           )}
           {field === 'files' && scope === 'flexible' && filesChosen && (
             <Text dimColor>   <Text bold>F</Text> pick files · <Text bold>W</Text> whole project</Text>
+          )}
+          {field === 'files' && scope === 'memory' && editorMode !== 'editing' && (
+            <Text dimColor>   <Text bold>ENTER</Text> edit memory-file path (huu-memory-v1, written by an earlier step)</Text>
           )}
         </Box>
 

@@ -52,6 +52,7 @@ function isStepValid(step: PipelineStep, allSteps: PipelineStep[]): boolean {
     const names = new Set(allSteps.map((s) => s.name));
     return step.outcomes.every((o) => o.label && o.nextStepName && names.has(o.nextStepName));
   }
+  if (step.scope === 'memory') return Boolean(step.prompt) && Boolean(step.filesFrom);
   return Boolean(step.prompt) && (step.scope !== 'per-file' || step.files.length > 0);
 }
 
@@ -321,6 +322,12 @@ export function PipelineEditor({
               detailBadge =
                 scope === 'project' ? (
                   <Text color="cyanBright">project</Text>
+                ) : scope === 'memory' ? (
+                  step.filesFrom ? (
+                    <Text color="blueBright">memory · {step.filesFrom}</Text>
+                  ) : (
+                    <Text color="red">memory (no filesFrom)</Text>
+                  )
                 ) : scope === 'per-file' ? (
                   step.files.length === 0 ? (
                     <Text color="red">per-file (no files)</Text>

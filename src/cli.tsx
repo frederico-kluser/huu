@@ -496,6 +496,20 @@ async function main(): Promise<void> {
     );
     for (const w of warnings) process.stderr.write(`[warn] ${w}\n`);
 
+    // Per-file steps must have concrete files by now (from the pipeline or
+    // config.files) — failing here beats spawning a misconfigured run.
+    // `memory` steps are exempt on purpose: their list materializes at run
+    // time from the filesFrom memory file an earlier step writes.
+    for (const step of mergedPipeline.steps) {
+      if (!('files' in step)) continue;
+      if (step.scope === 'per-file' && step.files.length === 0) {
+        console.error(
+          `Step "${step.name}" has scope "per-file" but no files — add them under config.files["${step.name}"], or switch the step to scope "memory" with filesFrom.`,
+        );
+        process.exit(1);
+      }
+    }
+
     const bundle = selectBackend(runConfig.backend);
     let apiKey = '';
     let endpoint: string | undefined;
