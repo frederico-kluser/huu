@@ -18,12 +18,28 @@
 
 <p align="center">
   <a href="#licença"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
+  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-1.3.0-blueviolet"></a>
   <img alt="Node.js 20+" src="https://img.shields.io/badge/node-%E2%89%A5%2020-339933?logo=node.js&logoColor=white">
   <img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.x-3178C6?logo=typescript&logoColor=white">
   <img alt="Built with Ink" src="https://img.shields.io/badge/TUI-Ink%204-000000">
+  <a href="docs/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-pt--BR%20%2B%20EN-success"></a>
 </p>
 
 ---
+
+## Os quatro primitivos de orquestração
+
+| | Primitivo | O que faz |
+|---|---|---|
+| 🗺️ | **Map** — fan-out `per-file`/`memory` | o mesmo prompt vira N agentes em paralelo, um por arquivo (`$file` + `$hint`), cada um em seu git worktree |
+| 🔀 | **Switch** — check steps | um judge LLM com shell emite um veredito JSON e o cursor segue o outcome (com `default` seguro e `maxRuns`) |
+| ◇ | **Parallel + Join** — [`dependsOn`](docs/pipeline-json-guide.md) | ramos heterogêneos rodam juntos em **ondas determinísticas**; o join enxerga todos os merges — mesma pipeline ⇒ mesma sequência de commits, sempre |
+| 🧠 | **Memory** — [`produces` → `filesFrom`](docs/memory-scope.pt-BR.md) | uma etapa **descobre** o trabalho e a próxima fan-outa sobre ele — zero seleção humana de arquivos; o contrato de formato é injetado pelo huu |
+
+Compõem livremente: *descoberta → fan-out por memória → ramos paralelos →
+join julgado → rework em cascata* — tudo visível no kanban, tudo
+reproduzível. Quebrou algo? Todo erro fatal vem com **causa + próximo
+passo** ([troubleshooting](docs/troubleshooting.pt-BR.md)).
 
 ## O que é o huu
 

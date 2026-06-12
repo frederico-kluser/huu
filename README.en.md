@@ -18,12 +18,28 @@
 
 <p align="center">
   <a href="#license"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
+  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-1.3.0-blueviolet"></a>
   <img alt="Node.js 20+" src="https://img.shields.io/badge/node-%E2%89%A5%2020-339933?logo=node.js&logoColor=white">
   <img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.x-3178C6?logo=typescript&logoColor=white">
   <img alt="Built with Ink" src="https://img.shields.io/badge/TUI-Ink%204-000000">
+  <a href="docs/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-EN%20%2B%20pt--BR-success"></a>
 </p>
 
 ---
+
+## The four orchestration primitives
+
+| | Primitive | What it does |
+|---|---|---|
+| 🗺️ | **Map** — `per-file`/`memory` fan-out | the same prompt becomes N parallel agents, one per file (`$file` + `$hint`), each in its own git worktree |
+| 🔀 | **Switch** — check steps | an LLM judge with shell access emits a JSON verdict and the cursor follows the outcome (safe `default` + `maxRuns`) |
+| ◇ | **Parallel + Join** — [`dependsOn`](docs/pipeline-json-guide.md) | heterogeneous branches run together in **deterministic waves**; the join sees every merge — same pipeline ⇒ same commit sequence, always |
+| 🧠 | **Memory** — [`produces` → `filesFrom`](docs/memory-scope.md) | one step **discovers** the work and the next fans out over it — zero human file-picking; huu injects the format contract |
+
+They compose freely: *discover → memory fan-out → parallel branches →
+judged join → cascading rework* — all visible on the kanban, all
+reproducible. Something broke? Every fatal error ships with **cause +
+next step** ([troubleshooting](docs/troubleshooting.md)).
 
 ## What huu is
 
