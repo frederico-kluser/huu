@@ -132,12 +132,12 @@ Dependencies flow **downward only**: the UI never imports the orchestrator's int
 
 1. **Preflight** validates repo state (clean tree, valid base branch, push capability where relevant).
 2. The **integration worktree** is created on a disposable branch named `huu/<runId>/integration`.
-3. Per stage, the orchestrator decomposes the step into tasks, allocates them to a bounded worker pool, and lets each agent work in its own worktree under `<repo>/.huu-worktrees/<runId>/`. Each worktree also receives a per-agent TCP port window (`.env.huu`) and a `.huu-bin/with-ports` shim — see [`PORT-SHIM.md`](PORT-SHIM.md) and the [`port-isolation`](../.agents/skills/port-isolation/SKILL.md) skill.
+3. Per stage, the orchestrator decomposes the step into tasks — one whole-project task, one per picked file, or (`scope: "memory"`) one per path listed in a `huu-memory-v1` file an **earlier step wrote**, read from the integration worktree with per-entry hints reaching prompts via `$hint` (see [`memory-scope.md`](memory-scope.md)) — allocates them to a bounded worker pool, and lets each agent work in its own worktree under `<repo>/.huu-worktrees/<runId>/`. Each worktree also receives a per-agent TCP port window (`.env.huu`) and a `.huu-bin/with-ports` shim — see [`PORT-SHIM.md`](PORT-SHIM.md) and the [`isolating-agent-ports`](../.agents/skills/isolating-agent-ports/SKILL.md) skill.
 4. As soon as all tasks for the stage finish, branches are merged serially into the integration worktree. In the rare case where a poorly-decomposed pipeline produces overlapping edits in the same stage, an integration agent backed by a real LLM resolves the conflict on a side worktree. Failed or timed-out tasks are retried up to `maxRetries` times in fresh worktrees.
 5. The next stage branches off the **HEAD of the updated integration**, so each step sees the changes from every previous step. **Conditional steps (`type: "check"`, v2)** insert decision nodes into this flow: a judge agent runs in the integration worktree (no commits, shell access only), emits a JSON verdict, and the cursor jumps to the matching outcome's `nextStepName`. Loops back to earlier steps re-execute on top of the current HEAD — the integration worktree is monotonic, it never rewinds. See [`docs/pipeline-json-guide.md`](pipeline-json-guide.md#conditional-steps-check-nodes) for the schema and `orchestrator/check-evaluator.ts` for the judge spawner.
 6. Cleanup removes the integration worktree. Per-agent branches are preserved as artifacts; logs land under `.huu/`.
 
-> See [`.agents/skills/git-workflow-orchestration/SKILL.md`](../.agents/skills/git-workflow-orchestration/SKILL.md) for the full lifecycle, branch naming, merge strategy, and conflict-resolution rules.
+> See [`.agents/skills/orchestrating-git-worktrees/SKILL.md`](../.agents/skills/orchestrating-git-worktrees/SKILL.md) for the full lifecycle, branch naming, merge strategy, and conflict-resolution rules.
 
 ## Authoring layer (pipeline assistant + project recon)
 
@@ -277,19 +277,11 @@ Key invariants:
 
 ## Agent skills
 
-The `.agents/skills/` directory contains domain-scoped guidance that the agents themselves consult before acting. They are also the canonical reference if you are extending `huu`.
+The `.agents/skills/` directory contains the skill system every task in this repo routes through (source of truth, mirrored into `.claude/skills/` via per-skill symlinks). It is also the canonical reference if you are extending `huu`.
 
-| Skill | Domain |
-|---|---|
-| [`architecture-conventions`](../.agents/skills/architecture-conventions/SKILL.md) | Layered architecture, naming, imports, dependency rules |
-| [`git-workflow-orchestration`](../.agents/skills/git-workflow-orchestration/SKILL.md) | Worktree lifecycle, branch naming, merge, conflict resolution |
-| [`pipeline-agents`](../.agents/skills/pipeline-agents/SKILL.md) | Pipeline creation, task decomposition, AgentFactory usage |
-| [`port-isolation`](../.agents/skills/port-isolation/SKILL.md) | Per-agent port allocation, bind() shim (LD_PRELOAD/DYLD), `.env.huu`, native compile |
-| [`ui-tui-ink`](../.agents/skills/ui-tui-ink/SKILL.md) | Ink (React for terminals) component patterns, screen routing |
-| [`build-dev-tools`](../.agents/skills/build-dev-tools/SKILL.md) | Build, dev, test commands and tooling config |
-| [`llm-integration`](../.agents/skills/llm-integration/SKILL.md) | OpenRouter model selection, Pi SDK, thinking detection |
+Start at [`project-router`](../.agents/skills/project-router/SKILL.md); the canonical routing index is [`catalog.md`](../.agents/skills/catalog.md) — 17 skills: 1 router · 8 knowledge (architecture, orchestrator, git worktrees, LLM backends, ports, Docker, tests, docs) · 6 task (pipelines, default pipelines, TUI, web mode, commit gate, release) · 2 meta (evolution, consolidate).
 
-A condensed catalog also lives at [`agent-skills.md`](../agent-skills.md).
+A human-facing overview of how the system works (routing, LEARNINGS, evolution, consolidation) lives at [`agent-skills.md`](../agent-skills.md).
 
 ## Logs and debugging
 

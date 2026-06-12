@@ -105,6 +105,20 @@ escritas disjuntas geram merges limpos. **Aqui está a sacada
 revolucionária: seu pipeline é o contrato, e o contrato escala
 horizontalmente.**
 
+### Scope memory: o pipeline escolhe os arquivos, não o humano
+
+`per-file` ainda exige que alguém selecione os arquivos. O scope
+`memory` remove até isso: uma etapa anterior **escreve um arquivo de
+memória** (`huu-memory-v1`) listando os paths — com um `hint` opcional
+por arquivo — e a etapa com `scope: "memory"` + `filesFrom` fan-outa
+**um agente por entrada**, lendo a lista do worktree de integração na
+hora de executar. O `hint` do produtor chega ao prompt do consumidor
+via token `$hint`, junto do `$file`.
+
+Scan → fix, recon → estudo, rank → refactor: o passo de descoberta
+decide o trabalho e o fan-out obedece, sem nenhum clique de seleção.
+Guia completo: [`docs/memory-scope.pt-BR.md`](docs/memory-scope.pt-BR.md).
+
 ---
 
 ## Showcase: huu Test Suite
@@ -145,11 +159,15 @@ resultado é auditável:
 - **Geração de testes** (`huu Test Suite`, o default) — regras de
   asserção que sobrevivem a mutation testing e regras de determinismo
   anti-flaky embutidas nos prompts.
-- **Extração de conhecimento** (`huu Agent Knowledge`) — recon, estudo
-  profundo por arquivo convergindo em `.huu/knowledge/findings.json`,
-  síntese de tópicos e compilação final em **Agent Skills**
-  ([spec](https://agentskills.io/specification)) sob `.agents/skills/`,
-  com um step `check` validando as skills geradas contra a spec.
+- **Extração de conhecimento** (`huu Knowledge System`) — totalmente
+  autônoma via scope `memory`: o recon escolhe sozinho os arquivos de
+  estudo (com um hint por arquivo), o estudo profundo converge em
+  `.huu/knowledge/`, dossiês por tópico viram **Agent Skills**
+  ([spec](https://agentskills.io/specification)) sob `.agents/skills/`
+  com **um agente paralelo por skill**, mais meta-skills de evolução e
+  uma superfície de roteamento router-aware (estende seu `catalog.md`
+  se já existir) — selada por um **eval cego de roteamento** com loop
+  de retrabalho de descriptions.
 - **Processos mecânicos em massa.** *Migrar 40 testes Mocha pra
   Vitest:* etapa 1 audita patterns em `MIGRATION.md`, etapa 2 ramifica
   40 agentes (um por arquivo), etapa 3 valida com `npm test`. O prompt

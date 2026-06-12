@@ -468,7 +468,7 @@ existing file, so editing one preserves your changes across launches.
 | Pipeline | What it does | Methodology |
 |---|---|---|
 | **huu Test Suite** *(highlighted)* | Detects the stack, sets up a test runner, writes unit tests for 3 representative files + the user-selected files, then prunes failing blocks and adds a coverage badge to README. | Unit-test fundamentals |
-| **huu Agent Knowledge** | Studies the project (recon + per-file deep study), accumulates findings in `.huu/knowledge/`, then compiles them into Agent Skills under `.agents/skills/` — one skill per topic plus a `project-knowledge` router skill any future agent loads first. A judge step validates the generated skills and loops back on failure. | [Agent Skills spec](https://agentskills.io/specification) + progressive knowledge |
+| **huu Knowledge System** | Builds the full knowledge-skills system, fully autonomous via the `memory` scope: recon picks the study files by itself (one hint per file), per-file deep study accumulates findings in `.huu/knowledge/`, per-topic dossiers become Agent Skills under `.agents/skills/` (one parallel agent per skill) plus evolution meta-skills and a router-aware routing surface (extends an existing router/`catalog.md`, else creates `project-knowledge`). A judge validates the skills and a blind routing eval gates the finish, sharpening descriptions on rework. | [Agent Skills spec](https://agentskills.io/specification) + [memory-scope](memory-scope.md) fan-out |
 | **huu Docs Audit** | Classifies every doc by [Diátaxis](https://diataxis.fr/) quadrant, scores the README against Awesome-README, flags stale references, measures inline API-doc coverage. | Diátaxis + Awesome-README |
 | **huu Quality Audit** | Sonar-style: cyclomatic / cognitive complexity, function/file size, parameter count, nesting depth, duplication, dead code. | [SonarSource](https://www.sonarsource.com/resources/library/cyclomatic-complexity/) + Fowler smells |
 | **huu Performance Audit** | Static hotspot scan (N+1, big-O, sync I/O, memory leak signals), Core Web Vitals for frontends, USE-method checklist for backends/CLIs. | [USE method](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
@@ -491,10 +491,11 @@ lockfiles, or any production source. Tools that need to be invoked
 `npx --yes`, `pipx run`, or vendored binaries under `$HOME/.huu/bin/` —
 never added to your project's manifests. Two pipelines touch production
 files by design: `huu Test Suite` (writes `huu-tests.md` and a tests
-badge in README) and `huu Agent Knowledge` (writes `.agents/skills/**`
+badge in README) and `huu Knowledge System` (writes `.agents/skills/**`
 and `.huu/knowledge/**`) — both are setup pipelines, not audits.
 
-Per-file steps are bounded by `Pipeline.maxNodeExecutions = 50`. On
+`Pipeline.maxNodeExecutions = 50` caps cursor visits to steps — a
+per-file (or memory) fan-out of N files counts as ONE visit. On
 large repos, narrow your file selection with Smart Select; auto-skip
 rules ignore `node_modules/`, `dist/`, `build/`, `vendor/`, generated
 files, `*.d.ts`, and lock files.

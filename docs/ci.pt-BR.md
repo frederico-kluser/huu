@@ -216,7 +216,7 @@ uso local; o CI não usa nenhum deles.
 
 **Quais pipelines rodar em CI?** Os audits report-only (Security, Quality,
 Docs, Performance, Refactor) — nunca modificam código de produção. O
-`huu Test Suite` e o `huu Agent Knowledge` mutam o repo por design; rode-os
+`huu Test Suite` e o `huu Knowledge System` mutam o repo por design; rode-os
 interativamente e revise o diff.
 
 **O job pode commitar os relatórios de volta?** Os audits escrevem em

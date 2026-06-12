@@ -137,7 +137,7 @@ default pipelines into `pipelines/` on first run. Each one is idempotent
 | Pipeline | What it does | Methodology |
 |---|---|---|
 | `huu Test Suite` (`_default`) | Stack detection → test runner setup → unit tests for 3 representative files + user-selected files → prune failing blocks → add coverage badge to README. Prompts bake in mutation-surviving assertion rules and an anti-flaky determinism ruleset. | Google Testing Blog (behavior, not implementation) + [Fowler non-determinism](https://martinfowler.com/articles/nonDeterminism.html) + [Stryker](https://stryker-mutator.io/) follow-up |
-| `huu Agent Knowledge` | Recon → per-file deep study converging into `.huu/knowledge/` (atlas + findings) → topic synthesis → materializes Agent Skills under `.agents/skills/` (one per topic; router-aware — extends an existing router/`catalog.md` when the repo has one, else creates `project-knowledge`) → judge validates frontmatter/naming/router coverage, looping back on `rework`. Setup pipeline — mutates the repo. | [Agent Skills spec](https://agentskills.io/specification) + progressive knowledge |
+| `huu Knowledge System` | Builds the full knowledge-skills system on a shared `.huu/knowledge/` blackboard — fully autonomous via `scope: "memory"` (no user file-picking): recon writes the study list (with per-file hints) → memory fan-out deep study (findings) → ONE synthesis step (topics + routing ground truth, written before any skill exists) → per-topic dossiers → skills materialized one-parallel-agent-per-dossier (memory fan-out, judge-looped) → meta-skills + LEARNINGS + routing surface (router-aware: extends an existing router/`catalog.md`, else creates `project-knowledge`) → blind routing eval gated by a description-sharpening rework loop. Engineered for small models: one cognitive op per step, mechanical judges, stub-safe forward defaults. Setup pipeline — mutates the repo. | [Agent Skills spec](https://agentskills.io/specification) + CoALA memory taxonomy + Voyager self-verification |
 | `huu Docs Audit` | Inventories every doc, classifies via the Diátaxis compass, scores the README (standard-readme grounded), flags stale references, measures inline API-doc coverage. Report-only + judge gate. | [Diátaxis](https://diataxis.fr/) + [standard-readme](https://github.com/RichardLitt/standard-readme) |
 | `huu Quality Audit` | Sonar-style report: cyclomatic + cognitive complexity, size metrics, churn×complexity hotspots (git-log mining), duplication, dead code, hotspot-weighted composite score. Report-only + judge gate. | [SonarSource cognitive complexity](https://www.sonarsource.com/docs/CognitiveComplexity.pdf) + [Tornhill hotspots](https://docs.enterprise.codescene.io/versions/4.0.16/guides/technical/hotspots.html) |
 | `huu Performance Audit` | Static hotspot scan (N+1, big-O, sync I/O, memory leaks, unbounded concurrency, missing caching), Core Web Vitals scorecard (INP via TBT lab proxy, caveat explicit), USE-method checklist. Report-only + judge gate. | [USE method](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
@@ -175,11 +175,13 @@ to your project's manifests.
 
 Two pipelines mutate production state by design (setup pipelines, not
 audits): `huu Test Suite` (writes `huu-tests.md` to repo root + inserts
-a tests-coverage badge in `README.md`) and `huu Agent Knowledge`
+a tests-coverage badge in `README.md`) and `huu Knowledge System`
 (writes `.agents/skills/**` + `.huu/knowledge/**`, same single
 `.gitignore` adjustment rule with `!.huu/knowledge/`).
 
-Per-file steps are bounded by `Pipeline.maxNodeExecutions = 50`. Each
+`Pipeline.maxNodeExecutions` (default 50) caps cursor VISITS to steps — a
+per-file fan-out of N files counts as ONE visit; width is bounded by the
+file selection (or `maxFiles` on memory steps) and the worker pool. Each
 per-file prompt opens with an auto-skip rule for `node_modules/`,
 `dist/`, `build/`, `vendor/`, `*.generated.*`, `*.d.ts`, lock/snapshot
 files, etc.
@@ -271,7 +273,11 @@ accumulating commits. Schema: `huu-pipeline-v2` (v1 still accepted,
 `type` is optional on work steps). Safeguards:
 `Pipeline.maxNodeExecutions` (default 50), `CheckStep.maxRuns`
 (default 5), and the `default: true` outcome (exactly one per check)
-fires on judge failure / unknown label / cap. See
+fires on judge failure / unknown label / cap. Work steps also support
+`scope: "memory"` + `filesFrom`: the per-file fan-out is read at stage
+start from a huu-memory-v1 JSON an EARLIER step wrote into the
+integration worktree (per-entry `hint`s reach prompts via `$hint`;
+missing file → empty stage, corrupt file → run fails). See
 `.agents/skills/authoring-pipelines/SKILL.md` and
 `docs/pipeline-json-guide.md` (`#conditional-steps-check-nodes`).
 

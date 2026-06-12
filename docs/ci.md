@@ -215,7 +215,7 @@ use; CI uses none of them.
 
 **Which pipelines should run in CI?** The report-only audits (Security,
 Quality, Docs, Performance, Refactor) — they never modify production source.
-`huu Test Suite` and `huu Agent Knowledge` mutate the repo by design; run
+`huu Test Suite` and `huu Knowledge System` mutate the repo by design; run
 those interactively and review the diff instead.
 
 **Can the job push the reports back?** The audits write to `.huu/audits/` in

@@ -102,6 +102,20 @@ context but are instructed to write only to their assigned file —
 disjoint writes mean clean merges. **This is the revolutionary bit:
 your pipeline is the contract, and the contract scales horizontally.**
 
+### Memory scope: the pipeline picks the files, not the human
+
+`per-file` still needs someone to select the files. The `memory` scope
+removes even that: an earlier step **writes a memory file**
+(`huu-memory-v1`) listing the paths — with an optional per-file
+`hint` — and the step with `scope: "memory"` + `filesFrom` fans out
+**one agent per entry**, reading the list from the integration
+worktree at run time. The producer's `hint` reaches the consumer's
+prompt through the `$hint` token, alongside `$file`.
+
+Scan → fix, recon → study, rank → refactor: the discovery step decides
+the work and the fan-out obeys, with zero selection clicks. Full
+guide: [`docs/memory-scope.md`](docs/memory-scope.md).
+
 ---
 
 ## Showcase: huu Test Suite
@@ -141,12 +155,15 @@ auditable:
 - **Test generation** (`huu Test Suite`, the default) — assertion
   rules that survive mutation testing and anti-flaky determinism
   rules baked into the prompts.
-- **Knowledge extraction** (`huu Agent Knowledge`) — recon, per-file
-  deep study converging into `.huu/knowledge/findings.json`, topic
-  synthesis and a final compilation into **Agent Skills**
+- **Knowledge extraction** (`huu Knowledge System`) — fully autonomous
+  via the `memory` scope: recon picks the study files by itself (with
+  a per-file hint), deep study converges into `.huu/knowledge/`,
+  per-topic dossiers become **Agent Skills**
   ([spec](https://agentskills.io/specification)) under
-  `.agents/skills/`, with a `check` step validating the generated
-  skills against the spec.
+  `.agents/skills/` with **one parallel agent per skill**, plus
+  evolution meta-skills and a router-aware routing surface (extends
+  your existing `catalog.md` when present) — sealed by a **blind
+  routing eval** with a description-sharpening rework loop.
 - **Mechanical mass processes.** *Migrate 40 Mocha tests to Vitest:*
   stage 1 audits patterns into `MIGRATION.md`, stage 2 fans out 40
   agents (one per file), stage 3 validates with `npm test`. The prompt

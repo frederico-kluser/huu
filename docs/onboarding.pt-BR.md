@@ -485,7 +485,7 @@ editar um preserva suas mudanças entre launches.
 | Pipeline | O que faz | Metodologia |
 |---|---|---|
 | **huu Test Suite** *(destacado)* | Detecta a stack, configura test runner, escreve testes unitários pra 3 arquivos representativos + os arquivos selecionados pelo usuário, depois poda os blocos com falha e adiciona um badge de cobertura no README. | Fundamentos de teste unitário |
-| **huu Agent Knowledge** | Estuda o projeto (recon + estudo profundo por arquivo), acumula findings em `.huu/knowledge/`, e compila tudo em Agent Skills sob `.agents/skills/` — uma skill por tópico mais a skill roteadora `project-knowledge` que qualquer agente futuro carrega primeiro. Um step juiz valida as skills geradas e volta pro passo anterior em caso de falha. | [Spec Agent Skills](https://agentskills.io/specification) + conhecimento progressivo |
+| **huu Knowledge System** | Constrói o sistema completo de knowledge skills, totalmente autônomo via scope `memory`: o recon escolhe sozinho os arquivos de estudo (um hint por arquivo), o estudo profundo por arquivo acumula findings em `.huu/knowledge/`, dossiês por tópico viram Agent Skills sob `.agents/skills/` (um agente paralelo por skill) mais meta-skills de evolução e uma superfície de roteamento router-aware (estende um router/`catalog.md` existente, senão cria `project-knowledge`). Um juiz valida as skills e um eval cego de roteamento fecha o run, afiando descriptions no retrabalho. | [Spec Agent Skills](https://agentskills.io/specification) + fan-out [memory-scope](memory-scope.pt-BR.md) |
 | **huu Docs Audit** | Classifica cada doc pelo quadrante [Diátaxis](https://diataxis.fr/), pontua o README contra o Awesome-README, sinaliza referências stale, mede cobertura de doc inline de API. | Diátaxis + Awesome-README |
 | **huu Quality Audit** | Estilo Sonar: complexidade ciclomática / cognitiva, tamanho de função/arquivo, contagem de parâmetros, profundidade de aninhamento, duplicação, código morto. | [SonarSource](https://www.sonarsource.com/resources/library/cyclomatic-complexity/) + smells do Fowler |
 | **huu Performance Audit** | Varredura estática de hotspots (N+1, big-O, I/O sync, sinais de memory leak), Core Web Vitals pra frontends, checklist USE pra backends/CLIs. | [Método USE](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
@@ -509,10 +509,11 @@ lighthouse-ci, …) rodam efêmeras via `npx --yes`, `pipx run`, ou
 binários vendorizados sob `$HOME/.huu/bin/` — nunca adicionadas aos
 manifests do seu projeto. Dois pipelines tocam arquivos de produção por
 design: `huu Test Suite` (escreve `huu-tests.md` e um badge de testes
-no README) e `huu Agent Knowledge` (escreve `.agents/skills/**` e
+no README) e `huu Knowledge System` (escreve `.agents/skills/**` e
 `.huu/knowledge/**`) — ambos são pipelines de setup, não auditorias.
 
-Steps por-arquivo são limitados por `Pipeline.maxNodeExecutions = 50`.
+`Pipeline.maxNodeExecutions = 50` limita as visitas do cursor aos
+steps — um fan-out per-file (ou memory) de N arquivos conta como UMA visita.
 Em repos grandes, restrinja sua seleção de arquivos com Smart Select;
 regras de auto-skip ignoram `node_modules/`, `dist/`, `build/`,
 `vendor/`, arquivos generated, `*.d.ts` e arquivos de lock.

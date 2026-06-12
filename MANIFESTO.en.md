@@ -93,9 +93,12 @@ flowchart LR
 Between supersteps, knowledge flows through **files, not context**:
 stage 1 writes a contract (`huu-tests.md`, an atlas, a findings JSON),
 later stages read it before acting and append what they learned. Shared
-memory with the durability of a commit — the `huu Agent Knowledge`
-pipeline pushes this to its limit, compiling the run's accumulated
-knowledge into Agent Skills that any future agent loads.
+memory with the durability of a commit. The `memory` scope makes this
+executable: one step writes the file list (with a per-entry hint) and
+the next fans out one agent per path — the pipeline decides its own
+work. The `huu Knowledge System` pipeline pushes it all to the limit,
+compiling the run's accumulated knowledge into Agent Skills that any
+future agent loads.
 
 ## Where this thesis is NOT novel (the honest counterpoint)
 

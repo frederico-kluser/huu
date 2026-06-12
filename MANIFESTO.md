@@ -93,10 +93,12 @@ flowchart LR
 Entre os supersteps, o conhecimento flui por **arquivos, não por
 contexto**: a etapa 1 escreve um contrato (`huu-tests.md`, um atlas,
 um findings JSON), as etapas seguintes leem antes de agir e anexam o
-que aprenderam. Memória compartilhada com a durabilidade de um commit
-— a pipeline `huu Agent Knowledge` leva isso ao limite, compilando o
-conhecimento acumulado da run em Agent Skills que qualquer agente
-futuro carrega.
+que aprenderam. Memória compartilhada com a durabilidade de um commit.
+O scope `memory` torna isso executável: uma etapa escreve a lista de
+arquivos (com um hint por entrada) e a próxima fan-outa um agente por
+path — o pipeline decide o próprio trabalho. A pipeline
+`huu Knowledge System` leva tudo ao limite, compilando o conhecimento
+acumulado da run em Agent Skills que qualquer agente futuro carrega.
 
 ## Onde essa tese NÃO é inédita (o contraponto honesto)
 
