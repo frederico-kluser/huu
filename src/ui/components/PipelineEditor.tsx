@@ -57,10 +57,120 @@ function isStepValid(step: PipelineStep, allSteps: PipelineStep[]): boolean {
 }
 
 type Mode =
+  | { kind: 'pattern' }
   | { kind: 'list' }
   | { kind: 'editing'; index: number }
   | { kind: 'naming-pipeline' }
   | { kind: 'editing-settings' };
+
+type Pattern = 'discover-act' | 'per-file' | 'audit-judge' | 'blank';
+
+const PATTERNS: { id: Pattern; label: string; hint: string }[] = [
+  { id: 'discover-act', label: '🔍 Discover → Act', hint: 'two linked steps: one finds the files, one fixes each in parallel ($hint carries why)' },
+  { id: 'per-file', label: '📄 Per-file transform', hint: 'the same prompt over N files you pick, in parallel ($file)' },
+  { id: 'audit-judge', label: '🧪 Audit with judge', hint: 'report-only audit + a check that loops back on rework' },
+  { id: 'blank', label: '▢  Blank', hint: 'start from a single empty step' },
+];
+
+function scaffold(pattern: Pattern): Pipeline {
+  if (pattern === 'discover-act') {
+    const memoryPath = '.huu/memory/discovered.json';
+    return {
+      name: 'discover-and-act',
+      steps: [
+        {
+          type: 'work',
+          name: '1. Discover targets',
+          prompt:
+            'Scan the project and decide which files need <describe the work — e.g. "a performance fix">. For each file you pick, explain in one line WHY — that line becomes the next agent\'s $hint.',
+          files: [],
+          scope: 'project',
+          // huu appends the MEMORY CONTRACT (exact path + format + cap) to
+          // this prompt at run time — the author never writes it.
+          produces: memoryPath,
+        },
+        {
+          type: 'work',
+          name: '2. Act on each target',
+          prompt: 'Apply <your fix / procedure> to $file.\nThe discovery note about this file: $hint',
+          files: [],
+          scope: 'memory',
+          filesFrom: memoryPath,
+        },
+      ],
+    };
+  }
+  if (pattern === 'per-file') {
+    return {
+      name: 'per-file-transform',
+      steps: [
+        {
+          type: 'work',
+          name: '1. Transform $file',
+          prompt: 'Apply <your transformation> to $file. Write only to $file.',
+          files: [],
+          scope: 'per-file',
+        },
+      ],
+    };
+  }
+  if (pattern === 'audit-judge') {
+    return {
+      name: 'audit-with-judge',
+      steps: [
+        {
+          type: 'work',
+          name: '1. Audit',
+          prompt:
+            'Audit the project for <topic>. REPORT-ONLY: write your findings to .huu/audits/<topic>.md and touch nothing else.',
+          files: [],
+          scope: 'project',
+        },
+        {
+          type: 'check',
+          name: '2. Validate report',
+          condition:
+            'The report at .huu/audits/<topic>.md exists, every section is filled, and its numbers are internally consistent.',
+          maxRuns: 2,
+          outcomes: [
+            { label: 'approved', nextStepName: '3. Finalize', default: true },
+            { label: 'rework', nextStepName: '1. Audit' },
+          ],
+        },
+        {
+          type: 'work',
+          name: '3. Finalize',
+          prompt: 'Append a final "sealed" section to the report with the date and totals.',
+          files: [],
+          scope: 'project',
+        },
+      ],
+    };
+  }
+  return { name: 'my-pipeline', steps: [{ ...EMPTY_STEP }] };
+}
+
+/** What is wrong with this step and WHICH KEY fixes it (actionable validation). */
+function stepProblem(step: PipelineStep, allSteps: PipelineStep[]): string | null {
+  if (!step.name) return 'unnamed — ENTER, then edit Name';
+  if (isCheckStep(step)) {
+    if (!step.condition) return 'empty condition — ENTER, then edit Condition';
+    const defaults = step.outcomes.filter((o) => o.default).length;
+    if (defaults !== 1) return 'needs exactly one default outcome — ENTER to edit outcomes';
+    const names = new Set(allSteps.map((s) => s.name));
+    const bad = step.outcomes.find((o) => !o.label || !o.nextStepName || !names.has(o.nextStepName));
+    if (bad) return `outcome "${bad.label || '?'}" points to no step — ENTER to fix`;
+    return null;
+  }
+  if (!step.prompt) return 'empty prompt — ENTER, then E opens $EDITOR';
+  if (step.scope === 'memory' && !step.filesFrom) {
+    return 'memory not linked — ENTER, then the Files field links a producer';
+  }
+  if (step.scope === 'per-file' && step.files.length === 0) {
+    return 'per-file without files — ENTER, then F picks them';
+  }
+  return null;
+}
 
 function msToMin(ms: number): string {
   return (ms / 60_000).toString();
@@ -100,8 +210,10 @@ export function PipelineEditor({
     initialPipeline ?? { name: 'my-pipeline', steps: [{ ...EMPTY_STEP }] },
   );
   const [cursor, setCursor] = useState(0);
+  // Fresh pipelines start at the pattern picker (pre-loaded templates beat a
+  // blank screen); existing ones open straight on the list.
   const [mode, setMode] = useState<Mode>(
-    initialPipeline ? { kind: 'list' } : { kind: 'editing', index: 0 },
+    initialPipeline ? { kind: 'list' } : { kind: 'pattern' },
   );
 
   useEffect(() => {
@@ -200,6 +312,26 @@ export function PipelineEditor({
     }
   });
 
+  if (mode.kind === 'pattern') {
+    return (
+      <PatternPick
+        onSelect={(pattern) => {
+          const next = scaffold(pattern);
+          setPipeline(next);
+          setCursor(0);
+          // Single-step patterns drop you straight into the step; linked
+          // patterns land on the list so the wiring is visible first.
+          if (pattern === 'blank' || pattern === 'per-file') {
+            setMode({ kind: 'editing', index: 0 });
+          } else {
+            setMode({ kind: 'list' });
+          }
+        }}
+        onCancel={onCancel}
+      />
+    );
+  }
+
   if (mode.kind === 'editing') {
     const editing = pipeline.steps[mode.index]!;
     if (isCheckStep(editing)) {
@@ -239,6 +371,23 @@ export function PipelineEditor({
         pipeline={pipeline}
         apiKey={apiKey}
         llmContext={llmContext}
+        priorSteps={pipeline.steps
+          .map((s, i) => ({ s, i }))
+          .slice(0, mode.index)
+          .filter(({ s }) => isWorkStep(s))
+          .map(({ s, i }) => ({
+            pipelineIndex: i,
+            name: s.name,
+            produces: (s as WorkStep).produces,
+          }))}
+        onDeclareProducer={(pipelineIndex, path) => {
+          setPipeline((p) => ({
+            ...p,
+            steps: p.steps.map((s, i) =>
+              i === pipelineIndex && isWorkStep(s) ? { ...s, produces: path } : s,
+            ),
+          }));
+        }}
       />
     );
   }
@@ -324,9 +473,9 @@ export function PipelineEditor({
                   <Text color="cyanBright">project</Text>
                 ) : scope === 'memory' ? (
                   step.filesFrom ? (
-                    <Text color="blueBright">memory · {step.filesFrom}</Text>
+                    <Text color="blueBright">memory ← {step.filesFrom}</Text>
                   ) : (
-                    <Text color="red">memory (no filesFrom)</Text>
+                    <Text color="red">memory (not linked)</Text>
                   )
                 ) : scope === 'per-file' ? (
                   step.files.length === 0 ? (
@@ -355,6 +504,12 @@ export function PipelineEditor({
                 {typeBadge}
                 <Text dimColor>  ·  </Text>
                 {detailBadge}
+                {isWorkStep(step) && step.produces ? (
+                  <>
+                    <Text dimColor>  ·  </Text>
+                    <Text color="blueBright">→ {step.produces}</Text>
+                  </>
+                ) : null}
                 <Text dimColor>  ·  </Text>
                 {modelBadge}
                 {!valid && <Text color="red">  ⚠</Text>}
@@ -362,6 +517,16 @@ export function PipelineEditor({
             );
           })}
         </Box>
+
+        {(() => {
+          const current = pipeline.steps[cursor];
+          const problem = current ? stepProblem(current, pipeline.steps) : null;
+          return problem ? (
+            <Box marginTop={1}>
+              <Text color="yellow">⚠ step #{cursor + 1}: {problem}</Text>
+            </Box>
+          ) : null;
+        })()}
 
         <Box marginTop={1}>
           <Text dimColor>
@@ -381,6 +546,39 @@ export function PipelineEditor({
           <Text dimColor>
             <Text bold>R</Text> rename · <Text bold>T</Text> settings · <Text bold>I</Text> import · <Text bold>S</Text> save · <Text bold>G</Text> run · <Text bold>ESC</Text> back
           </Text>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+function PatternPick(props: {
+  onSelect: (pattern: Pattern) => void;
+  onCancel: () => void;
+}): React.JSX.Element {
+  const [cursor, setCursor] = useState(0);
+  useInput((_input, key) => {
+    if (key.escape) props.onCancel();
+    else if (key.upArrow) setCursor((c) => Math.max(0, c - 1));
+    else if (key.downArrow) setCursor((c) => Math.min(PATTERNS.length - 1, c + 1));
+    else if (key.return) props.onSelect(PATTERNS[cursor]!.id);
+  });
+  return (
+    <Box flexDirection="column" width="100%">
+      <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
+        <Text bold color="cyan">New pipeline — what shape is your method?</Text>
+        <Box flexDirection="column" marginTop={1}>
+          {PATTERNS.map((p, i) => (
+            <Box key={p.id} flexDirection="column">
+              <Text color={i === cursor ? 'cyan' : undefined} bold={i === cursor}>
+                {i === cursor ? '› ' : '  '}{p.label}
+              </Text>
+              <Text dimColor>      {p.hint}</Text>
+            </Box>
+          ))}
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>↑↓ choose · <Text bold>ENTER</Text> scaffold it · <Text bold>ESC</Text> back</Text>
         </Box>
       </Box>
     </Box>

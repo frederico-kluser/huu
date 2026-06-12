@@ -108,15 +108,59 @@ export function StepEditor({ steps, onChange, onPickFiles, models, className }: 
             ]}
           />
           {(editing.scope ?? 'flexible') === 'memory' ? (
-            <Input
-              label="Memory file (filesFrom — huu-memory-v1 written by an earlier step)"
-              value={editing.filesFrom ?? ''}
-              onChange={(e) =>
-                update(editingIndex, { filesFrom: e.currentTarget.value || undefined })
-              }
-              placeholder=".huu/knowledge/study-list.json"
-            />
+            (() => {
+              const producers = steps
+                .slice(0, editingIndex)
+                .map((s, i) => ({ index: i, name: s.name, produces: s.produces }))
+                .filter((p): p is { index: number; name: string; produces: string } =>
+                  Boolean(p.produces),
+                );
+              const isDeclared = producers.some((p) => p.produces === editing.filesFrom);
+              return (
+                <div className="flex flex-col gap-2">
+                  {producers.length > 0 ? (
+                    <Select
+                      label="Memory file (filesFrom)"
+                      value={isDeclared ? (editing.filesFrom ?? '') : '__custom'}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v !== '__custom') update(editingIndex, { filesFrom: v || undefined });
+                      }}
+                      options={[
+                        ...producers.map((p) => ({
+                          value: p.produces,
+                          label: `${p.produces}  ← produced by #${p.index + 1} ${p.name}`,
+                        })),
+                        { value: '__custom', label: 'custom path (the producer prompt writes it manually)…' },
+                      ]}
+                    />
+                  ) : null}
+                  {producers.length === 0 || !isDeclared ? (
+                    <Input
+                      label={
+                        producers.length === 0
+                          ? 'Memory file (filesFrom — no earlier step declares "produces" yet)'
+                          : 'Custom memory file path'
+                      }
+                      value={editing.filesFrom ?? ''}
+                      onChange={(e) =>
+                        update(editingIndex, { filesFrom: e.currentTarget.value || undefined })
+                      }
+                      placeholder=".huu/memory/targets.json"
+                    />
+                  ) : null}
+                </div>
+              );
+            })()
           ) : null}
+          <Input
+            label="Produces (memory file this step writes for a later step — optional; huu appends the format contract at run time)"
+            value={editing.produces ?? ''}
+            onChange={(e) =>
+              update(editingIndex, { produces: e.currentTarget.value || undefined })
+            }
+            placeholder=".huu/memory/targets.json"
+          />
           <div className="flex items-end gap-2">
             <Button
               variant="secondary"

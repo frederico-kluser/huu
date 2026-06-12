@@ -6,7 +6,7 @@ Portuguese, matching the recon prompts). Below is the complete map.
 ## Welcome
 
 - `A` open the **pipeline assistant** (guided conversational authoring; runs a four-agent project recon first)
-- `N` new pipeline (empty editor)
+- `N` new pipeline — opens the **pattern picker** first (Discover → Act, Per-file transform, Audit with judge, Blank); `↑↓` choose · `ENTER` scaffold · `ESC` back
 - `I` import from list (`./pipelines/*.pipeline.json`)
 - `↑↓` highlight a pipeline from the discovered list · `ENTER` load it
 - `1`–`9` jump straight to the Nth discovered pipeline
@@ -45,22 +45,35 @@ Portuguese, matching the recon prompts). Below is the complete map.
 ## Step editor
 
 - `↑↓` select field · `TAB` cycle (Name / Prompt / Scope / Files / Model)
-- The active field is marked by a `›` indicator on the left.
+- The active field is marked by a `›` indicator; a single footer line always
+  shows the keys for the focused field.
 - `ENTER` start editing the active field · `ENTER` again to confirm and move on
-- On the **Scope** row: `ENTER` cycles `flexible` → `project` → `per-file`,
-  or jump directly with `P` (project), `F` (per-file), `X` (flexible).
+- On the **Prompt** row: `ENTER` edit inline (single line) · `E` open the
+  prompt in `$EDITOR` for multiline editing (git-commit pattern; set
+  `EDITOR`/`VISUAL`).
+- On the **Scope** row: `ENTER` opens a **scope list** with a one-line
+  consequence per option, or jump directly with `P` (project), `F`
+  (per-file), `X` (flexible), `M` (memory).
   - `project` — runs once on the whole project. The Files row is locked.
   - `per-file` — runs once per selected file. The Files row demands a
     selection; `ENTER` (and `F`) on Files opens the picker.
+  - `memory` — runs once per file listed in a memory file an EARLIER step
+    writes (`$file` + `$hint` in the prompt).
   - `flexible` — pick at edit time (legacy behavior).
 - On the **Files** row:
   - `scope=flexible`: `F` open the picker · `W` use whole project · `ENTER`
     re-opens the picker once a choice has been made.
   - `scope=per-file`: `F` or `ENTER` open the picker. `W` is disabled.
   - `scope=project`: `F`/`W`/`ENTER` are no-ops — the selection is locked.
+  - `scope=memory`: `ENTER` opens the **memory link picker** — choose a
+    file an earlier step `produces`, pick an earlier step to produce it
+    (huu wires both sides and appends the format contract to that step's
+    prompt at run time), or type a custom path. `U` unlinks.
+  - A step that `produces` a memory file shows `→ produces: <path>` here;
+    `O` stops producing it.
 - On the **Model** row: `M` pick a model for this step · `C` clear and use the global default
 - `ESC` exit editing
-- Pressing `ESC` outside editing discards the in-progress step
+- Pressing `ESC` outside editing saves the step when complete (cancels when incomplete)
 
 ## File picker
 
