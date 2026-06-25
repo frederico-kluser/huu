@@ -10,7 +10,7 @@
 - [project-router](project-router/SKILL.md) `router` — entry point for EVERY task; classifies, assembles the chain, enforces evolution.
 ## Knowledge skills
 
-- [following-architecture-conventions](following-architecture-conventions/SKILL.md) `knowledge` — layers, downward-only imports, ESM `.js`, named exports, style; load before writing any TS in src/ or webui/.
+- [following-architecture-conventions](following-architecture-conventions/SKILL.md) `knowledge` — layers, downward-only imports, ESM `.js`, named exports, style; load before writing any TS in src/.
 - [working-on-orchestrator](working-on-orchestrator/SKILL.md) `knowledge` — run lifecycle, AutoScaler math, memory-guard requeue (`killedAgentIds`), CheckStep judge 9998, checkRuns; for any src/orchestrator change.
 - [orchestrating-git-worktrees](orchestrating-git-worktrees/SKILL.md) `knowledge` — worktree/branch naming (branch-namer), ascending --no-ff merges, never-rewind invariant, preflight, conflict policy; for src/git work and ANY stage-merge behavior change.
 - [integrating-llm-backends](integrating-llm-backends/SKILL.md) `knowledge` — backend registry (pi/copilot/azure/stub), BackendBundle, API-key chain, model catalogs, new-backend checklist.
@@ -24,7 +24,6 @@
 - [authoring-pipelines](authoring-pipelines/SKILL.md) `task` — pipeline JSON v2 schema + design + stub dry-run; for any *.pipeline.json.
 - [editing-default-pipelines](editing-default-pipelines/SKILL.md) `task` — the 7 bundled defaults, registry.test contract, knowledge-protocol helpers, never-overwrite trap.
 - [building-tui-screens](building-tui-screens/SKILL.md) `task` — FSM + app.tsx routing, theme.ai rule, cardHeight sync, useInput ref-stability; for Ink UI work.
-- [extending-web-mode](extending-web-mode/SKILL.md) `task` — ws-protocol + CLIENT_MSG_TYPES, session wiring, coalescer, Atomic Design tiers; for --web and webui work.
 - [committing-and-validating](committing-and-validating/SKILL.md) `task` — typecheck+test gate (no CI), Conventional Commits, smoke triggers; for every commit/push.
 - [releasing-versions](releasing-versions/SKILL.md) `task` — manual release steps, GHCR multi-arch publish, published-image smoke.
 
@@ -34,5 +33,4 @@
 ## Chain hints
 
 - Any code change → following-architecture-conventions + the domain skill → writing-tests → committing-and-validating.
-- TUI⇄web parity: building-tui-screens and extending-web-mode share the screen-fsm — load both when a screen exists on both fronts.
 - Pipeline work: authoring-pipelines for user JSONs; editing-default-pipelines when the change is under src/lib/default-pipelines/.

@@ -444,14 +444,6 @@ export function App({
             </Text>
           </Box>
 
-          <Box marginTop={1} flexDirection="column">
-            <Text bold color="cyan">Is there a web mode?</Text>
-            <Text>
-              {'  '}Yes. Run <Text bold>huu --web --yolo</Text> and open the front-end in your browser.
-              {'  '}Same orchestration, different UI.
-            </Text>
-          </Box>
-
           <Box marginTop={1}>
             <Text dimColor>
               <Text bold>ENTER</Text> / <Text bold>Esc</Text> / any key — go back

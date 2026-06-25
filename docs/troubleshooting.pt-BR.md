@@ -22,7 +22,6 @@
 |---|---|
 | `not a git repository` | O huu roda SOBRE um repo. `git init` primeiro (o huu oferece). |
 | erro de permissão de push no início | O preflight testa push quando `HUU_CHECK_PUSH` exige. Ajuste remote/credenciais, ou desligue o probe em repos offline. |
-| `--web` sai pedindo `--yolo` | Restrição da fase 1: o servidor web ainda não publica portas do container — rode `huu --web --yolo` (nativo). |
 
 ## API keys & modelos
 

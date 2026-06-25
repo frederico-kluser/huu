@@ -41,7 +41,7 @@ Após aprovação deste plano: salvo este mapa como `.agents/workbench/skill-map
 | task | 1.200–2.200 | procedimento + conhecimento mínimo + `<evolution>` |
 | meta | 1.000–1.600 | protocolo preciso anti-injeção / GC |
 
-## Catálogo proposto (17 skills)
+## Catálogo proposto (16 skills)
 
 ### Router (1)
 
@@ -53,7 +53,7 @@ Description (EN): "Routes every task in this repo to the right skills before any
 
 | name | gatilhos (ex.) | por quê existe / conteúdo-núcleo |
 |---|---|---|
-| `following-architecture-conventions` | qualquer escrita de TS em src/ ou webui/; "onde coloco X?"; review | camadas ui→orchestrator→git→lib downward-only; web/ ∌ ui/; ESM `.js`; exports nomeados (divergência default-export a re-verificar); kebab-case; types.ts fonte única; pureza de módulo no topo do cli; sem linters — siga o vizinho |
+| `following-architecture-conventions` | qualquer escrita de TS em src/; "onde coloco X?"; review | camadas ui→orchestrator→git→lib downward-only; ESM `.js`; exports nomeados (sem default); kebab-case; types.ts fonte única; pureza de módulo no topo do cli; sem linters — siga o vizinho |
 | `working-on-orchestrator` | mexer em scheduling/concorrência/requeue/checkRuns; bug no kanban de estado | ciclo stage→decompose→pool→merge; AutoScaler (fórmula EMA, guard ≥95%, kill mais novo por startedAt, requeue na frente); `killedAgentIds` Set consumível; judge 9998; checkRuns→manifest |
 | `orchestrating-git-worktrees` | mexer em src/git, merge, branch, preflight | `.huu-worktrees/<runId>`; `huu/<runId>/agent-N`+integration(9999); merge asc `--no-ff`; integração nunca rebobina; `--no-verify`; push retry ≤3; stub aborta conflito |
 | `integrating-llm-backends` | trocar/adicionar backend, auth, catálogo de modelos | registry kind→factory (pi/copilot/azure/stub — azure FALTA no AGENTS.md); cadeia de API key (`/run/secrets`→`*_FILE`→env→config→prompt); detecção de thinking; recommended-models.json; checklist "novo backend" |
@@ -62,14 +62,13 @@ Description (EN): "Routes every task in this repo to the right skills before any
 | `writing-tests` | criar/editar qualquer teste | vitest colocado `<mod>.test.ts`; git REAL em mkdtemp (sem mock); stub factories ad-hoc; regressões-spec (requeue, registry); sem fake timers por padrão |
 | `writing-project-docs` | criar/editar qualquer markdown | raiz pt-BR-primeiro (+`.en.md`); docs/ EN com variantes `.pt-BR.md`; CHANGELOG Keep-a-Changelog 1.1.0; identidade do MANIFESTO (não vender huu como feature-builder) |
 
-### Task (6) — todas terminam com `<evolution>`
+### Task (5) — todas terminam com `<evolution>`
 
 | name | gatilhos (ex.) | procedimento-núcleo |
 |---|---|---|
 | `authoring-pipelines` | criar/editar `*.pipeline.json`; "que step uso p/ X?" | schema v2 (WorkStep/CheckStep, scope, exatamente-um default:true, caps 50/5/600k/300k/1retry); validar topologia; testar com `--stub`; link pipeline-json-guide.md |
 | `editing-default-pipelines` | mudar os 7 defaults, registry, knowledge-protocol | editar módulo em src/lib/default-pipelines → manter `registry.test.ts` verde (contrato: judge shape, REPORT-ONLY, caps) → lembrar: bootstrap nunca sobrescreve JSON materializado |
 | `building-tui-screens` | nova tela/componente Ink, teclado, tema | FSM (estado+evento) → app.tsx routing → componente em ui/components → theme tokens (ai=magenta SÓ IA) → sincronizar `cardHeight()` → testes |
-| `extending-web-mode` | nova mensagem WS, handler, componente webui | tipo em ws-protocol → `CLIENT_MSG_TYPES`+guard → handler na session → acumulador/`useWsSession` no front → Atomic Design (tier certo) → smoke-web |
 | `committing-and-validating` | qualquer commit/push pronto | `npm run typecheck && npm test` (NÃO há CI — gate é local); Conventional Commits (scopes observados); hooks opt-in; quando rodar smokes |
 | `releasing-versions` | "cortar vX.Y.Z", publicar imagem | package.json+CHANGELOG → typecheck/test/build docker/smokes → tag+push → buildx multi-arch GHCR (opcional) → smoke da imagem publicada |
 
@@ -86,7 +85,6 @@ project-router → * (todas, via catalog.md)
 authoring-pipelines        → running-in-docker (flags de run) · editing-default-pipelines (vizinha)
 editing-default-pipelines  → authoring-pipelines (schema) · writing-tests · committing-and-validating
 building-tui-screens       → following-architecture-conventions · writing-tests · committing-and-validating
-extending-web-mode         → following-architecture-conventions · building-tui-screens (FSM compartilhado) · writing-tests · committing-and-validating
 releasing-versions         → committing-and-validating · running-in-docker (smokes)
 working-on-orchestrator    → orchestrating-git-worktrees · isolating-agent-ports · writing-tests (requeue-spec)
 integrating-llm-backends   → working-on-orchestrator (interface factory) · running-in-docker (secrets)
@@ -100,13 +98,12 @@ Links no corpo via `[[name]]`-style wiki refs (texto plano portável: `see follo
 | Tarefa-exemplo | Cadeia esperada |
 |---|---|
 | "badge ↻N não aparece no card requeued" | router → working-on-orchestrator + building-tui-screens → writing-tests → committing-and-validating |
-| "nova mensagem WS p/ trocar modelo durante run" | router → extending-web-mode (+arch) → committing-and-validating |
 | "novo pipeline default de licenças" | router → editing-default-pipelines + authoring-pipelines → writing-tests → committing-and-validating |
 | "cortar release v1.4.0" | router → releasing-versions |
 | "por que a porta 3000 do agente colide?" | router → isolating-agent-ports (só knowledge; sem evolution) |
 | "adicionar backend Gemini" | router → integrating-llm-backends + working-on-orchestrator → committing-and-validating |
 | "refatorar merge p/ paralelo" | router → orchestrating-git-worktrees + working-on-orchestrator → writing-tests → committing-and-validating |
-| "atualizar README sobre --web" | router → writing-project-docs |
+| "atualizar README sobre flags de run" | router → writing-project-docs |
 | near-miss: "o que é huu?" | router responde direto (FAQ/MANIFESTO) — nenhuma skill de tarefa |
 | near-miss: "roda npm test" | execução direta; sem cadeia (router: tarefas triviais passam direto) |
 
@@ -114,8 +111,8 @@ Links no corpo via `[[name]]`-style wiki refs (texto plano portável: `see follo
 
 - **Uni** arquitetura+estilo (`following-architecture-conventions`): sempre co-ativadas em qualquer escrita de código; separá-las dobraria overhead de roteamento.
 - **Separei** orchestrator ≠ git-worktrees: superfícies de mudança e públicos distintos; cada uma cabe no orçamento sem cortar fatos.
-- **Não criei** skill de env-vars (lista solta = overview genérico, viola critério 5) — distribuídas em docker/backends/ports; nem de headless/CI (cabe em docker+pipelines); nem de FSM isolada (vive em building-tui-screens, referenciada por extending-web-mode); nem assistant/recon (sem tarefa recorrente própria — reavaliar via meta-skill-evolution se surgir); nem por-componente/tela (staleness alta, valor baixo).
-- 17 skills ≈ 24k tokens de biblioteca total — carregável seletivamente, nunca inteira.
+- **Não criei** skill de env-vars (lista solta = overview genérico, viola critério 5) — distribuídas em docker/backends/ports; nem de headless/CI (cabe em docker+pipelines); nem de FSM isolada (vive em building-tui-screens); nem assistant/recon (sem tarefa recorrente própria — reavaliar via meta-skill-evolution se surgir); nem por-componente/tela (staleness alta, valor baixo).
+- 16 skills ≈ 24k tokens de biblioteca total — carregável seletivamente, nunca inteira.
 
 ## Integrações fora de .agents/skills/ (Fase 4)
 
@@ -126,7 +123,7 @@ Links no corpo via `[[name]]`-style wiki refs (texto plano portável: `see follo
 
 ## Execução pós-aprovação
 
-- **Fase 3**: gravar skill-map.md no workbench → gerar 8 knowledge + 6 task (corpo EN, conhecimento re-verificado no código ANTES de fixar — em especial: linhas do orchestrator, regra default-exports, tabela azure) → catalog.md → symlinks completos → **CHECKPOINT 3 (diffs)**.
+- **Fase 3**: gravar skill-map.md no workbench → gerar 8 knowledge + 5 task (corpo EN, conhecimento re-verificado no código ANTES de fixar — em especial: linhas do orchestrator, regra default-exports, tabela azure) → catalog.md → symlinks completos → **CHECKPOINT 3 (diffs)**.
 - **Fase 4**: project-router + 2 meta-skills + `<evolution>`/LEARNINGS + scripts determinísticos + integrações 1–4 acima → **CHECKPOINT 4**.
 - **Fase 5**: evals por skill (3 gatilhos + 2 near-misses), teste de roteamento nas 10 cadeias, verificação dos 7 success_criteria → `validation-report.md` → **CHECKPOINT 5**.
 
@@ -134,7 +131,7 @@ Links no corpo via `[[name]]`-style wiki refs (texto plano portável: `see follo
 
 1. enxutas → orçamentos definidos acima ✓ (verificação mecânica na Fase 5)
 2. exatamente um router ✓ (+ desativação do router concorrente do pipeline AK)
-3. `<evolution>`+LEARNINGS nas 6 task skills ✓ (LEARNINGS em todas, p/ roteamento de aprendizado)
+3. `<evolution>`+LEARNINGS nas 5 task skills ✓ (LEARNINGS em todas, p/ roteamento de aprendizado)
 4. meta-skills evolution + consolidate ✓
 5. curadoria → divergências marcadas para re-verificação; sem MUST/ALWAYS sem porquê (regra de redação da Fase 3)
 6. portabilidade → fonte .agents/skills/, symlinks por-skill documentados, frontmatter mínimo ✓

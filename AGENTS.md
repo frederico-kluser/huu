@@ -45,21 +45,11 @@ the knowledge BEFORE implementation, and guarantees each task skill runs its
 (probation) and are promoted into skill bodies only by
 `meta-skill-consolidate`, always as uncommitted diffs for human review.
 
-17 skills: 1 router · 8 knowledge (architecture, orchestrator, git
-worktrees, LLM backends, ports, Docker, tests, docs) · 6 task (pipelines,
-default pipelines, TUI, web mode, commit gate, release) · 2 meta
+16 skills: 1 router · 8 knowledge (architecture, orchestrator, git
+worktrees, LLM backends, ports, Docker, tests, docs) · 5 task (pipelines,
+default pipelines, TUI, commit gate, release) · 2 meta
 (evolution, consolidate). The catalog is canonical — consult it, not this
 paragraph, for the current list.
-
-### Web UI mode (`huu --web`)
-
-Alternate entry point that swaps Ink (TUI) for a browser front-end while reusing 100% of the back-end (Orchestrator, FSM, handlers).
-
-- `src/web/` — back-end (HTTP+WS server, session, handlers, orchestrator-bridge). Cannot import from `ui/`.
-- `src/lib/screen-fsm.ts` — pure FSM shared by both TUI and web session.
-- `webui/` — front-end workspace (Vite + React + TS + Tailwind). Build output → `src/web/dist-static/`.
-- Protocol: `src/web/ws-protocol.ts` (Node-free types; imported via `@shared` path alias from `webui/`).
-- Phase-1 constraint: `--web` requires `--yolo` (Docker port-publishing not yet implemented).
 
 ## Architecture (summary)
 
@@ -87,9 +77,6 @@ Alternate entry point that swaps Ink (TUI) for a browser front-end while reusing
                     init-docker, docker-reexec, active-run-sentinel,
                     api-key, prune, debug-logger, run-logger,
                     screen-fsm, assistant-check-feasibility)
-                ↓ (web mode only — alternate front-end, not above ui/)
-              web/ (HTTP+WS server, session, handlers, orchestrator-bridge,
-                    ws-protocol; consumed by `webui/` Vite build)
 ```
 
 Dependencies flow **downward only** — lower layers never import upper layers.
@@ -258,7 +245,6 @@ non-trivial PR:
 docker build -t huu:local .
 ./scripts/smoke-image.sh        # ~10s — image sanity
 ./scripts/smoke-pipeline.sh     # ~60s — end-to-end pipeline with --stub
-./scripts/smoke-web.sh          # ~5s — sanity for `huu --web` mode (port bind)
 ```
 
 All exit 0 on success and !=0 on failure — chainable with `&&`.

@@ -1,6 +1,5 @@
 node_modules/
 dist/
-src/web/dist-static/
 *.log
 .DS_Store
 .huu-worktrees/

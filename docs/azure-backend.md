@@ -141,15 +141,6 @@ um helper:
                                           └──→ CheckStepEditor                ──→ analyzeCheckFeasibility
 ```
 
-Mesmo padrão na camada web:
-
-```
-src/web/session.ts
-  └─ buildHelperLlmContext()  // resolve Azure key+endpoint via specs
-       ├──→ src/web/handlers/assistant.ts → createAssistantChat
-       └──→ src/web/handlers/recon.ts     → runProjectRecon
-```
-
 Cada helper aceita `llmContext` **opcional**: quando ausente, cai no
 caminho legado (OpenRouter), preservando back-compat para quem ainda usa
 `--backend=pi`. Quando presente, decide via factory.
@@ -209,7 +200,7 @@ quando `backend === 'copilot'` os helpers continuam usando OpenRouter
 
 ### 3.2 `helperLlmContext` é por-sessão, não por-pipeline
 
-Os helpers seguem o backend ativo no app/web session. Trocar de backend
+Os helpers seguem o backend ativo na sessão do app. Trocar de backend
 no meio de uma sessão **não** muda o `llmContext` em árvores de
 componentes já montadas — é necessário re-entrar no fluxo. Comportamento
 intencional para evitar surpresas de cobrança no meio de um trabalho.
@@ -262,9 +253,6 @@ Commits relevantes na branch `ai-task-1779716819`:
 - `src/ui/components/FileMultiSelect.tsx`
 - `src/ui/components/CheckStepEditor.tsx`
 - `src/ui/components/ProjectRecon.tsx`
-- `src/web/session.ts`
-- `src/web/handlers/assistant.ts`
-- `src/web/handlers/recon.ts`
 
 **Catálogo de modelos Azure customizável:**
 

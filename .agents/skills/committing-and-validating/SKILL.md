@@ -17,12 +17,11 @@ Every time a change is ready to commit/push. Also when explaining or scripting v
 - There is NO automated CI. The gate is `npm run typecheck && npm test` before every commit — skipping it means nothing else will catch the break. Opt-in enforcement: `git config core.hooksPath .githooks` (pre-push hook).
 - Conventional Commits, types observed in history: `feat`, `fix`, `docs`, `chore` (releases), `refactor`, `merge`. Scopes actually used: `pipelines`, `cli`, `orchestrator`, `docker`, `azure`, `ui,web`, `smoke`, `tui`, `kanban`, `backend`, `readme`, `merges`. Subject in English, imperative.
 - Never force-push to `main`.
-- Docker smoke suite — run when the change touches the wrapper, Dockerfile, web server, or before any release (not for ordinary src-only changes):
+- Docker smoke suite — run when the change touches the wrapper, Dockerfile, or before any release (not for ordinary src-only changes):
   ```bash
   docker build -t huu:local . \
     && ./scripts/smoke-image.sh \
-    && ./scripts/smoke-pipeline.sh \
-    && ./scripts/smoke-web.sh
+    && ./scripts/smoke-pipeline.sh
   ```
 - Two regression suites act as contracts; if they fail, read them before adjusting anything: `requeue.test.ts` (memory-guard requeue race), `registry.test.ts` (default-pipeline contract).
 - Changelog: user-visible changes get a bullet under `[Unreleased]` in Keep-a-Changelog format (see writing-project-docs).
