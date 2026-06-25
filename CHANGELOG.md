@@ -7,6 +7,8 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-25
+
 ### Added
 
 - **MAX (greedy) auto-scaling mode.** Press `M` on the run dashboard to
@@ -369,7 +371,8 @@ Initial public release. Available on npm as `huu-pipe`
 - `safe.directory '*'` set system-wide in the image.
 
 
-[Unreleased]: https://github.com/frederico-kluser/huu/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/frederico-kluser/huu/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/frederico-kluser/huu/compare/v1.4.0...v2.0.0
 [1.4.0]: https://github.com/frederico-kluser/huu/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.3.0
 [1.2.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.2.0
