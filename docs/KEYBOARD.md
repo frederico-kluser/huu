@@ -106,6 +106,13 @@ Portuguese, matching the recon prompts). Below is the complete map.
   `CPU%`/`RAM%`, the observed `~<N>MB/agent` footprint, and free
   memory. Pin manual at startup with `huu --concurrency=N` or
   `huu --no-auto-scale`.
+- `M` toggle **MAX mode** (greedy): floods one agent per queued task
+  (capped at the hard ceiling) and lets the always-on memory guard be the
+  sole backstop — concurrency settles right at the RAM limit, the newest
+  agent is killed and requeued to TODO whenever it's crossed. The header
+  shows a blue `MAX <state>` chip with live `CPU%`/`RAM%` and the kill
+  count. Cooldown-damped, so it never thrashes. Press `M` again (or `A`)
+  to return to auto; `+`/`-` drops to manual.
 - `↑↓←→` navigate cards · `ENTER` open card details
 - `F` filter logs to a single agent (cycles through agents and back to "all")
 - `Q` abort the run · press `Q` twice to force-exit the dashboard immediately

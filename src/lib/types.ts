@@ -398,9 +398,10 @@ export interface AutoScaleStatus {
   /**
    * 'auto' adapts concurrency to real memory headroom; 'manual' keeps the
    * user-pinned concurrency but the memory guard (kill newest at the destroy
-   * threshold, requeue to TODO) stays active.
+   * threshold, requeue to TODO) stays active. 'greedy' floods one agent per
+   * queued task and lets the same guard be the sole backstop (shown as MAX).
    */
-  mode: 'auto' | 'manual';
+  mode: 'auto' | 'manual' | 'greedy';
   state: 'NORMAL' | 'SCALING_UP' | 'BACKING_OFF' | 'COOLDOWN' | 'DESTROYING';
   cooldownRemainingMs: number;
   cpuPercent: number;

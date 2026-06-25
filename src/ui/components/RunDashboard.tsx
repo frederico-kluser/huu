@@ -7,6 +7,7 @@ import type { AgentFactory } from '../../orchestrator/types.js';
 import { RunKanban } from './RunKanban.js';
 import { RunModal } from './RunModal.js';
 import { LogArea } from './LogArea.js';
+import { theme } from '../theme.js';
 import { log as dlog, bump as dbump } from '../../lib/debug-logger.js';
 
 // Width of the right-side log column. Below this threshold of total terminal
@@ -285,14 +286,16 @@ export function RunDashboard({
         return;
       }
       if (input === '+' || input === '=') {
-        if (stateRef.current?.autoScale?.enabled) {
+        // Pin manual from any scaling mode (auto OR greedy) — otherwise the
+        // per-tick target would immediately overwrite the bump.
+        if (stateRef.current?.autoScale?.mode !== 'manual') {
           orch.disableAutoScale();
         }
         orch.increaseConcurrency();
         return;
       }
       if (input === '-' || input === '_') {
-        if (stateRef.current?.autoScale?.enabled) {
+        if (stateRef.current?.autoScale?.mode !== 'manual') {
           orch.disableAutoScale();
         }
         orch.decreaseConcurrency();
@@ -324,6 +327,16 @@ export function RunDashboard({
           orch.disableAutoScale();
         } else {
           orch.enableAutoScale();
+        }
+        return;
+      }
+      if (input === 'm' || input === 'M') {
+        // MAX (greedy): flood to the memory limit. Toggle back to auto.
+        const s = stateRef.current;
+        if (s?.autoScale?.mode === 'greedy') {
+          orch.enableAutoScale();
+        } else {
+          orch.enableGreedyMode();
         }
         return;
       }
@@ -423,6 +436,18 @@ export function RunDashboard({
             <Text bold color="yellow">conflicts unresolved</Text>
           </>
         )}
+        {state.autoScale?.mode === 'greedy' && (
+          <>
+            <Text dimColor>  ·  </Text>
+            <Text bold color={theme.info}>MAX {state.autoScale.state}</Text>
+            <Text dimColor>  ·  </Text>
+            <Text>
+              CPU {state.autoScale.cpuPercent}% RAM {state.autoScale.ramPercent}%
+              {' '}· ~{state.autoScale.observedAgentMemoryMb}MB/agent · free {state.autoScale.ramAvailableMb}MB
+              {state.autoScale.guardKillCount > 0 ? ` · ${state.autoScale.guardKillCount} killed` : ''}
+            </Text>
+          </>
+        )}
         {state.autoScale?.enabled && (
           <>
             <Text dimColor>  ·  </Text>
@@ -440,7 +465,7 @@ export function RunDashboard({
             </Text>
           </>
         )}
-        {state.autoScale && !state.autoScale.enabled && (
+        {state.autoScale && !state.autoScale.enabled && state.autoScale.mode !== 'greedy' && (
           <>
             <Text dimColor>  ·  </Text>
             <Text dimColor bold>GUARD</Text>
@@ -481,7 +506,7 @@ export function RunDashboard({
       </Box>
       <Box paddingX={1} width="100%">
         <Text dimColor>
-          <Text bold>+</Text>/<Text bold>-</Text> concurrency (pins manual) · <Text bold>↑↓←→</Text> navigate · <Text bold>ENTER</Text> details · <Text bold>F</Text> filter logs ({logFilter !== null ? `A${logFilter}` : 'all'}) · <Text bold>A</Text> toggle auto-scale · <Text bold>Q</Text> abort (press twice to force-exit)
+          <Text bold>+</Text>/<Text bold>-</Text> concurrency (pins manual) · <Text bold>↑↓←→</Text> navigate · <Text bold>ENTER</Text> details · <Text bold>F</Text> filter logs ({logFilter !== null ? `A${logFilter}` : 'all'}) · <Text bold>A</Text> toggle auto-scale · <Text bold>M</Text> max agents · <Text bold>Q</Text> abort (press twice to force-exit)
         </Text>
       </Box>
     </Box>
