@@ -8,6 +8,7 @@ import { getModel, type Model } from '@mariozechner/pi-ai';
 import type { AgentEvent, AgentFactory, SpawnedAgent } from '../../types.js';
 import { supportsThinking } from '../../../lib/model-factory.js';
 import { checkAzureReachable } from '../../../lib/azure.js';
+import { AuthError } from '../../../lib/auth-error.js';
 import { buildAgentMessageHeader } from '../_shared/build-message.js';
 import { createDisposableState } from '../_shared/lifecycle.js';
 import { translatePiEvent } from '../pi/event-mapper.js';
@@ -95,9 +96,13 @@ export const azureAgentFactory: AgentFactory = async (
   // the Pi SDK's retry chain (~32 s per agent).
   const reach = await checkAzureReachable(apiKey, endpoint);
   if (reach.kind === 'unauthorized') {
-    throw new Error(
-      `Azure endpoint rejected the API key (HTTP ${reach.status}). Check AZURE_OPENAI_API_KEY.`,
-    );
+    throw new AuthError({
+      backendKind: 'azure',
+      specName: 'azureApiKey',
+      message:
+        `Azure endpoint rejected the API key (HTTP ${reach.status}). ` +
+        `Update AZURE_OPENAI_API_KEY in the Options screen.`,
+    });
   }
   if (reach.kind === 'unreachable') {
     onEvent({

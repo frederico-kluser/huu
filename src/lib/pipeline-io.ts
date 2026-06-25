@@ -332,6 +332,12 @@ export function listAllPipelines(localDir: string): PipelineEntry[] {
     seen.add(entry.pipeline.name);
     results.push(entry);
   }
+  // Pin the `_default` pipeline (the "pipeline zero") to the top so the
+  // Welcome screen can offer it as [0]. Stable: everything else keeps its
+  // alphabetical order from listPipelines.
+  results.sort(
+    (a, b) => Number(b.pipeline._default === true) - Number(a.pipeline._default === true),
+  );
   return results;
 }
 

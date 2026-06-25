@@ -7,6 +7,33 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
+### Added
+
+- **Options screen for AI provider API keys (`[O]` on the Welcome screen).**
+  A new TUI screen lists every credential in the API-key registry with its
+  resolved (masked) value and source, and lets you overwrite any one in place
+  — persisted to the global config (`~/.config/huu/config.json`, mode 0600).
+  It also **opens automatically when a run aborts on an invalid key**: the
+  pre-run reachability probe (pi) and the Azure factory now throw a typed
+  `AuthError`, which the run dashboard routes to the Options screen
+  pre-focused on the rejected provider, so an invalid key is fixable without
+  editing env vars or files by hand.
+- **Reusable full-width `ActionBar` footer.** Keyboard hints now span the
+  whole width with per-key semantic colors — `G run` (green) and `ESC back`
+  (red, bold) stand out as the primary actions; the rest are muted blue.
+
+### Changed
+
+- **The default pipeline (huu Test Suite) is pinned as "pipeline zero".** It
+  always appears first on the Welcome screen, labelled `[0]` (the `0` key
+  loads it) and colored distinctly with a `(default)` tag, so the
+  most-recommended entry is unmistakable. Remaining pipelines are labelled
+  `[1]`, `[2]`, … and the digit keys map directly to those indices.
+- **Steps that need fixing before a run are now colored in the editor.** An
+  invalid step's whole row turns yellow (in addition to the existing `⚠`
+  marker and the actionable problem hint), so the blocker is visible at a
+  glance.
+
 ## [2.1.0] - 2026-06-25
 
 ### Changed

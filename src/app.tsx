@@ -15,6 +15,7 @@ import { BackendSelector } from './ui/components/BackendSelector.js';
 import { useTerminalResize } from './ui/hooks/useTerminalResize.js';
 import { SystemMetricsBar } from './ui/components/SystemMetricsBar.js';
 import { SavedPipelinesManager } from './ui/components/SavedPipelinesManager.js';
+import { OptionsScreen } from './ui/components/OptionsScreen.js';
 import {
   selectBackend,
   type AgentBackendKind,
@@ -262,6 +263,10 @@ export function App({
           dispatch({ type: 'welcome.saved' });
           return;
         }
+        if (input === 'o' || input === 'O') {
+          dispatch({ type: 'welcome.options' });
+          return;
+        }
         if (key.upArrow) {
           setSelectedPipelineIndex((prev) => Math.max(0, prev - 1));
           return;
@@ -280,15 +285,17 @@ export function App({
           }
           return;
         }
+        // Labels are 0-based ([0] is the pinned default), so the digit maps
+        // directly to the list index.
         const num = parseInt(input, 10);
         if (
           !Number.isNaN(num) &&
-          num >= 1 &&
-          num <= availablePipelinesRef.current.length
+          num >= 0 &&
+          num < availablePipelinesRef.current.length
         ) {
           dispatch({
             type: 'welcome.selectPipeline',
-            pipeline: availablePipelinesRef.current[num - 1]!.pipeline,
+            pipeline: availablePipelinesRef.current[num]!.pipeline,
           });
         }
       } else if (kind === 'faq') {
@@ -332,6 +339,7 @@ export function App({
             <Text>  <Text bold color="cyan">[N]</Text>  New pipeline</Text>
             <Text>  <Text bold color="cyan">[I]</Text>  Import pipeline from list</Text>
             <Text>  <Text bold color="cyan">[M]</Text>  Saved pipelines</Text>
+            <Text>  <Text bold color="cyan">[O]</Text>  Options — AI providers & API keys</Text>
             <Text>  <Text bold color="cyan">[?]</Text>  FAQ — frequently asked questions</Text>
             <Text>  <Text bold color="cyan">[Q]</Text>  Quit</Text>
           </Box>
@@ -339,20 +347,30 @@ export function App({
           {availablePipelines.length > 0 && (
             <Box marginTop={1} flexDirection="column">
               <Text bold>Pipelines available in ./pipelines:</Text>
-              {availablePipelines.map((entry, idx) => (
-                <Box key={entry.filePath}>
-                  <Text>
-                    {'  '}
-                    <Text bold color={idx === selectedPipelineIndex ? 'green' : 'cyan'}>
-                      [{idx + 1}]
-                    </Text>{' '}
-                    {entry.pipeline.name}
-                  </Text>
-                </Box>
-              ))}
+              {availablePipelines.map((entry, idx) => {
+                const isSelected = idx === selectedPipelineIndex;
+                const isDefault = entry.pipeline._default === true;
+                // The pinned default ([0]) gets its own color so it reads as
+                // distinct even when another row is selected.
+                const labelColor = isDefault ? 'green' : isSelected ? 'green' : 'cyan';
+                return (
+                  <Box key={entry.filePath}>
+                    <Text>
+                      {isSelected ? '› ' : '  '}
+                      <Text bold color={labelColor}>
+                        [{idx}]
+                      </Text>{' '}
+                      <Text color={isDefault ? 'green' : undefined} bold={isDefault}>
+                        {entry.pipeline.name}
+                      </Text>
+                      {isDefault ? <Text dimColor> (default)</Text> : null}
+                    </Text>
+                  </Box>
+                );
+              })}
               <Box marginTop={1}>
                 <Text dimColor>
-                  <Text bold>ENTER</Text> load selected · <Text bold>↑↓</Text> navigate · <Text bold>1-9</Text> jump
+                  <Text bold>ENTER</Text> load selected · <Text bold>↑↓</Text> navigate · <Text bold>0-9</Text> jump
                 </Text>
               </Box>
             </Box>
@@ -592,6 +610,13 @@ export function App({
         onCancel={() => dispatch({ type: 'saved.cancel' })}
       />
     );
+  } else if (screen.kind === 'options') {
+    body = (
+      <OptionsScreen
+        focusSpecName={screen.focusSpecName}
+        onClose={() => dispatch({ type: 'options.close' })}
+      />
+    );
   } else if (screen.kind === 'model-selector') {
     body = (
       <ModelSelectorOverlay
@@ -675,6 +700,9 @@ export function App({
         initialConcurrency={concurrency}
         onComplete={(result) => dispatch({ type: 'run.complete', result })}
         onAbort={() => dispatch({ type: 'run.abort' })}
+        onAuthError={(specName) =>
+          dispatch({ type: 'run.authError', backendKind, specName })
+        }
       />
     );
   } else if (screen.kind === 'summary') {

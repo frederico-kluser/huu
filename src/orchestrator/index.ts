@@ -56,6 +56,7 @@ import { join, dirname, isAbsolute } from 'node:path';
 import { log as dlog } from '../lib/debug-logger.js';
 import { attachProcessLogSink } from '../lib/process-log-bridge.js';
 import { checkOpenRouterReachable } from '../lib/openrouter.js';
+import { AuthError } from '../lib/auth-error.js';
 
 function ensureGitignored(repoRoot: string, line: string): void {
   const gitignorePath = join(repoRoot, '.gitignore');
@@ -544,10 +545,13 @@ export class Orchestrator {
           kind: reach.kind,
         });
         if (reach.kind === 'unauthorized') {
-          throw new Error(
-            `OpenRouter rejected the API key (HTTP ${reach.status}). ` +
-              `Check OPENROUTER_API_KEY at ~/.huu/api-key or in your shell.`,
-          );
+          throw new AuthError({
+            backendKind: 'pi',
+            specName: 'openrouter',
+            message:
+              `OpenRouter rejected the API key (HTTP ${reach.status}). ` +
+              `Update OPENROUTER_API_KEY in the Options screen.`,
+          });
         }
         if (reach.kind === 'unreachable') {
           const inContainer = process.env.HUU_IN_CONTAINER === '1';

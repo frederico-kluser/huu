@@ -16,6 +16,7 @@ import { ModelSelectorOverlay } from './ModelSelectorOverlay.js';
 import { log as dlog, bump as dbump } from '../../lib/debug-logger.js';
 import { savePipelineToMemory } from '../../lib/pipeline-io.js';
 import { theme } from '../theme.js';
+import { ActionBar, type ActionHint } from './ActionBar.js';
 
 interface Props {
   initialPipeline?: Pipeline;
@@ -241,6 +242,26 @@ function parseRetries(s: string): number | null {
 }
 
 const FULL_CLEAR = '\x1b[3J';
+
+// Two full-width footer rows. Navigation keys are muted (info); the two
+// most important actions — G run (success) and ESC back (error) — are
+// colored and bold so they stand out.
+const EDITOR_NAV_HINTS: ActionHint[] = [
+  { key: '↑↓', label: 'select', color: theme.info },
+  { key: 'SHIFT+↑↓', label: 'reorder', color: theme.info },
+  { key: 'ENTER', label: 'edit', color: theme.info },
+  { key: 'N', label: 'new work', color: theme.info },
+  { key: 'C', label: 'new check', color: theme.info },
+  { key: 'D', label: 'delete', color: theme.info },
+];
+const EDITOR_ACTION_HINTS: ActionHint[] = [
+  { key: 'R', label: 'rename', color: theme.info },
+  { key: 'T', label: 'settings', color: theme.info },
+  { key: 'I', label: 'import', color: theme.info },
+  { key: 'S', label: 'save', color: theme.info },
+  { key: 'G', label: 'run', color: theme.success, bold: true },
+  { key: 'ESC', label: 'back', color: theme.error, bold: true },
+];
 
 export function PipelineEditor({
   initialPipeline,
@@ -545,7 +566,10 @@ export function PipelineEditor({
             );
             return (
               <Box key={i}>
-                <Text color={isCursor ? 'cyan' : undefined} bold={isCursor}>
+                <Text
+                  color={!valid ? 'yellow' : isCursor ? 'cyan' : undefined}
+                  bold={isCursor}
+                >
                   {isCursor ? '› ' : '  '}#{i + 1}{'  '}
                   {step.name || <Text dimColor italic>(unnamed)</Text>}
                 </Text>
@@ -596,13 +620,9 @@ export function PipelineEditor({
           )}
         </Box>
 
-        <Box marginTop={1} flexDirection="column">
-          <Text dimColor>
-            <Text bold>↑↓</Text> select · <Text bold>SHIFT+↑↓</Text> reorder · <Text bold>ENTER</Text> edit · <Text bold>N</Text> new work · <Text bold>C</Text> new check · <Text bold>D</Text> delete
-          </Text>
-          <Text dimColor>
-            <Text bold>R</Text> rename · <Text bold>T</Text> settings · <Text bold>I</Text> import · <Text bold>S</Text> save · <Text bold>G</Text> run · <Text bold>ESC</Text> back
-          </Text>
+        <Box marginTop={1} flexDirection="column" width="100%">
+          <ActionBar hints={EDITOR_NAV_HINTS} />
+          <ActionBar hints={EDITOR_ACTION_HINTS} />
         </Box>
       </Box>
     </Box>
