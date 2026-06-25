@@ -17,12 +17,17 @@
 </p>
 
 <p align="center">
+  Um pipeline em JSON vira agentes paralelos — <strong>um por arquivo</strong> — em git worktrees isolados, mesclados de forma determinística a cada etapa, com suas credenciais protegidas em Docker.
+</p>
+
+<p align="center">
   <a href="MANIFESTO.md">Manifesto</a> · <a href="README.en.md">English</a> · <strong>Português (BR)</strong>
 </p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/huu-pipe"><img alt="npm version" src="https://img.shields.io/npm/v/huu-pipe?color=blueviolet&label=npm"></a>
   <a href="#licença"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
-  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-1.4.0-blueviolet"></a>
+  <a href="https://www.repostatus.org/#active"><img alt="Status do projeto: ativo — em uso e em desenvolvimento ativo" src="https://www.repostatus.org/badges/latest/active.svg"></a>
   <img alt="Node.js 20+" src="https://img.shields.io/badge/node-%E2%89%A5%2020-339933?logo=node.js&logoColor=white">
   <img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.x-3178C6?logo=typescript&logoColor=white">
   <img alt="Built with Ink" src="https://img.shields.io/badge/TUI-Ink%204-000000">
@@ -77,6 +82,48 @@ Essa frase tem algumas afirmações que vale destacar:
   `huu-pipeline-v1.json` é um artefato versionado — comite, compartilhe
   como gist, contribua pro cookbook. O know-how de *como decompor essa
   classe de tarefa* mora em JSON puro.
+
+---
+
+## Início rápido
+
+**Pré-requisitos:** Node.js ≥ 20, `git` e Docker (recomendado). Para o
+backend padrão, exporte uma `OPENROUTER_API_KEY`
+([openrouter.ai/keys](https://openrouter.ai/keys)).
+
+### Docker (recomendado)
+
+```bash
+git clone https://github.com/frederico-kluser/huu
+cd huu
+docker build -t huu:local .
+export OPENROUTER_API_KEY=sk-or-...
+HUU_IMAGE=huu:local huu run example.pipeline.json
+```
+
+Imagens pré-buildadas em `ghcr.io/frederico-kluser/huu:latest` — o
+wrapper puxa automaticamente quando nenhum `HUU_IMAGE` está setado.
+MTU VPN-aware, mount de secrets, forwarding de sinais e limpeza de
+órfãos são todos cuidados pelo wrapper.
+
+### Nativo
+
+```bash
+npm install -g huu-pipe        # Node 20+ e um `git` funcional
+huu --yolo                     # abre a TUI nativa (sem Docker)
+```
+
+Execuções nativas expõem suas credenciais de shell pro agente LLM.
+Prefira Docker pra qualquer coisa real no seu laptop. (`--no-docker` é
+o alias de grafia neutra do `--yolo`, pensado pra runners de CI — veja
+abaixo.) Matriz completa de instalação (macOS / Windows / Linux, notas
+do OrbStack, caveats do WSL2):
+[`docs/onboarding.pt-BR.md#instalação`](docs/onboarding.pt-BR.md#instalação).
+
+A TUI abre na tela de boas-vindas. Não quer escrever JSON na mão? O
+**Pipeline Assistant** (tecla `[A]`, em magenta) esboça uma pipeline a
+partir de uma descrição em linguagem natural e a valida antes de rodar —
+ou comece pelo `huu Test Suite`, o pipeline default já materializado.
 
 ---
 
@@ -216,9 +263,9 @@ flowchart LR
 
 Mesmo prompt, `$file` diferente. Agentes leem o worktree inteiro pra
 contexto mas são instruídos a escrever só no arquivo atribuído —
-escritas disjuntas geram merges limpos. **Aqui está a sacada
-revolucionária: seu pipeline é o contrato, e o contrato escala
-horizontalmente.**
+escritas disjuntas geram merges limpos. **Porque o pipeline é só um
+contrato declarativo, o mesmo arquivo roda um agente ou trinta —
+escalando horizontalmente sem mudar os passos.**
 
 ### Scope memory: o pipeline escolhe os arquivos, não o humano
 
@@ -363,39 +410,6 @@ Controles:
 
 ---
 
-## Início rápido
-
-### Docker (recomendado)
-
-```bash
-git clone https://github.com/frederico-kluser/huu
-cd huu
-docker build -t huu:local .
-export OPENROUTER_API_KEY=sk-or-...
-HUU_IMAGE=huu:local huu run example.pipeline.json
-```
-
-Imagens pré-buildadas em `ghcr.io/frederico-kluser/huu:latest` — o
-wrapper puxa automaticamente quando nenhum `HUU_IMAGE` está setado.
-MTU VPN-aware, mount de secrets, forwarding de sinais e limpeza de
-órfãos são todos cuidados pelo wrapper.
-
-### Nativo
-
-```bash
-npm install -g huu-pipe        # Node 20+ e um `git` funcional
-huu --yolo                     # abre a TUI nativa (sem Docker)
-```
-
-Execuções nativas expõem suas credenciais de shell pro agente LLM.
-Prefira Docker pra qualquer coisa real no seu laptop. (`--no-docker` é
-o alias de grafia neutra do `--yolo`, pensado pra runners de CI — veja
-abaixo.) Matriz completa de instalação (macOS / Windows / Linux, notas
-do OrbStack, caveats do WSL2):
-[`docs/onboarding.pt-BR.md#instalação`](docs/onboarding.pt-BR.md#instalação).
-
----
-
 ## Modo headless / um-comando
 
 Pra CI, cron, demos:
@@ -501,6 +515,17 @@ portas): [`docs/pipeline-json-guide.md`](docs/pipeline-json-guide.md).
 | **Referência de teclado** | [`docs/KEYBOARD.md`](docs/KEYBOARD.md) |
 | **Catálogo de skills de agente** | [`agent-skills.md`](agent-skills.md) |
 | **Changelog** | [`CHANGELOG.md`](CHANGELOG.md) |
+
+---
+
+## Contribuindo
+
+Contribuições são bem-vindas — o projeto é jovem e há bastante a fazer.
+Abra uma issue em [github.com/frederico-kluser/huu/issues](https://github.com/frederico-kluser/huu/issues)
+pra propor uma pipeline, reportar um bug ou discutir uma ideia. Não há
+CI automatizado: antes de abrir um PR, rode `npm run typecheck && npm test`
+localmente — a convenção é responsabilidade do contribuidor. Detalhes de
+desenvolvimento e arquitetura em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 
