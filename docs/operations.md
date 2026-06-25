@@ -407,7 +407,7 @@ is fine — burn tokens "fixing" a non-bug.
    `PORT`, `HUU_PORT_HTTP`, `HUU_PORT_DB`, `HUU_PORT_WS`,
    `DATABASE_URL`, and seven extras. Frameworks that respect dotenv
    (Next, Vite, Nest, Astro, dotenv-flow, …) load it automatically.
-3. **Native `bind()` interceptor.** A ~150-line C shared library at
+3. **Native `bind()` interceptor.** A ~170-line C shared library at
    `native/port-shim/port-shim.c`. The orchestrator compiles it with
    `cc` and preloads it via `LD_PRELOAD` (Linux) or
    `DYLD_INSERT_LIBRARIES` (macOS). Customer code is never modified —

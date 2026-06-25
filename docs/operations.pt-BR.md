@@ -414,7 +414,7 @@ gastam tokens "consertando" um não-bug.
    `DATABASE_URL` e sete extras. Frameworks que respeitam dotenv
    (Next, Vite, Nest, Astro, dotenv-flow, …) carregam automaticamente.
 3. **Interceptor `bind()` nativo.** Uma biblioteca C compartilhada de
-   ~150 linhas em `native/port-shim/port-shim.c`. O orchestrator
+   ~170 linhas em `native/port-shim/port-shim.c`. O orchestrator
    compila com `cc` e faz preload via `LD_PRELOAD` (Linux) ou
    `DYLD_INSERT_LIBRARIES` (macOS). **O código do cliente nunca é
    modificado** — `app.listen(3000)` literal no source roda
