@@ -50,11 +50,11 @@ describe('validateKeyValue', () => {
     expect(r.status).toBe('unverifiable');
   });
 
-  it('returns unverifiable for a key with no cheap probe (copilot), no network call', async () => {
+  it('returns unverifiable for a spec with no cheap probe (Azure endpoint URL), no network call', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    const r = await validateKeyValue(findSpec('copilot')!, 'ghp_whatever');
-    expect(r.status).toBe('unverifiable');
+    const r = await validateKeyValue(findSpec('azureEndpoint')!, 'https://x.openai.azure.com');
+    expect(r).toEqual({ status: 'unverifiable', reason: 'no validator for this key' });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

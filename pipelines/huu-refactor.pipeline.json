@@ -1,8 +1,9 @@
 {
   "_format": "huu-pipeline-v2",
-  "exportedAt": "2026-06-25T12:17:09.382Z",
+  "exportedAt": "2026-06-25T17:14:38.339Z",
   "pipeline": {
     "name": "huu Refactor Plan",
+    "description": "Characterization-test baseline → per-file smell catalog → top-5 ranking by smell-weight × churn → a static Mikado graph per target → Fowler-grounded recommendations. Report-only.",
     "maxRetries": 1,
     "maxNodeExecutions": 50,
     "steps": [

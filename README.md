@@ -519,33 +519,36 @@ reprodutibilidade de método, poucos outros entregam o mesmo contrato.
 
 ---
 
-## Backends — qualquer modelo, sua escolha
+## Provedores — qualquer modelo, sua escolha
+
+huu roda sempre pelo **pi**. O que você escolhe é o *provedor* por baixo
+dele: **OpenRouter** (padrão) ou **Azure AI Foundry**. (O backend Copilot
+foi removido na v2.2.)
 
 ```mermaid
 flowchart LR
-    K["kind: 'pi' | 'azure' | 'copilot' | 'stub'"]
-    K --> R["selectBackend()<br/>registry.ts"]
-    R --> P["Pi<br/>(OpenRouter, qualquer modelo)"]
-    R --> Z["Azure AI Foundry<br/>(qualquer deployment)"]
-    R --> C["Copilot<br/>(estabilizando)"]
-    R --> S["Stub<br/>(sem LLM, smoke)"]
+    P["provider: 'openrouter' | 'azure'"]
+    P --> M["providerToBackend()<br/>providers.ts"]
+    M --> O["Pi · OpenRouter<br/>(qualquer modelo)"]
+    M --> Z["Pi · Azure AI Foundry<br/>(qualquer deployment)"]
+    P -. "--stub (interno)" .-> S["Stub<br/>(sem LLM, smoke)"]
 ```
 
-| Backend | Flag | Modelo de custo | Status |
+| Provedor | Flag | Modelo de custo | Status |
 |---|---|---|---|
-| **Pi** (padrão) | `--backend=pi` | Por-token via `OPENROUTER_API_KEY` — **qualquer modelo OpenRouter** | Recomendado |
-| Azure AI Foundry | `--backend=azure` | Por endpoint via `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` — qualquer deployment ([guia](docs/azure-backend.md)) | Novo |
-| GitHub Copilot | `--copilot` | Assinatura via `COPILOT_GITHUB_TOKEN` (dependência opcional) | Estabilizando |
+| **OpenRouter** (padrão) | `--provider=openrouter` | Por-token via `OPENROUTER_API_KEY` — **qualquer modelo OpenRouter** | Recomendado |
+| Azure AI Foundry | `--provider=azure` | Por endpoint via `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` — qualquer deployment ([guia](docs/azure-backend.md)) | Novo |
 | Stub | `--stub` | Grátis, sem LLM — smoke tests / demos | Estável |
 
 A factory do Pi habilita `thinking=medium` por padrão pra todo modelo
 que suporta — o modelo pode rascunhar, criticar e revisar internamente
 antes de emitir uma resposta final. Pra trabalho per-file (um agente,
-uma missão), esse é o trade-off certo. Os quatro backends compartilham o
+uma missão), esse é o trade-off certo. Os dois provedores compartilham o
 mesmo orchestrator, ciclo de vida de worktree e lógica de merge.
 
-Adicionar um backend futuro (ACP, Claude Code, …) é uma mudança de
-uma pasta + um case no registry sob `src/orchestrator/backends/`.
+Escolha o provedor na tela de launch (web e TUI) ou trave pela linha de
+comando com `--provider=`. A chave de cada provedor é carregada, editável
+e persistida em Opções — e é a mesma chave que o pi usa no run.
 
 A fundo: [`docs/onboarding.pt-BR.md#backends-a-fundo`](docs/onboarding.pt-BR.md#backends-a-fundo).
 
@@ -763,9 +766,6 @@ CC0 — use no trabalho, em casa, onde quiser.
 `huu` é construído em cima de [`@mariozechner/pi-coding-agent`](https://www.npmjs.com/package/@mariozechner/pi-coding-agent)
 — um SDK de coding agent lean e multi-provider do Mario Zechner. O
 [post dele sobre o design](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/)
-vale a leitura; a sobreposição filosófica não é coincidência.
-
-A integração com GitHub Copilot usa
-[`@github/copilot-sdk`](https://www.npmjs.com/package/@github/copilot-sdk)
-(declarada como dependência opcional) — fornecendo acesso baseado em
-assinatura pra usuários que já têm um plano GitHub Copilot.
+vale a leitura; a sobreposição filosófica não é coincidência. O mesmo SDK
+serve tanto OpenRouter quanto Azure AI Foundry — os dois provedores que o
+pi expõe.

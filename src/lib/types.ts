@@ -7,27 +7,46 @@
  * canonical declaration lives there because it's tightly coupled to the
  * factory dispatch. This local alias avoids a `lib/` → `orchestrator/`
  * import cycle (lib imports must stay backend-agnostic).
+ *
+ * Only `pi` is user-facing — the LLM provider underneath it (OpenRouter or
+ * Azure AI Foundry) is chosen via {@link LlmProvider}. `azure` is the
+ * internal dispatch kind backing the Azure provider; `stub` is the no-LLM
+ * smoke-test backend. (Copilot was removed in v2.2 — huu is pi-only.)
  */
-export type AgentBackendKind = 'pi' | 'copilot' | 'azure' | 'stub';
+export type AgentBackendKind = 'pi' | 'azure' | 'stub';
+
+/**
+ * The LLM provider the (single, user-facing) pi backend talks to. This is
+ * the choice surfaced in the UI: "Pi → OpenRouter" or "Pi → Azure AI
+ * Foundry". `src/orchestrator/backends/registry.ts` maps each provider to
+ * the concrete {@link AgentBackendKind} that serves it (`openrouter` → `pi`,
+ * `azure` → `azure`).
+ */
+export type LlmProvider = 'openrouter' | 'azure';
 
 export interface AppConfig {
   apiKey: string;
   modelId: string;
   budgetUsd?: number;
   /**
-   * Optional backend-specific endpoint URL. Currently used by the `azure`
-   * backend to pass the Azure AI Foundry endpoint (e.g.
+   * Optional backend-specific endpoint URL. Used by the Azure provider to
+   * pass the Azure AI Foundry endpoint (e.g.
    * `https://my.openai.azure.com/openai/v1/`) to the agent factory.
-   * Pi and Copilot backends ignore this field.
+   * The OpenRouter provider ignores this field.
    */
   endpoint?: string;
   /**
-   * Optional. Default `'pi'`. Set by the CLI flag `--backend=` or the
-   * TUI BackendSelector. Used by the api-key resolver to know which
-   * spec is "the required one" and by the model selector to filter
-   * the catalog.
+   * Optional. Default `'pi'`. The concrete dispatch kind. Usually derived
+   * from {@link AppConfig.provider} via `providerToBackend()`; set directly
+   * only by `--backend=` / `--stub`.
    */
   backend?: AgentBackendKind;
+  /**
+   * Optional. Default `'openrouter'`. The user-facing provider choice for
+   * the pi backend. Drives api-key resolution (which spec is required) and
+   * model-catalog filtering.
+   */
+  provider?: LlmProvider;
 }
 
 /**
@@ -177,6 +196,14 @@ export const DEFAULT_MAX_NODE_EXECUTIONS = 50;
 
 export interface Pipeline {
   name: string;
+  /**
+   * One-line, human-facing summary of what this pipeline does and the
+   * methodology behind it. Surfaced at launch — under the name in the TUI
+   * welcome list and on the web pipeline cards — so the user knows what
+   * they're about to run before picking it. Optional for back-compat with
+   * pipeline files written before this field existed.
+   */
+  description?: string;
   steps: PipelineStep[];
   /**
    * Marker for the bundled default test pipeline (see

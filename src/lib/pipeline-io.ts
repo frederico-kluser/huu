@@ -75,6 +75,8 @@ const PortAllocationSchema = z.object({
 
 export const PipelineSchema = z.object({
   name: z.string().min(1),
+  /** One-line human-facing summary shown at launch. Optional (back-compat). */
+  description: z.string().max(280).optional(),
   steps: z.array(PipelineStepSchema).min(1),
   cardTimeoutMs: z.number().int().positive().optional(),
   singleFileCardTimeoutMs: z.number().int().positive().optional(),

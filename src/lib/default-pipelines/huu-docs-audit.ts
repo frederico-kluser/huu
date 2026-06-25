@@ -406,6 +406,8 @@ Numbers MUST come from re-reading \`.huu/audits/docs-faq.json\` and the report ‚
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
+    description:
+      'Inventories every doc, classifies it via the Di√°taxis compass, scores the README, flags stale references and measures inline API-doc coverage. Report-only.',
     maxRetries: 1,
     maxNodeExecutions: 50,
     steps: [

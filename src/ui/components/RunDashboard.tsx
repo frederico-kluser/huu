@@ -7,6 +7,7 @@ import type { AgentFactory } from '../../orchestrator/types.js';
 import { RunKanban } from './RunKanban.js';
 import { RunModal } from './RunModal.js';
 import { LogArea } from './LogArea.js';
+import { MorphLoader, MorphMark } from './MorphLoader.js';
 import { theme } from '../theme.js';
 import { log as dlog, bump as dbump } from '../../lib/debug-logger.js';
 import { isAuthError } from '../../lib/auth-error.js';
@@ -377,7 +378,21 @@ export function RunDashboard({
   const handleModalClose = useCallback(() => setModalOpen(false), []);
 
   if (!state) {
-    return <Text>Initializing orchestrator...</Text>;
+    return (
+      <Box flexDirection="column" width="100%">
+        <Box
+          borderStyle="round"
+          borderColor={theme.ai}
+          paddingX={1}
+          paddingY={1}
+          flexDirection="column"
+          width="100%"
+          alignItems="center"
+        >
+          <MorphLoader label="Initializing orchestrator…" />
+        </Box>
+      </Box>
+    );
   }
 
   if (aborting) {
@@ -426,26 +441,37 @@ export function RunDashboard({
   const elapsed = Math.floor(state.elapsedMs / 1000);
   const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
   const ss = String(elapsed % 60).padStart(2, '0');
+  const providerLabel = config.provider === 'azure' ? 'Azure AI Foundry' : 'OpenRouter';
 
   return (
     <Box flexDirection="column" width="100%">
-      <Box paddingX={1} width="100%">
+      {/*
+        flexWrap lets the status items reflow onto a second line on narrow
+        terminals instead of overflowing and "breaking" the header. Each
+        metric is one <Text> unit so it wraps whole, and every value carries
+        an explicit space after its label so "stage" and "5/5" never collide.
+      */}
+      <Box paddingX={1} width="100%" flexWrap="wrap">
+        <MorphMark active={state.status !== 'done' && state.status !== 'error'} />
+        <Text> </Text>
         <Text bold color="cyan">{pkg.name} v{pkg.version}</Text>
-        <Text dimColor>  ·  </Text>
-        <Text>stage <Text bold>{state.currentStage}/{state.totalStages}</Text></Text>
+        <Text dimColor>{'  ·  '}</Text>
+        <Text>{providerLabel}{' '}<Text bold color="cyan">{config.modelId}</Text></Text>
+        <Text dimColor>{'  ·  '}</Text>
+        <Text>stage{' '}<Text bold>{state.currentStage}/{state.totalStages}</Text></Text>
         {state.wave !== undefined && (
           <>
-            <Text dimColor>  ·  </Text>
-            <Text>◇ wave <Text bold color="cyanBright">{state.wave}</Text></Text>
+            <Text dimColor>{'  ·  '}</Text>
+            <Text>◇ wave{' '}<Text bold color="cyanBright">{state.wave}</Text></Text>
           </>
         )}
-        <Text dimColor>  ·  </Text>
-        <Text>concurrency <Text bold color="yellow">{state.concurrency}</Text></Text>
-        <Text dimColor>  ·  </Text>
-        <Text>elapsed {mm}:{ss}</Text>
-        <Text dimColor>  ·  </Text>
-        <Text>{state.completedTasks}/{state.totalTasks} done</Text>
-        <Text dimColor>  ·  status: </Text>
+        <Text dimColor>{'  ·  '}</Text>
+        <Text>concurrency{' '}<Text bold color="yellow">{state.concurrency}</Text></Text>
+        <Text dimColor>{'  ·  '}</Text>
+        <Text>elapsed{' '}{mm}:{ss}</Text>
+        <Text dimColor>{'  ·  '}</Text>
+        <Text>{state.completedTasks}/{state.totalTasks}{' '}done</Text>
+        <Text dimColor>{'  ·  status: '}</Text>
         <Text bold color={state.status === 'done' ? 'green' : state.status === 'error' ? 'red' : 'cyan'}>
           {state.status}
         </Text>

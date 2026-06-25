@@ -6,7 +6,8 @@
  * the HTTP plumbing in `server.ts` so it can be unit-tested without a socket.
  */
 
-import { basename } from 'node:path';
+import { basename, dirname, join, parse } from 'node:path';
+import { readdirSync, existsSync } from 'node:fs';
 import {
   ALL_BACKENDS,
   selectBackend,
@@ -16,10 +17,12 @@ import {
   findSpec,
   resolveApiKey,
   findMissingKeysForBackend,
+  findMissingKeysForProvider,
   type ApiKeySpec,
 } from '../lib/api-key.js';
 import { checkOpenRouterReachable } from '../lib/openrouter.js';
 import { checkAzureReachable } from '../lib/azure.js';
+import { PROVIDERS, type ProviderInfo } from '../lib/providers.js';
 import { loadRecommendedModels } from '../models/catalog.js';
 import { supportsThinking } from '../lib/model-factory.js';
 import {
@@ -28,9 +31,9 @@ import {
   type PipelineEntry,
 } from '../lib/pipeline-io.js';
 import { ensureAllDefaultPipelines } from '../lib/pipeline-bootstrap.js';
-import { join } from 'node:path';
 import {
   isCheckStep,
+  type LlmProvider,
   type Pipeline,
   type PipelineStep,
 } from '../lib/types.js';
@@ -87,6 +90,8 @@ export interface StepInfo {
 
 export interface PipelineInfo {
   name: string;
+  /** One-line summary shown on the launch cards. */
+  description?: string;
   source: 'local' | 'global' | 'memory';
   fileName?: string;
   stepCount: number;
@@ -103,8 +108,8 @@ function backendHasKey(kind: AgentBackendKind): boolean {
     // Azure needs BOTH the key and the endpoint to actually run.
     return findMissingKeysForBackend('azure').length === 0;
   }
-  if (kind === 'pi' || kind === 'copilot') {
-    return findMissingKeysForBackend(kind).length === 0;
+  if (kind === 'pi') {
+    return findMissingKeysForBackend('pi').length === 0;
   }
   return true;
 }
@@ -205,9 +210,9 @@ export function keyStatus(backend: AgentBackendKind): KeyStatus {
   if (!bundle.requiresApiKey || backend === 'stub') {
     return { ok: true, missing: [] };
   }
-  const missing = findMissingKeysForBackend(
-    backend as 'pi' | 'copilot' | 'azure',
-  ).map(specToInfo);
+  const missing = findMissingKeysForBackend(backend as 'pi' | 'azure').map(
+    specToInfo,
+  );
   return { ok: missing.length === 0, missing };
 }
 
@@ -244,6 +249,7 @@ function toPipelineInfo(
   const check = pipeline.steps.length - work;
   return {
     name: pipeline.name,
+    description: pipeline.description,
     source,
     fileName,
     stepCount: pipeline.steps.length,
@@ -302,4 +308,85 @@ export function getPipelineByName(cwd: string, name: string): Pipeline | null {
 /** Friendly repo label for the header (basename of the working dir). */
 export function repoName(cwd: string): string {
   return basename(cwd) || cwd;
+}
+
+// ── Providers ────────────────────────────────────────────────────────────
+
+export interface ProviderUiInfo {
+  id: LlmProvider;
+  /** Concrete dispatch backend for model/key lookups (`pi` or `azure`). */
+  backend: AgentBackendKind;
+  label: string;
+  description: string;
+  /** Credential specs this provider needs, with live presence. */
+  keySpecs: KeySpecInfo[];
+  /** True when every required credential resolves — the run can launch. */
+  hasKey: boolean;
+}
+
+/**
+ * The user-facing provider choices for the pi backend (OpenRouter / Azure AI
+ * Foundry), each annotated with the credential specs it needs and whether
+ * they're already resolvable. Drives the web provider selector.
+ */
+export function listProvidersInfo(): ProviderUiInfo[] {
+  return PROVIDERS.map((p: ProviderInfo) => {
+    const specs: ApiKeySpec[] = [];
+    const keySpec = findSpec(p.apiKeySpecName);
+    if (keySpec) specs.push(keySpec);
+    if (p.endpointSpecName) {
+      const ep = findSpec(p.endpointSpecName);
+      if (ep) specs.push(ep);
+    }
+    return {
+      id: p.id,
+      backend: p.backend,
+      label: p.label,
+      description: p.description,
+      keySpecs: specs.map(specToInfo),
+      hasKey: findMissingKeysForProvider(p.id).length === 0,
+    };
+  });
+}
+
+// ── Filesystem folder navigation (run-directory picker) ──────────────────
+
+export interface DirEntryInfo {
+  name: string;
+  path: string;
+}
+
+export interface DirListing {
+  path: string;
+  /** Parent directory, or null at the filesystem root. */
+  parent: string | null;
+  /** True when the directory is a git repo (a valid run target). */
+  isGitRepo: boolean;
+  entries: DirEntryInfo[];
+}
+
+/**
+ * List the sub-directories of `target` for the web folder picker. Dotfolders
+ * are hidden to keep the list readable. Unreadable directories yield an empty
+ * entry list rather than throwing, so the browser can still navigate away.
+ * Falls back to the process cwd when the path doesn't exist.
+ */
+export function listDirs(target: string): DirListing {
+  const path = target && existsSync(target) ? target : process.cwd();
+  let entries: DirEntryInfo[] = [];
+  try {
+    entries = readdirSync(path, { withFileTypes: true })
+      .filter((e) => (e.isDirectory() || e.isSymbolicLink()) && !e.name.startsWith('.'))
+      .map((e) => ({ name: e.name, path: join(path, e.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    entries = [];
+  }
+  const root = parse(path).root;
+  return {
+    path,
+    parent: path === root ? null : dirname(path),
+    isGitRepo: existsSync(join(path, '.git')),
+    entries,
+  };
 }

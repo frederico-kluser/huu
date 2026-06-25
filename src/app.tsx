@@ -12,6 +12,7 @@ import { TimeoutPrompt } from './ui/components/TimeoutPrompt.js';
 import { RunDashboard } from './ui/components/RunDashboard.js';
 import { ApiKeyPrompt } from './ui/components/ApiKeyPrompt.js';
 import { BackendSelector } from './ui/components/BackendSelector.js';
+import { DirectoryPicker } from './ui/components/DirectoryPicker.js';
 import { useTerminalResize } from './ui/hooks/useTerminalResize.js';
 import { SystemMetricsBar } from './ui/components/SystemMetricsBar.js';
 import { SavedPipelinesManager } from './ui/components/SavedPipelinesManager.js';
@@ -20,6 +21,7 @@ import {
   selectBackend,
   type AgentBackendKind,
 } from './orchestrator/backends/registry.js';
+import { backendToProvider } from './lib/providers.js';
 import { listAllPipelines, savePipelineToMemory, deletePipelineFromMemory } from './lib/pipeline-io.js';
 import { listPipelinesInMemory } from './lib/pipeline-memory.js';
 import { ensureAllDefaultPipelines } from './lib/pipeline-bootstrap.js';
@@ -84,7 +86,6 @@ export function App({
   useTerminalResize();
 
   const openrouterSpec = findSpec('openrouter');
-  const copilotSpec = findSpec('copilot');
   const azureApiKeySpec = findSpec('azureApiKey');
   const azureEndpointSpec = findSpec('azureEndpoint');
 
@@ -120,7 +121,10 @@ export function App({
   const [savedPipelines, setSavedPipelines] = useState<PipelineEntry[]>([]);
 
   const { screen, pipeline, modelId, backendKind, apiKey, pipelineSourceName } = fsm;
-  const repoRoot = process.cwd();
+  // The directory the run targets. Defaults to the process cwd (which the
+  // `--dir=` flag may already have moved). The DirectoryPicker screen lets
+  // the user navigate the filesystem and choose a different folder at runtime.
+  const [repoRoot, setRepoRoot] = useState<string>(() => process.cwd());
 
   // CLI-provided factory wins. When the user picks via TUI we set
   // `activeFactory` from selectBackend(). The fallback chain is:
@@ -136,15 +140,11 @@ export function App({
   // entry of API_KEY_REGISTRY is "the required one"; the others stay
   // optional regardless of their `required` flag.
   const activeSpec: ApiKeySpec | undefined =
-    backendKind === 'copilot'
-      ? copilotSpec
-      : backendKind === 'azure'
-        ? azureApiKeySpec
-        : openrouterSpec;
+    backendKind === 'azure' ? azureApiKeySpec : openrouterSpec;
 
-  // Backend-aware context passed to TUI helpers (Pipeline Assistant, Smart
+  // Provider-aware context passed to TUI helpers (Pipeline Assistant, Smart
   // File Select, Project Recon). Without this, helpers used to hard-code
-  // OpenRouter even when the agent backend was Azure/Copilot — leaking
+  // OpenRouter even when the user picked the Azure provider — leaking
   // charges to the wrong account.
   const helperLlmContext: import('./lib/llm-client-factory.js').LlmClientContext = useMemo(() => {
     if (backendKind === 'azure') {
@@ -154,9 +154,7 @@ export function App({
         azureEndpoint: azureEndpointSpec ? resolveApiKey(azureEndpointSpec) : '',
       };
     }
-    // pi, copilot, stub — helpers fall back to OpenRouter (copilot's agent
-    // path uses GitHub subscription, but it has no generic-completion API
-    // for the helpers, so they continue on OpenRouter).
+    // pi / stub → OpenRouter for the helper features.
     return {
       backend: backendKind,
       openrouterApiKey: openrouterSpec ? resolveApiKey(openrouterSpec) : '',
@@ -267,6 +265,10 @@ export function App({
           dispatch({ type: 'welcome.options' });
           return;
         }
+        if (input === 'd' || input === 'D') {
+          dispatch({ type: 'welcome.directory' });
+          return;
+        }
         if (key.upArrow) {
           setSelectedPipelineIndex((prev) => Math.max(0, prev - 1));
           return;
@@ -339,6 +341,7 @@ export function App({
             <Text>  <Text bold color="cyan">[N]</Text>  New pipeline</Text>
             <Text>  <Text bold color="cyan">[I]</Text>  Import pipeline from list</Text>
             <Text>  <Text bold color="cyan">[M]</Text>  Saved pipelines</Text>
+            <Text>  <Text bold color="cyan">[D]</Text>  Run directory — browse & choose where to run</Text>
             <Text>  <Text bold color="cyan">[O]</Text>  Options — AI providers & API keys</Text>
             <Text>  <Text bold color="cyan">[?]</Text>  FAQ — frequently asked questions</Text>
             <Text>  <Text bold color="cyan">[Q]</Text>  Quit</Text>
@@ -353,8 +356,9 @@ export function App({
                 // The pinned default ([0]) gets its own color so it reads as
                 // distinct even when another row is selected.
                 const labelColor = isDefault ? 'green' : isSelected ? 'green' : 'cyan';
+                const desc = entry.pipeline.description?.trim();
                 return (
-                  <Box key={entry.filePath}>
+                  <Box key={entry.filePath} flexDirection="column">
                     <Text>
                       {isSelected ? '› ' : '  '}
                       <Text bold color={labelColor}>
@@ -365,6 +369,12 @@ export function App({
                       </Text>
                       {isDefault ? <Text dimColor> (default)</Text> : null}
                     </Text>
+                    {desc ? (
+                      <Text dimColor wrap="wrap">
+                        {'      '}
+                        {desc}
+                      </Text>
+                    ) : null}
                   </Box>
                 );
               })}
@@ -377,7 +387,7 @@ export function App({
           )}
 
           <Box marginTop={1}>
-            <Text dimColor>cwd: {repoRoot}</Text>
+            <Text dimColor>run directory: {repoRoot}  ·  <Text bold>[D]</Text> change</Text>
           </Box>
         </Box>
       </Box>
@@ -414,19 +424,20 @@ export function App({
           </Box>
 
           <Box marginTop={1} flexDirection="column">
-            <Text bold color="cyan">Which LLM backends are supported?</Text>
+            <Text bold color="cyan">Which LLM providers are supported?</Text>
             <Text>
-              {'  '}<Text bold>pi</Text> (OpenRouter — default), <Text bold>copilot</Text> (GitHub subscription),
-              {'  '}<Text bold>azure</Text> (Azure AI Foundry), and <Text bold>stub</Text> (LLM-free mock, for smoke tests).
+              {'  '}huu runs through <Text bold>pi</Text>. Pick the provider underneath it:
+              {'  '}<Text bold>OpenRouter</Text> (default) or <Text bold>Azure AI Foundry</Text>.
+              {'  '}<Text bold>stub</Text> (LLM-free mock, for smoke tests) is reachable via --stub.
             </Text>
           </Box>
 
           <Box marginTop={1} flexDirection="column">
             <Text bold color="cyan">Do I need an API key?</Text>
             <Text>
-              {'  '}Yes for <Text bold>pi</Text> (OPENROUTER_API_KEY). <Text bold>copilot</Text> uses your
-              {'  '}GitHub subscription. <Text bold>azure</Text> needs AZURE_OPENAI_API_KEY + AZURE_OPENAI_BASE_URL.
-              {'  '}Keys are requested on demand and saved locally.
+              {'  '}Yes. <Text bold>OpenRouter</Text> needs OPENROUTER_API_KEY; <Text bold>Azure AI Foundry</Text>
+              {'  '}needs AZURE_OPENAI_API_KEY + AZURE_OPENAI_BASE_URL.
+              {'  '}Keys are requested on demand and saved locally ([O] Options to change them).
             </Text>
           </Box>
 
@@ -531,12 +542,7 @@ export function App({
           // Skip model selector when every step already has its own model.
           if (allStepsHaveModel(pipeline)) {
             const missing = kind === 'stub' ? [] : findMissingKeysForBackend(kind);
-            const spec =
-              kind === 'copilot'
-                ? copilotSpec
-                : kind === 'azure'
-                  ? azureApiKeySpec
-                  : openrouterSpec;
+            const spec = kind === 'azure' ? azureApiKeySpec : openrouterSpec;
             const resolved = spec ? resolveApiKey(spec) : apiKey;
             dispatch({
               type: 'runDirect',
@@ -617,6 +623,17 @@ export function App({
         onClose={() => dispatch({ type: 'options.close' })}
       />
     );
+  } else if (screen.kind === 'directory-picker') {
+    body = (
+      <DirectoryPicker
+        initialDir={repoRoot}
+        onSelect={(dir) => {
+          setRepoRoot(dir);
+          dispatch({ type: 'directory.select' });
+        }}
+        onCancel={() => dispatch({ type: 'directory.cancel' })}
+      />
+    );
   } else if (screen.kind === 'model-selector') {
     body = (
       <ModelSelectorOverlay
@@ -684,6 +701,7 @@ export function App({
           apiKey: screen.apiKey || 'stub',
           modelId: screen.modelId,
           backend: backendKind,
+          provider: backendToProvider(backendKind),
           // For Azure backend, resolve the endpoint from the registry.
           // process.env was updated by the ApiKeyPrompt submit handler,
           // so resolveApiKey picks it up without additional plumbing.

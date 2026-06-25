@@ -1,43 +1,43 @@
 import React, { useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import {
-  ALL_BACKENDS,
-  selectBackend,
-  type AgentBackendKind,
-} from '../../orchestrator/backends/registry.js';
+import type { AgentBackendKind } from '../../orchestrator/backends/registry.js';
+import { PROVIDERS, providerToBackend } from '../../lib/providers.js';
+import { findMissingKeysForProvider } from '../../lib/api-key.js';
+import type { LlmProvider } from '../../lib/types.js';
 import { log as dlog } from '../../lib/debug-logger.js';
 
 export interface BackendSelectorProps {
+  /** Receives the concrete dispatch backend for the chosen provider. */
   onSelect: (kind: AgentBackendKind) => void;
   onCancel: () => void;
 }
 
 interface SelectItem {
   label: string;
-  value: AgentBackendKind;
+  value: LlmProvider;
 }
 
+/**
+ * Provider picker. huu exposes a single backend — pi — so this screen lets
+ * the user choose the LLM provider underneath it: OpenRouter or Azure AI
+ * Foundry. The choice is mapped to a concrete {@link AgentBackendKind} before
+ * being handed back to the app, which keeps the rest of the run flow
+ * backend-keyed and unchanged.
+ */
 export function BackendSelector({
   onSelect,
   onCancel,
 }: BackendSelectorProps): React.JSX.Element {
-  // Only render backends marked `userSelectable: true` in the registry.
-  // Stub is excluded — it's a CLI-flag-only test tool (`huu --stub`).
-  // Surfacing it in a user-facing picker is misleading (a stub run
-  // doesn't actually do the work) and the option's existence prompted
-  // user feedback to remove it from the menu.
   const items: SelectItem[] = useMemo(
     () =>
-      ALL_BACKENDS.flatMap((kind) => {
-        const bundle = selectBackend(kind);
-        if (!bundle.userSelectable) return [];
-        return [
-          {
-            label: `${bundle.label} — ${bundle.description}`,
-            value: kind,
-          },
-        ];
+      PROVIDERS.map((p) => {
+        const ready = findMissingKeysForProvider(p.id).length === 0;
+        const badge = ready ? '✓ key set' : '• key needed';
+        return {
+          label: `${p.label} — ${p.description}  (${badge})`,
+          value: p.id,
+        };
       }),
     [],
   );
@@ -49,18 +49,20 @@ export function BackendSelector({
   return (
     <Box flexDirection="column" width="100%">
       <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column" width="100%">
-        <Text bold color="cyan">Select agent backend</Text>
+        <Text bold color="cyan">Choose the LLM provider for pi</Text>
         <Text dimColor>
-          Each backend uses a different SDK. Pi is the default; Copilot needs
-          COPILOT_GITHUB_TOKEN; Stub never calls an LLM.
+          huu runs through pi. Pick where the tokens come from — OpenRouter
+          (pay-per-token) or your own Azure AI Foundry deployment. You can set
+          or change the key on the next screen or in Options.
         </Text>
 
         <Box marginTop={1}>
           <SelectInput
             items={items}
             onSelect={(item) => {
-              dlog('action', 'BackendSelector.select', { kind: item.value });
-              onSelect(item.value);
+              const kind = providerToBackend(item.value);
+              dlog('action', 'BackendSelector.select', { provider: item.value, kind });
+              onSelect(kind);
             }}
           />
         </Box>

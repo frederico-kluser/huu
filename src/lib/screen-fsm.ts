@@ -18,6 +18,7 @@ export type Screen =
   | { kind: 'pipeline-export' }
   | { kind: 'saved-pipelines' }
   | { kind: 'options'; focusSpecName?: string }
+  | { kind: 'directory-picker' }
   | { kind: 'backend-selector' }
   | { kind: 'model-selector'; backendKind: AgentBackendKind }
   | { kind: 'api-key'; missing: ApiKeySpec[] }
@@ -44,9 +45,13 @@ export type FsmEvent =
   | { type: 'welcome.selectPipeline'; pipeline: Pipeline }
   | { type: 'welcome.faq' }
   | { type: 'welcome.options' }
+  | { type: 'welcome.directory' }
   | { type: 'welcome.quit' }
   // options (provider/API-key editor)
   | { type: 'options.close' }
+  // directory-picker (choose where to run)
+  | { type: 'directory.select' }
+  | { type: 'directory.cancel' }
   // faq
   | { type: 'faq.back' }
   // pipeline-assistant
@@ -186,9 +191,18 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
       return { ...state, screen: { kind: 'faq' } };
     case 'welcome.options':
       return { ...state, screen: { kind: 'options' } };
+    case 'welcome.directory':
+      return { ...state, screen: { kind: 'directory-picker' } };
 
     // ── options ───────────────────────────────────────────────────────────
     case 'options.close':
+      return { ...state, screen: { kind: 'welcome' } };
+
+    // ── directory-picker ──────────────────────────────────────────────────
+    // The chosen directory is applied as a side effect by the caller
+    // (setRepoRoot); the reducer only navigates back to welcome.
+    case 'directory.select':
+    case 'directory.cancel':
       return { ...state, screen: { kind: 'welcome' } };
 
     // ── faq ───────────────────────────────────────────────────────────────

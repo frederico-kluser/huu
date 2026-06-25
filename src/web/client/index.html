@@ -11,16 +11,22 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <!-- Ambient depth: soft accent glows behind the glass, theme-aware. -->
+    <!-- Ambient depth: gooey accent blobs drifting behind the glass, theme-aware. -->
     <div class="aurora" aria-hidden="true">
-      <span class="aurora__blob aurora__blob--a"></span>
-      <span class="aurora__blob aurora__blob--b"></span>
-      <span class="aurora__blob aurora__blob--c"></span>
+      <div class="aurora__goo">
+        <span class="aurora__blob aurora__blob--a"></span>
+        <span class="aurora__blob aurora__blob--b"></span>
+        <span class="aurora__blob aurora__blob--c"></span>
+        <span class="aurora__blob aurora__blob--d"></span>
+      </div>
     </div>
 
     <header class="topbar glass">
       <div class="topbar__brand">
-        <span class="brand-orb" aria-hidden="true"></span>
+        <!-- The morphing gooey blob IS huu's mark — it animates the whole time.
+             Same liquid mark as the launch/loader blobs: needs blob--goo (the
+             #huu-goo filter + visible inner cut), just rendered smaller here. -->
+        <span class="brand-orb blob blob--goo" aria-hidden="true"><span class="blob__i"></span></span>
         <div class="brand-text">
           <strong>huu</strong>
           <span class="brand-repo" id="repoName">—</span>
@@ -29,10 +35,12 @@
 
       <div class="topbar__status" id="runStatusGroup" hidden>
         <span class="status-pill" id="statusPill"><i class="dot"></i><span id="statusText">idle</span></span>
-        <div class="metric" title="Pipeline stage / wave"><span class="metric__label">Stage</span><span class="metric__val" id="mStage">—</span></div>
-        <div class="metric" title="Tasks completed / total"><span class="metric__label">Tasks</span><span class="metric__val" id="mTasks">—</span></div>
-        <div class="metric" title="Elapsed time"><span class="metric__label">Elapsed</span><span class="metric__val" id="mElapsed">—</span></div>
-        <div class="metric" title="Estimated cost (USD)"><span class="metric__label">Cost</span><span class="metric__val" id="mCost">—</span></div>
+        <div class="metrics" id="metrics">
+          <div class="metric" title="Pipeline stage / wave"><span class="metric__label">Stage</span><span class="metric__val" id="mStage">—</span></div>
+          <div class="metric" title="Tasks completed / total"><span class="metric__label">Tasks</span><span class="metric__val" id="mTasks">—</span></div>
+          <div class="metric" title="Elapsed time"><span class="metric__label">Elapsed</span><span class="metric__val" id="mElapsed">—</span></div>
+          <div class="metric" title="Estimated cost (USD)"><span class="metric__label">Cost</span><span class="metric__val" id="mCost">—</span></div>
+        </div>
       </div>
 
       <div class="topbar__actions">
@@ -69,7 +77,9 @@
           <aside class="panel glass panel--config" id="configPanel">
             <div class="panel__title"><span>Launch</span></div>
             <div class="config-empty" id="configEmpty">
-              <div class="config-empty__art" aria-hidden="true">◇</div>
+              <div class="config-empty__art" aria-hidden="true">
+                <span class="blob blob--goo blob--md"><span class="blob__i"></span></span>
+              </div>
               <p class="muted">Select a pipeline to configure the run.</p>
             </div>
 
@@ -77,11 +87,20 @@
               <div class="field">
                 <label>Pipeline</label>
                 <div class="selected-pipe" id="selectedPipe">—</div>
+                <div class="selected-pipe__desc muted" id="selectedPipeDesc"></div>
               </div>
 
               <div class="field">
-                <label>Backend</label>
-                <div class="segmented" id="backendSeg"></div>
+                <label>Run directory</label>
+                <div class="dir-row">
+                  <code class="dir-path" id="dirPath" title="">—</code>
+                  <button type="button" class="btn btn--ghost btn--sm" id="dirBrowse">Browse…</button>
+                </div>
+              </div>
+
+              <div class="field">
+                <label>Provider</label>
+                <div class="segmented" id="providerSeg"></div>
               </div>
 
               <div class="field">
@@ -92,15 +111,11 @@
                 <div class="model-hint" id="modelHint"></div>
               </div>
 
-              <div class="field" id="keyField" hidden>
-                <label id="keyLabel">API key</label>
-                <div class="key-row">
-                  <input type="password" id="keyInput" placeholder="paste key…" autocomplete="off" spellcheck="false" />
-                  <button type="button" class="btn btn--ghost" id="keySave">Validate &amp; use</button>
-                </div>
-                <div class="model-hint" id="keyHint"></div>
-                <div class="model-hint">Validated against the provider, then kept only in this browser tab — never written to disk.</div>
-              </div>
+              <!-- Key area: JS renders one row per credential the provider needs,
+                   and a "change" affordance even when a key is already set. Keys
+                   are validated against the provider, then kept only in this
+                   browser tab (sessionStorage) — never written to disk. -->
+              <div class="field" id="keyArea"></div>
 
               <div class="field">
                 <label>Concurrency</label>
@@ -127,6 +142,13 @@
 
       <!-- RUN VIEW -->
       <section class="view view--run" id="viewRun" hidden>
+        <!-- Gooey morph loader shown while the orchestrator spins up (before
+             the first agent card lands), and as the empty-board "thinking" state. -->
+        <div class="run-loader" id="runLoader" hidden>
+          <span class="blob blob--goo blob--lg"><span class="blob__i"></span></span>
+          <div class="run-loader__label" id="runLoaderLabel">Spinning up agents…</div>
+        </div>
+
         <div class="board" id="board">
           <div class="lane" data-lane="todo">
             <div class="lane__head"><span class="lane__dot todo"></span>To do<span class="lane__count" id="cntTodo">0</span></div>
@@ -173,12 +195,38 @@
       <pre class="drawer__logs" id="drawerLogs"></pre>
     </aside>
 
+    <!-- Folder picker modal (choose the run directory) -->
+    <div class="modal-scrim" id="folderScrim" hidden></div>
+    <div class="folder-modal glass" id="folderModal" hidden role="dialog" aria-label="Choose run directory">
+      <div class="folder-modal__head">
+        <div class="folder-modal__title">Choose run directory</div>
+        <button class="iconbtn" id="folderClose" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="folder-modal__path"><code id="folderPath">—</code><span class="folder-modal__git" id="folderGit"></span></div>
+      <div class="folder-modal__list" id="folderList"></div>
+      <div class="folder-modal__foot">
+        <button class="btn btn--ghost btn--sm" id="folderUp">↑ Parent</button>
+        <button class="btn btn--primary btn--sm" id="folderUse">Run here</button>
+      </div>
+    </div>
+
     <!-- Toast -->
     <div class="toast" id="toast" hidden></div>
 
-    <!-- Icon sprite -->
+    <!-- Icon sprite + the gooey SVG filter that gives the blob its liquid edges -->
     <svg width="0" height="0" style="position:absolute" aria-hidden="true">
       <defs>
+        <filter id="huu-goo">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+          <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9" result="goo" />
+          <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+        </filter>
+        <filter id="huu-goo-bg">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur" />
+          <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" />
+        </filter>
         <symbol id="ic-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M19.4 4.6l-1.8 1.8M6.4 17.6l-1.8 1.8"/></g></symbol>
         <symbol id="ic-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" fill="currentColor"/></symbol>
         <symbol id="ic-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></symbol>

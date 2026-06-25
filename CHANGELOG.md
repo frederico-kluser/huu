@@ -9,6 +9,32 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Added
 
+- **Provider selection inside pi — OpenRouter or Azure AI Foundry.** huu now
+  exposes a single backend (pi) and lets you choose the LLM *provider*
+  underneath it. New `LlmProvider` type + `src/lib/providers.ts` mapping
+  (`openrouter` → `pi`, `azure` → `azure`); the TUI provider selector and the
+  web segmented control both show the two providers with live "key set / key
+  needed" status. Lock it from the CLI with `--provider=openrouter|azure`
+  (`huu auto` configs gain an optional `provider` field).
+- **Per-pipeline descriptions at launch.** `Pipeline.description` is now part
+  of the schema and surfaced under each pipeline's name in the TUI Welcome
+  list and on the web launch cards. All seven bundled defaults carry a
+  one-line summary of what they do.
+- **Filesystem folder navigation — choose where to run.** Default is the
+  current directory, but you can now browse the filesystem and pick a
+  different run directory: a `[D]` DirectoryPicker screen in the TUI, a
+  "Browse…" folder modal in the web UI (`GET /api/folders`), and a `--dir=`
+  CLI flag honored across native, Docker and headless runs. `RunConfig` gains
+  `workingDirectory`.
+- **Animated gooey-blob mark, loader and favicon.** huu's logo is now a
+  morphing "liquid" blob driven by an SVG goo filter (web) / graded-Unicode
+  metaball (`MorphLoader` in the TUI). It animates as the brand mark, as the
+  run loader while the orchestrator spins up, and as the favicon — in the
+  indigo→purple (AI-magenta) identity, honoring `prefers-reduced-motion`.
+- **Editable API key for the selected provider.** The launch screen loads the
+  current key status per provider and lets you set OR change each credential
+  in place (Azure shows both key + endpoint); saving persists to the same
+  global store pi reads from, so the change takes effect on the next run.
 - **Options screen for AI provider API keys (`[O]` on the Welcome screen).**
   A new TUI screen lists every credential in the API-key registry with its
   resolved (masked) value and source, and lets you overwrite any one in place
@@ -73,6 +99,30 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
   (`resolveApiKeyWithSource` + `keyRemedyHint` in `lib/api-key.ts`). The
   Docker wrapper prints the same warning on the host before forwarding a
   shadowing env value into the container.
+- **Run dashboard header no longer breaks on narrow terminals.** The status
+  row now wraps (`flexWrap`) instead of overflowing, every value carries an
+  explicit space after its label (so "stage" and "5/5" never read stuck
+  together), and the active provider + model are shown up front.
+- **Web UI background, header and mobile layout.** The ambient aurora is a
+  richer multi-blob drift; the topbar wraps and spaces its metrics so they
+  no longer jam; new phone/tablet breakpoints stack the layout, switch the
+  card drawer + folder modal to full-height sheets, and enforce 44px touch
+  targets on coarse pointers.
+
+### Removed
+
+- **GitHub Copilot backend.** huu is pi-only now (OpenRouter or Azure AI
+  Foundry via the provider toggle). Removed `src/orchestrator/backends/copilot/`,
+  the `@github/copilot-sdk` optional dependency, the `copilot` backend kind /
+  api-key spec / model catalog, and the `--copilot` flag. Existing `huu auto`
+  configs that set `"backend": "copilot"` no longer validate — switch to
+  `"provider": "azure"` or the default OpenRouter.
+
+> Note: the bundled `pipelines/*.pipeline.json` were re-rendered to include
+> the new `description` field. Existing users keep their materialized copies
+> (bootstrap never overwrites) — delete a file to pick up the new version, or
+> run `npx tsx scripts/regen-default-pipelines.ts`.
+
 
 ## [2.1.0] - 2026-06-25
 

@@ -511,6 +511,8 @@ const N_FINALIZE = '9. Finalize report';
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
+    description:
+      'Secrets sweep, OWASP Top 10:2025 scan, dependency CVE check and supply-chain / CI posture, run as parallel waves and consolidated into a remediation roadmap. Report-only.',
     maxRetries: 1,
     maxNodeExecutions: 50,
     // dependsOn switches the run into DETERMINISTIC WAVES. After the scaffold,

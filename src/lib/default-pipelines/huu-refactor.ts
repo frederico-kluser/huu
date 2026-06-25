@@ -327,6 +327,8 @@ Numbers MUST come from re-reading \`.huu/audits/refactor-faq.json\` and the repo
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
+    description:
+      'Characterization-test baseline → per-file smell catalog → top-5 ranking by smell-weight × churn → a static Mikado graph per target → Fowler-grounded recommendations. Report-only.',
     maxRetries: 1,
     maxNodeExecutions: 50,
     steps: [

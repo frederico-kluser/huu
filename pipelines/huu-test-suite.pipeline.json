@@ -1,8 +1,9 @@
 {
   "_format": "huu-pipeline-v2",
-  "exportedAt": "2026-06-25T12:17:09.380Z",
+  "exportedAt": "2026-06-25T17:14:38.336Z",
   "pipeline": {
     "name": "huu Test Suite",
+    "description": "Detects your stack, sets up a runner, then autonomously picks the most test-worthy files and writes mutation-surviving, non-flaky unit tests in parallel — looping until the suite is green. Adds a coverage badge.",
     "_default": true,
     "maxRetries": 1,
     "maxNodeExecutions": 50,
