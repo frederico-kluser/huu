@@ -8,9 +8,16 @@ Portuguese, matching the recon prompts). Below is the complete map.
 - `A` open the **pipeline assistant** (guided conversational authoring; runs a four-agent project recon first)
 - `N` new pipeline — opens the **pattern picker** first (Discover → Act, Per-file transform, Audit with judge, Blank); `↑↓` choose · `ENTER` scaffold · `ESC` back
 - `I` import from list (`./pipelines/*.pipeline.json`)
+- `M` saved pipelines
+- `O` open **Options** — edit AI provider API keys (also opens automatically when a run aborts on an invalid key)
 - `↑↓` highlight a pipeline from the discovered list · `ENTER` load it
-- `1`–`9` jump straight to the Nth discovered pipeline
+- `0`–`9` jump straight to the labelled pipeline; `[0]` is the pinned **default** (unit-test suite), shown first and colored distinctly
 - `Q` quit
+
+## Options
+
+- `↑↓` select a provider · `ENTER` edit its key (masked input) · `ENTER` save · `ESC` cancel/back
+- Keys are persisted to the global config (`~/.config/huu/config.json`, mode 0600)
 
 ## Pipeline assistant
 

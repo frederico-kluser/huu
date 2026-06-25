@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <em>55 minutos do <code>huu</code> gerando 100% de cobertura de testes unitários — acelerados pra 10 segundos.</em>
+  <em>55 minutos do <code>huu</code> gerando 100% de cobertura de testes unitários — acelerados pra 10 segundos (execução real de exemplo, não uma garantia de resultado).</em>
 </p>
 
 <h1 align="center">huu</h1>
@@ -54,9 +54,8 @@ passo** ([troubleshooting](docs/troubleshooting.pt-BR.md)).
 
 **O huu desenha pipelines que fazem agentes que pensam seguirem um
 processo determinístico.** Ele não é uma ferramenta para desenvolver
-features novas: o foco é auditoria, geração de testes, extração de
-conhecimento e qualquer processo em esteira com previsibilidade real
-de valor — onde o método é fixo e o agente entra com a inteligência,
+features novas: o foco é auditoria, geração de testes e extração de
+conhecimento — o método é fixo e o agente entra com a inteligência,
 não com o escopo.
 
 **Um pipeline é um arquivo de ordens que a IA obedece.** Você escreve
@@ -160,99 +159,6 @@ boas-vindas:
 Mapa de teclas completo: [`docs/KEYBOARD.md`](docs/KEYBOARD.md) ·
 tutorial passo a passo:
 [`docs/onboarding.pt-BR.md`](docs/onboarding.pt-BR.md).
-
----
-
-## Onde o huu se encaixa — e onde ele difere da concorrência
-
-Pesquisamos ~20 ferramentas open-source de orquestração de agentes. Elas
-se separam por **duas perguntas**: *quem decide o escopo* (o humano ou o
-LLM?) e *como o trabalho é integrado de volta* (merge determinístico ou
-manual?). Quase todo mundo cai em dois cantos lotados; o canto do huu é
-bem menos povoado.
-
-```
-              MERGE DETERMINÍSTICO, etapa a etapa
-                          ▲
-                          │            ┌─────────┐
-       (escasso)          │            │   huu   │  ← pipeline humano +
-                          │            └─────────┘    fan-out + --no-ff
-   ESCOPO ◀───────────────┼───────────────────────▶ ESCOPO
-  DO LLM                  │                          DO HUMANO
-   OpenHands              │   Conductor · Crystal
-   SWE-agent              │   Claude Squad · uzi · vibe-kanban
-   Cursor · Amp           │   container-use · Sculptor
-                          │   LangGraph · CrewAI · AutoGen
-                          ▼   Dify · n8n · Flowise
-              MERGE MANUAL (PR / cherry-pick por sessão)
-```
-
-A combinação que define o huu — **que poucos concorrentes entregam de
-fábrica** — é: *pipeline determinística escrita por humano* (sem planner
-LLM inventando escopo) **+** *um git worktree por agente* (isolamento
-físico) **+** *merge determinístico `--no-ff` ao fim de cada etapa* **+**
-*sandbox Docker que esconde suas credenciais* **+** *auditorias/testes
-prontos que terminam num agente juiz*.
-
-| Ferramenta | Quem decide o escopo | Isolamento | Fan-out por arquivo | Integração / merge | Sandbox de credenciais | Foco |
-|---|---|---|---|---|---|---|
-| **huu** | **humano — JSON versionado** | **git worktree + Docker** | **✅ nativo** | **determinístico `--no-ff`, a cada etapa** | **✅ por padrão** | **auditoria · teste · conhecimento** |
-| Conductor · Crystal · Claude Squad · vibe-kanban · uzi | humano — ad-hoc, por sessão | git worktree | ❌ | manual (diff/PR/rebase por sessão) | ❌ (worktree no host) | construir features |
-| container-use · Sculptor | humano — ad-hoc | container | ❌ | manual (`cu merge` · PR) | ✅ container | construir features |
-| OpenHands · SWE-agent · Cursor · Amp | **LLM planeja tudo** | container / VM | ❌ | PR aberto pelo agente | ✅ (cloud/local) | construir features · resolver issues |
-| LangGraph · CrewAI · AutoGen / MAF | dev — grafo em código | in-process | ❌ | estado compartilhado em memória | ❌ | construir agentes (SDK) |
-| Dify · n8n · Flowise | humano — canvas visual | servidor persistente | ❌ | banco de dados | ❌ | apps & automação LLM |
-
-### Os três campos vizinhos, em uma frase cada
-
-- **Runners paralelos em worktree** (Conductor, Crystal, Claude Squad,
-  vibe-kanban, uzi) — os parentes mais próximos: também isolam cada
-  agente num worktree e rodam vários em paralelo. A diferença é a
-  **forma do trabalho**: eles são *interativos* ("você vira o gerente de
-  N agentes", particiona tarefas na mão e faz **merge manual por
-  sessão** via diff/PR/rebase). O huu troca a interatividade por um
-  **contrato**: a pipeline define a ordem, o fan-out é por arquivo, e o
-  merge ascendente `--no-ff` acontece sozinho ao fim de cada etapa.
-- **Sandboxes em container** (container-use da Dagger, Sculptor da Imbue)
-  — validam a tese de isolamento do huu (container-use até combina
-  container + worktree + auto-commit, o mais perto que existe da nossa
-  trilha de auditoria). Continuam **interativos** e com **merge manual**;
-  não há pipeline ordenada nem merge determinístico.
-- **Agentes autônomos** (OpenHands, SWE-agent, Cursor/Amp background
-  agents) — o oposto filosófico: **o LLM inventa o escopo e planeja**, e
-  o resultado é um **PR**. Brilham em "resolva esse issue" de ponta a
-  ponta; o huu recusa esse trabalho por design.
-- **Frameworks de orquestração** (LangGraph, CrewAI, AutoGen/MAF, Dify,
-  n8n, Flowise) — são *SDKs* ou *canvases* dos quais você programa.
-  Rodam os agentes **no mesmo processo** (sem worktree, sem sandbox de
-  credenciais por agente), e vários default a um fluxo **decidido pelo
-  LLM** em runtime. O huu é o produto acabado de um método estreito, não
-  uma caixa de ferramentas genérica.
-
-### Onde a concorrência ganha (e quando NÃO usar o huu)
-
-Honestidade primeiro: o huu é um nicho. Os concorrentes têm
-**ecossistemas muito maiores** (dezenas de milhares de estrelas, apps
-desktop nativos, marketplaces de integração, clouds gerenciadas, respaldo
-corporativo — a Microsoft uniu AutoGen + Semantic Kernel no Agent
-Framework). E há coisas que eles fazem melhor por construção:
-
-- **"Só conserta esse bug" / "constrói essa feature".** Trabalho aberto,
-  one-off, sem método repetível? Use um agente interativo (Claude Code,
-  Cursor) ou autônomo (OpenHands). Escrever uma pipeline pra isso é
-  overhead.
-- **Comparar 3 soluções e escolher a melhor.** Crystal e uzi fazem
-  *candidate-generation* (mesmo prompt × N → você fica com o vencedor)
-  como fluxo de primeira classe. O huu não tem essa ergonomia nativa.
-- **Esteerar o agente no meio da execução.** O Pairing Mode do Sculptor e
-  o diff review por sessão do vibe-kanban são interativos; o huu roda o
-  contrato até o fim e te entrega o resultado mergeado.
-
-O huu ganha em **uma coisa**, de propósito: fazer agentes que pensam
-seguirem um **processo determinístico e auditável** sobre N arquivos —
-auditoria, geração de testes, extração de conhecimento. Quando o método é
-conhecido e o valor está em executá-lo com disciplina e reprodutibilidade,
-poucos outros entregam o mesmo contrato.
 
 ---
 
@@ -390,6 +296,85 @@ Defaults empacotados:
 
 ---
 
+## Onde o huu se encaixa — e onde ele difere da concorrência
+
+Pesquisamos ~20 ferramentas open-source de orquestração de agentes. Elas
+se separam por **duas perguntas**: *quem decide o escopo* (o humano ou o
+LLM?) e *como o trabalho é integrado de volta* (merge determinístico ou
+manual?). Quase todo mundo cai em dois cantos lotados; o canto do huu é
+bem menos povoado.
+
+```
+              MERGE DETERMINÍSTICO, etapa a etapa
+                          ▲
+                          │            ┌─────────┐
+       (escasso)          │            │   huu   │  ← pipeline humano +
+                          │            └─────────┘    fan-out + --no-ff
+   ESCOPO ◀───────────────┼───────────────────────▶ ESCOPO
+  DO LLM                  │                          DO HUMANO
+   OpenHands              │   Conductor · Crystal
+   SWE-agent              │   Claude Squad · uzi · vibe-kanban
+   Cursor · Amp           │   container-use · Sculptor
+                          │   LangGraph · CrewAI · AutoGen
+                          ▼   Dify · n8n · Flowise
+              MERGE MANUAL (PR / cherry-pick por sessão)
+```
+
+A combinação que define o huu — **que não encontramos reunida em nenhuma
+das ~20 ferramentas open-source que pesquisamos** — é: *pipeline
+determinística escrita por humano* (sem planner LLM inventando escopo)
+**+** *um git worktree por agente* (isolamento físico) **+** *merge
+determinístico `--no-ff` ao fim de cada etapa* **+** *sandbox Docker que
+esconde suas credenciais* **+** *auditorias/testes prontos que terminam
+num agente juiz*.
+
+| Ferramenta | Quem decide o escopo | Isolamento | Fan-out por arquivo | Integração / merge | Sandbox de credenciais | Foco |
+|---|---|---|---|---|---|---|
+| **huu** | **humano — JSON versionado** | **git worktree + Docker** | **✅ nativo** | **determinístico `--no-ff`, a cada etapa** | **✅ por padrão** | **auditoria · teste · conhecimento** |
+| Conductor · Crystal · Claude Squad · vibe-kanban · uzi | humano — ad-hoc, por sessão | git worktree | ❌ | manual (diff/PR/rebase por sessão) | ❌ (worktree no host) | construir features |
+| container-use · Sculptor | humano — ad-hoc | container | ❌ | manual (`cu merge` · PR) | ✅ container | construir features |
+| OpenHands · SWE-agent · Cursor · Amp | **LLM planeja tudo** | container / VM | ❌ | PR aberto pelo agente | ✅ (cloud/local) | construir features · resolver issues |
+| LangGraph · CrewAI · AutoGen / MAF | dev — grafo em código | in-process | ❌ | estado compartilhado em memória | ❌ | construir agentes (SDK) |
+| Dify · n8n · Flowise | humano — canvas visual | servidor persistente | ❌ | banco de dados | ❌ | apps & automação LLM |
+
+O vizinho mais próximo no eixo do determinismo é o **[Conductor da
+Microsoft](https://github.com/microsoft/conductor)** (CLI sob licença MIT,
+anunciado em 2026): ele roteia entre agentes de forma determinística via
+templates (regras YAML/Jinja2, sem LLM no loop de orquestração) e gasta
+**zero tokens** pra decidir o próximo passo — a mesma recusa a um planner
+LLM que move o huu. A diferença é o escopo do produto: o Conductor é um
+orquestrador **genérico** de workflows de agentes; ele não isola cada
+agente num git worktree nem faz fan-out de código por arquivo, que são o
+miolo do huu. (Não confundir com o *Conductor* da Melty no quadrante
+acima — um app desktop de runners paralelos.)
+
+### Onde a concorrência ganha (e quando NÃO usar o huu)
+
+Honestidade primeiro: o huu é um nicho. Os concorrentes têm
+**ecossistemas muito maiores** (dezenas de milhares de estrelas, apps
+desktop nativos, marketplaces de integração, clouds gerenciadas, respaldo
+corporativo — a Microsoft uniu AutoGen + Semantic Kernel no Agent
+Framework). E há coisas que eles fazem melhor por construção:
+
+- **"Só conserta esse bug" / "constrói essa feature".** Trabalho aberto,
+  one-off, sem método repetível? Use um agente interativo (Claude Code,
+  Cursor) ou autônomo (OpenHands). Escrever uma pipeline pra isso é
+  overhead.
+- **Comparar 3 soluções e escolher a melhor.** Crystal e uzi fazem
+  *candidate-generation* (mesmo prompt × N → você fica com o vencedor)
+  como fluxo de primeira classe. O huu não tem essa ergonomia nativa.
+- **Esteerar o agente no meio da execução.** O Pairing Mode do Sculptor e
+  o diff review por sessão do vibe-kanban são interativos; o huu roda o
+  contrato até o fim e te entrega o resultado mergeado.
+
+O huu ganha em **uma coisa**, de propósito: fazer agentes que pensam
+seguirem um **processo determinístico e auditável** sobre N arquivos —
+auditoria, geração de testes, extração de conhecimento. Quando o método é
+conhecido e o valor está em executá-lo com disciplina e reprodutibilidade,
+poucos outros entregam o mesmo contrato.
+
+---
+
 ## Backends — qualquer modelo, sua escolha
 
 ```mermaid
@@ -405,7 +390,7 @@ flowchart LR
 | Backend | Flag | Modelo de custo | Status |
 |---|---|---|---|
 | **Pi** (padrão) | `--backend=pi` | Por-token via `OPENROUTER_API_KEY` — **qualquer modelo OpenRouter** | Recomendado |
-| Azure AI Foundry | `--backend=azure` | Por endpoint via `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` — qualquer deployment ([guia](docs/azure-backend.md)) | Estável |
+| Azure AI Foundry | `--backend=azure` | Por endpoint via `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` — qualquer deployment ([guia](docs/azure-backend.md)) | Novo |
 | GitHub Copilot | `--copilot` | Assinatura via `COPILOT_GITHUB_TOKEN` | Estabilizando |
 | Stub | `--stub` | Grátis, sem LLM — smoke tests / demos | Estável |
 
@@ -458,7 +443,7 @@ huu auto pipeline.json --config config.json
 {
   "modelId": "minimax/minimax-m2.7",
   "backend": "pi",
-  "files": { "3. Test $file (user-selected)": ["src/index.ts"] },
+  "files": { "3. Write tests for $file": ["src/index.ts"] },
   "concurrency": 4
 }
 ```

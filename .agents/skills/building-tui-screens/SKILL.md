@@ -16,7 +16,7 @@ New screens/components in `src/ui/`, keyboard/navigation changes in `app.tsx`, k
 
 ### Routing is a pure FSM (`src/lib/screen-fsm.ts`)
 
-- `Screen` is a discriminated union of 15 kinds (welcome, faq, pipeline-assistant, pipeline-editor, pipeline-import, pipeline-import-custom, pipeline-import-paste, pipeline-export, saved-pipelines, backend-selector, model-selector, api-key, timeout-prompt, run, summary), some carrying payloads (`model-selector` carries backendKind; `run` carries modelId+apiKey).
+- `Screen` is a discriminated union of 16 kinds (welcome, faq, pipeline-assistant, pipeline-editor, pipeline-import, pipeline-import-custom, pipeline-import-paste, pipeline-export, saved-pipelines, options, backend-selector, model-selector, api-key, timeout-prompt, run, summary), some carrying payloads (`model-selector` carries backendKind; `run` carries modelId+apiKey; `options` carries an optional `focusSpecName`).
 - The reducer is PURE — no I/O. `app.tsx` drives it: it resolves I/O (backend selection, key lookup) and dispatches events with resolved payloads. Keep new transitions in the reducer and their side effects in the callers.
 
 ### Theme (`src/ui/theme.ts` — 8 tokens, `as const`)

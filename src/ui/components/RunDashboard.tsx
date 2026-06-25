@@ -9,6 +9,7 @@ import { RunModal } from './RunModal.js';
 import { LogArea } from './LogArea.js';
 import { theme } from '../theme.js';
 import { log as dlog, bump as dbump } from '../../lib/debug-logger.js';
+import { isAuthError } from '../../lib/auth-error.js';
 
 // Width of the right-side log column. Below this threshold of total terminal
 // columns the sidebar is hidden so the kanban still has room to breathe;
@@ -44,6 +45,12 @@ interface Props {
   initialConcurrency?: number;
   onComplete: (result: OrchestratorResult) => void;
   onAbort: () => void;
+  /**
+   * Called instead of surfacing an inline error when the run aborts because
+   * a backend rejected the credentials. Lets the parent jump straight to the
+   * Options screen, focused on the offending provider (`specName`).
+   */
+  onAuthError?: (specName?: string) => void;
 }
 
 export function RunDashboard({
@@ -56,6 +63,7 @@ export function RunDashboard({
   initialConcurrency,
   onComplete,
   onAbort,
+  onAuthError,
 }: Props): React.JSX.Element {
   // Create the Orchestrator exactly once per mount. Parent re-renders pass new
   // identities for `config`/callbacks; depending on those would rebuild the
@@ -85,6 +93,8 @@ export function RunDashboard({
   onCompleteRef.current = onComplete;
   const onAbortRef = useRef(onAbort);
   onAbortRef.current = onAbort;
+  const onAuthErrorRef = useRef(onAuthError);
+  onAuthErrorRef.current = onAuthError;
   // When the user aborts (Q), `orch.start()` is still in flight — it only
   // resolves after every in-flight agent's session/dispose/finalize finishes.
   // Once it resolves, the original `.then(onCompleteRef.current)` would fire
@@ -137,6 +147,15 @@ export function RunDashboard({
     }).catch((err) => {
       if (abortedRef.current) {
         onAbortRef.current();
+        return;
+      }
+      // Credential rejection: hand off to the parent so it can open the
+      // Options screen focused on the bad provider, instead of dead-ending
+      // on an inline error the user can't act on here.
+      if (isAuthError(err) && onAuthErrorRef.current) {
+        abortedRef.current = true;
+        orch.abort();
+        onAuthErrorRef.current(err.specName);
         return;
       }
       setError(err instanceof Error ? err.message : String(err));

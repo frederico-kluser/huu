@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { exportPipeline, importPipeline, listPipelines, parsePipelineFromJson } from './pipeline-io.js';
+import { exportPipeline, importPipeline, listAllPipelines, listPipelines, parsePipelineFromJson } from './pipeline-io.js';
 import type { Pipeline } from './types.js';
 
 describe('pipeline-io', () => {
@@ -192,6 +192,38 @@ describe('pipeline-io', () => {
 
   it('returns empty array for non-existent directory', () => {
     expect(listPipelines(join(tmp, 'nonexistent'))).toEqual([]);
+  });
+
+  it('listAllPipelines pins the _default pipeline to the top', () => {
+    // Isolate the global pipelines dir to an empty temp HOME so only the
+    // local dir contributes entries.
+    const fakeHome = mkdtempSync(join(tmpdir(), 'pa-home-'));
+    const prevHome = process.env.HUU_HOST_HOME;
+    process.env.HUU_HOST_HOME = fakeHome;
+    try {
+      const localDir = join(tmp, 'all-pipelines');
+      mkdirSync(localDir, { recursive: true });
+      // Alphabetically, "alpha" sorts before "zzz-default", so without the
+      // pin the default would land second.
+      exportPipeline(
+        { name: 'Alpha', steps: [{ name: 's', prompt: 'p', files: [] }] },
+        join(localDir, 'alpha.pipeline.json'),
+      );
+      exportPipeline(
+        { name: 'The Default', _default: true, steps: [{ name: 's', prompt: 'p', files: [] }] },
+        join(localDir, 'zzz-default.pipeline.json'),
+      );
+
+      const entries = listAllPipelines(localDir);
+      expect(entries).toHaveLength(2);
+      expect(entries[0].pipeline._default).toBe(true);
+      expect(entries[0].pipeline.name).toBe('The Default');
+      expect(entries[1].pipeline.name).toBe('Alpha');
+    } finally {
+      if (prevHome === undefined) delete process.env.HUU_HOST_HOME;
+      else process.env.HUU_HOST_HOME = prevHome;
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
   });
 
   describe('parsePipelineFromJson', () => {

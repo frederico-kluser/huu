@@ -54,6 +54,31 @@ describe('screen-fsm', () => {
     });
   });
 
+  describe('options screen', () => {
+    it('welcome.options opens the options screen', () => {
+      const next = reduce(baseState(), { type: 'welcome.options' });
+      expect(next.screen).toEqual({ kind: 'options' });
+    });
+
+    it('options.close returns to welcome', () => {
+      const next = reduce(
+        baseState({ screen: { kind: 'options', focusSpecName: 'openrouter' } }),
+        { type: 'options.close' },
+      );
+      expect(next.screen).toEqual({ kind: 'welcome' });
+    });
+
+    it('run.authError opens options focused on the rejected provider', () => {
+      const next = reduce(
+        baseState({ screen: { kind: 'run', modelId: 'm', apiKey: 'k' }, backendKind: 'pi' }),
+        { type: 'run.authError', backendKind: 'azure', specName: 'azureApiKey' },
+      );
+      expect(next.screen).toEqual({ kind: 'options', focusSpecName: 'azureApiKey' });
+      // Backend is carried over so a follow-up run uses the right backend.
+      expect(next.backendKind).toBe('azure');
+    });
+  });
+
   describe('initialState', () => {
     it('starts on welcome when autoStart is false', () => {
       const s = initialState({
