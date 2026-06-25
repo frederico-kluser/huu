@@ -99,8 +99,12 @@ export OPENROUTER_API_KEY=sk-or-...
 HUU_IMAGE=huu:local huu run pipelines/huu-test-suite.pipeline.json
 ```
 
+> Open **http://localhost:4888** in your browser — the **web UI is the
+> default**. Inside Docker the server runs in the container and the port
+> is published to the host automatically. Prefer the terminal? `huu --cli`.
+
 > huu writes the bundled default pipelines into `./pipelines/` on first
-> launch — pick one on the welcome screen or pass its path.
+> launch — pick one in the UI or pass its path.
 
 Pre-built images at `ghcr.io/frederico-kluser/huu:latest` — the wrapper
 pulls automatically when no `HUU_IMAGE` is set. VPN-aware MTU, secret
@@ -111,7 +115,8 @@ the wrapper.
 
 ```bash
 npm install -g huu-pipe        # Node 20+ and a working `git`
-huu --yolo                     # opens the TUI natively (no Docker)
+huu --yolo                     # opens the web UI natively (no Docker)
+huu --yolo --cli               # or the terminal TUI, no Docker
 ```
 
 Native runs expose your shell credentials to the LLM agent. Prefer
@@ -120,9 +125,48 @@ neutral-spelling alias of `--yolo`, meant for CI runners — see below.)
 Full install matrix (macOS / Windows / Linux, OrbStack notes, WSL2
 caveats): [`docs/onboarding.md#install`](docs/onboarding.md#install).
 
-The TUI opens on the welcome screen: start from `huu Test Suite` (the
-default pipeline, already materialized) or build your own **without
-hand-writing JSON** — see the next section.
+The UI (web by default, or the TUI with `--cli`) opens on a dashboard:
+start from `huu Test Suite` (the default pipeline, already materialized)
+or build your own **without hand-writing JSON** — see the next section.
+
+---
+
+## Web UI (default)
+
+Running `huu` opens a **browser interface** — Apple-inspired (Liquid
+Glass, light/dark), real-time, no delay. It drives the same Orchestrator
+as the TUI; only the face changes. The **`--cli`** flag brings the
+terminal TUI back.
+
+- **Default, no friction.** `huu` → web. `huu --cli` → terminal.
+  `huu --yolo` → web **without Docker** (native). Every combination is
+  valid: the front-end (web/CLI) is orthogonal to the runtime
+  (Docker/native).
+- **Works with and without Docker.** In the container the server runs
+  inside and the port is published to the host (`-p`); native binds
+  directly.
+- **On your network.** Binds `0.0.0.0` by default — reach it from your
+  phone or another machine at `http://<your-machine-ip>:4888`. Real-time
+  over Server-Sent Events (auto-reconnecting), zero new dependencies.
+- **Everything is clickable.** A kanban of cards (agents, merges, judges)
+  flowing TODO → DOING → DONE; click a card for tokens, cost, branch,
+  files and **live logs**. Global log console, concurrency control
+  (Auto · Manual · MAX) and a stop button up top.
+
+```bash
+huu                       # web UI (default) — http://localhost:4888
+huu --port=8080           # custom port (or HUU_WEB_PORT=8080)
+HUU_WEB_HOST=127.0.0.1 huu # localhost-only (don't expose on the LAN)
+HUU_WEB_TOKEN=secret huu  # require ?token=secret for data/actions
+huu --cli                 # terminal TUI
+```
+
+| Variable | Does |
+|---|---|
+| `HUU_WEB_PORT` / `--port=<n>` | Port (default `4888`). |
+| `HUU_WEB_HOST` | Bind address (default `0.0.0.0`; `127.0.0.1` = local only). |
+| `HUU_WEB_TOKEN` | Shared secret required on data/action routes. |
+| `HUU_CLI=1` | Default to the TUI (same as `--cli`). |
 
 ---
 

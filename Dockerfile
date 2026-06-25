@@ -124,6 +124,11 @@ ENV GIT_TERMINAL_PROMPT=0 \
     TERM=xterm-256color \
     HUU_IN_CONTAINER=1
 
+# Web UI default port. EXPOSE is documentation only — the host wrapper
+# publishes it with `docker run -p <port>:<port>` (buildDockerArgv), and the
+# in-container server binds 0.0.0.0:$HUU_WEB_PORT. Override with --port / HUU_WEB_PORT.
+EXPOSE 4888
+
 WORKDIR /opt/huu
 
 # Pull only what the runtime needs from the builder.

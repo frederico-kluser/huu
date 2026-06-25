@@ -211,6 +211,14 @@ export interface DockerCommandOptions {
    * inherit MSS-clamping. Omitted → docker default (bridge).
    */
   network?: string;
+  /**
+   * TCP ports to publish host→container (`docker run -p <p>:<p>`). Used by
+   * web-UI mode so the browser on the host reaches the server that runs
+   * INSIDE the container. Same number both sides — the container binds the
+   * port it's told via HUU_WEB_PORT (forwarded through the passthrough env
+   * set). Empty/omitted for the TUI (CLI) path.
+   */
+  publishPorts?: number[];
 }
 
 /**
@@ -224,6 +232,11 @@ export function buildDockerArgv(opts: DockerCommandOptions): string[] {
   // error out with "the input device is not a TTY".
   if (opts.hasTTY) argv.push('-t');
   if (opts.network) argv.push('--network', opts.network);
+  // Publish the web-UI port(s) so the host browser can reach the in-container
+  // server. Bound to the same number inside (HUU_WEB_PORT) and out.
+  for (const port of opts.publishPorts ?? []) {
+    argv.push('-p', `${port}:${port}`);
+  }
   argv.push(
     '--cidfile', opts.cidfile,
     '--user', `${opts.uid}:${opts.gid}`,
@@ -265,6 +278,9 @@ export function buildDockerArgv(opts: DockerCommandOptions): string[] {
   // secretMounts above, not env at all.
   const passthrough = new Set<string>([
     'HUU_CHECK_PUSH', 'HUU_WORKTREE_BASE', 'TERM',
+    // Web-UI knobs: the in-container server must bind the SAME port the
+    // wrapper published, and honor the host's front-end + token choices.
+    'HUU_WEB_PORT', 'HUU_WEB_HOST', 'HUU_WEB_TOKEN', 'HUU_CLI',
     // Tells the in-container code (via getHuuHome()) where the host's
     // home is, so writes to `~/.huu/` and `~/Downloads/` land on the
     // bind-mounted host filesystem instead of the container's ephemeral
@@ -464,6 +480,11 @@ export function makeSecretFile(value: string, scope: string = 'huu-secret'): str
 export interface ReexecOptions {
   /** Extra host paths to bind-mount (forwarded to buildDockerArgv). */
   extraMounts?: string[];
+  /**
+   * TCP ports to publish host→container. Web-UI mode passes the resolved
+   * web port so the host browser reaches the in-container server.
+   */
+  publishPorts?: number[];
 }
 
 /**
@@ -565,6 +586,7 @@ export async function reexecInDocker(
     excludeFromEnv,
     extraMounts: [...(opts.extraMounts ?? []), ...hostHomeMounts],
     network: pickDockerNetwork(),
+    publishPorts: opts.publishPorts,
   });
 
   const child = spawn('docker', argv, { stdio: 'inherit' });

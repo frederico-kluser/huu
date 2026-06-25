@@ -21,6 +21,23 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 - **Reusable full-width `ActionBar` footer.** Keyboard hints now span the
   whole width with per-key semantic colors — `G run` (green) and `ESC back`
   (red, bold) stand out as the primary actions; the rest are muted blue.
+- **Web UI — now the default front-end.** Running `huu` opens an
+  Apple-inspired browser interface (Liquid Glass, light/dark, real-time)
+  instead of the Ink TUI; the new **`--cli`** flag (or `HUU_CLI=1`) keeps the
+  terminal UI. The web front-end is orthogonal to the Docker/native runtime, so
+  every combination works — notably `huu --yolo` is the web UI running natively
+  without Docker. New presentation layer under `src/web/` (a sibling to
+  `ui/`): a dependency-free `node:http` + Server-Sent-Events server drives the
+  same `Orchestrator` as the TUI and the headless runner. A live kanban of
+  agent/merge/judge cards (TODO → DOING → DONE) is clickable for per-card
+  tokens, cost, branch, files and streaming logs, with a global log console and
+  Auto · Manual · MAX concurrency control. In Docker the wrapper publishes the
+  web port to the host (`docker run -p`) and the in-container server binds
+  `0.0.0.0:$HUU_WEB_PORT`; natively it binds `0.0.0.0` so the LAN can reach it.
+  Knobs: `--port=<n>` / `HUU_WEB_PORT` (default 4888), `HUU_WEB_HOST`
+  (localhost-only via `127.0.0.1`), and an optional `HUU_WEB_TOKEN` shared
+  secret gating the data/action routes. Client assets ship in `dist/web/client`
+  (build copies them; no CDN, works offline and inside the image).
 
 ### Changed
 
@@ -33,7 +50,6 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
   invalid step's whole row turns yellow (in addition to the existing `⚠`
   marker and the actionable problem hint), so the blocker is visible at a
   glance.
-
 ## [2.1.0] - 2026-06-25
 
 ### Changed
