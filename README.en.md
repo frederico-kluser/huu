@@ -118,10 +118,42 @@ neutral-spelling alias of `--yolo`, meant for CI runners — see below.)
 Full install matrix (macOS / Windows / Linux, OrbStack notes, WSL2
 caveats): [`docs/onboarding.md#install`](docs/onboarding.md#install).
 
-The TUI opens on the welcome screen. Don't want to hand-write JSON? The
-**Pipeline Assistant** (`[A]` key, in magenta) sketches a pipeline from
-a natural-language description and validates it before you run — or
-start from `huu Test Suite`, the default pipeline already materialized.
+The TUI opens on the welcome screen: start from `huu Test Suite` (the
+default pipeline, already materialized) or build your own **without
+hand-writing JSON** — see the next section.
+
+---
+
+## Build a pipeline without hand-writing JSON
+
+You don't need to open a JSON editor to get started. The TUI has two
+guided ways to create a pipeline, both from the welcome screen:
+
+<p align="center">
+  <img src="assets/huu-print.jpg" alt="huu welcome screen, with the [A] Pipeline Assistant and [N] New pipeline options" width="640">
+</p>
+
+- **Guided builder — `N` key.** Opens a **pattern picker** (Discover →
+  Act with a pre-wired memory pair · Per-file transform · Audit with
+  judge · Blank) that scaffolds the linked steps for you; then you edit
+  step by step. For each step you pick the **scope** (`project`,
+  `per-file`, `memory`, or `flexible`), the **dependencies** between
+  steps (`dependsOn` — they form deterministic waves: you can fan a
+  branch into parallel steps that rejoin at a later one) and the **check
+  steps** (a judge that approves, loops back to an earlier step, or
+  branches, with `maxRuns`). The footer always shows the keys for the
+  focused field.
+- **Pipeline Assistant — `A` key** (in magenta, the color reserved for
+  AI-driven UI). Describe what you need in natural language and answer a
+  few multiple-choice questions. huu runs a parallel project recon,
+  sketches the structure (the *Architect flow* compares drafts under
+  different lenses) and hands you a pipeline **already validated** against
+  the real schema and topology — **which you then edit** in the same
+  builder. You still underwrite the scope: the AI drafts, you review and
+  approve.
+
+Full key map: [`docs/KEYBOARD.md`](docs/KEYBOARD.md) · step-by-step
+tutorial: [`docs/onboarding.md`](docs/onboarding.md).
 
 ---
 

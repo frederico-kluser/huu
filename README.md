@@ -120,10 +120,43 @@ abaixo.) Matriz completa de instalação (macOS / Windows / Linux, notas
 do OrbStack, caveats do WSL2):
 [`docs/onboarding.pt-BR.md#instalação`](docs/onboarding.pt-BR.md#instalação).
 
-A TUI abre na tela de boas-vindas. Não quer escrever JSON na mão? O
-**Pipeline Assistant** (tecla `[A]`, em magenta) esboça uma pipeline a
-partir de uma descrição em linguagem natural e a valida antes de rodar —
-ou comece pelo `huu Test Suite`, o pipeline default já materializado.
+A TUI abre na tela de boas-vindas: comece pelo `huu Test Suite` (o
+pipeline default já materializado) ou monte o seu **sem escrever JSON
+na mão** — veja a próxima seção.
+
+---
+
+## Monte um pipeline sem escrever JSON na mão
+
+Você não precisa abrir um editor de JSON pra começar. A TUI tem duas
+formas guiadas de criar um pipeline, ambas a partir da tela de
+boas-vindas:
+
+<p align="center">
+  <img src="assets/huu-print.jpg" alt="Tela de boas-vindas do huu, com as opções [A] Pipeline Assistant e [N] New pipeline" width="640">
+</p>
+
+- **Construtor guiado — tecla `N`.** Abre um **seletor de padrões**
+  (Discover → Act com par de memória pré-ligado · Per-file transform ·
+  Audit with judge · Blank) que já monta os steps ligados; daí você edita
+  etapa por etapa. Pra cada step você escolhe o **scope** (`project`,
+  `per-file`, `memory` ou `flexible`), as **dependências** entre steps
+  (`dependsOn` — formam ondas determinísticas: dá pra abrir um galho em
+  ramos paralelos que se juntam num step seguinte) e os **check steps**
+  (um juiz que aprova, volta pra um step anterior ou ramifica, com
+  `maxRuns`). O rodapé sempre mostra as teclas do campo em foco.
+- **Pipeline Assistant — tecla `A`** (em magenta, a cor reservada à UI
+  movida a IA). Descreva sua demanda em linguagem natural e responda
+  algumas perguntas de múltipla escolha. O huu faz um recon do projeto em
+  paralelo, esboça a estrutura (o *Architect flow* compara rascunhos sob
+  lentes diferentes) e entrega um pipeline **já validado** pelo schema e
+  pela topologia reais — **que você então edita** no mesmo construtor.
+  Você continua subscrevendo o escopo: a IA monta o rascunho, você revisa
+  e aprova.
+
+Mapa de teclas completo: [`docs/KEYBOARD.md`](docs/KEYBOARD.md) ·
+tutorial passo a passo:
+[`docs/onboarding.pt-BR.md`](docs/onboarding.pt-BR.md).
 
 ---
 
