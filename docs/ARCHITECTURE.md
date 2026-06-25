@@ -254,10 +254,10 @@ Key invariants:
 | Conflict resolution | Integration agent (real LLM) on a side worktree | Fallback for misdesigned pipelines, not a core path — see "Decomposition is human work" in the README. |
 | Worktree location | `<repo>/.huu-worktrees/<runId>/` | Isolated edits, native git audit trail. |
 | Per-agent network isolation | `LD_PRELOAD` / `DYLD_INSERT_LIBRARIES` shim that rewrites `bind(2)` against a per-agent port table | No Docker, no privileges, no edits to customer code. Worktrees isolate FS but not network — without this, parallel `npm run dev` invocations collide on port 3000. See [`PORT-SHIM.md`](PORT-SHIM.md) for the full alternatives analysis (Docker / netns / code rewriting / serialization rejected). |
-| Native shim build | On-demand compile via `cc` into `<repo>/.huu-cache/native-shim/<os>-<arch>/` | Avoids shipping prebuilts; gracefully falls back to env-only mode when `cc` is unavailable. Source at `native/port-shim/port-shim.c` (~150 lines C). |
+| Native shim build | On-demand compile via `cc` into `<repo>/.huu-cache/native-shim/<os>-<arch>/` | Avoids shipping prebuilts; gracefully falls back to env-only mode when `cc` is unavailable. Source at `native/port-shim/port-shim.c` (~170 lines C). |
 | Recents storage | `~/.huu/recents.json` (global) | Stays out of repo state. |
 | Default concurrency | `10` (live-tunable with `+`/`-`) | Empirically a good default for OpenRouter throughput. |
-| Default port range | `55100..56000`, window of 10 ports per agent (configurable via `pipeline.portAllocation`) | Above well-known + registered ranges; TCP probe slides the window if the user already occupies part of it. |
+| Default port range | `55100..55300` for the default ceiling of 20 agents (10 ports per agent; configurable via `pipeline.portAllocation`) | Above well-known + registered ranges; TCP probe slides the window forward — as far as ~55900 — if the user already occupies part of it. |
 | Default timeouts | `300000ms` single-file · `600000ms` multi-file/whole-project | Single-file work has very different latency from whole-project work. |
 | Default retries | `1` per card | Retries run in fresh worktrees off the current integration HEAD. |
 | Pipeline editor | Full in-app TUI, plus JSON import/export | Pipelines are reusable artifacts and round-trip cleanly. |

@@ -1,9 +1,11 @@
 <p align="center">
-  <img src="assets/huu-demo.gif" alt="huu generating 100% unit-test coverage — 55 minutes sped up to 10 seconds" width="720">
+  <img src="assets/huu-demo.gif" alt="huu generating a unit-test suite — 55 minutes sped up to 10 seconds" width="720">
 </p>
 
 <p align="center">
-  <em>55 minutes of <code>huu</code> generating 100% unit-test coverage — sped up to 10 seconds (a real example run, not a guaranteed outcome).</em>
+  <em>55 minutes of <code>huu</code> generating a unit-test suite — sped up to 10 seconds.
+  A real example run (100% <strong>line</strong> coverage on this one), <strong>not</strong> a guaranteed
+  outcome — see the coverage caveat in the <a href="#showcase-huu-test-suite">showcase</a>.</em>
 </p>
 
 <h1 align="center">huu</h1>
@@ -17,7 +19,9 @@
 </p>
 
 <p align="center">
-  A JSON pipeline becomes parallel agents — <strong>one per file</strong> — in isolated git worktrees, merged deterministically at every stage, with your credentials sandboxed in Docker.
+  A JSON pipeline becomes parallel agents — <strong>one per file</strong> — in isolated git worktrees,
+  merged at every stage <strong>deterministically in method and merge order</strong>
+  (<a href="MANIFESTO.en.md">not in result</a>), with your credentials sandboxed in Docker.
 </p>
 
 <p align="center">
@@ -34,6 +38,11 @@
   <a href="docs/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-EN%20%2B%20pt--BR-success"></a>
 </p>
 
+<p align="center">
+  <sub>Young project, essentially single-author, with heavily AI-assisted development —
+  read <a href="#status--maturity">Status &amp; maturity</a> before taking it to critical production.</sub>
+</p>
+
 ---
 
 ## The four orchestration primitives
@@ -42,13 +51,13 @@
 |---|---|---|
 | 🗺️ | **Map** — `per-file`/`memory` fan-out | the same prompt becomes N parallel agents, one per file (`$file` + `$hint`), each in its own git worktree |
 | 🔀 | **Switch** — check steps | an LLM judge with shell access emits a JSON verdict and the cursor follows the outcome (safe `default` + `maxRuns`) |
-| ◇ | **Parallel + Join** — [`dependsOn`](docs/pipeline-json-guide.md) | heterogeneous branches run together in **deterministic waves**; the join sees every merge — same pipeline ⇒ same commit sequence, always |
+| ◇ | **Parallel + Join** — [`dependsOn`](docs/pipeline-json-guide.md) | heterogeneous branches run together in **deterministic waves**; the **order** of the waves and merges is the same on every run (the *content* of each node is the model's — and a conflicting merge falls to an LLM resolver) |
 | 🧠 | **Memory** — [`produces` → `filesFrom`](docs/memory-scope.md) | one step **discovers** the work and the next fans out over it — zero human file-picking; huu injects the format contract |
 
 They compose freely: *discover → memory fan-out → parallel branches →
 judged join → cascading rework* — all visible on the kanban, all
-reproducible. Something broke? Every fatal error ships with **cause +
-next step** ([troubleshooting](docs/troubleshooting.md)).
+reproducible **in topology**. Something broke? Every fatal error ships
+with **cause + next step** ([troubleshooting](docs/troubleshooting.md)).
 
 ## What huu is
 
@@ -71,15 +80,44 @@ That sentence has a few claims worth unpacking:
   step 3 should do or which files it should touch. If a step is
   misdesigned, the result is predictably and auditably wrong — not
   surprisingly wrong.
+- **Deterministic in method and merge order, not in result.** The
+  pipeline topology, the scopes, the merge points and the order
+  (`git merge --no-ff`, branches ascending by agentId) are identical on
+  every run. What the model writes *inside* each node is free — and when
+  a merge conflicts, resolution falls to an **LLM integration agent**
+  (non-deterministic, by construction). Two runs of the same pipeline
+  produce different diffs; that's where the model's creativity earns its
+  cost. The [MANIFESTO](MANIFESTO.en.md) develops this thesis.
 - **In `per-file` mode, one agent gets one file.** The prompt is
   identical across the N agents — only `$file` is substituted. No
   context degradation between agents, no scope drift. The Pi coding
-  agent (default backend) runs with `thinking=medium` so the model
-  trades latency for quality on its single mission.
+  agent (default backend) runs with `thinking=medium` on every model
+  that supports it, so the model trades latency for quality on its
+  single mission.
 - **Pipelines are portable, not provider-locked.** A
   `huu-pipeline-v1.json` is a versioned artifact — commit it, share
   it as a gist, contribute it to the cookbook. The know-how of *how
   to decompose this class of task* lives in plain JSON.
+
+---
+
+## Who huu is for (and what it is NOT)
+
+Decide in 30 seconds whether this is for you:
+
+- ✅ **It fits** if your method fits an ordered list of steps and the
+  value is in running it with **discipline and reproducibility over N
+  files**: audits, test generation, knowledge extraction, mechanical
+  mass migration. You write the scope once; 30 agents obey in parallel.
+- ❌ **It doesn't fit** for "fix this bug" or "build this feature."
+  Open-ended, one-off work with no repeatable method calls for an
+  interactive agent (Claude Code, Cursor) or an autonomous one
+  (OpenHands). Writing a pipeline for that is overhead — and "build app
+  X" is not a pipeline, it's a bet.
+
+The rule of thumb: **when every step demands an open-ended design
+decision, it's not huu's job. When the method is known and only rigorous
+execution is left, it's exactly huu's job.**
 
 ---
 
@@ -147,11 +185,22 @@ terminal TUI back.
   directly.
 - **On your network.** Binds `0.0.0.0` by default — reach it from your
   phone or another machine at `http://<your-machine-ip>:4888`. Real-time
-  over Server-Sent Events (auto-reconnecting), zero new dependencies.
+  over Server-Sent Events (auto-reconnecting), zero new dependencies
+  (just `node:http`).
 - **Everything is clickable.** A kanban of cards (agents, merges, judges)
-  flowing TODO → DOING → DONE; click a card for tokens, cost, branch,
-  files and **live logs**. Global log console, concurrency control
+  flowing TODO → DOING → DONE; click a card for **per-agent tokens, cost,
+  branch, files and live logs**. Global log console, concurrency control
   (Auto · Manual · MAX) and a stop button up top.
+
+> **Today the web runs existing pipelines** (list, pick, execute, tune
+> concurrency, stop). The **guided builders** (Pipeline Assistant and the
+> step-by-step editor) still live in the **TUI** — use `huu --cli`.
+> Web-based pipeline authoring is roadmap.
+
+> **About "cost":** **per-card / per-agent** cost and tokens are real
+> (accumulated from the backend's usage events, when the provider reports
+> them). The **aggregate run total** is not yet summed — see the caveat
+> under [headless mode](#headless--one-command-mode).
 
 ```bash
 huu                       # web UI (default) — http://localhost:4888
@@ -172,11 +221,12 @@ huu --cli                 # terminal TUI
 
 ## Build a pipeline without hand-writing JSON
 
-You don't need to open a JSON editor to get started. The TUI has two
-guided ways to create a pipeline, both from the welcome screen:
+You don't need to open a JSON editor to get started. The **TUI**
+(`huu --cli`) has two guided ways to create a pipeline, both from the
+welcome screen:
 
 <p align="center">
-  <img src="assets/huu-print.jpg" alt="huu welcome screen, with the [A] Pipeline Assistant and [N] New pipeline options" width="640">
+  <img src="assets/huu-print.jpg" alt="huu welcome screen (TUI), with the [A] Pipeline Assistant and [N] New pipeline options" width="640">
 </p>
 
 - **Guided builder — `N` key.** Opens a **pattern picker** (Discover →
@@ -198,6 +248,9 @@ guided ways to create a pipeline, both from the welcome screen:
   builder. You still underwrite the scope: the AI drafts, you review and
   approve.
 
+> Both flows are **TUI** (`huu --cli`). The web UI (default) runs existing
+> pipelines today; web-based guided authoring is roadmap.
+
 Full key map: [`docs/KEYBOARD.md`](docs/KEYBOARD.md) · step-by-step
 tutorial: [`docs/onboarding.md`](docs/onboarding.md).
 
@@ -213,20 +266,25 @@ flowchart LR
         H --> F1["Agent 1<br/>worktree"]
         H --> F2["Agent 2<br/>worktree"]
         H --> F3["Agent N<br/>worktree"]
-        F1 --> M["Merge<br/>git merge --no-ff"]
+        F1 --> M["Deterministic merge<br/>git merge --no-ff (order by agentId)"]
         F2 --> M
         F3 --> M
         M --> H2["Integration HEAD<br/>(stage N+1 base)"]
-        M -. conflict .-> R["LLM integration agent<br/>(side worktree)"]
+        M -. conflict .-> R["LLM integration agent<br/>(side worktree, non-deterministic)"]
         R --> H2
     end
 ```
 
 Each stage forks N agents off the integration HEAD, lets them work in
-parallel in their own worktrees, and merges them back **before**
-the next stage starts. The integration worktree is never rewound —
-loops re-execute on top of the current HEAD, accumulating commits.
-Conflicts hit a side LLM integration agent (skipped in `--stub` mode).
+parallel in their own worktrees, and merges them back **before** the
+next stage starts. The barrier is `git merge --no-ff`, in ascending
+agentId order — a 20-year-old algorithm, not an LLM coordinator. The
+integration worktree is never rewound — loops re-execute on top of the
+current HEAD, accumulating commits. **A real conflict is the only point
+where AI enters the control plane:** it falls to a side LLM integration
+agent (skipped in `--stub` mode), and that resolution is *not*
+deterministic. It's the fallback for misdesigned pipelines, not the
+main path.
 
 ### Per-file scope: one agent, one mission
 
@@ -257,69 +315,93 @@ removes even that: an earlier step **writes a memory file**
 `hint` — and the step with `scope: "memory"` + `filesFrom` fans out
 **one agent per entry**, reading the list from the integration
 worktree at run time. The producer's `hint` reaches the consumer's
-prompt through the `$hint` token, alongside `$file`.
+prompt through the `$hint` token, alongside `$file`. huu injects the
+format contract automatically (`src/lib/memory-contract.ts`), so the
+producer's prompt stays clean.
 
 Scan → fix, recon → study, rank → refactor: the discovery step decides
-the work and the fan-out obeys, with zero selection clicks. Full
-guide: [`docs/memory-scope.md`](docs/memory-scope.md).
+the work and the fan-out obeys, with zero selection clicks. **This is
+how every default pipeline works today — autonomous, with you pointing
+at no files at all.** Full guide:
+[`docs/memory-scope.md`](docs/memory-scope.md).
 
 ---
 
-## Showcase: huu Test Suite
+<h2 id="showcase-huu-test-suite">Showcase: huu Test Suite</h2>
 
 `huu Test Suite` is the default pipeline materialized on first run. It
-demonstrates why mixing `project` and `per-file` scope is the recipe.
+demonstrates why mixing `project`, memory discovery, and a judge is the
+recipe — **without you picking a single file**.
 
 | # | Step | Scope | What it does |
 |---|---|---|---|
-| 1 | Analyze stack and write `huu-tests.md` | `project` | Detects language (Node / Python / Go / Rust / Java / .NET), verifies test runner, writes the **plan** every later step obeys. |
-| 2 | Test 3 representative files | `project` | Picks 3 diverse business-logic files, writes tests, fixes failures, appends learnings to `huu-tests-faq.json`. |
-| 3 | **Test `$file` (user-selected)** | `per-file` | **N parallel agents, each receives one file.** Each follows `huu-tests.md`, writes a test, accumulates FAQ. |
-| 4 | Final cleanup + coverage badge | `project` | Runs the full suite, deletes only the failing **blocks** (never entire files), updates README badge. |
+| 1 | Analyze stack and write `huu-tests.md` | `project` | Detects language (Node / Python / Go / Rust / Java / .NET), verifies the test runner, writes the **plan** every later step obeys. |
+| 2 | Select test targets | `project` → `produces` | **Autonomous recon:** writes the `huu-memory-v1` list of the most test-worthy files (with a per-file `hint`). **No manual selection.** |
+| 3 | **Write tests for `$file`** | `memory` (fan-out) | **N parallel agents, one per file from step 2's list.** Same prompt, different `$file`/`$hint`; each follows `huu-tests.md`. |
+| 4 | Cleanup + coverage badge | `project` | Runs the full suite, deletes only the failing **blocks** (never entire files), measures whatever **line** coverage emerges, updates the README badge. |
+| 5 | Suite green? | `check` (maxRuns 2) | A judge runs the suite: `approved` → finalize (default, forward path); `rework` → back to step 4. |
+| 6 | Finalize | `project` | Final stamp and removal of the transient targets file. |
 
-Step 1 writes a contract; step 3 makes 30 agents obey it in parallel;
-step 4 validates. **Plan in `project`, execute in `per-file`, validate
-in `project`** — the template for everything else.
+Step 1 writes a contract; step 2 discovers the work; step 3 makes N
+agents obey in parallel; step 5's judge closes the loop. **Plan in
+`project`, discover and execute in `memory`, validate with a judge** —
+the template for everything else.
+
+> **Honest coverage caveat.** The pipeline does **not** target or
+> guarantee 100%. The gate is "**the suite passes**" (exit 0); line
+> coverage is **measured and reported**, not required — the GIF run hit
+> 100%, another might hit 70%. And line coverage only proves the code
+> *ran*, not that the assertions would catch a bug: the prompts already
+> aim for **assertions that survive mutation testing** plus anti-flaky
+> determinism rules, and `huu-tests.md` itself points to mutation testing
+> (Stryker/mutmut/PIT) as the follow-up that measures real quality. Treat
+> 100% coverage as a **starting point, not proof**.
 
 Step-by-step walkthrough with prompts:
 [`docs/onboarding.md#example-walkthrough`](docs/onboarding.md#example-walkthrough).
 
 ---
 
-## What huu is for (and what it is not)
+## What huu is for — the bundled pipelines
 
-The **plan → fan-out → merge** shape shines in processes with real,
-predictable value — where the method fits in a file and the result is
-auditable. Seven pipelines ship bundled (only `huu Test Suite` is flagged
-as the default):
+The **plan → discover → fan-out → merge → judge** shape shines in
+processes with real, predictable value. Seven pipelines ship bundled
+(only `huu Test Suite` is flagged as the default; all are **autonomous**
+— they discover their own targets via recon + `scope: memory`, with you
+pointing at no files):
 
 - **Audits** (five defaults: Security, Quality, Docs, Performance,
-  Refactor Plan) — strict report-only: they write **only** to
-  `.huu/audits/<topic>.md` + `<topic>-faq.json`, never touching
-  `README.md`, `package.json`, lockfiles, or production source.
+  Refactor Plan) — strict **report-only**: they write **only** to
+  `.huu/audits/<topic>.md`, `<topic>-faq.json` and `<topic>-targets.json`
+  (plus working files under `.huu/audits/.tmp/`), and at most **one**
+  `.gitignore` adjustment so the reports survive the merge. They never
+  touch `README.md`, `package.json`, lockfiles, or production source.
   Auxiliary tools (gitleaks, semgrep, jscpd, lighthouse-ci…) run
   ephemerally via `npx --yes`/`pipx run` — they never enter your
   manifests. Each one is anchored in published methodology (OWASP Top
   10:2025, churn×complexity, Diátaxis, Core Web Vitals, Fowler/Mikado)
   and **ends with a judge agent** that validates the report and sends it
   back for rework (`rework`, `maxRuns 2`) if the numbers don't add up.
-- **Test generation** (`huu Test Suite`, the default) — assertion
-  rules that survive mutation testing and anti-flaky determinism
-  rules baked into the prompts.
-- **Knowledge extraction** (`huu Knowledge System`) — fully autonomous
-  via the `memory` scope: recon picks the study files by itself (with
-  a per-file hint), deep study converges into `.huu/knowledge/`,
-  per-topic dossiers become **Agent Skills**
-  ([spec](https://agentskills.io/specification)) under
-  `.agents/skills/` with **one parallel agent per skill**, plus
-  evolution meta-skills and a router-aware routing surface (extends
-  your existing `catalog.md` when present) — sealed by a **blind
-  routing eval** with a description-sharpening rework loop.
+- **Test generation** (`huu Test Suite`, the default) — **mutates the
+  repo by construction** (writes `huu-tests.md` to the root and inserts
+  the coverage badge into `README.md`). Assertion rules that survive
+  mutation testing and anti-flaky determinism rules baked into the
+  prompts.
+- **Knowledge extraction** (`huu Knowledge System`) — also **mutates the
+  repo by construction** (`.agents/skills/**` + `.huu/knowledge/**`).
+  Fully autonomous via the `memory` scope: recon picks the study files
+  by itself (with a per-file hint), deep study converges into
+  `.huu/knowledge/`, per-topic dossiers become **Agent Skills**
+  ([spec](https://agentskills.io/specification)) under `.agents/skills/`
+  with **one parallel agent per skill**, plus evolution meta-skills and
+  a router-aware routing surface (extends your existing `catalog.md`
+  when present) — sealed by a **blind routing eval** with a
+  description-sharpening rework loop.
 - **Mechanical mass processes.** *Migrate 40 Mocha tests to Vitest:*
-  stage 1 audits patterns into `MIGRATION.md`, stage 2 fans out 40
-  agents (one per file), stage 3 validates with `npm test`. The prompt
-  is identical across all 40 — only `$file` changes. Predictable by
-  construction.
+  stage 1 audits patterns into `MIGRATION.md`, stage 2 discovers the 40
+  files, stage 3 fans out 40 agents (one per file), stage 4 validates
+  with `npm test`. The prompt is identical across all 40 — only `$file`
+  changes. Predictable by construction.
 - **Your process.** If you can write the method as an ordered list of
   steps with prompts and a `scope`, you can run it. The pipeline
   format is stable; the cookbook is open.
@@ -339,14 +421,13 @@ Bundled defaults: [`docs/onboarding.md#bundled-default-pipelines`](docs/onboardi
 We surveyed ~20 open-source agent-orchestration tools. They split along
 **two questions**: *who decides the scope* (the human or the LLM?) and
 *how is the work integrated back* (deterministic merge or manual?).
-Almost everyone lands in two crowded corners; huu's corner is far less crowded.
 
 ```
               DETERMINISTIC MERGE, stage by stage
                           ▲
-                          │            ┌─────────┐
-        (sparse)          │            │   huu   │  ← human pipeline +
-                          │            └─────────┘    fan-out + --no-ff
+            ┌───────────┐ │            ┌─────────┐
+            │ Bernstein │ │            │   huu   │  ← HUMAN decomposition +
+            └───────────┘ │            └─────────┘    per-file fan-out + --no-ff
    SCOPE ◀────────────────┼───────────────────────▶ SCOPE
    BY LLM                 │                          BY HUMAN
    OpenHands              │   Conductor · Crystal
@@ -357,42 +438,59 @@ Almost everyone lands in two crowded corners; huu's corner is far less crowded.
               MANUAL MERGE (PR / per-session cherry-pick)
 ```
 
-The combination that defines huu — **that we didn't find combined in any
-of the ~20 open-source tools we surveyed** — is: *a human-authored
-deterministic pipeline* (no LLM planner invents scope) **+** *one git
-worktree per agent* (physical isolation) **+** *a deterministic `--no-ff`
-merge at the end of every stage* **+** *a Docker sandbox that hides your
-credentials* **+** *ready-made audit/test pipelines that end in a judge
-agent*.
+The **closest neighbor** is
+**[Bernstein](https://github.com/sipyourdrink-ltd/bernstein)**
+(Apache-2.0, v2.7.0): a **deterministic Python scheduler** that runs a
+crew of CLI coding agents (Claude Code, Codex, Gemini CLI and 40+) in
+**git worktrees, one per task**, with a **serialized merge queue**, a
+**"janitor"** that gates on tests/lint/types before merging, and an
+**HMAC-chained audit log** (replayable, tamper-evident). It shares almost
+everything that drives huu — a **refusal to put an LLM planner in the
+coordination loop** ("zero LLM in the coordination loop"), worktree
+isolation, deterministic merge, and a verification gate.
+
+**The line that divides them is who writes the decomposition.** Bernstein
+makes **one LLM call** to break the goal into tasks, then runs plain
+Python ("one LLM call, then plain Python from there"). huu asks the
+**human** to write the decomposition — *not even one call*. So what's
+left genuinely distinctive in huu is: **per-file fan-out** (same prompt ×
+N files, data parallelism rather than task parallelism), the **ready-made
+methods** (audit/test/knowledge) that end in a judge, and the **Docker
+sandbox that hides your credentials** by default.
 
 | Tool | Who decides scope | Isolation | Per-file fan-out | Integration / merge | Credential sandbox | Focus |
 |---|---|---|---|---|---|---|
-| **huu** | **human — versioned JSON** | **git worktree + Docker** | **✅ native** | **deterministic `--no-ff`, every stage** | **✅ by default** | **audits · tests · knowledge** |
+| **huu** | **human — versioned JSON** | **git worktree + Docker** | **✅ native** | **deterministic `--no-ff`, every stage** (conflict → LLM resolver) | **✅ by default** | **audits · tests · knowledge** |
+| **Bernstein** | LLM — **1 call** decomposes the goal | git worktree (per task) | ❌ (per task) | serialized merge queue (deterministic) | — (runs CLI agents on the host) | building features from a goal (audit-grade) |
 | Conductor · Crystal · Claude Squad · vibe-kanban · uzi | human — ad-hoc, per session | git worktree | ❌ | manual (diff/PR/rebase per session) | ❌ (worktree on host) | building features |
 | container-use · Sculptor | human — ad-hoc | container | ❌ | manual (`cu merge` · PR) | ✅ container | building features |
 | OpenHands · SWE-agent · Cursor · Amp | **LLM plans everything** | container / VM | ❌ | PR opened by the agent | ✅ (cloud/local) | building features · fixing issues |
 | LangGraph · CrewAI · AutoGen / MAF | dev — graph in code | in-process | ❌ | shared in-memory state | ❌ | building agents (SDK) |
 | Dify · n8n · Flowise | human — visual canvas | persistent server | ❌ | database | ❌ | LLM apps & automation |
 
-The closest neighbor on the determinism axis is **[Microsoft's
-Conductor](https://github.com/microsoft/conductor)** (an MIT-licensed CLI
-announced in 2026): it routes between agents deterministically via
-templates (YAML/Jinja2 rules, no LLM in the orchestration loop) and spends
-**zero tokens** deciding the next step — the same refusal of an LLM planner
-that drives huu. The difference is product scope: Conductor is a
-**general-purpose** agent-workflow orchestrator; it does not isolate each
-agent in a git worktree or fan code out per file, which are huu's core.
-(Not to be confused with the *Conductor* in the quadrant above — Melty's
-desktop app for parallel runners.)
+On the *orchestration-determinism* axis it's also worth citing
+**[Microsoft's Conductor](https://github.com/microsoft/conductor)** (an
+MIT CLI, 2026): it routes between agents via templates (YAML/Jinja2, no
+LLM in the orchestration loop) and spends **zero tokens** deciding the
+next step. The difference is product scope: it's a **general-purpose**
+workflow orchestrator; it does not isolate each agent in a git worktree
+or fan code out per file. (Not to be confused with the *Conductor* in the
+quadrant above — Melty's desktop app for parallel runners.)
 
 ### Where the competition wins (and when NOT to use huu)
 
-Honesty first: huu is niche. The competitors have **much larger
-ecosystems** (tens of thousands of stars, native desktop apps, integration
-marketplaces, managed clouds, corporate backing — Microsoft merged AutoGen
-+ Semantic Kernel into the Agent Framework). And there are things they do
-better by construction:
+Honesty first: huu is niche, and the neighborhood is strong. The
+competitors have **much larger ecosystems** (tens of thousands of stars,
+native desktop apps, integration marketplaces, managed clouds, corporate
+backing — Microsoft merged AutoGen + Semantic Kernel into the Agent
+Framework). And there are things they do better by construction:
 
+- **Decompose the goal for you.** Bernstein breaks the objective into
+  tasks with one LLM call and ships **40+ CLI-agent adapters** plus a
+  **tamper-evident audit log** — for a one-off goal where you don't want
+  to write the decomposition, it has less authoring overhead than huu.
+  huu's price (you write the pipeline) only pays off when the method
+  repeats.
 - **"Just fix this bug" / "build this feature."** Open-ended, one-off work
   with no repeatable method? Use an interactive agent (Claude Code,
   Cursor) or an autonomous one (OpenHands). Writing a pipeline for that is
@@ -405,10 +503,10 @@ better by construction:
   end and hands you the merged result.
 
 huu wins at **one thing**, on purpose: making thinking agents follow a
-**deterministic, auditable process** over N files — audits, test
-generation, knowledge extraction. When the method is known and the value
-is in executing it with discipline and reproducibility, few of the others
-ship the same contract.
+**deterministic, auditable process** over N files, where **the human —
+not an LLM — writes the decomposition**. When the method is known and
+the value is in executing it with discipline and reproducibility of
+method, few of the others ship the same contract.
 
 ---
 
@@ -428,7 +526,7 @@ flowchart LR
 |---|---|---|---|
 | **Pi** (default) | `--backend=pi` | Pay-per-token via `OPENROUTER_API_KEY` — **any OpenRouter model** | Recommended |
 | Azure AI Foundry | `--backend=azure` | Per endpoint via `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` — any deployment ([guide](docs/azure-backend.md)) | New |
-| GitHub Copilot | `--copilot` | Subscription via `COPILOT_GITHUB_TOKEN` | Stabilizing |
+| GitHub Copilot | `--copilot` | Subscription via `COPILOT_GITHUB_TOKEN` (optional dependency) | Stabilizing |
 | Stub | `--stub` | Free, no LLM — smoke tests / demos | Stable |
 
 The Pi factory enables `thinking=medium` by default for every model
@@ -448,22 +546,24 @@ Deep dive: [`docs/onboarding.md#backends-deep-dive`](docs/onboarding.md#backends
 
 By default huu **adapts concurrency to the real memory headroom**: it
 measures how much each agent actually consumes (moving average, seeded
-at 250 MB) and admits new agents only while they fit in the available
-memory minus a safety margin — cgroup-aware, so inside a container it
+at 250 MiB and clamped between 128 MiB and 2 GiB) and admits new agents
+only while they fit in the available memory minus a safety margin (the
+larger of 10% and 512 MiB) — cgroup-aware, so inside a container it
 respects the container's limit, not the host's.
 
-A **memory guard stays always on** (even with manual concurrency): if
-RAM crosses ~95%, the **newest** agent — the one with the least work
-done — is killed, its card **returns to the TODO column** with a `↻N`
-counter, and the task restarts from zero once memory frees up. The
-older agents' work is never lost.
+A **memory guard stays always on** (even with manual or MAX concurrency):
+if RAM **or** CPU crosses ~95%, the **newest** agent — the one with the
+least work done (picked by `startedAt`) — is killed, its card **returns
+to the TODO column** with a `↻N` counter, and the task is re-queued at
+the front, restarting from zero once memory frees up. The older agents'
+work is never lost.
 
 Controls:
 
 | Where | How |
 |---|---|
 | CLI | `--concurrency=N` pins manual at N · `--no-auto-scale` turns the dynamic mode off |
-| TUI | `+`/`-` adjust (and pin manual) · `A` re-enables auto-scale · `M` MAX mode (floods to the memory limit) |
+| TUI | `+`/`-` adjust (and pin manual) · `A` re-enables auto-scale · `M` MAX/greedy mode (floods to the memory limit) |
 | Headless | `"concurrency": N` in the config pins manual; omit it for the dynamic mode |
 
 ---
@@ -485,10 +585,21 @@ huu auto pipeline.json --config config.json
 }
 ```
 
-- **stderr** — NDJSON progress events (one per state change).
-- **stdout** — one final JSON object on completion (`runId`,
-  `integrationBranch`, `totalCost`, …).
+- **stderr** — NDJSON progress events (one per state change, ~250 ms
+  throttle).
+- **stdout** — one final JSON object on completion: `ok`, `runId`,
+  `integrationBranch`, `baseCommit`, `status`, `durationMs`,
+  `filesModified`, `conflicts`, and an `agents[]` array (per agent:
+  `tokensIn`, `tokensOut`, `cost`, branch, commit, files).
 - **Exit code** — `0` if `status === 'done'`, `1` otherwise.
+
+> **Cost caveat (roadmap).** The final JSON also carries a `totalCost`
+> field, but the **run aggregate is not yet summed** — it always comes
+> out `0` (marked `// M5 will populate` in
+> `src/orchestrator/index.ts`). Per-agent tokens and cost in the
+> `agents[]` array are real (when the provider reports cost); the
+> **consolidated total** is roadmap. Don't build billing on `totalCost`
+> yet.
 
 Build pipes on top: `huu auto … | jq .runId`. Full doc:
 [`docs/onboarding.md#headless-mode`](docs/onboarding.md#headless-mode).
@@ -558,6 +669,38 @@ Full schema (timeouts, retries, conditional `check` steps,
 
 ---
 
+## Status & maturity
+
+Honesty about maturity builds credibility — so here's the real state,
+unretouched:
+
+- **Age and authorship.** Young project, essentially **single-author**
+  (Frederico Kluser), with **heavily AI-assisted** development: a large
+  share of commits credit "Claude" as author or co-author. That's not a
+  flaw — it's context. Evaluate it as you would any new tool from one
+  person.
+- **Version.** `2.1.0`, published on npm as
+  [`huu-pipe`](https://www.npmjs.com/package/huu-pipe) and as the
+  `ghcr.io/frederico-kluser/huu` image. The [CHANGELOG](CHANGELOG.md)
+  follows Keep a Changelog.
+- **Tests, but no CI.** ~710 test cases (Vitest) across 59 colocated
+  files — but **there is no automated CI**. Running
+  `npm run typecheck && npm test` before every commit is the
+  **contributor's convention**, enforceable locally with the pre-push
+  hook (`git config core.hooksPath .githooks`).
+
+### Implemented · Stabilizing · Roadmap
+
+So nobody confuses intent with done:
+
+| State | What |
+|---|---|
+| ✅ **Implemented** | Pipeline JSON v2 (work · check · memory · `dependsOn`/waves); `per-file` and `memory` fan-out; deterministic `--no-ff` merge with an LLM conflict-resolver fallback; Docker sandbox with secret mounts; web UI (default) + TUI (`--cli`); headless `auto` mode; Pi · Azure · Stub backends; memory-aware concurrency + memory guard; native-shim port isolation; 7 autonomous default pipelines; **per-agent** token/cost telemetry. |
+| 🟡 **Stabilizing** | GitHub Copilot backend (optional dependency, SDK 0.3.x); Azure backend (new); Pipeline Assistant / Architect flow (TUI). |
+| 🧭 **Roadmap** | **Aggregate run cost** (`totalCost` is `0` today); **mutation score** as a first-class metric (prompts already aim for mutation-surviving assertions, but the pipeline doesn't run the mutator); **web-based pipeline authoring** (TUI-only today); more backends (ACP, Claude Code). |
+
+---
+
 ## More
 
 | Topic | Where |
@@ -578,10 +721,11 @@ Full schema (timeouts, retries, conditional `check` steps,
 
 Contributions are welcome — the project is young and there's plenty to
 do. Open an issue at [github.com/frederico-kluser/huu/issues](https://github.com/frederico-kluser/huu/issues)
-to propose a pipeline, report a bug, or discuss an idea. There is no
-automated CI: before opening a PR, run `npm run typecheck && npm test`
-locally — the convention is the contributor's responsibility. Development
-and architecture details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+to propose a pipeline, report a bug, or discuss an idea. **There is no
+automated CI:** before opening a PR, run `npm run typecheck && npm test`
+locally — the convention is the contributor's responsibility (and the
+pre-push hook in `.githooks` helps you not forget). Development and
+architecture details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 
