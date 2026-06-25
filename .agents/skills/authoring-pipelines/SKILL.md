@@ -45,8 +45,8 @@ Creating or editing `*.pipeline.json` (user pipelines under `pipelines/`, exampl
 ## References
 
 - The Pipeline Assistant now runs the **Architect flow** (parallel lens sketches → generative selection → per-step prompt expansion → mechanical validation, `src/lib/assistant-architect.ts`) — point users with vague intents there; hand-author when the method is already precise.
-- `docs/pipeline-json-guide.md` (full spec; `#conditional-steps-check-nodes` for checks), `example.pipeline.json`, `example.conditional.pipeline.json`
-- Related skills: editing-default-pipelines, running-in-docker (run flags), working-on-orchestrator (execution semantics)
+- `docs/pipeline-json-guide.md` (full spec; `#conditional-steps-check-nodes` for checks). Live examples to copy from (sources in `src/lib/default-pipelines/`): **huu Security Audit** (check step + `dependsOn` waves), **huu Knowledge System** (memory-scope fan-out + check loops), **huu Test Suite** (recon→memory fan-out + cleanup loop)
+- Related skills: editing-default-pipelines, authoring-agent-prompts (step-prompt techniques), running-in-docker (run flags), working-on-orchestrator (execution semantics)
 
 > Facts verified against source on 2026-06-12.
 

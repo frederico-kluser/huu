@@ -98,8 +98,11 @@ git clone https://github.com/frederico-kluser/huu
 cd huu
 docker build -t huu:local .
 export OPENROUTER_API_KEY=sk-or-...
-HUU_IMAGE=huu:local huu run example.pipeline.json
+HUU_IMAGE=huu:local huu run pipelines/huu-test-suite.pipeline.json
 ```
+
+> O huu materializa os pipelines default empacotados em `./pipelines/` no
+> primeiro launch — escolha um na tela de boas-vindas ou passe o caminho.
 
 Imagens pré-buildadas em `ghcr.io/frederico-kluser/huu:latest` — o
 wrapper puxa automaticamente quando nenhum `HUU_IMAGE` está setado.
@@ -165,14 +168,14 @@ tutorial passo a passo:
 Pesquisamos ~20 ferramentas open-source de orquestração de agentes. Elas
 se separam por **duas perguntas**: *quem decide o escopo* (o humano ou o
 LLM?) e *como o trabalho é integrado de volta* (merge determinístico ou
-manual?). Quase todo mundo cai em dois cantos lotados — e o canto do huu
-fica vazio.
+manual?). Quase todo mundo cai em dois cantos lotados; o canto do huu é
+bem menos povoado.
 
 ```
               MERGE DETERMINÍSTICO, etapa a etapa
                           ▲
                           │            ┌─────────┐
-       (ninguém)          │            │   huu   │  ← pipeline humano +
+       (escasso)          │            │   huu   │  ← pipeline humano +
                           │            └─────────┘    fan-out + --no-ff
    ESCOPO ◀───────────────┼───────────────────────▶ ESCOPO
   DO LLM                  │                          DO HUMANO
@@ -184,7 +187,7 @@ fica vazio.
               MERGE MANUAL (PR / cherry-pick por sessão)
 ```
 
-A combinação que define o huu — **e que nenhum concorrente entrega de
+A combinação que define o huu — **que poucos concorrentes entregam de
 fábrica** — é: *pipeline determinística escrita por humano* (sem planner
 LLM inventando escopo) **+** *um git worktree por agente* (isolamento
 físico) **+** *merge determinístico `--no-ff` ao fim de cada etapa* **+**
@@ -249,7 +252,7 @@ O huu ganha em **uma coisa**, de propósito: fazer agentes que pensam
 seguirem um **processo determinístico e auditável** sobre N arquivos —
 auditoria, geração de testes, extração de conhecimento. Quando o método é
 conhecido e o valor está em executá-lo com disciplina e reprodutibilidade,
-nenhum dos outros entrega o mesmo contrato.
+poucos outros entregam o mesmo contrato.
 
 ---
 

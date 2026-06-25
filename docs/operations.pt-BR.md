@@ -55,8 +55,11 @@ wrapper puxa automaticamente:
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...
-huu run example.pipeline.json     # usa ghcr.io/frederico-kluser/huu:latest
+huu run pipelines/huu-test-suite.pipeline.json     # usa ghcr.io/frederico-kluser/huu:latest
 ```
+
+> O huu materializa os pipelines default empacotados em `./pipelines/` no
+> primeiro launch — escolha um na tela de boas-vindas ou passe o caminho.
 
 Por baixo dos panos, o wrapper monta o equivalente a:
 
@@ -66,7 +69,7 @@ docker run --rm -it \
   --user "$(id -u):$(id -g)" \
   -v "$PWD:$PWD" -w "$PWD" \
   -e OPENROUTER_API_KEY \
-  ghcr.io/frederico-kluser/huu:latest run example.pipeline.json
+  ghcr.io/frederico-kluser/huu:latest run pipelines/huu-test-suite.pipeline.json
 ```
 
 > **Por que montar `$PWD:$PWD` (mesmo path nos dois lados)?** git
@@ -145,7 +148,7 @@ ativos durante a execução — esse é o trade-off pelo speedup.
 ```bash
 # usa o compose.yaml do repo (compila a imagem na primeira execução)
 export OPENROUTER_API_KEY=sk-or-...
-docker compose run --rm huu run example.pipeline.json
+docker compose run --rm huu run pipelines/huu-test-suite.pipeline.json
 ```
 
 **Wrapper de conveniência:** jogue [`scripts/huu-docker`](../scripts/huu-docker)

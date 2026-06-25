@@ -54,8 +54,11 @@ wrapper pulls it automatically:
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...
-huu run example.pipeline.json     # auto-uses ghcr.io/frederico-kluser/huu:latest
+huu run pipelines/huu-test-suite.pipeline.json     # auto-uses ghcr.io/frederico-kluser/huu:latest
 ```
+
+> huu writes the bundled default pipelines into `./pipelines/` on first
+> launch — pick one on the welcome screen or pass its path.
 
 Behind the scenes the wrapper builds the equivalent of:
 
@@ -65,7 +68,7 @@ docker run --rm -it \
   --user "$(id -u):$(id -g)" \
   -v "$PWD:$PWD" -w "$PWD" \
   -e OPENROUTER_API_KEY \
-  ghcr.io/frederico-kluser/huu:latest run example.pipeline.json
+  ghcr.io/frederico-kluser/huu:latest run pipelines/huu-test-suite.pipeline.json
 ```
 
 > **Why mount `$PWD:$PWD` (same path on both sides)?** git stores
@@ -142,7 +145,7 @@ during the run — that's the trade-off for the speedup.
 ```bash
 # uses the bundled compose.yaml (builds the image on first run)
 export OPENROUTER_API_KEY=sk-or-...
-docker compose run --rm huu run example.pipeline.json
+docker compose run --rm huu run pipelines/huu-test-suite.pipeline.json
 ```
 
 **Convenience wrapper:** drop [`scripts/huu-docker`](../scripts/huu-docker)

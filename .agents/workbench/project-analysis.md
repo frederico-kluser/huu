@@ -50,7 +50,7 @@ web/ (servidor HTTP+WS + session + handlers) — front-end alternativo; consumid
 > "Dependencies flow **downward only** — lower layers never import upper layers." — AGENTS.md
 
 - Regra extra verificada: `src/web/` **não importa nada de `src/ui/`** (grep limpo). Protocolo em `src/web/ws-protocol.ts` é Node-free para o front importar via `@shared`.
-- Diretórios de topo: `src/` (CLI/TUI/back-end) · `webui/` (SPA React) · `native/` (port-shim.c) · `pipelines/` (JSONs materializados: demo-quick, security-tests) · `scripts/` (smokes + helpers) · `docs/` (16 arquivos, bilíngue) · `.fixtures/` · `.huu/` (logs de run) · `dist/` (build).
+- Diretórios de topo: `src/` (CLI/TUI/back-end) · `webui/` (SPA React) · `native/` (port-shim.c) · `pipelines/` (JSONs materializados: os 7 defaults huu) · `scripts/` (smokes + helpers) · `docs/` (16 arquivos, bilíngue) · `.fixtures/` · `.huu/` (logs de run) · `dist/` (build).
 
 ## 4. Domínios e contratos
 

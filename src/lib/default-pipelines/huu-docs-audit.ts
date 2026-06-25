@@ -19,9 +19,13 @@ import {
   knowledgeProtocol,
   persistenceCheck,
   reportJudgeCondition,
+  targetsRecon,
   KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
   KNOWLEDGE_ORDERING_NOTE,
 } from './knowledge-protocol.js';
+
+const DOCS_TARGETS_PATH = '.huu/audits/docs-targets.json';
+const DOCS_TARGETS_MAX_FILES = 30;
 
 export const DEFAULT_PIPELINE_FILENAME = 'huu-docs-audit.pipeline.json';
 export const DEFAULT_PIPELINE_NAME = 'huu Docs Audit';
@@ -67,7 +71,7 @@ Path: \`./.huu/audits/docs.md\`. Required structure (English, no fluff):
 - Total doc files: <N>
 - Markdown / RST / AsciiDoc breakdown: <numbers>
 - Canonical files present: README=<yes/no>, CHANGELOG=<yes/no>, CONTRIBUTING=<yes/no>, LICENSE=<yes/no>, CODE_OF_CONDUCT=<yes/no>, SECURITY=<yes/no>
-- Inline API doc coverage estimate: <N public exports / N documented> (filled in by step 5)
+- Inline API doc coverage estimate: <N public exports / N documented> (filled in by the API-doc-coverage scan)
 
 ## 2. Diátaxis classification
 (filled in by step 2 of the audit)
@@ -79,7 +83,7 @@ Path: \`./.huu/audits/docs.md\`. Required structure (English, no fluff):
 (filled in by step 4)
 
 ## 5. API doc coverage
-(filled in by step 5)
+(filled in by the API-doc-coverage scan)
 
 ## 6. Recommendations
 (filled in by step 6)
@@ -264,11 +268,28 @@ Plus summary counts (critical/warn/info).
 - DO NOT modify the docs.
 - DO NOT modify code referenced by the docs.`;
 
-const STEP5_PROMPT = `You are at step 5 — API doc coverage for \`$file\`. Goal: for this ONE source file, list its public exports and check whether each has an inline doc-comment (JSDoc / TSDoc / docstring / Rustdoc / Javadoc).
+const STEP_RECON_PROMPT = `${targetsRecon({
+  role: "huu's API-doc-coverage target selector",
+  purpose:
+    'checking inline API-doc coverage (JSDoc/TSDoc/docstring/Rustdoc/Javadoc) on',
+  prefer: [
+    'files with a real public API surface — several exported functions / classes / types / components',
+    'core modules and library entry points over leaf scripts, constants, or config',
+    'public-facing code a consumer would import (the docs that matter most when missing)',
+  ],
+  hintGuide:
+    'name the key public exports here whose doc-comments matter most (and whether they currently look documented)',
+  maxFiles: DOCS_TARGETS_MAX_FILES,
+})}
 
-=== STEP 0 — SCOPE NOTE + SKIP RULE ===
-This step spawns one agent per selected file. The pipeline caps total nodes at \`maxNodeExecutions: 50\` (~45 files on a 6-step pipeline). If you are auditing a larger repo, narrow your file selection with Smart Select in the file picker.
+=== BEFORE YOU START ===
+Read \`./.huu/audits/docs.md\` for the doc inventory the earlier steps built (section 1's totals and the canonical-files list tell you where the real source modules live). This step writes ONLY the target list; the per-file API-doc-coverage scan that follows does the actual finding.`;
 
+const STEP5_PROMPT = `You are the API-doc-coverage scan for ONE file: \`$file\`. You are one of many agents running in parallel; your whole job is this single file.
+
+The recon step chose this file deliberately and left you a lead — start there: $hint
+
+=== STEP 0 — SKIP RULE ===
 SKIP IMMEDIATELY (no findings, no FAQ append) if \`$file\` matches: \`node_modules/\`, \`dist/\`, \`build/\`, \`out/\`, \`coverage/\`, \`.git/\`, \`vendor/\`, \`target/\`, \`__pycache__/\`, \`*.generated.*\`, \`*.min.js\`, \`*.min.css\`, \`*.d.ts\`, \`*.lock\`, \`*.snap\`.
 
 === STEP 1 — Read \`$file\` and identify language ===
@@ -418,21 +439,33 @@ export function getDefaultPipeline(): Pipeline {
       },
       {
         type: 'work',
-        name: '5. API doc coverage for $file',
-        prompt: STEP5_PROMPT,
+        name: '5. Select API-doc targets',
+        prompt: STEP_RECON_PROMPT,
         files: [],
-        scope: 'per-file',
+        scope: 'project',
+        // huu appends the huu-memory-v1 MEMORY CONTRACT (path + format + cap).
+        produces: DOCS_TARGETS_PATH,
       },
       {
         type: 'work',
-        name: '6. Consolidate report and cleanup',
+        name: '6. API doc coverage for $file',
+        prompt: STEP5_PROMPT,
+        files: [],
+        // Autonomous file set from the recon step — no per-file picker.
+        scope: 'memory',
+        filesFrom: DOCS_TARGETS_PATH,
+        maxFiles: DOCS_TARGETS_MAX_FILES,
+      },
+      {
+        type: 'work',
+        name: '7. Consolidate report and cleanup',
         prompt: STEP6_PROMPT,
         files: [],
         scope: 'project',
       },
       {
         type: 'check',
-        name: '7. Validate report',
+        name: '8. Validate report',
         condition: reportJudgeCondition({
           reportPath: '.huu/audits/docs.md',
           faqPath: '.huu/audits/docs-faq.json',
@@ -450,13 +483,13 @@ export function getDefaultPipeline(): Pipeline {
         }),
         maxRuns: 2,
         outcomes: [
-          { label: 'approved', nextStepName: '8. Finalize report', default: true },
-          { label: 'rework', nextStepName: '6. Consolidate report and cleanup' },
+          { label: 'approved', nextStepName: '9. Finalize report', default: true },
+          { label: 'rework', nextStepName: '7. Consolidate report and cleanup' },
         ],
       },
       {
         type: 'work',
-        name: '8. Finalize report',
+        name: '9. Finalize report',
         prompt: STEP8_PROMPT,
         files: [],
         scope: 'project',

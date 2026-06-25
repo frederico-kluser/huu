@@ -97,8 +97,11 @@ git clone https://github.com/frederico-kluser/huu
 cd huu
 docker build -t huu:local .
 export OPENROUTER_API_KEY=sk-or-...
-HUU_IMAGE=huu:local huu run example.pipeline.json
+HUU_IMAGE=huu:local huu run pipelines/huu-test-suite.pipeline.json
 ```
+
+> huu writes the bundled default pipelines into `./pipelines/` on first
+> launch — pick one on the welcome screen or pass its path.
 
 Pre-built images at `ghcr.io/frederico-kluser/huu:latest` — the wrapper
 pulls automatically when no `HUU_IMAGE` is set. VPN-aware MTU, secret
@@ -162,13 +165,13 @@ tutorial: [`docs/onboarding.md`](docs/onboarding.md).
 We surveyed ~20 open-source agent-orchestration tools. They split along
 **two questions**: *who decides the scope* (the human or the LLM?) and
 *how is the work integrated back* (deterministic merge or manual?).
-Almost everyone lands in two crowded corners — and huu's corner is empty.
+Almost everyone lands in two crowded corners; huu's corner is far less crowded.
 
 ```
               DETERMINISTIC MERGE, stage by stage
                           ▲
                           │            ┌─────────┐
-        (nobody)          │            │   huu   │  ← human pipeline +
+        (sparse)          │            │   huu   │  ← human pipeline +
                           │            └─────────┘    fan-out + --no-ff
    SCOPE ◀────────────────┼───────────────────────▶ SCOPE
    BY LLM                 │                          BY HUMAN
@@ -180,7 +183,7 @@ Almost everyone lands in two crowded corners — and huu's corner is empty.
               MANUAL MERGE (PR / per-session cherry-pick)
 ```
 
-The combination that defines huu — **and that no competitor ships out of
+The combination that defines huu — **that few competitors ship out of
 the box** — is: *a human-authored deterministic pipeline* (no LLM planner
 invents scope) **+** *one git worktree per agent* (physical isolation)
 **+** *a deterministic `--no-ff` merge at the end of every stage* **+** *a
@@ -244,7 +247,7 @@ better by construction:
 huu wins at **one thing**, on purpose: making thinking agents follow a
 **deterministic, auditable process** over N files — audits, test
 generation, knowledge extraction. When the method is known and the value
-is in executing it with discipline and reproducibility, none of the others
+is in executing it with discipline and reproducibility, few of the others
 ship the same contract.
 
 ---

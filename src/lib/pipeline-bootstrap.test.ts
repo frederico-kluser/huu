@@ -9,7 +9,7 @@ import {
 import { DEFAULT_PIPELINE_FILENAME } from './default-pipelines/huu-test-suite.js';
 import { DEFAULT_PIPELINES } from './default-pipelines/registry.js';
 import { importPipeline } from './pipeline-io.js';
-import { isWorkStep } from './types.js';
+import { isWorkStep, isCheckStep } from './types.js';
 
 describe('pipeline-bootstrap', () => {
   let tmp: string;
@@ -45,19 +45,27 @@ describe('pipeline-bootstrap', () => {
     expect(readFileSync(target, 'utf8')).toBe(userContent);
   });
 
-  it('produces a file that re-imports as a valid pipeline with 4 steps', () => {
+  it('re-imports as an autonomous pipeline: memory-scope fan-out, no per-file picker', () => {
     const res = ensureDefaultPipeline(tmp);
     const pipeline = importPipeline(res.filePath);
     expect(pipeline.name).toBe('huu Test Suite');
     expect(pipeline._default).toBe(true);
-    expect(pipeline.steps).toHaveLength(4);
 
-    // Per-file is the user-selected step at index 2.
-    const perFile = pipeline.steps[2];
-    expect(isWorkStep(perFile)).toBe(true);
-    if (isWorkStep(perFile)) {
-      expect(perFile.scope).toBe('per-file');
-    }
+    // Autonomy invariant: the test set is chosen by a recon step, never by the
+    // user. So NO step may carry the manual `per-file` scope...
+    const workSteps = pipeline.steps.filter(isWorkStep);
+    expect(workSteps.every((s) => s.scope !== 'per-file')).toBe(true);
+
+    // ...the per-file fan-out is driven by a `memory` step whose `filesFrom`
+    // is the huu-memory-v1 list an earlier `produces` step writes.
+    const memory = workSteps.find((s) => s.scope === 'memory');
+    expect(memory, 'a memory-scope fan-out step').toBeDefined();
+    expect(memory!.filesFrom).toBeTruthy();
+    const producer = workSteps.find((s) => s.produces === memory!.filesFrom);
+    expect(producer, 'a producer for the memory file').toBeDefined();
+
+    // ...and a CheckStep gate ("voltar") lets the suite loop back to cleanup.
+    expect(pipeline.steps.some(isCheckStep)).toBe(true);
   });
 
   it('calls onError when writing fails (read-only parent)', () => {

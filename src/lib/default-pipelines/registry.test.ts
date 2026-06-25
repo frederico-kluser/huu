@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_PIPELINES } from './registry.js';
 import { parsePipelineFromJson } from '../pipeline-io.js';
+import { isWorkStep } from '../types.js';
 import type { CheckStep, Pipeline } from '../types.js';
 
 const AUDIT_NAMES = [
@@ -97,6 +98,27 @@ describe('default-pipelines registry', () => {
       const p = mod.getDefaultPipeline();
       expect(p.maxRetries ?? 1, mod.DEFAULT_PIPELINE_NAME).toBeLessThanOrEqual(3);
       expect(p.maxNodeExecutions ?? 50, mod.DEFAULT_PIPELINE_NAME).toBeLessThanOrEqual(50);
+    }
+  });
+
+  it('no default uses manual per-file selection — file sets come from memory recon (autonomy invariant)', () => {
+    for (const mod of DEFAULT_PIPELINES) {
+      const p = mod.getDefaultPipeline();
+      const workSteps = p.steps.filter(isWorkStep);
+      // The whole point of the v2 modernization: the pipeline (a recon step),
+      // not the user, picks the files. `per-file` is the manual picker scope.
+      for (const s of workSteps) {
+        expect(s.scope, `${mod.DEFAULT_PIPELINE_NAME} / ${s.name}`).not.toBe('per-file');
+      }
+      // Every memory fan-out must be fed by an earlier `produces` step (also
+      // enforced by validateTopology; kept here as a living spec of the design).
+      for (const m of workSteps.filter((s) => s.scope === 'memory')) {
+        const producer = workSteps.find((w) => w.produces === m.filesFrom);
+        expect(
+          producer,
+          `${mod.DEFAULT_PIPELINE_NAME}: producer for ${m.filesFrom}`,
+        ).toBeDefined();
+      }
     }
   });
 });

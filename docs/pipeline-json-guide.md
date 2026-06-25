@@ -414,7 +414,7 @@ Two outcomes, `maxRuns: 2`:
 - Every `CheckStep` must have **exactly one** outcome with `default: true`.
 - `outcomes` must be non-empty.
 
-A full working example lives in [`example.conditional.pipeline.json`](../example.conditional.pipeline.json) at the repo root.
+The bundled **huu Security Audit** pipeline (materialized into `./pipelines/huu-security-audit.pipeline.json` on first launch) is a full working example of check steps plus `dependsOn` waves; **huu Knowledge System** shows memory-scope fan-out with check loops.
 
 ---
 

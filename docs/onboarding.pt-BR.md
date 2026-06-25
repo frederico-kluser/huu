@@ -51,8 +51,11 @@ está disponível, o wrapper puxa automaticamente:
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...
-huu run example.pipeline.json     # usa ghcr.io/frederico-kluser/huu:latest
+huu run pipelines/huu-test-suite.pipeline.json     # usa ghcr.io/frederico-kluser/huu:latest
 ```
+
+> O huu materializa os pipelines default empacotados em `./pipelines/` no
+> primeiro launch — escolha um na tela de boas-vindas ou passe o caminho.
 
 **Pré-requisitos:**
 
@@ -110,26 +113,28 @@ gastos.
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...
-huu run example.pipeline.json
+huu run pipelines/huu-test-suite.pipeline.json
 ```
 
-`example.pipeline.json` (que vem junto com o repo) é:
+O huu traz **sete pipelines empacotados** e os materializa em
+`./pipelines/` no primeiro launch. O default — destacado na tela de
+boas-vindas — é o **huu Test Suite**: ele seleciona sozinho os arquivos
+mais dignos de teste e escreve uma suíte de testes unitários pra eles.
+Escolha qualquer pipeline na tela de boas-vindas (ou passe o caminho, como
+acima). Um pipeline mínimo seu é só uma lista de steps com um token
+`$file`, por exemplo:
 
 ```json
 {
-  "_format": "huu-pipeline-v1",
+  "_format": "huu-pipeline-v2",
   "pipeline": {
-    "name": "exemplo-padronizar-headers",
+    "name": "padronizar-headers",
     "steps": [
       {
         "name": "Padronizar headers",
         "prompt": "Adicione um cabeçalho JSDoc no topo de $file com @author huu.",
-        "files": ["src/cli.tsx", "src/app.tsx"]
-      },
-      {
-        "name": "Gerar CHANGELOG",
-        "prompt": "Crie ou atualize o CHANGELOG.md ...",
-        "files": []
+        "files": ["src/cli.tsx", "src/app.tsx"],
+        "scope": "per-file"
       }
     ]
   }
@@ -158,17 +163,18 @@ o [Pipeline Assistant](#pipeline-assistant) roda um reconhecimento
 adaptativo do projeto e te guia por ≤8 perguntas pra rascunhar um pra
 você.
 
-Exemplos que vêm no repo:
+Os defaults empacotados que caem em `./pipelines/` no primeiro launch:
 
-| Arquivo | O que faz |
-|---|---|
-| `example.pipeline.json` (pt-BR) | Adiciona headers JSDoc e escreve uma entrada no CHANGELOG. |
-| `pipelines/demo-rapida.pipeline.json` (pt-BR) | Configura testes, escreve um teste por arquivo, roda três auditorias (segurança, qualidade, performance). |
-| `pipelines/testes-seguranca.pipeline.json` (pt-BR) | Suíte de regressão focada em segurança. |
+- **huu Test Suite** — suíte de testes unitários autônoma (o default,
+  destacado na tela de boas-vindas).
+- **huu Knowledge System** — constrói um sistema de skills/conhecimento a
+  partir do repo.
+- Cinco auditorias apenas-relatório: **huu Docs Audit**, **huu Quality
+  Audit**, **huu Performance Audit**, **huu Refactor Plan**, **huu Security
+  Audit**.
 
-> Os exemplos que vêm no repo já estão em português (a língua nativa
-> do autor). O formato do pipeline é agnóstico de idioma — escreva
-> seus prompts em qualquer língua que o modelo entenda.
+Veja [Pipelines default empacotados](#pipelines-default-empacotados) pra a
+tabela completa.
 
 ---
 
@@ -176,7 +182,7 @@ Exemplos que vêm no repo:
 
 ```bash
 export COPILOT_GITHUB_TOKEN=ghp_...      # PAT fine-grained, escopo "Copilot Requests"
-huu --copilot run example.pipeline.json
+huu --copilot run pipelines/huu-test-suite.pipeline.json
 ```
 
 Mesmo pipeline, mesmo orchestrator, mesma lógica de merge — a única
@@ -522,7 +528,7 @@ regras de auto-skip ignoram `node_modules/`, `dist/`, `build/`,
 
 ## Pipelines como artefato compartilhável
 
-Um pipeline é um artefato reusável. Um `security-tests.pipeline.json`
+Um pipeline é um artefato reusável. Um `huu-security-audit.pipeline.json`
 que funciona num repo Node funciona em outro. O know-how de "como
 decompor essa classe de tarefa" fica capturado em JSON — não na cabeça
 de quem rodou um agente interativo numa tarde.

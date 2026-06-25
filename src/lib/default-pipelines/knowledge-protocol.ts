@@ -53,6 +53,53 @@ If IGNORED: the committed \`.gitignore\` excludes \`.huu/\`. Apply the MINIMAL r
 }
 
 /**
+ * Recon (producer) prompt for the autonomous file-discovery pattern that
+ * replaces manual `per-file` selection. A step carrying this prompt declares
+ * `produces: "<path>"`, so huu appends the deterministic MEMORY CONTRACT
+ * (exact path + huu-memory-v1 format + cap + hint rule) at run time — the
+ * author never writes that boilerplate. A LATER `scope: 'memory'` step reads
+ * the file and fans out one task per entry, each entry's `hint` riding `$hint`.
+ *
+ * Kept here (like {@link reportJudgeCondition}) so every modernized pipeline
+ * selects targets with the same wording and the same skip discipline. One
+ * cognitive op: choose files, write the list — nothing else.
+ */
+export function targetsRecon(opts: {
+  /** What this run IS (e.g. "huu's test-target selector"). */
+  role: string;
+  /** What the fan-out will DO with each file (e.g. "write unit tests for"). */
+  purpose: string;
+  /** Bulleted inclusion criteria — what makes a file worth a slot. */
+  prefer: string[];
+  /** What each entry's one-line `hint` must carry for the next agent. */
+  hintGuide: string;
+  /** Width cap (must equal the consumer step's maxFiles). */
+  maxFiles: number;
+}): string {
+  return `You are ${opts.role}. Goal: choose the files worth the work that follows and hand them to the parallel fan-out — ONE cognitive op: pick the files, write the list, nothing else.
+
+=== SKIP RULE (never list these) ===
+Generated/vendored/trivial paths: \`node_modules/\`, \`dist/\`, \`build/\`, \`out/\`, \`coverage/\`, \`.git/\`, \`vendor/\`, \`target/\`, \`__pycache__/\`, \`*.generated.*\`, \`*.min.js\`, \`*.min.css\`, \`*.d.ts\`, \`*.lock\`, \`*.snap\`; and pure config / constants / type-only / barrel-export files.
+
+=== SELECT (at most ${opts.maxFiles}, most valuable first) ===
+A file earns a slot only when ${opts.purpose} it would catch real regressions or surface real findings. Prefer:
+${opts.prefer.map((p) => `- ${p}`).join('\n')}
+Fewer, load-bearing files beat a long shallow list. Rank by value and let the cap drop the tail.
+
+=== WRITE THE MEMORY FILE ===
+Write your selection to the file named in the MEMORY CONTRACT appended below (huu fills in the exact path + format). One entry per file:
+- \`path\`: repo-relative.
+- \`hint\`: ${opts.hintGuide} — this becomes the next agent's \`$hint\` and is the single most valuable thing you hand over. Never leave it empty.
+- \`priority\`: higher runs first; the cap drops the lowest. Rank deliberately.
+An EMPTY list is valid and means "nothing here qualifies" — the next stage then runs zero tasks (do not pad to hit the cap).
+
+=== HARD RULES ===
+- Selection only: do NOT modify source, run long builds, or write anything except the memory file.
+- Be language-agnostic — do not assume Node.js.
+- Every path you list must exist in the working tree (the consumer drops unresolvable paths).`;
+}
+
+/**
  * Natural-language condition for the report-validation judge appended to
  * every report-only audit. The judge runs in the integration worktree with
  * shell access; the condition tells it exactly what evidence to gather so

@@ -7,6 +7,43 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
+### Changed
+
+- **Bundled pipelines are now fully autonomous — manual file-picking removed.**
+  The six defaults that used to require `scope: "per-file"` (huu Test Suite +
+  the five report-only audits) now discover their own targets: a recon step
+  `produces` a `huu-memory-v1` list (with per-file `hint`s) and the work step
+  fans out via `scope: "memory"` + `filesFrom` — the pattern huu Knowledge
+  System already used. A shared `targetsRecon()` helper in
+  `knowledge-protocol.ts` keeps the selection prompt identical across them, and
+  `registry.test.ts` now enforces that NO default ever reintroduces
+  `scope: "per-file"`. huu Test Suite additionally ends with a CheckStep cleanup
+  loop (reworks until the suite is green); huu Security Audit fans its four
+  independent scan dimensions (recon · secrets · CVE · supply-chain) into
+  parallel `dependsOn` waves joined by consolidation. Step prompts were sharpened
+  against the new prompting playbook. NOTE: `pipeline-bootstrap` never overwrites
+  — existing users keep their materialized JSONs; delete
+  `pipelines/<name>.pipeline.json` to re-materialize the autonomous version.
+
+### Added
+
+- **`docs/prompting-playbook.md` (+ pt-BR twin) and the `authoring-agent-prompts`
+  knowledge skill.** A research-grounded, cross-LLM playbook of 12 prompt
+  techniques (atomic decomposition, explicit output contracts, `$file`/`$hint`
+  injection, mechanical forward-default judges, lean pi-backend prompts, …) that
+  the bundled pipelines now follow; indexed from `docs/README.md` and the skill
+  catalog.
+
+### Removed
+
+- **Dropped the four loose sample pipelines.** `example.pipeline.json` and
+  `example.conditional.pipeline.json` (repo root) plus `demo-quick` /
+  `security-tests` (`pipelines/`) are gone; the README / onboarding / operations
+  quickstart and the pipeline-JSON guide now point at the bundled defaults
+  (`pipelines/huu-test-suite.pipeline.json`, materialized on first launch) and
+  use huu Security Audit / Knowledge System as the live check-step + `dependsOn`
+  wave examples.
+
 ## [2.0.0] - 2026-06-25
 
 ### Added
