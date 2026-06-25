@@ -4,7 +4,7 @@
  * The three "helper" features in huu — Pipeline Assistant, Smart File Select,
  * and Project Recon — all use LangChain's `ChatOpenAI`. Historically they
  * hard-coded the OpenRouter base URL, which means even when a user picked
- * `--backend=azure` (or `copilot`), the helpers still hit OpenRouter and
+ * the Azure provider, the helpers still hit OpenRouter and
  * generated charges on the wrong account.
  *
  * This factory centralizes client construction so every helper builds its
@@ -13,9 +13,6 @@
  * Routing matrix:
  *   - `pi`      → OpenRouter (https://openrouter.ai/api/v1, Authorization: Bearer)
  *   - `azure`   → Azure AI Foundry v1 endpoint, `api-key:` header (NOT Bearer)
- *   - `copilot` → OpenRouter (pre-existing fallback — Copilot has no public
- *                 generic-completion API; helpers continue to use OpenRouter
- *                 unless we add a dedicated copilot path)
  *   - `stub`    → caller short-circuits; never reaches this factory
  */
 import { ChatOpenAI } from '@langchain/openai';
@@ -31,7 +28,7 @@ const OPENROUTER_HEADERS = {
 export interface LlmClientContext {
   /** Backend the user selected. Drives routing decisions. */
   backend: AgentBackendKind;
-  /** OpenRouter API key (used when backend === 'pi' or 'copilot' fallback). */
+  /** OpenRouter API key (used when backend === 'pi'). */
   openrouterApiKey?: string;
   /** Azure API key (used when backend === 'azure'). */
   azureApiKey?: string;
@@ -100,8 +97,7 @@ export function buildChatClient(
     });
   }
 
-  // pi (OpenRouter) and copilot (fallback to OpenRouter for helpers — Copilot
-  // doesn't expose a generic chat-completion API for the assistant features).
+  // pi → OpenRouter for the helper features.
   const apiKey = ctx.openrouterApiKey?.trim() ?? '';
   if (!apiKey) {
     throw new Error(

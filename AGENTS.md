@@ -65,9 +65,11 @@ paragraph, for the current list.
               orchestrator/ (worker pool, stage lifecycle, merge)
                 ↓
               orchestrator/backends/ (pluggable agent SDKs:
-                pi/      — @mariozechner/pi-coding-agent (default, OpenRouter)
-                copilot/ — @github/copilot-sdk (GitHub subscription)
-                azure/   — Azure AI Foundry (see docs/azure-backend.md)
+                pi/      — @mariozechner/pi-coding-agent (the only user-facing
+                           backend; provider OpenRouter|Azure chosen via
+                           LlmProvider — see src/lib/providers.ts)
+                azure/   — internal dispatch kind serving the Azure AI Foundry
+                           provider (docs/azure-backend.md)
                 stub/    — no-LLM mock for smoke tests
                 registry.ts — single dispatch from kind → factory)
                 ↓

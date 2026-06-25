@@ -420,6 +420,8 @@ Update ONLY section 8.
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
+    description:
+      'Builds a full agent-skills knowledge system on a shared blackboard: recon → deep study → synthesis → per-topic dossiers → skills + meta-skills + routing, gated by a blind routing eval. Fully autonomous.',
     maxRetries: 1,
     maxNodeExecutions: 50,
     steps: [

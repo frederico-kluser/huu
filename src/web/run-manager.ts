@@ -10,14 +10,17 @@
  * the `onUpdate` callback; the server owns throttling + SSE fan-out.
  */
 
+import { existsSync, statSync } from 'node:fs';
 import { Orchestrator } from '../orchestrator/index.js';
 import {
   selectBackend,
   type AgentBackendKind,
 } from '../orchestrator/backends/registry.js';
 import { findSpec, resolveApiKey } from '../lib/api-key.js';
+import { backendToProvider } from '../lib/providers.js';
 import type {
   AppConfig,
+  LlmProvider,
   OrchestratorState,
   Pipeline,
 } from '../lib/types.js';
@@ -31,6 +34,8 @@ export interface StartRunParams {
   /** A concrete pipeline (e.g. preloaded via `huu run x.json --web`). */
   pipeline?: Pipeline;
   backend: AgentBackendKind;
+  /** User-facing provider (openrouter|azure). Carried into AppConfig for display. */
+  provider?: LlmProvider;
   modelId: string;
   /** Manual concurrency seed (used when mode === 'manual'). */
   concurrency?: number;
@@ -38,6 +43,11 @@ export interface StartRunParams {
   mode?: 'auto' | 'manual' | 'greedy';
   /** Azure only — endpoint URL override. */
   endpoint?: string;
+  /**
+   * Directory to run in. Defaults to the server's cwd. Lets the web folder
+   * picker target a different project without restarting the server.
+   */
+  runDirectory?: string;
   /** Per-card timeout in minutes (sets both card timeouts, like the TUI). */
   timeoutMinutes?: number;
 }
@@ -107,6 +117,14 @@ export class WebRunManager {
 
     const effectivePipeline = applyTimeout(pipeline, params.timeoutMinutes);
 
+    // Resolve the run directory: an explicit pick from the folder picker, or
+    // the server's cwd. Validate up front so a typo fails as a 4xx instead of
+    // surfacing deep in preflight.
+    const runDir = params.runDirectory?.trim() || this.cwd;
+    if (!existsSync(runDir) || !statSync(runDir).isDirectory()) {
+      throw new Error(`Run directory does not exist: ${runDir}`);
+    }
+
     const bundle = selectBackend(params.backend);
 
     let apiKey = 'stub';
@@ -138,6 +156,7 @@ export class WebRunManager {
       apiKey: apiKey || 'stub',
       modelId: params.modelId,
       backend: params.backend,
+      provider: params.provider ?? backendToProvider(params.backend),
       endpoint,
     };
 
@@ -145,7 +164,7 @@ export class WebRunManager {
     const orch = new Orchestrator(
       config,
       effectivePipeline,
-      this.cwd,
+      runDir,
       bundle.agentFactory,
       {
         conflictResolverFactory: bundle.conflictResolverFactory,

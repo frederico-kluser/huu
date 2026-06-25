@@ -60,9 +60,11 @@ export interface ApiKeySpec {
    * When set, this spec is "owned" by a specific agent backend and the
    * App should only enforce its presence when that backend is active.
    * Specs without `backendBound` are universal — when `required: true`
-   * they're enforced regardless of backend.
+   * they're enforced regardless of backend. The provider selector resolves
+   * a provider to its backend (`openrouter` → `pi`, `azure` → `azure`)
+   * before checking, so this stays backend-keyed.
    */
-  backendBound?: 'pi' | 'copilot' | 'azure';
+  backendBound?: 'pi' | 'azure';
 }
 
 export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
@@ -95,25 +97,9 @@ export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
     required: false,
   },
   {
-    // Used when --backend=copilot. `required: false` so legacy callers
-    // (`findMissingRequiredKeys()`, smoke scripts) don't gate on it for
-    // pi runs. `backendBound: 'copilot'` makes the App's
-    // backend-aware helper (`findMissingKeysForBackend`) enforce it
-    // whenever copilot is the active backend, regardless of `required`.
-    name: 'copilot',
-    envVar: 'COPILOT_GITHUB_TOKEN',
-    envFileVar: 'COPILOT_GITHUB_TOKEN_FILE',
-    secretMountPath: '/run/secrets/copilot_token',
-    hostSecretScope: 'huu-copilot-token',
-    label: 'GitHub Copilot',
-    hint: 'GitHub fine-grained PAT with "Copilot Requests" scope, or COPILOT_GITHUB_TOKEN/GH_TOKEN',
-    required: false,
-    backendBound: 'copilot',
-  },
-  {
-    // Azure API key — used when --backend=azure.
+    // Azure API key — used when the Azure AI Foundry provider is selected.
     // The value is the API key shown in "Keys and Endpoints" in the
-    // Azure AI Foundry portal. `required: false` keeps pi/copilot runs
+    // Azure AI Foundry portal. `required: false` keeps OpenRouter runs
     // unblocked. `backendBound: 'azure'` makes findMissingKeysForBackend
     // enforce it whenever the azure backend is active.
     name: 'azureApiKey',

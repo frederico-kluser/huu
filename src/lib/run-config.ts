@@ -17,11 +17,26 @@ import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import type { Pipeline, PipelineStep } from './types.js';
 
-const AgentBackendKindSchema = z.enum(['pi', 'copilot', 'azure', 'stub']);
+const AgentBackendKindSchema = z.enum(['pi', 'azure', 'stub']);
+const LlmProviderSchema = z.enum(['openrouter', 'azure']);
 
 export const RunConfigSchema = z.object({
   modelId: z.string().min(1),
   backend: AgentBackendKindSchema.default('pi'),
+  /**
+   * LLM provider for the pi backend: `openrouter` (default) or `azure`
+   * (Azure AI Foundry). When set, the launcher derives `backend` from it
+   * and resolves the matching API key. Omitting it keeps the legacy
+   * `backend`-only behavior.
+   */
+  provider: LlmProviderSchema.optional(),
+  /**
+   * Absolute or cwd-relative path of the directory to run in. The run's
+   * git worktrees, preflight and reports all happen here. Defaults to the
+   * process working directory when omitted, so existing configs are
+   * unaffected.
+   */
+  workingDirectory: z.string().min(1).optional(),
   /**
    * Map step.name → files. The wrapper injects these into the matching
    * step's `files` array before constructing the Orchestrator. Steps

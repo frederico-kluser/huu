@@ -33,7 +33,11 @@ const S = {
   boot: null,
   pipelines: [],
   selectedPipe: null,
-  backend: 'pi',
+  provider: 'openrouter',     // user-facing choice (openrouter | azure)
+  providers: [],
+  backend: 'pi',              // dispatch backend derived from provider
+  runDir: '',                 // chosen run directory (default = server cwd)
+  cwd: '',
   models: [],
   modelId: '',
   mode: 'auto',
@@ -43,6 +47,14 @@ const S = {
   openCardKey: null,
   logOpen: false,
 };
+
+function providerInfoById(id) {
+  return (S.providers || []).find((p) => p.id === id) || null;
+}
+function providerBackend(id) {
+  const p = providerInfoById(id);
+  return p ? p.backend : id === 'azure' ? 'azure' : 'pi';
+}
 
 const PIPE_ICONS = { test: '✓', audit: '◎', security: '🛡', performance: '⚡', docs: '✦', quality: '◆', refactor: '↻', knowledge: '✸' };
 function pipeIcon(name) {
@@ -56,22 +68,25 @@ async function boot() {
   const b = await api('/api/bootstrap');
   S.boot = b;
   S.pipelines = b.pipelines || [];
+  S.providers = b.providers || [];
+  S.cwd = b.cwd || '';
+  S.runDir = b.cwd || '';
   $('repoName').textContent = b.repo || '';
   document.title = `huu · ${b.repo || 'web'}`;
   if (b.defaults && typeof b.defaults.concurrency === 'number') { S.manualN = b.defaults.concurrency; }
   if (b.defaults && b.defaults.autoScale === false) { S.mode = 'manual'; }
-  S.backend = b.lockedBackend || pickDefaultBackend(b.backends);
+  S.provider = b.lockedProvider || pickDefaultProvider(b.providers);
+  S.backend = providerBackend(S.provider);
   renderGallery();
   if (b.initialPipeline) selectPipelineByName(b.initialPipeline);
   ingestRun(b.run);
   connectSse();
 }
 
-function pickDefaultBackend(backends) {
-  const usable = (backends || []).find((x) => x.userSelectable && x.hasKey);
-  if (usable) return usable.id;
-  const sel = (backends || []).find((x) => x.userSelectable);
-  return sel ? sel.id : 'pi';
+function pickDefaultProvider(providers) {
+  const ready = (providers || []).find((x) => x.hasKey);
+  if (ready) return ready.id;
+  return (providers && providers[0] && providers[0].id) || 'openrouter';
 }
 
 /* ---------------- Launch: pipeline gallery ---------------- */
@@ -88,6 +103,7 @@ function renderGallery() {
       <div class="pipe-card__icon">${pipeIcon(p.name)}</div>
       <div>
         <div class="pipe-card__name">${esc(p.name)} ${p.isDefault ? '<span class="star" title="default">★</span>' : ''}</div>
+        ${p.description ? `<div class="pipe-card__desc">${esc(p.description)}</div>` : ''}
         <div class="pipe-card__sub">${p.workSteps} work · ${p.checkSteps} check · ${p.stepCount} steps</div>
       </div>
       <div class="pipe-card__badges">
@@ -110,33 +126,40 @@ async function selectPipeline(p) {
   $('configEmpty').hidden = true;
   $('configForm').hidden = false;
   $('selectedPipe').textContent = p.name;
-  renderBackendSeg();
+  $('selectedPipeDesc').textContent = p.description || '';
+  $('dirPath').textContent = S.runDir;
+  $('dirPath').title = S.runDir;
+  renderProviderSeg();
   await refreshModelsAndKeys();
   renderModeSeg();
 }
 
-/* ---------------- Launch: backend + models + keys ---------------- */
-function renderBackendSeg() {
-  const seg = $('backendSeg');
+/* ---------------- Launch: provider + models + keys ---------------- */
+function renderProviderSeg() {
+  const seg = $('providerSeg');
   seg.innerHTML = '';
-  const locked = !!(S.boot && S.boot.lockedBackend);
-  for (const b of S.boot.backends) {
-    if (!b.userSelectable && b.id !== 'stub') continue;
+  const locked = !!(S.boot && S.boot.lockedProvider);
+  for (const p of S.providers) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = S.backend === b.id ? 'on' : '';
-    btn.textContent = b.id === 'stub' ? 'Demo' : b.label.replace(/\s*\(.*\)/, '');
-    btn.title = b.description + (b.requiresApiKey ? (b.hasKey ? ' · key ✓' : ' · key needed') : '');
-    if (locked && b.id !== S.boot.lockedBackend) btn.disabled = true;
-    btn.addEventListener('click', async () => { S.backend = b.id; renderBackendSeg(); await refreshModelsAndKeys(); });
+    btn.className = S.provider === p.id ? 'on' : '';
+    btn.textContent = p.label + (p.hasKey ? '' : ' •');
+    btn.title = p.description + (p.hasKey ? ' · key ✓' : ' · key needed');
+    if (locked && p.id !== S.boot.lockedProvider) btn.disabled = true;
+    btn.addEventListener('click', async () => {
+      S.provider = p.id;
+      S.backend = providerBackend(p.id);
+      renderProviderSeg();
+      await refreshModelsAndKeys();
+    });
     seg.appendChild(btn);
   }
 }
 
 async function refreshModelsAndKeys() {
-  // Models
+  // Models (by provider)
   try {
-    const m = await api('/api/models?backend=' + S.backend);
+    const m = await api('/api/models?provider=' + encodeURIComponent(S.provider));
     S.models = m.models || [];
   } catch { S.models = []; }
   const sel = $('modelSelect');
@@ -155,12 +178,10 @@ async function refreshModelsAndKeys() {
     sel.value = S.modelId;
   }
   updateModelHint();
-  // Keys
-  if (S.backend === 'stub') { S.keyStatus = { ok: true, missing: [] }; }
-  else {
-    try { S.keyStatus = await api('/api/keys?backend=' + S.backend); } catch { S.keyStatus = { ok: true, missing: [] }; }
-  }
-  renderKeyField();
+  // Keys (by provider)
+  try { S.keyStatus = await api('/api/keys?provider=' + encodeURIComponent(S.provider)); }
+  catch { S.keyStatus = { ok: true, missing: [] }; }
+  renderKeyArea();
   updateRunBtn();
 }
 
@@ -173,27 +194,57 @@ function updateModelHint() {
   h.innerHTML = `${think}${esc(md.description || '')} ${price ? `<br>${price}` : ''}`;
 }
 
-function renderKeyField() {
-  const f = $('keyField');
-  if (S.keyStatus.ok || !S.keyStatus.missing.length) { f.hidden = true; return; }
-  const spec = S.keyStatus.missing[0];
-  f.hidden = false;
-  $('keyLabel').textContent = `${spec.label} key needed`;
-  $('keyInput').placeholder = spec.hint ? spec.hint : 'paste key…';
-  $('keyHint').textContent = spec.validatePrefix ? `Expected to start with “${spec.validatePrefix}”.` : '';
-  $('keyInput').dataset.spec = spec.name;
+/* Render one row per credential the selected provider needs. Each key can be
+   set when missing AND changed when already present (persists into the same
+   store pi reads from). Endpoint specs use a text input; keys use password. */
+function renderKeyArea() {
+  const area = $('keyArea');
+  const info = providerInfoById(S.provider);
+  const specs = (info && info.keySpecs) || [];
+  if (!specs.length) { area.innerHTML = ''; area.hidden = true; return; }
+  area.hidden = false;
+  const missing = new Set((S.keyStatus.missing || []).map((m) => m.name));
+  area.innerHTML = specs
+    .map((spec) => {
+      const present = !missing.has(spec.name);
+      const isText = spec.name === 'azureEndpoint';
+      const editorId = `keyEdit-${spec.name}`;
+      const inputHtml = `
+        <div class="key-row" id="${editorId}" ${present ? 'hidden' : ''}>
+          <input type="${isText ? 'text' : 'password'}" data-spec="${esc(spec.name)}"
+                 placeholder="${esc(spec.hint || 'paste value…')}" autocomplete="off" spellcheck="false" />
+          <button type="button" class="btn btn--ghost btn--sm" data-save="${esc(spec.name)}">Save</button>
+        </div>
+        ${spec.validatePrefix ? `<div class="key-hint">Expected to start with “${esc(spec.validatePrefix)}”.</div>` : ''}`;
+      const status = present
+        ? `<div class="key-status"><span class="key-status__ok">✓ ${esc(spec.label)} set</span>
+             <button type="button" class="linkbtn" data-change="${esc(spec.name)}">change</button></div>`
+        : `<div class="key-status"><span class="key-status__need">${esc(spec.label)} needed</span></div>`;
+      return `<label>${esc(spec.label)}</label>${status}${inputHtml}`;
+    })
+    .join('<div style="height:6px"></div>');
 }
 
-$('keySave').addEventListener('click', async () => {
-  const name = $('keyInput').dataset.spec;
-  const value = $('keyInput').value.trim();
-  if (!name || !value) return;
-  try {
-    await api('/api/keys', { method: 'POST', body: JSON.stringify({ name, value }) });
-    $('keyInput').value = '';
-    toast('Key saved');
-    await refreshModelsAndKeys();
-  } catch (e) { toast(e.message, true); }
+// Delegated handlers for the dynamic key rows (save + reveal "change" editor).
+$('keyArea').addEventListener('click', async (e) => {
+  const changeName = e.target.getAttribute && e.target.getAttribute('data-change');
+  if (changeName) {
+    const row = document.getElementById(`keyEdit-${changeName}`);
+    if (row) { row.hidden = false; const inp = row.querySelector('input'); if (inp) inp.focus(); }
+    return;
+  }
+  const saveName = e.target.getAttribute && e.target.getAttribute('data-save');
+  if (saveName) {
+    const row = document.getElementById(`keyEdit-${saveName}`);
+    const input = row && row.querySelector('input');
+    const value = input ? input.value.trim() : '';
+    if (!value) return;
+    try {
+      await api('/api/keys', { method: 'POST', body: JSON.stringify({ name: saveName, value }) });
+      toast('Saved');
+      await refreshModelsAndKeys();
+    } catch (err) { toast(err.message, true); }
+  }
 });
 
 $('modelSelect').addEventListener('change', (e) => { S.modelId = e.target.value; updateModelHint(); });
@@ -210,7 +261,7 @@ for (const btn of $('modeSeg').children) {
 $('concRange').addEventListener('input', (e) => { S.manualN = +e.target.value; $('concOut').textContent = S.manualN; });
 
 function updateRunBtn() {
-  const ok = S.selectedPipe && (S.backend === 'stub' || S.keyStatus.ok);
+  const ok = S.selectedPipe && S.keyStatus.ok;
   $('runBtn').disabled = !ok;
 }
 
@@ -225,10 +276,11 @@ $('configForm').addEventListener('submit', async (e) => {
       method: 'POST',
       body: JSON.stringify({
         pipelineName: S.selectedPipe.name,
-        backend: S.backend,
+        provider: S.provider,
         modelId: S.modelId,
         mode: S.mode,
         concurrency: S.mode === 'manual' ? S.manualN : undefined,
+        runDirectory: S.runDir || undefined,
       }),
     });
     showView('run');
@@ -238,6 +290,47 @@ $('configForm').addEventListener('submit', async (e) => {
     updateRunBtn();
   }
 });
+
+/* ---------------- Folder picker (run directory) ---------------- */
+const folderState = { path: '' };
+$('dirBrowse').addEventListener('click', () => openFolder(S.runDir || S.cwd));
+$('folderClose').addEventListener('click', closeFolder);
+$('folderScrim').addEventListener('click', closeFolder);
+$('folderUp').addEventListener('click', () => { if (folderState.parent) loadFolder(folderState.parent); });
+$('folderUse').addEventListener('click', () => {
+  S.runDir = folderState.path;
+  $('dirPath').textContent = S.runDir;
+  $('dirPath').title = S.runDir;
+  closeFolder();
+  toast('Run directory set');
+});
+
+function openFolder(start) { $('folderScrim').hidden = false; $('folderModal').hidden = false; loadFolder(start); }
+function closeFolder() { $('folderScrim').hidden = true; $('folderModal').hidden = true; }
+
+async function loadFolder(path) {
+  try {
+    const d = await api('/api/folders?path=' + encodeURIComponent(path || ''));
+    folderState.path = d.path;
+    folderState.parent = d.parent;
+    $('folderPath').textContent = d.path;
+    $('folderPath').title = d.path;
+    const git = $('folderGit');
+    git.textContent = d.isGitRepo ? '✓ git repo' : '⚠ not a git repo';
+    git.className = 'folder-modal__git ' + (d.isGitRepo ? 'ok' : 'no');
+    $('folderUp').disabled = !d.parent;
+    const list = $('folderList');
+    if (!d.entries.length) { list.innerHTML = '<div class="folder-empty">No sub-directories</div>'; return; }
+    list.innerHTML = '';
+    for (const ent of d.entries) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'folder-item';
+      b.innerHTML = `<span class="folder-item__icon">📁</span><span>${esc(ent.name)}</span>`;
+      b.addEventListener('click', () => loadFolder(ent.path));
+      list.appendChild(b);
+    }
+  } catch (err) { toast(err.message, true); }
+}
 
 /* ---------------- Views ---------------- */
 function showView(which) {
@@ -275,6 +368,18 @@ function ingestRun(run) {
 
   setStatus(run.phase);
   const st = run.state;
+  // Gooey morph loader while the orchestrator spins up — shown while the run
+  // is live but no cards have landed yet (preflight / worktree creation).
+  const cardCount = st
+    ? (st.agents || []).length + (st.stageIntegrations || []).length + (st.checkRuns || []).length
+    : 0;
+  const loader = $('runLoader');
+  if (active && cardCount === 0) {
+    loader.hidden = false;
+    $('runLoaderLabel').textContent = st ? 'Preparing worktrees…' : 'Spinning up agents…';
+  } else {
+    loader.hidden = true;
+  }
   if (st) {
     lastStartedAt = st.startedAt || run.startedAt || 0;
     $('mStage').textContent = st.wave != null ? `wave ${st.wave}` : `${st.currentStage}/${st.totalStages}`;

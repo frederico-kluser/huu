@@ -369,6 +369,8 @@ Numbers MUST come from re-reading \`.huu/audits/performance-faq.json\` and the r
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
+    description:
+      'Static hotspot scan (N+1, big-O, sync I/O, memory leaks, unbounded concurrency, missing caching), a Core Web Vitals scorecard and a USE-method checklist. Report-only.',
     maxRetries: 1,
     maxNodeExecutions: 50,
     steps: [

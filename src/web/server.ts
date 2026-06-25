@@ -19,13 +19,16 @@ import { extname, join, normalize } from 'node:path';
 import type { AgentBackendKind } from '../orchestrator/backends/registry.js';
 import { parseBackendKind } from '../orchestrator/backends/registry.js';
 import type { OrchestratorState, Pipeline } from '../lib/types.js';
+import { backendToProvider, parseProvider, providerToBackend } from '../lib/providers.js';
 import {
   listBackendsInfo,
+  listProvidersInfo,
   listModelsInfo,
   keyStatus,
   findKeySpec,
   listPipelinesInfo,
   getPipelineByName,
+  listDirs,
   repoName,
 } from './api-data.js';
 import { saveApiKey } from '../lib/api-key.js';
@@ -33,7 +36,7 @@ import { WebRunManager, type RunSnapshot, type StartRunParams } from './run-mana
 
 export interface WebServerOptions {
   cwd: string;
-  /** Pre-selected backend from CLI flags (`--backend`, `--copilot`, `--stub`). */
+  /** Pre-selected backend from CLI flags (`--backend`, `--provider`, `--stub`). */
   lockedBackend?: AgentBackendKind;
   /** Pipeline preloaded via `huu run <file>` — offered as the first choice. */
   initialPipeline?: Pipeline;
@@ -179,13 +182,28 @@ export function createWebServer(opts: WebServerOptions): {
       if (!pipeline) return sendJson(res, 404, { error: 'pipeline not found' });
       return sendJson(res, 200, { pipeline });
     }
+    if (method === 'GET' && path === '/api/providers') {
+      return sendJson(res, 200, { providers: listProvidersInfo() });
+    }
+    if (method === 'GET' && path === '/api/folders') {
+      // Folder navigation for the run-directory picker. Defaults to cwd.
+      const target = url.searchParams.get('path') ?? opts.cwd;
+      return sendJson(res, 200, listDirs(target));
+    }
     if (method === 'GET' && path === '/api/models') {
-      const backend = parseBackendKind(url.searchParams.get('backend') ?? 'pi');
+      // Accept either a provider (openrouter|azure) or a raw backend kind.
+      const provider = parseProvider(url.searchParams.get('provider') ?? '');
+      const backend = provider
+        ? providerToBackend(provider)
+        : parseBackendKind(url.searchParams.get('backend') ?? 'pi');
       if (!backend) return sendJson(res, 400, { error: 'unknown backend' });
       return sendJson(res, 200, { models: listModelsInfo(opts.cwd, backend) });
     }
     if (method === 'GET' && path === '/api/keys') {
-      const backend = parseBackendKind(url.searchParams.get('backend') ?? 'pi');
+      const provider = parseProvider(url.searchParams.get('provider') ?? '');
+      const backend = provider
+        ? providerToBackend(provider)
+        : parseBackendKind(url.searchParams.get('backend') ?? 'pi');
       if (!backend) return sendJson(res, 400, { error: 'unknown backend' });
       return sendJson(res, 200, keyStatus(backend));
     }
@@ -237,7 +255,12 @@ export function createWebServer(opts: WebServerOptions): {
     res: ServerResponse,
   ): Promise<void> {
     const body = await readJsonBody(req);
-    const backend = parseBackendKind(String(body.backend ?? 'pi'));
+    // Provider (openrouter|azure) is the user-facing choice; it maps to the
+    // dispatch backend. Falls back to a raw `backend` for older clients.
+    const provider = parseProvider(String(body.provider ?? ''));
+    const backend = provider
+      ? providerToBackend(provider)
+      : parseBackendKind(String(body.backend ?? 'pi'));
     if (!backend) return sendJson(res, 400, { error: 'unknown backend' });
     const params: StartRunParams = {
       pipelineName: body.pipelineName ? String(body.pipelineName) : undefined,
@@ -247,6 +270,7 @@ export function createWebServer(opts: WebServerOptions): {
           ? opts.initialPipeline
           : undefined,
       backend,
+      provider: provider ?? backendToProvider(backend),
       modelId: String(body.modelId ?? ''),
       concurrency:
         typeof body.concurrency === 'number' ? body.concurrency : undefined,
@@ -254,6 +278,7 @@ export function createWebServer(opts: WebServerOptions): {
         ? (body.mode as StartRunParams['mode'])
         : undefined,
       endpoint: body.endpoint ? String(body.endpoint) : undefined,
+      runDirectory: body.runDirectory ? String(body.runDirectory) : undefined,
       timeoutMinutes:
         typeof body.timeoutMinutes === 'number'
           ? body.timeoutMinutes
@@ -302,11 +327,17 @@ export function createWebServer(opts: WebServerOptions): {
       repo: repoName(opts.cwd),
       cwd: opts.cwd,
       lockedBackend: opts.lockedBackend ?? null,
+      // The user-facing provider locked from the CLI (--provider/--backend),
+      // derived from the locked backend. null = user chooses in the UI.
+      lockedProvider: opts.lockedBackend
+        ? backendToProvider(opts.lockedBackend)
+        : null,
       defaults: {
         autoScale: opts.defaultAutoScale,
         concurrency: opts.defaultConcurrency ?? null,
       },
       backends: listBackendsInfo(),
+      providers: listProvidersInfo(),
       pipelines: listPipelinesInfo(opts.cwd),
       initialPipeline: opts.initialPipeline?.name ?? null,
       run: serializeSnapshot(manager.getSnapshot()),

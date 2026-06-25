@@ -32,14 +32,13 @@ export const ModelTierSchema = z.enum(['flagship', 'workhorse', 'fast']);
 export type ModelTier = z.infer<typeof ModelTierSchema>;
 
 /**
- * Which agent backend can serve this model. `openrouter` is the default
- * when omitted (matches existing recommended-models.json with no
- * provider field). `copilot` is the GitHub Copilot CLI / SDK; only models
- * Copilot exposes via `--model` are valid (claude-sonnet-4.6, gpt-5.5,
- * gemini-3-pro, etc.). The model selector filters the catalog by this
- * field according to the active `AppConfig.backend`.
+ * Which LLM provider can serve this model. `openrouter` is the default when
+ * omitted (matches existing recommended-models.json with no provider field).
+ * `azure` models are deployment names served by an Azure AI Foundry endpoint.
+ * The model selector filters the catalog by this field according to the
+ * active provider (`AppConfig.backend` → provider).
  */
-export const ModelProviderSchema = z.enum(['openrouter', 'copilot', 'azure']);
+export const ModelProviderSchema = z.enum(['openrouter', 'azure']);
 export type ModelProvider = z.infer<typeof ModelProviderSchema>;
 
 export const ModelEntrySchema = z.object({

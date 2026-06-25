@@ -397,6 +397,8 @@ Numbers MUST come from re-reading \`.huu/audits/quality-faq.json\` and the repor
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
+    description:
+      'Sonar-style report: cyclomatic + cognitive complexity, size metrics, churn×complexity hotspots, duplication and dead code, rolled into a hotspot-weighted score. Report-only.',
     maxRetries: 1,
     maxNodeExecutions: 50,
     steps: [

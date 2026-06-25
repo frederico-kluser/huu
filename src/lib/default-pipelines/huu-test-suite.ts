@@ -301,6 +301,8 @@ Then confirm \`huu-tests-faq.json\` is still a valid JSON array (your run-summar
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
+    description:
+      'Detects your stack, sets up a runner, then autonomously picks the most test-worthy files and writes mutation-surviving, non-flaky unit tests in parallel — looping until the suite is green. Adds a coverage badge.',
     _default: true,
     maxRetries: 1,
     maxNodeExecutions: 50,

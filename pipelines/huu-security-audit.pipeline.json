@@ -1,8 +1,9 @@
 {
   "_format": "huu-pipeline-v2",
-  "exportedAt": "2026-06-25T12:17:09.382Z",
+  "exportedAt": "2026-06-25T17:14:38.340Z",
   "pipeline": {
     "name": "huu Security Audit",
+    "description": "Secrets sweep, OWASP Top 10:2025 scan, dependency CVE check and supply-chain / CI posture, run as parallel waves and consolidated into a remediation roadmap. Report-only.",
     "maxRetries": 1,
     "maxNodeExecutions": 50,
     "steps": [

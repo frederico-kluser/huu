@@ -1,8 +1,9 @@
 {
   "_format": "huu-pipeline-v2",
-  "exportedAt": "2026-06-25T12:17:09.380Z",
+  "exportedAt": "2026-06-25T17:14:38.337Z",
   "pipeline": {
     "name": "huu Knowledge System",
+    "description": "Builds a full agent-skills knowledge system on a shared blackboard: recon → deep study → synthesis → per-topic dossiers → skills + meta-skills + routing, gated by a blind routing eval. Fully autonomous.",
     "maxRetries": 1,
     "maxNodeExecutions": 50,
     "steps": [

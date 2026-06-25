@@ -12,6 +12,8 @@ import {
   findSpec,
   type ApiKeySpec,
 } from './api-key-registry.js';
+import { providerToBackend } from './providers.js';
+import type { AgentBackendKind, LlmProvider } from './types.js';
 
 export { API_KEY_REGISTRY, findSpec };
 export type { ApiKeySpec };
@@ -74,13 +76,15 @@ export function findMissingRequiredKeys(): ApiKeySpec[] {
  *      (Currently none — AA was demoted to `required: false` so it no
  *      longer gates the run flow after pipeline configuration.)
  *
- * Specs bound to a DIFFERENT backend are skipped so a Copilot run
+ * Specs bound to a DIFFERENT backend are skipped so an Azure run
  * doesn't ask for an OpenRouter key the user will never use.
  */
 export function findMissingKeysForBackend(
-  backend: 'pi' | 'copilot' | 'azure',
+  backend: AgentBackendKind,
 ): ApiKeySpec[] {
   const out: ApiKeySpec[] = [];
+  // stub has no credentials; only universal `required` specs (none today)
+  // could surface, and none are bound to it.
   for (const spec of API_KEY_REGISTRY) {
     const bound = spec.backendBound;
     if (bound) {
@@ -92,6 +96,16 @@ export function findMissingKeysForBackend(
     }
   }
   return out;
+}
+
+/**
+ * Provider-keyed wrapper around {@link findMissingKeysForBackend}. The UI
+ * picks a provider (OpenRouter / Azure AI Foundry); this resolves it to the
+ * backing dispatch kind and returns the credential specs still missing for
+ * it (OpenRouter → the openrouter key; Azure → the API key + endpoint URL).
+ */
+export function findMissingKeysForProvider(provider: LlmProvider): ApiKeySpec[] {
+  return findMissingKeysForBackend(providerToBackend(provider));
 }
 
 /**
