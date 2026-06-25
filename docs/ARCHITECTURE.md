@@ -76,17 +76,6 @@ src/
     │   └── useSystemMetrics.ts
     └── safe-terminal.ts       # belt-and-suspenders TTY restoration
 
-src/web/                       # alternate browser front-end (`huu --web`); reuses the orchestrator
-├── server.ts                  # HTTP + WS server (binds 127.0.0.1 + UUID token)
-├── session.ts                 # per-connection state driven by `lib/screen-fsm.ts`
-├── orchestrator-bridge.ts     # 8 Hz StateCoalescer for WS broadcast
-├── browser-open.ts            # opens the browser unless `HUU_WEB_NO_OPEN=1`
-├── ws-protocol.ts             # Node-free shared types (consumed by `webui/`)
-└── handlers/                  # assistant, files, models, pipelines, recon
-
-webui/                         # Vite + React + TS + Tailwind front-end (Atomic Design)
-                               # build output → `src/web/dist-static/`
-
 native/
 └── port-shim/
     ├── port-shim.c            # bind() interceptor (LD_PRELOAD / DYLD)
@@ -96,7 +85,7 @@ scripts/
 ├── deploy.sh                  # interactive release driver (semver bump + tag + optional ghcr push)
 ├── huu-docker                 # bash wrapper documented in the README's Docker section
 ├── huu-compose                # auto-detects host UID/GID for `docker compose run`
-└── smoke-image.sh, smoke-pipeline.sh, smoke-web.sh
+└── smoke-image.sh, smoke-pipeline.sh
 ```
 
 Dependencies flow **downward only**: the UI never imports the orchestrator's internals, and the orchestrator never imports the UI. See [`.agents/skills/architecture-conventions/SKILL.md`](../.agents/skills/architecture-conventions/SKILL.md) for the full set of layering rules.
@@ -197,8 +186,10 @@ UI via `OrchestratorState.autoScale` (`AutoScaleStatus`):
 | `COOLDOWN` | 30s pause after a destroy/back-off event so the system doesn't oscillate. |
 
 Manual `+`/`-` on the run dashboard disables auto-scale (a single `A`
-press re-enables it). Killed agents land on the `killed_by_autoscaler`
-lifecycle phase, preserved in the run summary.
+press re-enables it); `M` toggles **MAX mode** (`greedy`) — flood one
+agent per queued task and let the memory guard alone hold the line,
+surfaced as a blue `MAX` chip. Killed agents land on the
+`killed_by_autoscaler` lifecycle phase, preserved in the run summary.
 
 ## Docker layer (host wrapper + container runtime)
 
@@ -279,7 +270,7 @@ Key invariants:
 
 The `.agents/skills/` directory contains the skill system every task in this repo routes through (source of truth, mirrored into `.claude/skills/` via per-skill symlinks). It is also the canonical reference if you are extending `huu`.
 
-Start at [`project-router`](../.agents/skills/project-router/SKILL.md); the canonical routing index is [`catalog.md`](../.agents/skills/catalog.md) — 17 skills: 1 router · 8 knowledge (architecture, orchestrator, git worktrees, LLM backends, ports, Docker, tests, docs) · 6 task (pipelines, default pipelines, TUI, web mode, commit gate, release) · 2 meta (evolution, consolidate).
+Start at [`project-router`](../.agents/skills/project-router/SKILL.md); the canonical routing index is [`catalog.md`](../.agents/skills/catalog.md) — 16 skills: 1 router · 8 knowledge (architecture, orchestrator, git worktrees, LLM backends, ports, Docker, tests, docs) · 5 task (pipelines, default pipelines, TUI, commit gate, release) · 2 meta (evolution, consolidate).
 
 A human-facing overview of how the system works (routing, LEARNINGS, evolution, consolidation) lives at [`agent-skills.md`](../agent-skills.md).
 

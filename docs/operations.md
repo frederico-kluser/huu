@@ -16,7 +16,6 @@ auto-scaling, cost control, port isolation, FAQ, roadmap.
   - [Image variants](#image-variants)
   - [Cookbook in the image](#cookbook-in-the-image)
   - [Don't want Docker?](#dont-want-docker)
-- [Web UI (`huu --web`)](#web-ui-huu---web)
 - [Configuration](#configuration)
   - [API key registry](#api-key-registry)
   - [Environment variables](#environment-variables)
@@ -221,38 +220,6 @@ simplest to most complete:
 
 ---
 
-## Web UI (`huu --web`)
-
-`huu --web` opens a browser-based UI that mirrors the TUI 1:1 — same
-FSM, same orchestrator, same back-end — but with a click-driven,
-responsive layout and live updates over a single WebSocket connection.
-
-```bash
-# Phase 1: --web requires --yolo (Docker port-publishing is on the roadmap).
-huu --web --yolo
-
-# Pick an explicit port and skip auto-opening the browser:
-huu --web --web-port=4321 --no-open --yolo
-```
-
-| Flag | Behaviour |
-|---|---|
-| `--web` | Boot the web UI instead of the TUI. Prints the URL on stderr. |
-| `--web-port=<n>` | Bind the HTTP+WS server on `<n>` (default: random free port). |
-| `--no-open` | Don't auto-open the user's default browser. Equivalent to `HUU_WEB_NO_OPEN=1`. |
-
-**Security model**
-
-- The server binds to `127.0.0.1` only (never `0.0.0.0`) — unreachable
-  from other hosts.
-- Every URL carries a per-process UUID token (`?t=…`); the token is
-  validated on **every** HTTP request and on the WebSocket upgrade.
-  Requests without the token get `401`.
-
-Full Web UI guide: [`docs/WEB-UI.md`](WEB-UI.md).
-
----
-
 ## Configuration
 
 ### API key registry
@@ -376,6 +343,13 @@ kill count). The status block also shows live `CPU%` and `RAM%`,
 mirroring the `SystemMetricsBar` so you don't have to correlate two
 readouts.
 
+**MAX mode (`M`)** is a third, greedy mode: it floods the pool with one
+agent per queued task (up to the hard ceiling) and lets the always-on
+memory guard be the sole backstop, so concurrency settles right at the
+destroy threshold. The header shows a blue `MAX <STATE>` chip with the
+kill count; cooldown damping keeps it from thrashing. Press `M` again
+(or `A`) to return to auto, `+`/`-` to drop to manual.
+
 Override defaults by setting `agentMemoryEstimateMb`,
 `stopThresholdPercent`, `destroyThresholdPercent`, `cooldownMs`, and
 `maxAgents` in code if you embed the orchestrator; the CLI exposes
@@ -493,7 +467,7 @@ The always-on memory guard fired: at ~95% RAM (or CPU) it kills the
 **newest** agent — the one with the least work done — so the older
 agents' work survives. The card returns to the TODO column with a `↻N`
 requeue counter and the task restarts from zero once memory frees up.
-The guard is active in both concurrency modes. Memory-aware auto-scale
+The guard is active in every concurrency mode (auto, manual, and MAX). Memory-aware auto-scale
 is the default; pin a fixed agent count with `--concurrency=N` or
 `--no-auto-scale` (or `"concurrency": N` in a headless config).
 
@@ -609,5 +583,4 @@ Smoke tests for releases:
 docker build -t huu:local .
 ./scripts/smoke-image.sh        # ~10s — image sanity
 ./scripts/smoke-pipeline.sh     # ~60s — end-to-end pipeline with --stub
-./scripts/smoke-web.sh          # ~5s — `huu --web` mode (port bind)
 ```

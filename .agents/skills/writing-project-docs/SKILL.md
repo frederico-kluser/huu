@@ -17,7 +17,7 @@ Any markdown work: READMEs, docs/, CHANGELOG, MANIFESTO, doc comments that will 
 ### Language layout (bilingual by twin files, never mixed in one file)
 
 - Repo root is pt-BR-first: `README.md` and `MANIFESTO.md` are Portuguese; their English twins are `README.en.md` / `MANIFESTO.en.md`. Editing one side of a pair means updating the twin in the same change — they drift otherwise.
-- `docs/` is English-first with explicit pt-BR variants: `ci.md` + `ci.pt-BR.md`, `onboarding.md` + `onboarding.pt-BR.md`, `operations.md` + `operations.pt-BR.md`. Single-language docs there (ARCHITECTURE.md, PORT-SHIM.md, WEB-UI.md, KEYBOARD.md, pipeline-json-guide.md — EN; azure-backend.md — pt-BR) have no twin; don't invent one unless asked.
+- `docs/` is English-first with explicit pt-BR variants: `ci.md` + `ci.pt-BR.md`, `onboarding.md` + `onboarding.pt-BR.md`, `operations.md` + `operations.pt-BR.md`. Single-language docs there (ARCHITECTURE.md, PORT-SHIM.md, KEYBOARD.md, pipeline-json-guide.md — EN; azure-backend.md — pt-BR) have no twin; don't invent one unless asked.
 - New long-form docs go under `docs/`, not the repo root.
 
 ### CHANGELOG
@@ -31,7 +31,7 @@ huu "designs pipelines that make thinking agents follow a deterministic process�
 
 ### Visual conventions (when documenting UI)
 
-`theme.ai` magenta/fuchsia means "AI-driven UI" in both TUI and web; README's "Visual conventions" section is the user-facing source. Screenshots/descriptions should respect that mapping.
+`theme.ai` magenta/fuchsia means "AI-driven UI" in the TUI; README's "Visual conventions" section is the user-facing source. Screenshots/descriptions should respect that mapping.
 
 ### Pointers
 

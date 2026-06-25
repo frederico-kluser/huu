@@ -22,7 +22,6 @@
 |---|---|
 | `not a git repository` | huu runs ON a repo. `git init` first (huu offers to). |
 | push-permission errors at start | Preflight probes push when `HUU_CHECK_PUSH` demands it. Fix the remote/credentials, or unset the probe for offline repos. |
-| `--web` exits asking for `--yolo` | Phase-1 constraint: the web server doesn't publish container ports yet — run `huu --web --yolo` (native). |
 
 ## API keys & models
 

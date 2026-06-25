@@ -116,9 +116,6 @@ and spawns one agent per listed path.
 - **TUI** (`huu`): edit the step → **Scope** field → press **M** (or ENTER to
   cycle) → move to **Files** → ENTER opens a text input for the `filesFrom`
   path. The editor won't save a memory step without it.
-- **Web UI** (`huu --web`): edit the step → **Scope** select → choose
-  *memory* → a **Memory file (filesFrom)** input appears; the file picker is
-  disabled (the pipeline picks, not you).
 - **JSON**: the fields above; full schema in
   [pipeline-json-guide.md](pipeline-json-guide.md).
 - **Pipeline Assistant**: ask for a discover-then-act flow ("scan the repo

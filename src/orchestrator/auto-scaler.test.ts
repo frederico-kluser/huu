@@ -393,6 +393,100 @@ describe('AutoScaler', () => {
     });
   });
 
+  describe('greedy mode (MAX) — flood to the limit', () => {
+    it('targets one agent per queued task, ignoring memory headroom', () => {
+      // 128 MiB total / 100 MiB used: auto would admit only 1 (no headroom),
+      // but greedy floods straight to the queue depth.
+      const scaler = createScaler(
+        makeMetrics({ ramTotalBytes: 128 * 1024 ** 2, ramUsedBytes: 100 * 1024 ** 2 }),
+        { agentMemoryEstimateMb: 250 },
+      );
+      scaler.setMode('greedy');
+      scaler.start();
+      scaler.notifyTaskQueued(10);
+      expect(scaler.targetConcurrency()).toBe(10);
+      scaler.stop();
+    });
+
+    it('caps the target at active + pending (never over-provisions idle slots)', () => {
+      const scaler = createScaler(makeMetrics(), { agentMemoryEstimateMb: 250 });
+      scaler.setMode('greedy');
+      scaler.start();
+      scaler.notifyAgentSpawned();
+      scaler.notifyAgentSpawned();
+      scaler.notifyTaskQueued(5);
+      expect(scaler.targetConcurrency()).toBe(7); // min(active 2 + pending 5, maxAgents)
+      scaler.stop();
+    });
+
+    it('clamps the flood to maxAgents', () => {
+      const scaler = createScaler(makeMetrics(), { maxAgents: 8 });
+      scaler.setMode('greedy');
+      scaler.start();
+      scaler.notifyTaskQueued(100);
+      expect(scaler.targetConcurrency()).toBe(8);
+      scaler.stop();
+    });
+
+    it('spawns above the stop threshold (where auto would back off)', () => {
+      // 92% is ≥ the stop threshold (auto stops) but < the destroy threshold.
+      const scaler = createScaler(makeMetrics({ cpuPercent: 92, ramPercent: 92 }));
+      scaler.setMode('greedy');
+      scaler.start();
+      expect(scaler.shouldSpawn()).toBe(true);
+      scaler.stop();
+    });
+
+    it('stops spawning at the destroy threshold (RAM or CPU)', () => {
+      const ramHot = createScaler(makeMetrics({ cpuPercent: 50, ramPercent: 96 }));
+      ramHot.setMode('greedy');
+      ramHot.start();
+      expect(ramHot.shouldSpawn()).toBe(false);
+      ramHot.stop();
+
+      const cpuHot = createScaler(makeMetrics({ cpuPercent: 96, ramPercent: 50 }));
+      cpuHot.setMode('greedy');
+      cpuHot.start();
+      expect(cpuHot.shouldSpawn()).toBe(false);
+      cpuHot.stop();
+    });
+
+    it('is cooldown-damped: no respawn while cooling down from a guard kill', () => {
+      const scaler = createScaler(makeMetrics({ cpuPercent: 50, ramPercent: 50 }));
+      scaler.setMode('greedy');
+      scaler.start();
+      scaler.notifyAgentSpawned();
+      scaler.notifyAgentDestroyed();
+      expect(scaler.getStatus().state).toBe('COOLDOWN');
+      expect(scaler.shouldSpawn()).toBe(false);
+
+      // Floods again only once the cooldown expires.
+      vi.advanceTimersByTime(31_000);
+      expect(scaler.getStatus().state).toBe('NORMAL');
+      expect(scaler.shouldSpawn()).toBe(true);
+      scaler.stop();
+    });
+
+    it('keeps the always-on memory guard (destroys the newest at the threshold)', () => {
+      const scaler = createScaler(makeMetrics({ cpuPercent: 50, ramPercent: 96 }));
+      scaler.setMode('greedy');
+      scaler.start();
+      scaler.notifyAgentSpawned();
+      expect(scaler.shouldDestroy()).toBe(true);
+      scaler.stop();
+    });
+
+    it('reports mode=greedy and enabled=false', () => {
+      const scaler = createScaler(makeMetrics());
+      scaler.setMode('greedy');
+      scaler.start();
+      const status = scaler.getStatus();
+      expect(status.mode).toBe('greedy');
+      expect(status.enabled).toBe(false);
+      scaler.stop();
+    });
+  });
+
   describe('guard kill count', () => {
     it('increments on every notifyAgentDestroyed', () => {
       const scaler = createScaler(makeMetrics());

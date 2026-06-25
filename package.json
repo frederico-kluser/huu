@@ -1,13 +1,10 @@
 {
   "name": "huu-pipe",
   "version": "1.4.0",
-  "description": "huu (Humans Underwrite Undertakings) — deterministic pipelines over thinking LLM agents: audits, test generation, knowledge extraction and other predictable-value processes, fanned out in parallel git worktrees with reproducible merges stage-by-stage. TUI, web UI, and headless CI mode.",
+  "description": "huu (Humans Underwrite Undertakings) — deterministic pipelines over thinking LLM agents: audits, test generation, knowledge extraction and other predictable-value processes, fanned out in parallel git worktrees with reproducible merges stage-by-stage. TUI and headless CI mode.",
   "author": "Frederico Guilherme Kluser de Oliveira <kluserhuu@gmail.com>",
   "license": "Apache-2.0",
   "type": "module",
-  "workspaces": [
-    "webui"
-  ],
   "main": "dist/cli.js",
   "bin": {
     "huu": "dist/cli.js"
@@ -54,8 +51,7 @@
   "scripts": {
     "dev": "HUU_NO_DOCKER=1 tsx --watch src/cli.tsx",
     "start": "HUU_NO_DOCKER=1 tsx src/cli.tsx",
-    "build": "npm run build:webui && tsc && chmod +x dist/cli.js",
-    "build:webui": "npm run build -w webui",
+    "build": "tsc && chmod +x dist/cli.js",
     "build:link": "npm run build && npm link && tsx scripts/link-pipelines.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -75,12 +71,10 @@
     "model-selector-ink": "^3.1.0",
     "nanoid": "^5.0.0",
     "react": "^18.3.1",
-    "ws": "^8.18.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/ws": "^8.5.0",
     "@types/react": "^18.3.0",
     "tsx": "^4.0.0",
     "typescript": "^5.5.0",

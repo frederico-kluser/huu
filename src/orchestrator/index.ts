@@ -371,6 +371,25 @@ export class Orchestrator {
     this.emit();
   }
 
+  /**
+   * MAX mode: flood the pool with one agent per queued task (capped at the
+   * hard ceiling), letting the memory guard — kill the newest agent at the
+   * destroy threshold, requeue its task to TODO — be the sole backstop, so
+   * concurrency settles right at the memory limit. Raises the port-allocator
+   * cap to match (otherwise real concurrency is silently pinned at the manual
+   * port window). Exit via enableAutoScale() (→ auto) or +/- / disableAutoScale()
+   * (→ manual). The guard is cooldown-damped, so this never thrashes.
+   */
+  enableGreedyMode(): void {
+    if (this.autoScaler.getMode() === 'greedy') return;
+    this.autoScaler.setMode('greedy');
+    this.autoScaleDisabledByUser = false;
+    this.portAllocator.setMaxAgents(AUTO_SCALE_MAX_INSTANCES);
+    this.log({ level: 'info', message: 'MAX mode enabled (flood to memory limit; guard kills newest)' });
+    this.poolWakeup?.();
+    this.emit();
+  }
+
   abort(): void {
     if (this.aborted) return;
     this.aborted = true;
@@ -903,9 +922,11 @@ export class Orchestrator {
       (this.pendingTasks.length > 0 || this.activeAgents.size > 0 || this.spawningIds.size > 0 || this.finalizingIds.size > 0)
     ) {
       this.autoScaler.notifyTaskQueued(this.pendingTasks.length);
-      // Auto mode drives the concurrency target from memory headroom;
-      // manual mode keeps the user's pinned value.
-      if (this.autoScaler.getMode() === 'auto') {
+      // Auto mode drives the concurrency target from memory headroom; greedy
+      // (MAX) mode drives it from the queue depth; manual mode keeps the
+      // user's pinned value. Both scaler modes recompute every tick.
+      const scaleMode = this.autoScaler.getMode();
+      if (scaleMode === 'auto' || scaleMode === 'greedy') {
         this.instanceCount = this.autoScaler.targetConcurrency();
       }
 

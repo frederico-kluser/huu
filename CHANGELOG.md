@@ -5,6 +5,29 @@ All notable changes to `huu` are documented here.
 The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/).
 SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
+## [Unreleased]
+
+### Added
+
+- **MAX (greedy) auto-scaling mode.** Press `M` on the run dashboard to
+  flood the worker pool with one agent per queued task (up to the hard
+  ceiling) and let the always-on memory guard be the sole backstop;
+  concurrency settles at the memory limit, cooldown-damped to avoid
+  thrashing. Surfaced as a blue `MAX` status chip. `+`/`-` still pin
+  manual from any mode, `A` returns to auto.
+
+### Removed
+
+- **Web UI mode (`huu --web`) removed entirely.** huu is now terminal-only
+  (Ink TUI + headless `huu auto`). Deleted the `src/web/` HTTP+WebSocket
+  back-end, the `webui/` front-end workspace, the `cli-web.ts` entry point,
+  the `--web` / `--web-port` / `--no-open` flags (and the `HUU_WEB_NO_OPEN`
+  env var), the `smoke-web.sh` smoke test, the `extending-web-mode` skill,
+  and the `docs/WEB-UI.md` guide. The `ws` dependency and the `webui`
+  npm workspace were dropped; the Docker build no longer pre-builds the
+  front-end. The orchestrator, FSM (`src/lib/screen-fsm.ts`), and all
+  back-end layers are unchanged.
+
 ## [1.4.0] - 2026-06-12
 
 ### Added

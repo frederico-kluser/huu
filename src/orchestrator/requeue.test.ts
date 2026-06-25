@@ -187,4 +187,60 @@ describe('memory-guard requeue (kill → TODO)', () => {
     },
     20_000,
   );
+
+  it(
+    'guard kill → TODO → rerun still holds in greedy (MAX) mode, which also floods concurrency',
+    async () => {
+      const pipeline: Pipeline = {
+        name: 'requeue-greedy',
+        steps: [{ name: 'stage1', prompt: 'p $file', files: ['a.ts', 'b.ts', 'c.ts'] }],
+      };
+      const { factory, spawnCounts } = makeKillableFactory({});
+
+      const orch = new Orchestrator(
+        { apiKey: 'stub', modelId: 'stub-model', backend: 'stub' },
+        pipeline,
+        scratch,
+        factory,
+        { initialConcurrency: 1 },
+      );
+      // MAX mode: the poll loop now drives concurrency from the queue depth
+      // (not the memory headroom), and the always-on guard stays the sole
+      // backstop. The kill→TODO→rerun regression must survive this mode.
+      orch.enableGreedyMode();
+
+      let killedId: number | null = null;
+      let sawGreedy = false;
+      let maxConcurrency = 0;
+      orch.subscribe((state) => {
+        if (state.autoScale?.mode === 'greedy') sawGreedy = true;
+        if (state.concurrency > maxConcurrency) maxConcurrency = state.concurrency;
+        if (killedId === null) {
+          const streaming = state.agents.find((a) => a.state === 'streaming');
+          if (streaming) {
+            killedId = streaming.agentId;
+            void orch.destroyAgent(streaming.agentId);
+          }
+        }
+      });
+
+      const result = await orch.start();
+
+      expect(result.manifest.status).toBe('done');
+      expect(sawGreedy).toBe(true);
+      // Greedy floated concurrency up from the initial 1 toward the queue depth.
+      expect(maxConcurrency).toBeGreaterThan(1);
+      expect(killedId).not.toBeNull();
+      // Killed card went back to TODO with a requeue counter and reran to done.
+      expect(spawnCounts.get(killedId!)).toBe(2);
+      const victim = result.agents.find((a) => a.agentId === killedId)!;
+      expect(victim.state).toBe('done');
+      expect(victim.requeues).toBe(1);
+      // All three tasks merged — nothing dropped or double-counted.
+      expect(result.agents).toHaveLength(3);
+      expect(result.agents.filter((a) => a.commitSha)).toHaveLength(3);
+      expect(result.integration.branchesMerged).toHaveLength(3);
+    },
+    20_000,
+  );
 });

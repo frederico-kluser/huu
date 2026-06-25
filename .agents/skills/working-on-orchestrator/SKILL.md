@@ -2,7 +2,7 @@
 name: working-on-orchestrator
 description: Explains huu's run lifecycle and its invariants — stage loop, task decomposition, worker pool, AutoScaler memory math, the memory-guard kill/requeue path with its consumable killedAgentIds Set, CheckStep judge execution (reserved agentId 9998) and checkRuns kanban state. Use when changing anything in src/orchestrator/ — scheduling, concurrency, requeue, check execution, run state — or when debugging why agents are killed, requeued or misrouted.
 metadata:
-  version: 0.1.0
+  version: 0.2.0
   type: knowledge
 ---
 
@@ -29,14 +29,15 @@ Changes or investigations in `src/orchestrator/` (index, auto-scaler, port-alloc
 ### CheckStep execution
 
 - The judge runs with shell access in the integration worktree; its verdict is parsed from the last JSON block of its output. `condition` supports the `$runs` token (visit count).
-- Routing: verdict label → matching `outcomes[].nextStepName`. On judge failure, unknown label, or `maxRuns` cap (default 5): the single `default: true` outcome fires. Every run appends one entry to `OrchestratorState.checkRuns`, persisted to `RunManifest.checkRuns` — that slice feeds the judge cards in TUI and web; if you add state, wire it into both.
+- Routing: verdict label → matching `outcomes[].nextStepName`. On judge failure, unknown label, or `maxRuns` cap (default 5): the single `default: true` outcome fires. Every run appends one entry to `OrchestratorState.checkRuns`, persisted to `RunManifest.checkRuns` — that slice feeds the judge cards in the TUI; if you add state, wire it into that snapshot.
 
 ### AutoScaler (`auto-scaler.ts`) — default ON
 
 - Target concurrency = memory headroom ÷ observed per-agent footprint.
   - headroom = available RAM − margin, margin = max(total × safetyMarginPercent, 512 MiB) (`auto-scaler.ts:43,146`).
   - footprint = EMA, α = 0.2, seeded 250 MiB, clamped [128, 2048] MiB (`auto-scaler.ts:32,41,15-17`). The EMA sample is (used − baseline) / activeAgents.
-- `--concurrency=N` or `--no-auto-scale` pins `manual` mode. The MEMORY GUARD runs in BOTH modes.
+- `--concurrency=N` or `--no-auto-scale` pins `manual` mode. The MEMORY GUARD runs in EVERY mode.
+- Third mode `greedy` (UI label **MAX**, `M` hotkey): `targetConcurrency()` early-returns `min(active+pending, maxAgents)` — one agent per queued task — and the guard is the sole backstop, so concurrency settles at the destroy threshold. Two non-obvious wiring spots beyond the AutoScaler: `enableGreedyMode()` MUST raise the port cap (`portAllocator.setMaxAgents(AUTO_SCALE_MAX_INSTANCES)`) like `enableAutoScale()`, and the per-tick recompute in `executeTaskPool` must gate on `getMode() === 'auto' || 'greedy'` — miss either and concurrency silently freezes at its seed/manual window. `AutoScaleStatus.enabled` is `enabled && mode === 'auto'` ("auto is DRIVING the target", NOT "scaler on") — branch UI/logic on `mode`, not `enabled`, now that a third mode exists.
 
 ### Memory guard & requeue — the load-bearing invariant
 
@@ -55,4 +56,4 @@ The marker for "this failure was a guard kill, not a real error" is the consumab
 - `src/orchestrator/index.ts`, `src/orchestrator/auto-scaler.ts`, `src/orchestrator/requeue.test.ts` (the race spec)
 - Related skills: orchestrating-git-worktrees, isolating-agent-ports, writing-tests
 
-> Facts verified against source on 2026-06-12 (line refs included above).
+> Facts verified against source on 2026-06-12 (line refs included above); greedy/MAX auto-scaling mode verified against source on 2026-06-25.

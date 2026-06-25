@@ -24,8 +24,14 @@ export interface AutoScalerConfig {
  * 'auto'   — the scaler drives the concurrency target from memory headroom.
  * 'manual' — the user pins concurrency; only the memory guard stays active
  *            (block spawns and kill the newest agent at the destroy threshold).
+ * 'greedy' — flood: target one agent per queued task (capped at maxAgents),
+ *            ignoring the headroom estimate. The memory guard (kill newest at
+ *            the destroy threshold, requeue to TODO) is the sole backstop, so
+ *            concurrency settles at ~the destroy threshold. Cooldown-damped:
+ *            after a guard kill it waits out the cooldown before re-flooding,
+ *            which avoids tight kill→respawn churn at the ceiling.
  */
-export type AutoScaleMode = 'auto' | 'manual';
+export type AutoScaleMode = 'auto' | 'manual' | 'greedy';
 
 type AutoScaleState = 'NORMAL' | 'SCALING_UP' | 'BACKING_OFF' | 'COOLDOWN' | 'DESTROYING';
 
@@ -123,6 +129,15 @@ export class AutoScaler {
       // already at the destroy threshold (spawning would kill someone else).
       return ramPercent < this.config.destroyThresholdPercent;
     }
+    if (this.mode === 'greedy') {
+      // Flood up to the destroy threshold, then let the guard reclaim. Gate on
+      // both CPU and RAM so the spawn line matches shouldDestroy()'s (CPU OR
+      // RAM ≥ threshold) — otherwise we'd respawn into a CPU-driven kill.
+      // Damped: hold off while cooling down from the last guard kill.
+      if (this.state === 'COOLDOWN') return false;
+      const { destroyThresholdPercent } = this.config;
+      return cpuPercent < destroyThresholdPercent && ramPercent < destroyThresholdPercent;
+    }
     if (this.state === 'COOLDOWN') return false;
     const { stopThresholdPercent } = this.config;
     if (cpuPercent >= stopThresholdPercent || ramPercent >= stopThresholdPercent) {
@@ -153,6 +168,16 @@ export class AutoScaler {
   targetConcurrency(): number {
     const { ramTotalBytes, ramAvailableBytes } = this.currentMetrics;
     const { safetyMarginPercent, maxAgents } = this.config;
+    if (this.mode === 'greedy') {
+      // Flood: aim for one agent per queued task (never over-provision idle
+      // slots), capped only by the hard ceiling. No headroom estimate — the
+      // memory guard is what holds the line. shouldSpawn() still gates each
+      // actual spawn at the destroy threshold.
+      const ceiling = this.pendingTaskCount > 0
+        ? Math.min(this.activeAgentCount + this.pendingTaskCount, maxAgents)
+        : maxAgents;
+      return Math.max(1, ceiling);
+    }
     const margin = Math.max(
       ramTotalBytes * (safetyMarginPercent / 100),
       MIN_SAFETY_MARGIN_BYTES,

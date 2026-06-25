@@ -22,10 +22,6 @@ WORKDIR /build
 # at build time, npm ci will skip it without failing — the Copilot backend
 # falls back to a clear runtime error and the rest of huu still works.
 COPY package.json package-lock.json .npmrc ./
-# The webui workspace (src/web/dist-static is produced from here, served by
-# `huu --web`) must be present at install time so npm resolves its deps,
-# and again at build time because `npm run build` invokes `npm run build -w webui`.
-COPY webui/package.json ./webui/
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --include=dev
 
@@ -33,7 +29,6 @@ RUN --mount=type=cache,target=/root/.npm \
 # only walks src/.
 COPY tsconfig.json ./
 COPY src ./src
-COPY webui ./webui
 RUN npm run build
 
 # Pre-compile the bind() interceptor so the runtime image doesn't need a
