@@ -7,6 +7,8 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-06-25
+
 ### Changed
 
 - **Bundled pipelines are now fully autonomous — manual file-picking removed.**
@@ -408,7 +410,8 @@ Initial public release. Available on npm as `huu-pipe`
 - `safe.directory '*'` set system-wide in the image.
 
 
-[Unreleased]: https://github.com/frederico-kluser/huu/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/frederico-kluser/huu/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/frederico-kluser/huu/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/frederico-kluser/huu/compare/v1.4.0...v2.0.0
 [1.4.0]: https://github.com/frederico-kluser/huu/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.3.0
