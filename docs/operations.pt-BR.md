@@ -17,7 +17,6 @@ FAQ, roadmap.
   - [Variantes de imagem](#variantes-de-imagem)
   - [Cookbook na imagem](#cookbook-na-imagem)
   - [Não quer Docker?](#não-quer-docker)
-- [Web UI (`huu --web`)](#web-ui-huu---web)
 - [Configuração](#configuração)
   - [Registry de API keys](#registry-de-api-keys)
   - [Variáveis de ambiente](#variáveis-de-ambiente)
@@ -220,39 +219,6 @@ Três saídas, da mais simples à mais completa:
 | **Build local** | `docker build -t huu:local .` então `HUU_IMAGE=huu:local huu run …` | **Recomendado** — reprodutível, sem registry |
 | Rodar nativo | `huu --yolo run …` (== `HUU_NO_DOCKER=1`) | Dev/teste; ⚠️ expõe `~/.ssh`/`~/.aws` ao agente |
 | Re-autenticar | `echo "$PAT" \| docker login ghcr.io -u <user> --password-stdin` | Precisa de imagens privadas (PAT com escopo `read:packages`) |
-
----
-
-## Web UI (`huu --web`)
-
-`huu --web` abre uma interface no navegador que espelha a TUI 1:1 —
-mesma FSM, mesmo orchestrator, mesmo back-end — porém com layout
-click-driven, responsivo, e atualizações em tempo real via uma única
-conexão WebSocket.
-
-```bash
-# Fase 1: --web exige --yolo (publicação de porta no Docker ainda virá).
-huu --web --yolo
-
-# Escolher porta explícita e não abrir o browser automaticamente:
-huu --web --web-port=4321 --no-open --yolo
-```
-
-| Flag | Comportamento |
-|---|---|
-| `--web` | Sobe a UI web em vez da TUI. Imprime a URL no stderr. |
-| `--web-port=<n>` | Faz bind do servidor HTTP+WS em `<n>` (padrão: porta livre aleatória). |
-| `--no-open` | Não abre o navegador padrão automaticamente. Equivalente a `HUU_WEB_NO_OPEN=1`. |
-
-**Modelo de segurança**
-
-- O servidor faz bind só em `127.0.0.1` (nunca em `0.0.0.0`) —
-  inacessível de outras máquinas.
-- Toda URL carrega um token UUID por processo (`?t=…`); o token é
-  validado em **toda** requisição HTTP e no upgrade do WebSocket. Sem
-  token, retorna `401`.
-
-Guia completo da Web UI: [`docs/WEB-UI.md`](WEB-UI.md).
 
 ---
 
@@ -622,5 +588,4 @@ Smoke tests pra releases:
 docker build -t huu:local .
 ./scripts/smoke-image.sh        # ~10s — sanidade da imagem
 ./scripts/smoke-pipeline.sh     # ~60s — pipeline end-to-end com --stub
-./scripts/smoke-web.sh          # ~5s — modo `huu --web` (port bind)
 ```

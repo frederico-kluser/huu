@@ -46,10 +46,9 @@ The TUI writes `/tmp/huu/active` (containing the cwd) on start and clears it on 
 docker build -t huu:local .
 ./scripts/smoke-image.sh      # ~10s — image sanity
 ./scripts/smoke-pipeline.sh   # ~60s — e2e pipeline with --stub
-./scripts/smoke-web.sh        # ~5s  — `huu --web` port bind
 ```
 
-All exit non-zero on failure (chainable with `&&`). There is no CI: run these when touching Docker/wrapper/web-server code and before releases. CI recipes without Docker: `docs/ci.md`.
+All exit non-zero on failure (chainable with `&&`). There is no CI: run these when touching Docker/wrapper code and before releases. CI recipes without Docker: `docs/ci.md`.
 
 ## References
 

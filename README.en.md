@@ -500,7 +500,6 @@ Full schema (timeouts, retries, conditional `check` steps,
 | **CI without Docker (GitHub Actions / GitLab)** | [`docs/ci.md`](docs/ci.md) |
 | **Architecture & layered import rules** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | **Operations (Docker, env vars, FAQ, roadmap)** | [`docs/operations.md`](docs/operations.md) |
-| **Web UI mode (`huu --web`)** | [`docs/WEB-UI.md`](docs/WEB-UI.md) |
 | **Pipeline JSON schema** | [`docs/pipeline-json-guide.md`](docs/pipeline-json-guide.md) |
 | **Port isolation internals** | [`docs/PORT-SHIM.md`](docs/PORT-SHIM.md) |
 | **Keyboard reference** | [`docs/KEYBOARD.md`](docs/KEYBOARD.md) |

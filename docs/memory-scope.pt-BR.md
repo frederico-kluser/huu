@@ -119,9 +119,6 @@ path listado.
 - **TUI** (`huu`): edite o step → campo **Scope** → tecla **M** (ou ENTER
   para ciclar) → desça para **Files** → ENTER abre um campo de texto para o
   path do `filesFrom`. O editor não salva etapa memory sem ele.
-- **Web UI** (`huu --web`): edite o step → select **Scope** → escolha
-  *memory* → aparece o input **Memory file (filesFrom)**; o seletor de
-  arquivos fica desabilitado (quem escolhe é o pipeline, não você).
 - **JSON**: os campos acima; schema completo no
   [pipeline-json-guide.md](pipeline-json-guide.md).
 - **Pipeline Assistant**: peça um fluxo descobrir-e-agir ("escaneie o repo e

@@ -27,7 +27,6 @@ determinístico ao fim de cada estágio.
 | Troubleshooting — todos os modos de falha com ação corretiva | [troubleshooting.md](troubleshooting.md) · [pt-BR](troubleshooting.pt-BR.md) |
 | CI sem Docker (`--no-docker`, `huu auto`, receitas prontas) | [ci.md](ci.md) · [pt-BR](ci.pt-BR.md) |
 | Controle do Pi Coding Agent (modelo mental, CLI, env, sessão) | [pi-coding-agent.md](pi-coding-agent.md) |
-| Modo Web UI (`huu --web`) | [WEB-UI.md](WEB-UI.md) |
 | Isolamento de portas (shim de `bind()`, internals) | [PORT-SHIM.md](PORT-SHIM.md) |
 | Referência de teclado da TUI | [KEYBOARD.md](KEYBOARD.md) |
 

@@ -11,27 +11,6 @@ import { decideReexec, reexecInDocker } from './lib/docker-reexec.js';
 import { API_KEY_REGISTRY, configFilePath } from './lib/api-key.js';
 import { preflightGitOnHost } from './lib/git-preflight.js';
 
-// Phase-1 --web gate: enforced at the TOP of the file so it fires
-// BEFORE decideReexec/reexecInDocker. The host wrapper does not yet
-// publish container ports for the web UI, so requiring --yolo keeps
-// the experience honest — the user is opting into native execution
-// on the host. Inside the container (HUU_IN_CONTAINER=1), --web is
-// allowed; that path will be wired when port-publishing lands.
-{
-  const rawArgs = process.argv.slice(2);
-  const wantsWeb = rawArgs.includes('--web');
-  const wantsYolo = rawArgs.includes('--yolo') || rawArgs.includes('--no-docker');
-  if (wantsWeb && !wantsYolo && process.env.HUU_IN_CONTAINER !== '1') {
-    process.stderr.write(
-      'huu: --web requires --yolo in Phase 1 (Docker port-publishing for the web UI is not implemented yet).\n',
-    );
-    process.stderr.write(
-      'Add --yolo to acknowledge that the agent runs natively on your host with your shell credentials. This restriction will be relaxed in a future release.\n',
-    );
-    process.exit(2);
-  }
-}
-
 const reexec = decideReexec(process.argv.slice(2), process.env);
 if (reexec.shouldReexec) {
   // Host-side git preflight: fail fast BEFORE pulling/launching docker.
@@ -78,7 +57,6 @@ import type { AppConfig, Pipeline } from './lib/types.js';
 import { installSafeTerminal } from './ui/safe-terminal.js';
 import { initDebugLogger, log as dlog } from './lib/debug-logger.js';
 import { enqueueProcessLog } from './lib/process-log-bridge.js';
-import { runWebMode } from './cli-web.js';
 import { EventEmitter } from 'node:events';
 
 // Subcommands that don't render the TUI shouldn't pay the side-effects
@@ -88,11 +66,8 @@ import { EventEmitter } from 'node:events';
 const NON_TUI_SUBCOMMANDS = new Set(['init-docker', 'status', 'prune']);
 const firstNonFlagArg = process.argv.slice(2).find((a) => !a.startsWith('-'));
 const isNonTui = firstNonFlagArg !== undefined && NON_TUI_SUBCOMMANDS.has(firstNonFlagArg);
-// Web mode owns its own debug logger (initialized in runWebMode) and has
-// no TTY raw mode to restore, so the TUI lifecycle hooks are skipped.
-const isWebMode = process.argv.slice(2).includes('--web');
 
-if (!isNonTui && !isWebMode) {
+if (!isNonTui) {
   // Init the debug logger BEFORE installSafeTerminal so the SIGINT/exit
   // handlers from both layers are recorded in order. Logger writes to
   // `<cwd>/.huu/debug-<ISO>.log` so a freeze leaves a complete trail.
@@ -169,11 +144,6 @@ Usage:
   huu --auto-scale          Deprecated: auto-scale is now the default
   huu --help                Show this help
 
-Web UI flags:
-  --web                     Launch the browser-based UI instead of the TUI (Phase 1: requires --yolo)
-  --web-port=<n>            Bind the web UI to a fixed port (default: random ephemeral)
-  --no-open                 Do not auto-open the browser (also: HUU_WEB_NO_OPEN=1)
-
 init-docker flags:
   --force                   Overwrite files that already exist
   --with-wrapper            Also write scripts/huu-docker (bash launcher)
@@ -230,7 +200,7 @@ function restoreTerminal(): void {
   // Drop the HEALTHCHECK sentinel as part of the exit dance. Cheap,
   // best-effort, and prevents stale pointers if the same /tmp survives
   // between runs (rare outside containers, but possible).
-  if (!isNonTui && !isWebMode) {
+  if (!isNonTui) {
     clearActiveRunSentinel(process.cwd());
   }
 }
@@ -362,12 +332,6 @@ async function main(): Promise<void> {
     : concurrencyArg !== undefined
       ? args.includes('--auto-scale')
       : true;
-  const useWeb = args.includes('--web');
-  const useNoOpen = args.includes('--no-open');
-  const webPortArg = args
-    .filter((a) => a.startsWith('--web-port='))
-    .map((a) => Number(a.slice('--web-port='.length)))
-    .pop();
 
   // --backend=<kind> takes precedence over --stub/--copilot aliases. Last wins
   // so the user can override an alias they pre-set somewhere.
@@ -402,11 +366,8 @@ async function main(): Promise<void> {
       a !== '--no-docker' &&
       a !== '--auto-scale' &&
       a !== '--no-auto-scale' &&
-      a !== '--web' &&
-      a !== '--no-open' &&
       !a.startsWith('--backend=') &&
-      !a.startsWith('--concurrency=') &&
-      !a.startsWith('--web-port='),
+      !a.startsWith('--concurrency='),
   );
 
   if (filtered.includes('--help') || filtered.includes('-h')) {
@@ -597,20 +558,6 @@ async function main(): Promise<void> {
     backend: lockedBackend ?? 'unspecified',
     autoStart,
   });
-
-  if (useWeb) {
-    await runWebMode({
-      cwd: process.cwd(),
-      initialPipeline,
-      autoStart,
-      backendKind: lockedBackend,
-      autoScale,
-      concurrency: concurrencyArg,
-      openBrowser: !useNoOpen,
-      portOverride: Number.isFinite(webPortArg) ? webPortArg : undefined,
-    });
-    return;
-  }
 
   // Capture stray console.* + Node `warning` events into the process log
   // bridge BEFORE Ink mounts. With patchConsole:false below, Ink stops
