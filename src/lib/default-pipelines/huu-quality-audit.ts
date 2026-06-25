@@ -20,9 +20,13 @@ import {
   knowledgeProtocol,
   persistenceCheck,
   reportJudgeCondition,
+  targetsRecon,
   KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
   KNOWLEDGE_ORDERING_NOTE,
 } from './knowledge-protocol.js';
+
+const QUALITY_TARGETS_PATH = '.huu/audits/quality-targets.json';
+const QUALITY_TARGETS_MAX_FILES = 30;
 
 export const DEFAULT_PIPELINE_FILENAME = 'huu-quality-audit.pipeline.json';
 export const DEFAULT_PIPELINE_NAME = 'huu Quality Audit';
@@ -84,7 +88,7 @@ Path: \`./.huu/audits/quality.md\`. Required structure:
 - Tools unavailable: <list with the reason>
 
 ## 2. Complexity findings
-(filled in by step 2)
+(filled in by the per-file complexity scan)
 
 ## 3. Hotspots (churn × complexity)
 (filled in by step 3)
@@ -121,11 +125,26 @@ ${KNOWLEDGE_OPTIONAL_FIELDS_NOTE}
 - DO NOT touch CI/CD config.
 - The only outputs are .huu/audits/quality.md + .huu/audits/quality-faq.json (tools are ephemeral — npx/pipx/\$HOME/.huu/bin — never devDeps).`;
 
-const STEP2_PROMPT = `You are at step 2 — per-file complexity scan of \`$file\`. Goal: compute metrics (cyclomatic, cognitive complexity, function length, parameter count, nesting depth) for \`$file\` and append findings to \`.huu/audits/quality-faq.json\`. NO code changes.
+const STEP_RECON_PROMPT = `${targetsRecon({
+  role: "huu's complexity-scan target selector",
+  purpose: 'computing complexity metrics (cyclomatic, cognitive, length, nesting) for',
+  prefer: [
+    'files with real control flow — many branches / loops / nested conditionals',
+    'large modules and orchestrators / handlers / parsers most likely to be over-complex',
+    'the hot, churny core over leaf utilities, constants, types, or config',
+  ],
+  hintGuide: 'note why this file may score high (long functions, deep nesting, many branches, big switch)',
+  maxFiles: QUALITY_TARGETS_MAX_FILES,
+})}
 
-=== STEP 0 — SCOPE NOTE + SKIP RULE ===
-This step spawns one agent per selected file. The pipeline caps total nodes at \`maxNodeExecutions: 50\`. If you are auditing a larger repo, narrow your file selection with Smart Select in the file picker.
+=== BEFORE YOU START ===
+Read \`./.huu/audits/quality.md\` section 1 (the scaffold step recorded which complexity tools are available, and the detected stack) — lean toward the files those tools can actually measure. This step writes ONLY the target list; the per-file complexity scan that follows does the actual metric computation.`;
 
+const STEP2_PROMPT = `You are the per-file complexity scan for ONE file: \`$file\`. You are one of many agents running in parallel; your whole job is this single file. Goal: compute metrics (cyclomatic, cognitive complexity, function length, parameter count, nesting depth) for \`$file\` and append findings to \`.huu/audits/quality-faq.json\`. NO code changes.
+
+The recon step chose this file deliberately and left you a lead — start there: $hint
+
+=== STEP 0 — SKIP RULE ===
 SKIP IMMEDIATELY (no findings, no FAQ append) if \`$file\` matches: \`node_modules/\`, \`dist/\`, \`build/\`, \`out/\`, \`coverage/\`, \`.git/\`, \`vendor/\`, \`target/\`, \`__pycache__/\`, \`*.generated.*\`, \`*.min.js\`, \`*.min.css\`, \`*.d.ts\`, \`*.lock\`, \`*.snap\`.
 
 === STEP 1 — Read inputs ===
@@ -378,6 +397,8 @@ Numbers MUST come from re-reading \`.huu/audits/quality-faq.json\` and the repor
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
+    description:
+      'Sonar-style report: cyclomatic + cognitive complexity, size metrics, churn×complexity hotspots, duplication and dead code, rolled into a hotspot-weighted score. Report-only.',
     maxRetries: 1,
     maxNodeExecutions: 50,
     steps: [
@@ -390,42 +411,54 @@ export function getDefaultPipeline(): Pipeline {
       },
       {
         type: 'work',
-        name: '2. Per-file complexity scan: $file',
-        prompt: STEP2_PROMPT,
+        name: '2. Select complexity-scan targets',
+        prompt: STEP_RECON_PROMPT,
         files: [],
-        scope: 'per-file',
+        scope: 'project',
+        // huu appends the huu-memory-v1 MEMORY CONTRACT (path + format + cap).
+        produces: QUALITY_TARGETS_PATH,
       },
       {
         type: 'work',
-        name: '3. Hotspot analysis (churn × complexity)',
+        name: '3. Per-file complexity scan: $file',
+        prompt: STEP2_PROMPT,
+        files: [],
+        // Autonomous file set from the recon step — no per-file picker.
+        scope: 'memory',
+        filesFrom: QUALITY_TARGETS_PATH,
+        maxFiles: QUALITY_TARGETS_MAX_FILES,
+      },
+      {
+        type: 'work',
+        name: '4. Hotspot analysis (churn × complexity)',
         prompt: STEP3_PROMPT,
         files: [],
         scope: 'project',
       },
       {
         type: 'work',
-        name: '4. Project-wide duplication scan',
+        name: '5. Project-wide duplication scan',
         prompt: STEP4_PROMPT,
         files: [],
         scope: 'project',
       },
       {
         type: 'work',
-        name: '5. Dead-code detection',
+        name: '6. Dead-code detection',
         prompt: STEP5_PROMPT,
         files: [],
         scope: 'project',
       },
       {
         type: 'work',
-        name: '6. Composite score + recommendations',
+        name: '7. Composite score + recommendations',
         prompt: STEP6_PROMPT,
         files: [],
         scope: 'project',
       },
       {
         type: 'check',
-        name: '7. Validate report',
+        name: '8. Validate report',
         condition: reportJudgeCondition({
           reportPath: '.huu/audits/quality.md',
           faqPath: '.huu/audits/quality-faq.json',
@@ -444,13 +477,13 @@ export function getDefaultPipeline(): Pipeline {
         }),
         maxRuns: 2,
         outcomes: [
-          { label: 'approved', nextStepName: '8. Finalize report', default: true },
-          { label: 'rework', nextStepName: '6. Composite score + recommendations' },
+          { label: 'approved', nextStepName: '9. Finalize report', default: true },
+          { label: 'rework', nextStepName: '7. Composite score + recommendations' },
         ],
       },
       {
         type: 'work',
-        name: '8. Finalize report',
+        name: '9. Finalize report',
         prompt: STEP8_PROMPT,
         files: [],
         scope: 'project',

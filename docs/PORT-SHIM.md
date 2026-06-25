@@ -17,7 +17,7 @@ outros nove falham com `EADDRINUSE`. Worktrees isolam o filesystem; não
 isolam a rede.
 
 Resolvemos sem Docker, sem network namespaces, sem editar o código do
-cliente: uma biblioteca C de ~150 linhas é pré-carregada em cada processo
+cliente: uma biblioteca C de ~170 linhas é pré-carregada em cada processo
 spawnado pelo agente. Ela substitui o símbolo `bind` da libc, lê uma tabela
 de remap em `HUU_PORT_REMAP`, e troca a porta antes de delegar à `bind`
 real. O código do cliente continua dizendo `3000`; o kernel ouve `55110`.
@@ -368,7 +368,7 @@ vai colidir com convenções existentes.
 
 ### 4.3 Camada 3 — `bind()` interceptor (núcleo)
 
-**Arquivo.** [`native/port-shim/port-shim.c`](../native/port-shim/port-shim.c) (~150 linhas).
+**Arquivo.** [`native/port-shim/port-shim.c`](../native/port-shim/port-shim.c) (~170 linhas).
 Compilado para `.huu-cache/native-shim/<os>-<arch>/huu-port-shim.{so,dylib}`.
 
 Compilação:
@@ -719,16 +719,16 @@ Descartado por:
 
 - Disponibilidade: requer kernel ≥ 5.7 e configuração de unprivileged
   BPF (default off em muitas distros).
-- Complexidade: muito mais código que a `.so` de 150 linhas.
+- Complexidade: muito mais código que a `.so` de ~170 linhas.
 - macOS: zero suporte.
 
 ### 7.7 Por que C e não Rust/Zig?
 
-C: 150 linhas, compila com `cc`, dependências zero. Toolchain
+C: ~170 linhas, compila com `cc`, dependências zero. Toolchain
 universal — qualquer host Unix tem `cc` ou pode instalar em 30s.
 
 Rust: Cargo, edição 2021, `extern "C"` boilerplate, ~30s primeira
-compilação, mais ~100MB de toolchain. Para um shim de 150 linhas,
+compilação, mais ~100MB de toolchain. Para um shim de ~170 linhas,
 custo desproporcional.
 
 Zig: similar ao Rust em termos de toolchain, sem ganho técnico

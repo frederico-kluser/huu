@@ -1,7 +1,6 @@
 import type { AgentFactory } from '../types.js';
 import { piAgentFactory } from './pi/factory.js';
 import { stubAgentFactory } from './stub/factory.js';
-import { copilotAgentFactory } from './copilot/factory.js';
 import { azureAgentFactory } from './azure/factory.js';
 
 /**
@@ -12,10 +11,15 @@ import { azureAgentFactory } from './azure/factory.js';
  * The kind names match user-facing CLI flags (`--backend=<kind>`) and
  * the `AppConfig.backend` field, so changing one means changing both
  * intentionally.
+ *
+ * Only `pi` is surfaced as a backend in the UI; the provider underneath it
+ * (OpenRouter or Azure AI Foundry) is chosen via `LlmProvider` and mapped to
+ * the concrete dispatch kind by `src/lib/providers.ts` (`azure` is the kind
+ * that serves the Azure provider). `stub` is the no-LLM smoke-test backend.
  */
-export type AgentBackendKind = 'pi' | 'copilot' | 'azure' | 'stub';
+export type AgentBackendKind = 'pi' | 'azure' | 'stub';
 
-export const ALL_BACKENDS: ReadonlyArray<AgentBackendKind> = ['pi', 'copilot', 'azure', 'stub'];
+export const ALL_BACKENDS: ReadonlyArray<AgentBackendKind> = ['pi', 'azure', 'stub'];
 
 export interface BackendBundle {
   /** Factory used for regular per-task agents. */
@@ -64,32 +68,24 @@ export function selectBackend(kind: AgentBackendKind): BackendBundle {
       return {
         agentFactory: piAgentFactory,
         conflictResolverFactory: piAgentFactory,
-        label: 'Pi (OpenRouter)',
+        label: 'Pi · OpenRouter',
         description: 'Default. Uses @mariozechner/pi-coding-agent over OpenRouter; pay-per-token.',
         requiresApiKey: true,
         apiKeySpecName: 'openrouter',
-        userSelectable: true,
-      };
-    case 'copilot':
-      return {
-        agentFactory: copilotAgentFactory,
-        conflictResolverFactory: copilotAgentFactory,
-        label: 'GitHub Copilot',
-        description: 'Uses @github/copilot-sdk; subscription-based with premium-request quota.',
-        requiresApiKey: true,
-        apiKeySpecName: 'copilot',
         userSelectable: true,
       };
     case 'azure':
       return {
         agentFactory: azureAgentFactory,
         conflictResolverFactory: azureAgentFactory,
-        label: 'Azure AI Foundry',
+        label: 'Pi · Azure AI Foundry',
         description:
           'Azure AI Foundry endpoint (any deployment). Requires API key + endpoint URL from the portal.',
         requiresApiKey: true,
         apiKeySpecName: 'azureApiKey',
-        userSelectable: true,
+        // Reached via the provider selector (LlmProvider='azure'), not as a
+        // standalone backend entry — the UI shows providers, not backends.
+        userSelectable: false,
       };
     case 'stub':
       return {
@@ -117,9 +113,6 @@ export function selectBackend(kind: AgentBackendKind): BackendBundle {
 export function parseBackendKind(s: string): AgentBackendKind | null {
   const lower = s.trim().toLowerCase();
   if (lower === 'pi' || lower === 'real' || lower === 'openrouter') return 'pi';
-  if (lower === 'copilot' || lower === 'gh-copilot' || lower === 'github-copilot') {
-    return 'copilot';
-  }
   if (lower === 'azure' || lower === 'azure-openai' || lower === 'azure-foundry') return 'azure';
   if (lower === 'stub' || lower === 'fake' || lower === 'mock') return 'stub';
   return null;

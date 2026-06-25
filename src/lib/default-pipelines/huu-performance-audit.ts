@@ -16,9 +16,13 @@ import {
   knowledgeProtocol,
   persistenceCheck,
   reportJudgeCondition,
+  targetsRecon,
   KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
   KNOWLEDGE_ORDERING_NOTE,
 } from './knowledge-protocol.js';
+
+const PERF_TARGETS_PATH = '.huu/audits/performance-targets.json';
+const PERF_TARGETS_MAX_FILES = 30;
 
 export const DEFAULT_PIPELINE_FILENAME = 'huu-performance-audit.pipeline.json';
 export const DEFAULT_PIPELINE_NAME = 'huu Performance Audit';
@@ -83,7 +87,7 @@ Path: \`./.huu/audits/performance.md\`. Required structure:
 - Unavailable profilers: <list with reason>
 
 ## 2. Static hotspot scan
-(filled in by step 2 — per-file)
+(filled in by the per-file hotspot scan)
 
 ## 3. Frontend metrics (Core Web Vitals)
 (filled in by step 3 — only if classification = frontend or mixed)
@@ -112,11 +116,27 @@ ${KNOWLEDGE_OPTIONAL_FIELDS_NOTE}
 - DO NOT run benchmarks against external services or production.
 - Tool installs only — no other changes outside the new artifacts.`;
 
-const STEP2_PROMPT = `You are at step 2 — static hotspot scan for \`$file\`. Goal: identify likely performance hotspots in this single file and append findings to \`.huu/audits/performance-faq.json\`. NO code changes.
+const STEP_RECON_PROMPT = `${targetsRecon({
+  role: "huu's performance-hotspot target selector",
+  purpose: 'scanning for static performance hotspots in',
+  prefer: [
+    'hot paths — request/event handlers, loops over collections, DB/ORM access, data transforms, serialization',
+    'files doing synchronous I/O, heavy computation, or unbounded concurrency',
+    'render-critical frontend components and anything on the startup / request critical path',
+  ],
+  hintGuide:
+    'name the suspected hotspot (N+1 query, nested loop / big-O, sync I/O, memory leak, render-blocking)',
+  maxFiles: PERF_TARGETS_MAX_FILES,
+})}
 
-=== STEP 0 — SCOPE NOTE + SKIP RULE ===
-This step spawns one agent per selected file. The pipeline caps total nodes at \`maxNodeExecutions: 50\` (~45 files on a 5-step pipeline). If you are auditing a larger repo, narrow your file selection with Smart Select in the file picker.
+=== BEFORE YOU START ===
+Read \`./.huu/audits/performance.md\` section 1 (the scaffold step recorded the project classification — frontend / backend / library / CLI / mobile / mixed). Lean toward the files that classification makes risky (frontend → render-critical components; backend → request handlers and DB access). This step writes ONLY the target list; the per-file hotspot scan that follows does the actual finding.`;
 
+const STEP2_PROMPT = `You are the static hotspot scan for ONE file: \`$file\`. You are one of many agents running in parallel; your whole job is this single file. Goal: identify likely performance hotspots in this single file and append findings to \`.huu/audits/performance-faq.json\`. NO code changes.
+
+The recon step chose this file deliberately and left you a lead — start there: $hint
+
+=== STEP 0 — SKIP RULE ===
 SKIP IMMEDIATELY (no findings, no FAQ append) if \`$file\` matches: \`node_modules/\`, \`dist/\`, \`build/\`, \`out/\`, \`coverage/\`, \`.git/\`, \`vendor/\`, \`target/\`, \`__pycache__/\`, \`*.generated.*\`, \`*.min.js\`, \`*.min.css\`, \`*.d.ts\`, \`*.lock\`, \`*.snap\`.
 
 === STEP 1 — Read inputs ===
@@ -349,6 +369,8 @@ Numbers MUST come from re-reading \`.huu/audits/performance-faq.json\` and the r
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
+    description:
+      'Static hotspot scan (N+1, big-O, sync I/O, memory leaks, unbounded concurrency, missing caching), a Core Web Vitals scorecard and a USE-method checklist. Report-only.',
     maxRetries: 1,
     maxNodeExecutions: 50,
     steps: [
@@ -361,35 +383,47 @@ export function getDefaultPipeline(): Pipeline {
       },
       {
         type: 'work',
-        name: '2. Static hotspot scan: $file',
-        prompt: STEP2_PROMPT,
+        name: '2. Select hotspot-scan targets',
+        prompt: STEP_RECON_PROMPT,
         files: [],
-        scope: 'per-file',
+        scope: 'project',
+        // huu appends the huu-memory-v1 MEMORY CONTRACT (path + format + cap).
+        produces: PERF_TARGETS_PATH,
       },
       {
         type: 'work',
-        name: '3. Frontend Core Web Vitals',
+        name: '3. Static hotspot scan: $file',
+        prompt: STEP2_PROMPT,
+        files: [],
+        // Autonomous file set from the recon step — no per-file picker.
+        scope: 'memory',
+        filesFrom: PERF_TARGETS_PATH,
+        maxFiles: PERF_TARGETS_MAX_FILES,
+      },
+      {
+        type: 'work',
+        name: '4. Frontend Core Web Vitals',
         prompt: STEP3_PROMPT,
         files: [],
         scope: 'project',
       },
       {
         type: 'work',
-        name: '4. USE checklist + bundle weight',
+        name: '5. USE checklist + bundle weight',
         prompt: STEP4_PROMPT,
         files: [],
         scope: 'project',
       },
       {
         type: 'work',
-        name: '5. Composite score + recommendations',
+        name: '6. Composite score + recommendations',
         prompt: STEP5_PROMPT,
         files: [],
         scope: 'project',
       },
       {
         type: 'check',
-        name: '6. Validate report',
+        name: '7. Validate report',
         condition: reportJudgeCondition({
           reportPath: '.huu/audits/performance.md',
           faqPath: '.huu/audits/performance-faq.json',
@@ -407,13 +441,13 @@ export function getDefaultPipeline(): Pipeline {
         }),
         maxRuns: 2,
         outcomes: [
-          { label: 'approved', nextStepName: '7. Finalize report', default: true },
-          { label: 'rework', nextStepName: '5. Composite score + recommendations' },
+          { label: 'approved', nextStepName: '8. Finalize report', default: true },
+          { label: 'rework', nextStepName: '6. Composite score + recommendations' },
         ],
       },
       {
         type: 'work',
-        name: '7. Finalize report',
+        name: '8. Finalize report',
         prompt: STEP7_PROMPT,
         files: [],
         scope: 'project',

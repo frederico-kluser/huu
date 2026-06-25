@@ -17,9 +17,13 @@ import type { Pipeline } from '../types.js';
 import {
   persistenceCheck,
   reportJudgeCondition,
+  targetsRecon,
   KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
   KNOWLEDGE_ORDERING_NOTE,
 } from './knowledge-protocol.js';
+
+const REFACTOR_TARGETS_PATH = '.huu/audits/refactor-targets.json';
+const REFACTOR_TARGETS_MAX_FILES = 30;
 
 export const DEFAULT_PIPELINE_FILENAME = 'huu-refactor.pipeline.json';
 export const DEFAULT_PIPELINE_NAME = 'huu Refactor Plan';
@@ -66,7 +70,7 @@ Path: \`./.huu/audits/refactor.md\`.
 - Tests passing: <N> / <total>
 - Baseline run timestamp: <ISO 8601>
 
-## 2. Code smells catalog (per-file)
+## 2. Code smells catalog (per-file fan-out)
 (filled in by step 2)
 
 ## 3. Top 5 targets
@@ -92,11 +96,27 @@ ${KNOWLEDGE_OPTIONAL_FIELDS_NOTE}
 - DO NOT modify production source code in this pipeline.
 - The deliverable is a plan, not a refactor. Safe refactoring requires step-by-step human review.`;
 
-const STEP2_PROMPT = `You are at step 2 — code-smells catalog for \`$file\`. Goal: identify Fowler-classic code smells in this ONE file and append findings to \`.huu/audits/refactor-faq.json\`. NO code changes.
+const STEP_RECON_PROMPT = `${targetsRecon({
+  role: "huu's code-smell catalog target selector",
+  purpose: 'cataloging Fowler-classic code smells in',
+  prefer: [
+    'long files / god modules and large classes mixing many responsibilities',
+    'files with duplicated logic, deep nesting, long parameter lists, or feature envy',
+    'the churny core (frequently changed, high-traffic) over leaf utilities or generated code',
+  ],
+  hintGuide:
+    'name the suspected smells here (long function, large class, duplicated code, feature envy, long parameter list)',
+  maxFiles: REFACTOR_TARGETS_MAX_FILES,
+})}
 
-=== STEP 0 — SCOPE NOTE + SKIP RULE ===
-This step spawns one agent per selected file. The pipeline caps total nodes at \`maxNodeExecutions: 50\` (~45 files on a 5-step pipeline). If you are auditing a larger repo, narrow your file selection with Smart Select in the file picker.
+=== BEFORE YOU START ===
+Read \`./.huu/audits/refactor.md\` section 1 — the first step captured the test baseline there. This step writes ONLY the target list; the per-file code-smells catalog that follows does the actual finding.`;
 
+const STEP2_PROMPT = `You are the code-smells catalog for ONE file: \`$file\`. You are one of many agents running in parallel; your whole job is this single file. Goal: identify Fowler-classic code smells in this ONE file and append findings to \`.huu/audits/refactor-faq.json\`. NO code changes.
+
+The recon step chose this file deliberately and left you a lead — start there: $hint
+
+=== STEP 0 — SKIP RULE ===
 SKIP IMMEDIATELY (no findings, no FAQ append) if \`$file\` matches: \`node_modules/\`, \`dist/\`, \`build/\`, \`out/\`, \`coverage/\`, \`.git/\`, \`vendor/\`, \`target/\`, \`__pycache__/\`, \`*.generated.*\`, \`*.min.js\`, \`*.min.css\`, \`*.d.ts\`, \`*.lock\`, \`*.snap\`.
 
 === Smell catalog (Fowler) ===
@@ -307,6 +327,8 @@ Numbers MUST come from re-reading \`.huu/audits/refactor-faq.json\` and the repo
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
+    description:
+      'Characterization-test baseline → per-file smell catalog → top-5 ranking by smell-weight × churn → a static Mikado graph per target → Fowler-grounded recommendations. Report-only.',
     maxRetries: 1,
     maxNodeExecutions: 50,
     steps: [
@@ -319,41 +341,53 @@ export function getDefaultPipeline(): Pipeline {
       },
       {
         type: 'work',
-        name: '2. Code-smells catalog: $file',
-        prompt: STEP2_PROMPT,
+        name: '2. Select smell-catalog targets',
+        prompt: STEP_RECON_PROMPT,
         files: [],
-        scope: 'per-file',
+        scope: 'project',
+        // huu appends the huu-memory-v1 MEMORY CONTRACT (path + format + cap).
+        produces: REFACTOR_TARGETS_PATH,
       },
       {
         type: 'work',
-        name: '3. Pick top 5 refactoring targets',
+        name: '3. Code-smells catalog: $file',
+        prompt: STEP2_PROMPT,
+        files: [],
+        // Autonomous file set from the recon step — no per-file picker.
+        scope: 'memory',
+        filesFrom: REFACTOR_TARGETS_PATH,
+        maxFiles: REFACTOR_TARGETS_MAX_FILES,
+      },
+      {
+        type: 'work',
+        name: '4. Pick top 5 refactoring targets',
         prompt: STEP3_PROMPT,
         files: [],
         scope: 'project',
       },
       {
         type: 'work',
-        name: '4. Build Mikado graph per target',
+        name: '5. Build Mikado graph per target',
         prompt: STEP4_PROMPT,
         files: [],
         scope: 'project',
       },
       {
         type: 'work',
-        name: '5. Final Fowler recommendation list',
+        name: '6. Final Fowler recommendation list',
         prompt: STEP5_PROMPT,
         files: [],
         scope: 'project',
       },
       {
         type: 'check',
-        name: '6. Validate report',
+        name: '7. Validate report',
         condition: reportJudgeCondition({
           reportPath: '.huu/audits/refactor.md',
           faqPath: '.huu/audits/refactor-faq.json',
           requiredSections: [
             '1. Baseline',
-            '2. Code smells catalog (per-file)',
+            '2. Code smells catalog (per-file fan-out)',
             '3. Top 5 targets',
             '4. Mikado graph',
             '5. Recommended Fowler refactorings',
@@ -364,13 +398,13 @@ export function getDefaultPipeline(): Pipeline {
         }),
         maxRuns: 2,
         outcomes: [
-          { label: 'approved', nextStepName: '7. Finalize report', default: true },
-          { label: 'rework', nextStepName: '5. Final Fowler recommendation list' },
+          { label: 'approved', nextStepName: '8. Finalize report', default: true },
+          { label: 'rework', nextStepName: '6. Final Fowler recommendation list' },
         ],
       },
       {
         type: 'work',
-        name: '7. Finalize report',
+        name: '8. Finalize report',
         prompt: STEP7_PROMPT,
         files: [],
         scope: 'project',

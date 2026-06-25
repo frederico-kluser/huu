@@ -1,0 +1,203 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { execSync } from 'node:child_process';
+import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { AddressInfo } from 'node:net';
+import type { Server } from 'node:http';
+import { createWebServer } from './server.js';
+import type { WebRunManager } from './run-manager.js';
+import type { Pipeline } from '../lib/types.js';
+
+function setupRepo(dir: string): void {
+  execSync('git init --initial-branch=main', { cwd: dir, encoding: 'utf8' });
+  execSync('git config user.email "t@t.com" && git config user.name "t"', {
+    cwd: dir,
+    shell: '/bin/bash',
+  });
+  writeFileSync(join(dir, 'README.md'), '# init\n', 'utf8');
+  writeFileSync(join(dir, '.gitignore'), '.huu-worktrees/\n.huu/\n', 'utf8');
+  execSync('git add -A && git commit -m init', { cwd: dir, encoding: 'utf8' });
+}
+
+const PIPELINE: Pipeline = {
+  name: 'web-test-pipe',
+  steps: [
+    {
+      type: 'work',
+      name: 'Write note',
+      prompt: 'Write a short note file.',
+      files: [],
+      scope: 'project',
+    },
+  ],
+};
+
+async function listenEphemeral(server: Server): Promise<string> {
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return `http://127.0.0.1:${port}`;
+}
+
+describe('web server', () => {
+  let repo: string;
+  let server: Server;
+  let manager: WebRunManager;
+  let base: string;
+
+  beforeEach(async () => {
+    repo = mkdtempSync(join(tmpdir(), 'huu-web-'));
+    setupRepo(repo);
+    ({ server, manager } = createWebServer({
+      cwd: repo,
+      defaultAutoScale: true,
+      initialPipeline: PIPELINE,
+    }));
+    base = await listenEphemeral(server);
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it('serves the SPA shell at / with the right content type', async () => {
+    const res = await fetch(base + '/');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
+    const html = await res.text();
+    expect(html).toContain('huu');
+    expect(html).toContain('app.js');
+  });
+
+  it('serves static client assets', async () => {
+    for (const [path, ct] of [
+      ['/app.js', 'javascript'],
+      ['/styles.css', 'css'],
+      ['/favicon.svg', 'svg'],
+    ] as const) {
+      const res = await fetch(base + path);
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get('content-type'), path).toContain(ct);
+    }
+  });
+
+  it('answers /api/health', async () => {
+    const res = await fetch(base + '/api/health');
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.ok).toBe(true);
+    expect(json.name).toBe('huu');
+  });
+
+  it('bootstrap lists backends, defaults, and the preloaded pipeline', async () => {
+    const json = await (await fetch(base + '/api/bootstrap')).json();
+    expect(Array.isArray(json.backends)).toBe(true);
+    expect(json.backends.some((b: { id: string }) => b.id === 'pi')).toBe(true);
+    expect(json.backends.some((b: { id: string }) => b.id === 'stub')).toBe(true);
+    expect(json.initialPipeline).toBe('web-test-pipe');
+    expect(json.run.phase).toBe('idle');
+  });
+
+  it('lists models for a backend and 400s on an unknown one', async () => {
+    const ok = await fetch(base + '/api/models?backend=pi');
+    expect(ok.status).toBe(200);
+    expect(Array.isArray((await ok.json()).models)).toBe(true);
+
+    const bad = await fetch(base + '/api/models?backend=nope');
+    expect(bad.status).toBe(400);
+  });
+
+  it('reports stub needs no key', async () => {
+    const json = await (await fetch(base + '/api/keys?backend=stub')).json();
+    expect(json.ok).toBe(true);
+    expect(json.missing).toEqual([]);
+  });
+
+  it('opens an SSE stream and replays a frame immediately', async () => {
+    const res = await fetch(base + '/events');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+    const reader = res.body!.getReader();
+    const { value } = await reader.read();
+    const text = new TextDecoder().decode(value);
+    expect(text).toContain('data:');
+    await reader.cancel();
+  });
+
+  it('drives a full stub run from POST /api/run to done', async () => {
+    const res = await fetch(base + '/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pipelineName: 'web-test-pipe',
+        backend: 'stub',
+        modelId: 'stub',
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+
+    // Poll the manager until the run settles (or time out).
+    const deadline = Date.now() + 25_000;
+    let phase = manager.getSnapshot().phase;
+    while ((phase === 'running' || phase === 'idle') && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 150));
+      phase = manager.getSnapshot().phase;
+    }
+    const snap = manager.getSnapshot();
+    expect(phase, snap.errorReason ?? 'no error reason').toBe('done');
+    expect(snap.state).not.toBeNull();
+  }, 30_000);
+
+  it('rejects a second run while one is active (409)', async () => {
+    // Kick a run, then immediately try again before it settles.
+    await fetch(base + '/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pipelineName: 'web-test-pipe', backend: 'stub', modelId: 'stub' }),
+    });
+    if (manager.isActive()) {
+      const second = await fetch(base + '/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pipelineName: 'web-test-pipe', backend: 'stub', modelId: 'stub' }),
+      });
+      expect(second.status).toBe(409);
+    }
+    manager.abort();
+  });
+
+  it('404s unknown API routes and missing assets', async () => {
+    expect((await fetch(base + '/api/nope')).status).toBe(404);
+    expect((await fetch(base + '/does-not-exist.js')).status).toBe(404);
+  });
+});
+
+describe('web server token gate', () => {
+  let repo: string;
+  let server: Server;
+  let base: string;
+
+  beforeEach(async () => {
+    repo = mkdtempSync(join(tmpdir(), 'huu-web-tok-'));
+    setupRepo(repo);
+    ({ server } = createWebServer({ cwd: repo, defaultAutoScale: true, token: 'sekret' }));
+    base = await listenEphemeral(server);
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it('serves the shell without a token but gates /api', async () => {
+    expect((await fetch(base + '/')).status).toBe(200);
+    expect((await fetch(base + '/api/bootstrap')).status).toBe(401);
+    expect((await fetch(base + '/api/bootstrap?token=sekret')).status).toBe(200);
+    const viaHeader = await fetch(base + '/api/bootstrap', {
+      headers: { 'x-huu-token': 'sekret' },
+    });
+    expect(viaHeader.status).toBe(200);
+  });
+});

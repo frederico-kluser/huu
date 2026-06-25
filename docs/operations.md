@@ -54,8 +54,11 @@ wrapper pulls it automatically:
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...
-huu run example.pipeline.json     # auto-uses ghcr.io/frederico-kluser/huu:latest
+huu run pipelines/huu-test-suite.pipeline.json     # auto-uses ghcr.io/frederico-kluser/huu:latest
 ```
+
+> huu writes the bundled default pipelines into `./pipelines/` on first
+> launch — pick one on the welcome screen or pass its path.
 
 Behind the scenes the wrapper builds the equivalent of:
 
@@ -65,7 +68,7 @@ docker run --rm -it \
   --user "$(id -u):$(id -g)" \
   -v "$PWD:$PWD" -w "$PWD" \
   -e OPENROUTER_API_KEY \
-  ghcr.io/frederico-kluser/huu:latest run example.pipeline.json
+  ghcr.io/frederico-kluser/huu:latest run pipelines/huu-test-suite.pipeline.json
 ```
 
 > **Why mount `$PWD:$PWD` (same path on both sides)?** git stores
@@ -142,7 +145,7 @@ during the run — that's the trade-off for the speedup.
 ```bash
 # uses the bundled compose.yaml (builds the image on first run)
 export OPENROUTER_API_KEY=sk-or-...
-docker compose run --rm huu run example.pipeline.json
+docker compose run --rm huu run pipelines/huu-test-suite.pipeline.json
 ```
 
 **Convenience wrapper:** drop [`scripts/huu-docker`](../scripts/huu-docker)
@@ -251,6 +254,15 @@ Resolution order for every spec (first non-empty wins):
 Any key that resolves to empty AND is `required: true` causes the TUI
 to pop the prompt on the way to the first run. Stub mode (`--stub`)
 short-circuits the requirement check.
+
+Because step 3 (env) outranks step 4 (the saved store), a stale
+`OPENROUTER_API_KEY` exported from a shell profile silently shadows a key
+you saved in the Options screen — the classic "valid key still 401s".
+`resolveApiKeyWithSource` reports which tier won, so the abort message names
+the real source and, when an env var overrides the saved key, tells you to
+unset it. The **web UI sidesteps this entirely**: a key pasted in the
+browser is validated against the provider first and kept only in that tab's
+`sessionStorage` — sent with each run, never written to `~/.config`.
 
 ### Environment variables
 
@@ -404,7 +416,7 @@ is fine — burn tokens "fixing" a non-bug.
    `PORT`, `HUU_PORT_HTTP`, `HUU_PORT_DB`, `HUU_PORT_WS`,
    `DATABASE_URL`, and seven extras. Frameworks that respect dotenv
    (Next, Vite, Nest, Astro, dotenv-flow, …) load it automatically.
-3. **Native `bind()` interceptor.** A ~150-line C shared library at
+3. **Native `bind()` interceptor.** A ~170-line C shared library at
    `native/port-shim/port-shim.c`. The orchestrator compiles it with
    `cc` and preloads it via `LD_PRELOAD` (Linux) or
    `DYLD_INSERT_LIBRARIES` (macOS). Customer code is never modified —

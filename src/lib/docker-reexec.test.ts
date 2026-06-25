@@ -304,6 +304,38 @@ describe('buildDockerArgv', () => {
     // Must appear BEFORE the image name so docker parses it as a run flag.
     expect(idx).toBeLessThan(argv.indexOf(baseOpts.image));
   });
+
+  it('omits -p when no publishPorts (CLI/TUI path)', () => {
+    const argv = buildDockerArgv(baseOpts);
+    expect(argv).not.toContain('-p');
+  });
+
+  it('publishes the web-UI port host→container (-p <n>:<n>) before the image', () => {
+    const argv = buildDockerArgv({ ...baseOpts, publishPorts: [4888] });
+    const idx = argv.indexOf('-p');
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(argv[idx + 1]).toBe('4888:4888');
+    // Run flags must precede the image so docker parses -p as a run flag.
+    expect(idx).toBeLessThan(argv.indexOf(baseOpts.image));
+  });
+
+  it('publishes multiple ports when asked', () => {
+    const argv = buildDockerArgv({ ...baseOpts, publishPorts: [4888, 5000] });
+    const pairs = argv.filter((_, i) => argv[i - 1] === '-p');
+    expect(pairs).toEqual(['4888:4888', '5000:5000']);
+  });
+
+  it('forwards HUU_WEB_PORT by name so the container binds the published port', () => {
+    const saved = process.env.HUU_WEB_PORT;
+    try {
+      process.env.HUU_WEB_PORT = '4888';
+      const argv = buildDockerArgv({ ...baseOpts, publishPorts: [4888] });
+      expect(argv).toContain('HUU_WEB_PORT');
+    } finally {
+      if (saved === undefined) delete process.env.HUU_WEB_PORT;
+      else process.env.HUU_WEB_PORT = saved;
+    }
+  });
 });
 
 describe('pickDockerNetwork', () => {

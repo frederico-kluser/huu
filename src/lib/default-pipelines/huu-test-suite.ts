@@ -2,6 +2,13 @@
 // here; `lib/pipeline-bootstrap.ts` materializes it into the user's repo at
 // `pipelines/huu-test-suite.pipeline.json` on first run.
 //
+// FULLY AUTONOMOUS (v2): the file set is chosen by a recon step, not by the
+// user. Step 2 selects the most test-worthy files and writes a huu-memory-v1
+// list (`huu-tests-targets.json`); step 3 fans out one agent per entry via
+// `scope: 'memory'`, each entry's hint riding `$hint`. No `per-file` picker,
+// no "user-selected" stage. A CheckStep gate then loops cleanup until the
+// suite is green (the never-rewind integration worktree accumulates commits).
+//
 // Test-quality grounding baked into the prompts:
 // - Assertions that survive mutation testing (test behavior, not
 //   implementation; no change-detector tests): Google Testing Blog +
@@ -16,9 +23,18 @@
 // hot path of `App` mount, before any side effects.
 
 import type { Pipeline } from '../types.js';
+import { targetsRecon } from './knowledge-protocol.js';
 
 export const DEFAULT_PIPELINE_FILENAME = 'huu-test-suite.pipeline.json';
 export const DEFAULT_PIPELINE_NAME = 'huu Test Suite';
+
+// Repo-root memory file: the recon step (2) writes it, the fan-out step (3)
+// consumes it, the finalize step (6) deletes it. Kept at the root (next to
+// huu-tests.md / huu-tests-faq.json) so it survives the stage merge without a
+// `.gitignore` adjustment — Test Suite's side-effect surface stays "root docs
+// + README badge".
+const TARGETS_PATH = 'huu-tests-targets.json';
+const TARGETS_MAX_FILES = 12;
 
 const STEP1_PROMPT = `You are huu's test-bootstrap agent. Goal: leave the project with a working test runner, write \`huu-tests.md\` at the repo root with operational instructions, and initialize \`huu-tests-faq.json\` as an incremental knowledge base.
 
@@ -105,7 +121,7 @@ Line coverage only proves code RAN, not that assertions would catch a bug. Mutat
 ## Accumulated FAQ
 See \`huu-tests-faq.json\` — incremental knowledge base populated by the next pipeline steps. Schema per item:
 \`\`\`json
-{ "summary": "string up to 256 chars", "knowledge": "string up to 5000 chars", "path": "<file the lesson came from — optional>", "category": "<free-form tag, e.g. 'selection', 'mocking', 'run-summary' — optional>" }
+{ "summary": "string up to 256 chars", "knowledge": "string up to 5000 chars", "path": "<file the lesson came from — optional>", "category": "<free-form tag, e.g. 'mocking', 'run-summary' — optional>" }
 \`\`\`
 \`path\` and \`category\` are optional and additive — entries carrying only \`summary\` + \`knowledge\` (from older runs) remain valid.
 
@@ -116,83 +132,40 @@ If it EXISTS and is a valid JSON array: DO NOT touch it (preserve accumulated kn
 If it exists but is corrupted / not an array: replace with \`[]\` and mention it in the commit message.
 
 === HARD RULES ===
-- DO NOT write tests for project files in this step — that's the job of steps 2 and 3.
+- DO NOT write tests for project files in this step — that's the job of step 3.
 - DO NOT modify production source beyond what's needed to get the test infra up.
 - The ONLY new output of this step is huu-tests.md + huu-tests-faq.json + minimal runner config.
 - Ensure the "run the full test suite" command documented in huu-tests.md exits 0 (even if it's just the sample).`;
 
-const STEP2_PROMPT = `You are at step 2 — write tests for 3 representative project files. Goal: by the end, those 3 files have green tests and the lessons learned are distilled into \`huu-tests-faq.json\`.
+const STEP2_PROMPT = `${targetsRecon({
+  role: "huu's test-target selector (step 2 of the test pipeline)",
+  purpose: 'writing focused unit tests for',
+  prefer: [
+    'modules with real logic — transforms, validations, calculations, parsers, state machines, request/event handlers',
+    'files with a clear public surface (several exported functions / classes / components)',
+    'diversity across the run — a pure util, an I/O-abstractable module, a stateful/orchestrator file',
+    'files a prior run did NOT already cover — read `huu-tests-faq.json` first and skip paths already recorded there',
+  ],
+  hintGuide:
+    'name the public surface and the 1-2 behaviors / edge cases / error paths most worth asserting (what would a subtle bug break here?)',
+  maxFiles: TARGETS_MAX_FILES,
+})}
 
-=== STEP 1 — REQUIRED: read huu-tests.md at the root BEFORE anything else ===
-It tells you:
-- Which runner to use.
-- Exact "run a SINGLE test file" command.
-- Test path/name convention.
-- Project helpers/mocks/setup.
+=== BEFORE YOU START ===
+Read \`huu-tests.md\` (written by step 1) for the project's test conventions, and \`huu-tests-faq.json\` for what prior runs already tested. If \`huu-tests.md\` is missing, abort: step 1 is a prerequisite.`;
 
-If huu-tests.md does NOT exist: abort with a clear error. Step 1 of the pipeline is a prerequisite.
+const STEP3_PROMPT = `You are at step 3 — write tests for ONE source file: \`$file\`. Goal: \`$file\` ends with green tests AND the learning is propagated to \`huu-tests-faq.json\`. You are one of many agents running in parallel; your whole job is this single file.
 
-=== STEP 2 — Read huu-tests-faq.json (may be empty) ===
-It's an array of \`{ summary, knowledge }\`. Use the content as additional context.
+The recon step (2) chose this file deliberately and left you a lead — start from it: $hint
 
-=== STEP 3 — Pick 3 representative files ===
-Selection heuristic (do NOT pick trivial files):
-- Prefer modules with real business logic (transforms, validations, calculations, parsers, handlers).
-- Prefer files with a clear public surface (multiple exported functions/methods).
-- Cover DIVERSITY: try to take 3 distinct areas (e.g.: 1 pure util, 1 with abstractable I/O, 1 stateful/orchestrator).
-- IGNORE: purely declarative files (constants, types), entry points (index/main), generated files (dist/, build/, *.generated.*), config (eslint/prettier/tsconfig), files < 30 useful lines.
-- Check the FAQ first: if a previous run left a \`category: "selection"\` entry, prefer files NOT already covered by it.
-
-List the 3 picks before you start writing (leave them in the log), then APPEND one entry to \`huu-tests-faq.json\` recording them:
-\`\`\`json
-{ "summary": "Step 2 selection: <fileA>, <fileB>, <fileC>", "knowledge": "<1-2 sentences per pick: why it was representative>", "category": "selection" }
-\`\`\`
-This tells step 3's parallel agents (and future runs) which files already have fresh tests.
-
-=== STEP 4 — For EACH of the 3 files ===
-a) Identify the public surface (exports, classes, functions, components).
-b) Create/update the corresponding test file following the huu-tests.md convention.
-c) Write tests covering:
-   - Main behavior of each public export.
-   - At least 1 edge case (empty, null/undefined/None, limit).
-   - At least 1 error path (expected exception).
-d) ASSERTION QUALITY (what makes a test survive mutation testing):
-   - Test BEHAVIOR through the public surface, not implementation details — the test should not need to change when internals are refactored.
-   - One logical behavior per test, with a name that states the expectation.
-   - Assert concrete VALUES/effects, never "no throw" alone, never snapshot-the-output-and-call-it-done (a change-detector test passes for correct AND incorrect code — negative value).
-   - Mental check per assertion: "if the logic under test were subtly wrong (off-by-one, inverted condition), would this assertion fail?"
-e) MOCK external dependencies (network, fs, db, time). Follow the Determinism rules section of huu-tests.md — no sleeps, frozen clocks, fixed seeds, isolated state.
-f) Run the test file with the single-file command from huu-tests.md.
-
-=== STEP 5 — Error recovery + feed the FAQ ===
-For EACH failure found:
-1. Investigate the cause. Categorize:
-   - Real bug in production code -> FIX the code (minimal change, no refactor).
-   - Poorly written test (wrong assertion, weak mock, wrong expectation) -> FIX the test.
-   - Missing infra/helper (e.g.: needs fake timer, fixture) -> ADD it in the test file or in a local helper; NEVER touch huu-tests.md or the global config without absolute necessity.
-2. Re-run. Repeat until green OR up to 3 attempts per test (after that, mark the function with a clear TODO — step 4 will delete functions that keep failing).
-3. If you resolved it: APPEND a new object to huu-tests-faq.json:
-   \`\`\`json
-   { "summary": "<up to 256 chars: describes the problem in 1 sentence>", "knowledge": "<up to 5000 chars: context, symptom, root cause, applied fix, pattern to reuse in next tests>" }
-   \`\`\`
-   - Re-read huu-tests-faq.json before the append (preserve the prior array).
-   - DO NOT duplicate entries: if a semantically equivalent summary already exists, skip.
-
-=== STEP 6 — Final validation ===
-- Run the 3 test files (single-file each). Ideally all green.
-- huu-tests-faq.json is still a valid JSON array (\`jq . huu-tests-faq.json\` or equivalent).
-- Did NOT touch huu-tests.md.
-- Did NOT touch files outside the 3 picks + their tests + (eventual) shared test helper.`;
-
-const STEP3_PROMPT = `You are at step 3 — write tests for ONE source file: \`$file\`. Goal: \`$file\` ends with green tests AND the learning is propagated to \`huu-tests-faq.json\`.
+=== STEP 0 — SKIP RULE ===
+SKIP IMMEDIATELY (no tests, no FAQ append) if \`$file\` matches: \`node_modules/\`, \`dist/\`, \`build/\`, \`out/\`, \`coverage/\`, \`.git/\`, \`vendor/\`, \`target/\`, \`__pycache__/\`, \`*.generated.*\`, \`*.min.js\`, \`*.min.css\`, \`*.d.ts\`, \`*.lock\`, \`*.snap\`.
 
 === STEP 1 — REQUIRED: read BEFORE any action ===
 a) \`huu-tests.md\` at the root (runner, commands, conventions).
-b) \`huu-tests-faq.json\` at the root (array of \`{ summary, knowledge, path?, category? }\` — knowledge base accumulated by the previous steps; use it to avoid repeating errors other agents already solved).
+b) \`huu-tests-faq.json\` at the root (array of \`{ summary, knowledge, path?, category? }\` — knowledge base accumulated by parallel agents; use it to avoid repeating errors others already solved).
 
 If either is missing: abort with a clear error. Steps 1 and 2 of the pipeline are prerequisites.
-
-If the FAQ has a \`category: "selection"\` entry listing \`$file\`: step 2 already wrote fresh tests for it. Do NOT start from scratch — run the existing tests and only ADD missing edge/error cases (Case A below).
 
 === STEP 2 — Locate / create the test file for $file ===
 Follow the convention documented in huu-tests.md. Examples:
@@ -226,11 +199,11 @@ For each failure:
 2. Re-run. Up to 3 attempts per test; after that, leave it (step 4 cleans up).
 3. If resolved: APPEND to \`huu-tests-faq.json\`:
    - Re-read the file (other parallel agents may have appended).
-   - Add \`{ "summary": "<=256>", "knowledge": "<=5000>" }\`.
+   - Add \`{ "summary": "<=256>", "knowledge": "<=5000>", "path": "$file" }\`.
    - DO NOT duplicate: if a semantically equivalent summary exists, skip.
 
 === HARD REQUIREMENTS ===
-- Single-file command for \`$file\`'s test MUST exit 0 (except for functions you couldn't fix in 3 attempts — leave them failing with a TODO; step 4 deletes).
+- Single-file command for \`$file\`'s test MUST exit 0 (except for functions you couldn't fix in 3 attempts — leave them failing with a TODO; the cleanup step deletes them).
 - ZERO tests with .skip / xit / @Disabled / @pytest.mark.skip without justification.
 - DO NOT touch huu-tests.md.
 - DO NOT touch global config (package.json scripts, pyproject.toml [tool.X], pom.xml, build.gradle) without absolute necessity.
@@ -241,13 +214,11 @@ For each failure:
 
 This WHOLE pipeline is about UNIT tests. No integration, no e2e.`;
 
-const STEP4_PROMPT = `You are the final agent — step 4. Goal: leave the test suite 100% green by DELETING only the test functions/blocks that keep failing, collect coverage, and update the badge in README.md.
+const STEP4_PROMPT = `You are at the cleanup step. Goal: leave the test suite green by DELETING only the test functions/blocks that keep failing, collect coverage, and update the badge in README.md. (A judge gate runs after you and may send you back here to remove more.)
 
 === STEP 1 — Read huu-tests.md AND huu-tests-faq.json at the root ===
-From \`huu-tests.md\`, grab the exact commands for:
-- Running ALL tests.
-- Measuring coverage.
-From \`huu-tests-faq.json\`, read the accumulated lessons: recurring failure causes recorded by steps 2-3 tell you WHICH failing tests are likely flaky-by-construction (delete candidates) versus signal of a real bug worth one more look before deleting.
+From \`huu-tests.md\`, grab the exact commands for running ALL tests and measuring coverage.
+From \`huu-tests-faq.json\`, read the accumulated lessons: recurring failure causes recorded by step 3 tell you WHICH failing tests are likely flaky-by-construction (delete candidates) versus signal of a real bug worth one more look before deleting.
 
 === STEP 2 — Run the full suite and identify failures ===
 Execute the "run all tests" command from huu-tests.md.
@@ -268,11 +239,11 @@ By language/runner, what constitutes "a block":
 
 If a test file ends up with NO test functions after removals:
 - DO NOT delete the file.
-- Leave a comment at the top: \`// huu: every test in this file was removed by step 4 of the default pipeline. Rewrite them before re-running.\` (use the language's comment style).
+- Leave a comment at the top: \`// huu: every test in this file was removed by the cleanup step of the default pipeline. Rewrite them before re-running.\` (use the language's comment style).
 
 === STEP 4 — Re-run and confirm green ===
 Run "run all tests" again. It must exit 0 (or runner equivalent).
-If failures remain, repeat STEPS 2-3 until green OR up to 3 iterations; if iteration 3 still has failures, log it and proceed (the badge will reflect reality).
+If failures remain, repeat STEPS 2-3 until green OR up to 3 iterations; if iteration 3 still has failures, log it and proceed (the judge gate will catch it).
 
 === STEP 5 — Collect coverage ===
 Use the command documented in huu-tests.md. Extract the LINE coverage percentage — it's the standard metric for the badge.
@@ -295,25 +266,46 @@ Idempotent insertion rule:
 2. Otherwise, insert the line right after the first H1 heading (\`# Title\`), with one blank line before and after.
 3. If there is no H1, insert it at the absolute top of the file.
 
-DO NOT touch other parts of the README. DO NOT touch huu-tests.md or production code. The only huu-tests-faq.json change allowed in this whole step is the single run-summary append from STEP 7.
+DO NOT touch other parts of the README. DO NOT touch huu-tests.md or production code.`;
 
-=== STEP 7 — Close the knowledge loop + final verification ===
+const CHECK5_CONDITION = `You are the test-suite quality gate. Run the project's FULL test suite using the "run all tests" command documented in \`huu-tests.md\`, from the integration worktree.
+
+The suite is HEALTHY when ALL hold:
+1. the run exits 0 (no failing tests remain — the cleanup step should have deleted any that could not be fixed).
+2. \`README.md\` contains exactly ONE line matching \`img.shields.io/badge/tests-\`.
+3. \`huu-tests-faq.json\` parses as a JSON array.
+
+This is run $runs of this gate. If every clause holds, answer "approved". Otherwise answer "rework" and name precisely which test files/blocks still fail (\`<file>::<name>\`) so the cleanup step can remove them. (If $runs >= 2, lean "approved" unless the suite command itself errors out — a stubborn single block is not worth another loop.)`;
+
+const STEP6_PROMPT = `You are the final agent. The judge gate approved the suite. Goal: final hygiene + close the knowledge loop. No new tests here.
+
+=== STEP 1 — Final verification ===
+- Run the "run all tests" command from \`huu-tests.md\` once more — it must exit 0.
+- Confirm \`README.md\` contains exactly ONE \`img.shields.io/badge/tests-\` line.
+- Confirm no test FILE was deleted (only internal blocks may have been removed).
+
+=== STEP 2 — Remove the transient target list ===
+Delete \`./huu-tests-targets.json\` — it was the step-2 -> step-3 handoff and its job is done. Leave \`huu-tests.md\` and \`huu-tests-faq.json\` in place (they accumulate across runs).
+
+=== STEP 3 — Close the knowledge loop ===
 APPEND one final entry to \`huu-tests-faq.json\` (re-read it first; preserve the array):
 \`\`\`json
-{ "summary": "Run summary: coverage <XX>%, <N> failing blocks deleted", "knowledge": "<which blocks were deleted and why, what the recurring failure causes were, what the next run should do differently>", "category": "run-summary" }
+{ "summary": "Run summary: coverage <XX>%, <N> failing blocks deleted, <M> files tested", "knowledge": "<which blocks were deleted and why, the recurring failure causes, what the next run should do differently>", "category": "run-summary" }
 \`\`\`
+Then confirm \`huu-tests-faq.json\` is still a valid JSON array (your run-summary append is its ONLY change in this step).
 
-Then verify:
-- "run all tests" still passes.
-- README.md contains exactly ONE line with \`img.shields.io/badge/tests-\`.
-- No test file was DELETED (only internal blocks).
-- huu-tests-faq.json is still a valid JSON array (your run-summary append must be its ONLY change in this step).`;
+=== HARD RULES ===
+- DO NOT modify production code or huu-tests.md.
+- DO NOT add or delete tests — verify and stamp only.`;
 
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
+    description:
+      'Detects your stack, sets up a runner, then autonomously picks the most test-worthy files and writes mutation-surviving, non-flaky unit tests in parallel — looping until the suite is green. Adds a coverage badge.',
     _default: true,
     maxRetries: 1,
+    maxNodeExecutions: 50,
     steps: [
       {
         type: 'work',
@@ -324,22 +316,47 @@ export function getDefaultPipeline(): Pipeline {
       },
       {
         type: 'work',
-        name: '2. Test 3 representative files',
+        name: '2. Select test targets',
         prompt: STEP2_PROMPT,
+        files: [],
+        scope: 'project',
+        // huu appends the huu-memory-v1 MEMORY CONTRACT (exact path + format +
+        // cap) at run time — step 3 fans out over this list. No user picking.
+        produces: TARGETS_PATH,
+      },
+      {
+        type: 'work',
+        name: '3. Write tests for $file',
+        prompt: STEP3_PROMPT,
+        files: [],
+        // The recon step (2) writes the target list — autonomous, no picker.
+        scope: 'memory',
+        filesFrom: TARGETS_PATH,
+        maxFiles: TARGETS_MAX_FILES,
+      },
+      {
+        type: 'work',
+        name: '4. Cleanup + coverage badge',
+        prompt: STEP4_PROMPT,
         files: [],
         scope: 'project',
       },
       {
-        type: 'work',
-        name: '3. Test $file (user-selected)',
-        prompt: STEP3_PROMPT,
-        files: [],
-        scope: 'per-file',
+        type: 'check',
+        name: '5. Suite green?',
+        condition: CHECK5_CONDITION,
+        maxRuns: 2,
+        outcomes: [
+          // Default is the FORWARD path: a judge failure or the stub backend
+          // moves on to finalize instead of looping until maxRuns.
+          { label: 'approved', nextStepName: '6. Finalize', default: true },
+          { label: 'rework', nextStepName: '4. Cleanup + coverage badge' },
+        ],
       },
       {
         type: 'work',
-        name: '4. Final cleanup + coverage badge',
-        prompt: STEP4_PROMPT,
+        name: '6. Finalize',
+        prompt: STEP6_PROMPT,
         files: [],
         scope: 'project',
       },

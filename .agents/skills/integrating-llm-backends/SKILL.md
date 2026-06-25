@@ -37,6 +37,12 @@ Note: azure IS a real backend (`backends/azure/factory.ts`, `docs/azure-backend.
 
 Per-backend specs live in `src/lib/api-key-registry.ts` (envVar / envFileVar / secretMountPath per key). The Docker wrapper forwards every registry envVar/envFileVar into the container and mounts secret files — add a new key spec there and the wrapper picks it up without edits.
 
+**Source-aware resolution (the "valid key still 401s" trap).** `resolveApiKey` delegates to `resolveApiKeyWithSource(spec) → { value, source, shadowsStored }`. `source` is which tier won (`secret-mount`/`env-file`/`env`/`stored`/`none`); `shadowsStored` is true when a higher tier won AND a *different* non-empty key sits in the store — i.e. an env var (step 3, often a stale `OPENROUTER_API_KEY` from a shell profile or a sourced `~/.secrets`) silently overrides what the user saved in the Options screen (step 4). Build user-facing remediation with `keyRemedyHint(spec, res)` — it names the actual source instead of the misleading "update it in Options" (a no-op against an env var). The orchestrator's 401 probe path and the docker-reexec host loop both use these; never re-hardcode the old blanket message. Diagnose mismatches by comparing `checkOpenRouterReachable` against a raw `curl https://openrouter.ai/api/v1/auth/key` — same endpoint, so curl-200 + huu-401 means key MISMATCH, not a bad key.
+
+### Web UI key flow is browser-only (never disk)
+
+`src/web/` does NOT use the TUI's save-to-disk path. The browser validates a pasted key first (`POST /api/keys/validate` → `validateKeyValue` in `api-data.ts`: openrouter→`checkOpenRouterReachable`, azureApiKey→`checkAzureReachable`, else `unverifiable`), keeps a `valid`/`unverifiable` value only in `sessionStorage('huu.key.<spec>')`, and sends it as `apiKey` in `POST /api/run`. `WebRunManager.start` prefers `params.apiKey` over `resolveApiKey` and NEVER calls `saveApiKey`. `BackendInfo.apiKeySpecName` (from `bundle.apiKeySpecName`) lets the browser look up its per-backend session key. The legacy disk-saving `POST /api/keys` endpoint stays for CLI reuse only.
+
 ### Models
 
 - Thinking-capable detection is a modelId-prefix heuristic (anthropic/claude*, deepseek/deepseek-r1*, openai/o1*, google/gemini-2.5*, z-ai/glm-z1*) — extend the list when a new reasoning family appears, don't special-case call sites.
@@ -56,4 +62,4 @@ Per-backend specs live in `src/lib/api-key-registry.ts` (envVar / envFileVar / s
 - `src/orchestrator/backends/registry.ts`, `src/lib/api-key.ts`, `src/lib/api-key-registry.ts`, `docs/azure-backend.md` (pt-BR), `docs/pi-coding-agent.md`
 - Related skills: working-on-orchestrator, running-in-docker (secret mounts)
 
-> Facts verified against source on 2026-06-12.
+> Facts verified against source on 2026-06-12; API-key source-awareness (`resolveApiKeyWithSource`/`keyRemedyHint`) + the web browser-only key flow verified and added 2026-06-25.

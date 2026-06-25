@@ -24,6 +24,7 @@ determinístico ao fim de cada estágio.
 | Arquitetura em camadas e regras de import | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Schema JSON do pipeline (referência completa) | [pipeline-json-guide.md](pipeline-json-guide.md) |
 | Scope `memory` — fan-out dirigido por arquivo de memória (`huu-memory-v1`, `$hint`) | [memory-scope.md](memory-scope.md) · [pt-BR](memory-scope.pt-BR.md) |
+| Playbook de prompting cross-LLM aplicado aos prompts de step | [prompting-playbook.md](prompting-playbook.md) · [pt-BR](prompting-playbook.pt-BR.md) |
 | Troubleshooting — todos os modos de falha com ação corretiva | [troubleshooting.md](troubleshooting.md) · [pt-BR](troubleshooting.pt-BR.md) |
 | CI sem Docker (`--no-docker`, `huu auto`, receitas prontas) | [ci.md](ci.md) · [pt-BR](ci.pt-BR.md) |
 | Controle do Pi Coding Agent (modelo mental, CLI, env, sessão) | [pi-coding-agent.md](pi-coding-agent.md) |

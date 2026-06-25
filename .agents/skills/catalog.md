@@ -18,6 +18,7 @@
 - [running-in-docker](running-in-docker/SKILL.md) `knowledge` — decideReexec bypass order, cidfile/prune, image/network/secrets, health sentinel, smoke suite; for wrapper/container/CI work.
 - [writing-tests](writing-tests/SKILL.md) `knowledge` — vitest colocated, real git in temp dirs, stub factories, regression-tests-as-spec; load before touching any test, and include in any chain that changes runtime code.
 - [writing-project-docs](writing-project-docs/SKILL.md) `knowledge` — pt-BR/EN twin files, docs/ layout, Keep-a-Changelog, identity framing; for any markdown work.
+- [authoring-agent-prompts](authoring-agent-prompts/SKILL.md) `knowledge` — cross-LLM step-prompt techniques (atomic ops, output contract, $file/$hint injection, mechanical forward-default judges, lean pi prompts); for writing/sharpening any step prompt, judge condition or memory recon prompt.
 
 ## Task skills (end with `<evolution>`)
 

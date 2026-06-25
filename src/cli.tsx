@@ -7,9 +7,32 @@
 // running `huu` in a host shell should be indistinguishable from
 // running it inside the container — the only thing the user notices
 // is a slightly slower first invocation while the image pulls.
+import { resolve as resolvePath } from 'node:path';
+import { existsSync, statSync } from 'node:fs';
 import { decideReexec, reexecInDocker } from './lib/docker-reexec.js';
 import { API_KEY_REGISTRY, configFilePath } from './lib/api-key.js';
 import { preflightGitOnHost } from './lib/git-preflight.js';
+// Pure, dependency-light: safe to load on the wrapper path without pulling
+// in React/Ink (which we deliberately avoid until after the re-exec gate).
+import { decideInterfaceMode, resolveWebPort } from './web/interface-mode.js';
+
+// `--dir=<path>` chooses WHERE to run — the default is the current directory.
+// Honor it at the very top (before the Docker gate) so every downstream
+// consumer — the container mount, the host git preflight, the web/headless
+// working dir and the TUI repo root — sees the chosen directory through
+// `process.cwd()`. Runtime folder-picking (web/TUI) threads a per-run cwd
+// instead; this flag only moves the process baseline.
+{
+  const dirArg = process.argv.slice(2).find((a) => a.startsWith('--dir='));
+  if (dirArg) {
+    const target = resolvePath(dirArg.slice('--dir='.length));
+    if (!existsSync(target) || !statSync(target).isDirectory()) {
+      process.stderr.write(`huu: --dir=${target}: not a directory\n`);
+      process.exit(1);
+    }
+    process.chdir(target);
+  }
+}
 
 const reexec = decideReexec(process.argv.slice(2), process.env);
 if (reexec.shouldReexec) {
@@ -22,12 +45,27 @@ if (reexec.shouldReexec) {
     process.stderr.write(pre.message);
     process.exit(1);
   }
+  // Web is the default front-end. When the run will land in the container,
+  // publish the web port so the host browser reaches the in-container
+  // server, and pin HUU_WEB_PORT so both sides agree on the number.
+  const webMode = decideInterfaceMode(process.argv.slice(2), process.env) === 'web';
+  const webPort = resolveWebPort(process.argv.slice(2), process.env);
+  if (webMode) {
+    process.env.HUU_WEB_PORT = String(webPort);
+    process.stderr.write(
+      `\nhuu: launching the web UI inside Docker — open ` +
+        `\x1b[1mhttp://localhost:${webPort}\x1b[0m once the container is up ` +
+        `(a few seconds on first run, longer while the image pulls).\n` +
+        `     Prefer the terminal UI? Run \x1b[1mhuu --cli\x1b[0m.\n\n`,
+    );
+  }
   // Top-level await is fine here: tsconfig targets ES2022 / ESNext
   // module, both of which support it. The await blocks the rest of the
   // module from evaluating, so none of the React/Ink imports below
   // ever load when we're going to re-exec.
   const code = await reexecInDocker(process.argv.slice(2), {
     extraMounts: pre.extraGitMounts,
+    publishPorts: webMode ? [webPort] : [],
   });
   process.exit(code);
 }
@@ -53,10 +91,12 @@ import {
   ALL_BACKENDS,
   type AgentBackendKind,
 } from './orchestrator/backends/registry.js';
-import type { AppConfig, Pipeline } from './lib/types.js';
+import { parseProvider, providerToBackend } from './lib/providers.js';
+import type { AppConfig, Pipeline, LlmProvider } from './lib/types.js';
 import { installSafeTerminal } from './ui/safe-terminal.js';
 import { initDebugLogger, log as dlog } from './lib/debug-logger.js';
 import { enqueueProcessLog } from './lib/process-log-bridge.js';
+import { startWebServer } from './web/serve.js';
 import { EventEmitter } from 'node:events';
 
 // Subcommands that don't render the TUI shouldn't pay the side-effects
@@ -126,19 +166,24 @@ function printUsage(): void {
   console.log(`huu — Humans Underwrite Undertakings · guided pipeline execution TUI with kanban
 
 Usage:
-  huu                       Open the TUI at the welcome screen
-  huu run <pipeline.json>   Load pipeline and jump to the model picker
+  huu                       Open the web UI (default) — dashboard in your browser
+  huu --cli                 Open the terminal UI (Ink TUI) instead of the web UI
+  huu run <pipeline.json>   Preload a pipeline (web UI, or TUI model picker with --cli)
   huu auto <p.json> --config <c.json>
                             Headless run — no TUI. Config JSON supplies
                             model, backend, per-step file selection.
   huu init-docker [...]     Scaffold compose.huu.yaml into the current repo
   huu status [...]          Inspect the latest run via .huu/debug-*.log
   huu prune [...]           List/kill orphan huu containers + stale cidfiles
-  huu --backend=<kind>      Pick agent backend: pi (default), copilot, azure, stub
-  huu --copilot             Alias for --backend=copilot
+  huu --dir=<path>          Run in this directory instead of the current one (default: cwd)
+  huu --provider=<name>     Pick the LLM provider for pi: openrouter (default), azure
+  huu --backend=<kind>      Advanced: pick dispatch backend pi (default), azure, stub
   huu --stub                Alias for --backend=stub (no real LLM)
   huu --yolo                Skip Docker, run native on the host (agent sees your shell creds)
   huu --no-docker           Alias for --yolo / HUU_NO_DOCKER=1 — neutral spelling for CI runners
+  huu --cli                 Use the terminal UI instead of the default web UI
+  huu --web                 Force the web UI (overrides HUU_CLI=1)
+  huu --port=<n>            Web UI port (default 4888; or HUU_WEB_PORT)
   huu --concurrency=<n>     Pin manual concurrency at n (disables memory-based auto-scale)
   huu --no-auto-scale       Disable memory-based auto-scale (on by default; guard stays on)
   huu --auto-scale          Deprecated: auto-scale is now the default
@@ -162,6 +207,10 @@ prune flags:
 
 Environment:
 ${envLines}
+  HUU_WEB_PORT                       Web UI port (default 4888). Same as --port=<n>.
+  HUU_WEB_HOST                       Web UI bind address (default 0.0.0.0; set 127.0.0.1 for localhost-only).
+  HUU_WEB_TOKEN                      Require this shared secret (?token=…) for the web UI's data + actions.
+  HUU_CLI                            Set to 1 to default to the terminal UI (same as --cli).
 
 Persisted globally at: ${configFilePath()}
 (written when you accept "Save globally" in the TUI prompt; mode 0600).
@@ -315,7 +364,6 @@ function installLogCaptures(): void {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const useStub = args.includes('--stub');
-  const useCopilot = args.includes('--copilot');
   const useYolo = args.includes('--yolo') || args.includes('--no-docker');
   const concurrencyArg = args
     .filter((a) => a.startsWith('--concurrency='))
@@ -333,7 +381,22 @@ async function main(): Promise<void> {
       ? args.includes('--auto-scale')
       : true;
 
-  // --backend=<kind> takes precedence over --stub/--copilot aliases. Last wins
+  // --provider=<name> picks the LLM provider for pi (openrouter | azure).
+  const providerArg = args
+    .filter((a) => a.startsWith('--provider='))
+    .map((a) => a.slice('--provider='.length))
+    .pop();
+  let providerFromCli: LlmProvider | null = null;
+  if (providerArg !== undefined) {
+    const parsed = parseProvider(providerArg);
+    if (!parsed) {
+      console.error(`huu: --provider=${providerArg}: unknown provider. Valid: openrouter, azure`);
+      process.exit(1);
+    }
+    providerFromCli = parsed;
+  }
+
+  // --backend=<kind> takes precedence over --provider/--stub aliases. Last wins
   // so the user can override an alias they pre-set somewhere.
   const backendArg = args
     .filter((a) => a.startsWith('--backend='))
@@ -350,8 +413,8 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     backendKindFromCli = parsed;
-  } else if (useCopilot) {
-    backendKindFromCli = 'copilot';
+  } else if (providerFromCli) {
+    backendKindFromCli = providerToBackend(providerFromCli);
   } else if (useStub) {
     backendKindFromCli = 'stub';
   }
@@ -361,13 +424,18 @@ async function main(): Promise<void> {
   const filtered = args.filter(
     (a) =>
       a !== '--stub' &&
-      a !== '--copilot' &&
       a !== '--yolo' &&
       a !== '--no-docker' &&
       a !== '--auto-scale' &&
       a !== '--no-auto-scale' &&
+      a !== '--cli' &&
+      a !== '--tui' &&
+      a !== '--web' &&
       !a.startsWith('--backend=') &&
-      !a.startsWith('--concurrency='),
+      !a.startsWith('--provider=') &&
+      !a.startsWith('--dir=') &&
+      !a.startsWith('--concurrency=') &&
+      !a.startsWith('--port='),
   );
 
   if (filtered.includes('--help') || filtered.includes('-h')) {
@@ -471,23 +539,24 @@ async function main(): Promise<void> {
       }
     }
 
-    const bundle = selectBackend(runConfig.backend);
+    // The `provider` field (when set) is the source of truth and overrides
+    // `backend`: openrouter → pi, azure → azure. Falls back to `backend`
+    // for configs written before provider selection existed.
+    const effectiveBackend: AgentBackendKind = runConfig.provider
+      ? providerToBackend(runConfig.provider)
+      : runConfig.backend;
+    const bundle = selectBackend(effectiveBackend);
     let apiKey = '';
     let endpoint: string | undefined;
     if (bundle.requiresApiKey) {
-      const specName =
-        runConfig.backend === 'copilot'
-          ? 'copilot'
-          : runConfig.backend === 'azure'
-            ? 'azureApiKey'
-            : 'openrouter';
+      const specName = effectiveBackend === 'azure' ? 'azureApiKey' : 'openrouter';
       const spec = findSpec(specName);
       if (spec) apiKey = resolveApiKey(spec);
       if (!apiKey) {
         console.error(
-          `huu auto: ${runConfig.backend} backend requires an API key but ` +
-            `${spec?.envVar ?? specName} is not set. Either export the env ` +
-            'var, mount a secret at ' +
+          `huu auto: the ${effectiveBackend === 'azure' ? 'Azure AI Foundry' : 'OpenRouter'} ` +
+            `provider requires an API key but ${spec?.envVar ?? specName} is not set. ` +
+            'Either export the env var, mount a secret at ' +
             (spec?.secretMountPath ?? '/run/secrets/<key>') +
             ', or persist it via the TUI first.',
         );
@@ -495,12 +564,12 @@ async function main(): Promise<void> {
       }
 
       // Azure also requires an endpoint URL.
-      if (runConfig.backend === 'azure') {
+      if (effectiveBackend === 'azure') {
         const endpointSpec = findSpec('azureEndpoint');
         if (endpointSpec) endpoint = resolveApiKey(endpointSpec) || undefined;
         if (!endpoint) {
           console.error(
-            'huu auto: azure backend requires an endpoint URL but ' +
+            'huu auto: the Azure AI Foundry provider requires an endpoint URL but ' +
               'AZURE_OPENAI_BASE_URL is not set. Export it or persist it via the TUI first.',
           );
           process.exit(1);
@@ -511,14 +580,15 @@ async function main(): Promise<void> {
     const appConfig: AppConfig = {
       apiKey: apiKey || 'stub',
       modelId: runConfig.modelId,
-      backend: runConfig.backend,
+      backend: effectiveBackend,
+      provider: runConfig.provider ?? (effectiveBackend === 'azure' ? 'azure' : 'openrouter'),
       endpoint,
     };
 
     const code = await runHeadless({
       pipeline: mergedPipeline,
       config: appConfig,
-      cwd: process.cwd(),
+      cwd: runConfig.workingDirectory ? resolvePath(runConfig.workingDirectory) : process.cwd(),
       agentFactory: bundle.agentFactory,
       conflictResolverFactory: bundle.conflictResolverFactory,
       concurrency: runConfig.concurrency,
@@ -550,21 +620,45 @@ async function main(): Promise<void> {
   // screen so the choice is explicit before launch (avoids the foot-gun
   // where someone runs `huu run` and silently burns OpenRouter quota).
   const lockedBackend = backendKindFromCli ?? undefined;
+
+  // Front-end fork: the BROWSER UI is the default; `--cli`/`--tui` (or
+  // HUU_CLI=1) keep the Ink TUI. Both drive the same Orchestrator — the
+  // only difference is the face the user sees. Decided AFTER the git +
+  // subcommand gates so `huu auto/status/init-docker/--help` are unaffected.
+  const interfaceMode = decideInterfaceMode(args, process.env);
+
+  // Capture stray console.* + Node `warning` events into the process log
+  // bridge. For the TUI (patchConsole:false below) this stops stray writes
+  // from corrupting the kanban; for the web UI it keeps the launching
+  // terminal clean and feeds those lines into the run's log stream.
+  installLogCaptures();
+
+  if (interfaceMode === 'web') {
+    dlog('lifecycle', 'web_start', {
+      backend: lockedBackend ?? 'unspecified',
+      hasInitialPipeline: Boolean(initialPipeline),
+    });
+    await startWebServer({
+      cwd: process.cwd(),
+      args,
+      env: process.env,
+      lockedBackend,
+      initialPipeline,
+      defaultAutoScale: autoScale,
+      defaultConcurrency: concurrencyArg,
+    });
+    dlog('lifecycle', 'web_server_closed');
+    return;
+  }
+
   const initialBundle = selectBackend(lockedBackend ?? 'pi');
 
   dlog('lifecycle', 'render_start', {
     useStub,
-    useCopilot,
+    provider: providerFromCli ?? 'unspecified',
     backend: lockedBackend ?? 'unspecified',
     autoStart,
   });
-
-  // Capture stray console.* + Node `warning` events into the process log
-  // bridge BEFORE Ink mounts. With patchConsole:false below, Ink stops
-  // intercepting console.* — left alone, those would corrupt the rendered
-  // frame. With the bridge, they land in LogArea (and .huu/debug-*.log)
-  // instead of bleeding above the kanban.
-  installLogCaptures();
 
   const { waitUntilExit } = render(
     <App

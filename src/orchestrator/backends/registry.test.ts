@@ -4,36 +4,46 @@ import {
   parseBackendKind,
   selectBackend,
 } from './registry.js';
+import {
+  PROVIDERS,
+  providerToBackend,
+  backendToProvider,
+  parseProvider,
+} from '../../lib/providers.js';
 
 describe('backend registry', () => {
   describe('ALL_BACKENDS', () => {
-    it('lists exactly pi, copilot, azure, stub', () => {
-      expect([...ALL_BACKENDS].sort()).toEqual(['azure', 'copilot', 'pi', 'stub']);
+    it('lists exactly pi, azure, stub (copilot removed)', () => {
+      expect([...ALL_BACKENDS].sort()).toEqual(['azure', 'pi', 'stub']);
+    });
+
+    it('no longer contains copilot', () => {
+      expect([...ALL_BACKENDS]).not.toContain('copilot');
     });
   });
 
   describe('parseBackendKind', () => {
     it('accepts canonical names', () => {
       expect(parseBackendKind('pi')).toBe('pi');
-      expect(parseBackendKind('copilot')).toBe('copilot');
+      expect(parseBackendKind('azure')).toBe('azure');
       expect(parseBackendKind('stub')).toBe('stub');
     });
 
     it('accepts legacy aliases', () => {
       expect(parseBackendKind('real')).toBe('pi');
       expect(parseBackendKind('openrouter')).toBe('pi');
-      expect(parseBackendKind('gh-copilot')).toBe('copilot');
-      expect(parseBackendKind('github-copilot')).toBe('copilot');
+      expect(parseBackendKind('azure-foundry')).toBe('azure');
       expect(parseBackendKind('fake')).toBe('stub');
       expect(parseBackendKind('mock')).toBe('stub');
     });
 
     it('is case-insensitive and trims whitespace', () => {
       expect(parseBackendKind('  PI  ')).toBe('pi');
-      expect(parseBackendKind('Copilot')).toBe('copilot');
+      expect(parseBackendKind('Azure')).toBe('azure');
     });
 
-    it('returns null for unknown values', () => {
+    it('returns null for unknown values (including the removed copilot)', () => {
+      expect(parseBackendKind('copilot')).toBeNull();
       expect(parseBackendKind('claude-code')).toBeNull();
       expect(parseBackendKind('')).toBeNull();
       expect(parseBackendKind('xyz')).toBeNull();
@@ -48,10 +58,10 @@ describe('backend registry', () => {
       expect(b.conflictResolverFactory).toBe(b.agentFactory);
     });
 
-    it('copilot: requires API key, exposes resolver, points at copilot spec', () => {
-      const b = selectBackend('copilot');
+    it('azure: requires API key, exposes resolver, points at azureApiKey spec', () => {
+      const b = selectBackend('azure');
       expect(b.requiresApiKey).toBe(true);
-      expect(b.apiKeySpecName).toBe('copilot');
+      expect(b.apiKeySpecName).toBe('azureApiKey');
       expect(b.conflictResolverFactory).toBe(b.agentFactory);
     });
 
@@ -70,18 +80,34 @@ describe('backend registry', () => {
       }
     });
 
-    it('pi and copilot are user-selectable (visible in TUI selector)', () => {
+    it('only pi is user-selectable (azure reached via provider toggle, stub via CLI)', () => {
       expect(selectBackend('pi').userSelectable).toBe(true);
-      expect(selectBackend('copilot').userSelectable).toBe(true);
+      expect(selectBackend('azure').userSelectable).toBe(false);
+      expect(selectBackend('stub').userSelectable).toBe(false);
+    });
+  });
+
+  describe('provider mapping', () => {
+    it('exposes exactly the OpenRouter and Azure providers', () => {
+      expect(PROVIDERS.map((p) => p.id).sort()).toEqual(['azure', 'openrouter']);
     });
 
-    it('stub is NOT user-selectable (CLI-flag only — regression guard)', () => {
-      // Stub is a developer/test tool surfaced via `huu --stub` /
-      // `--backend=stub`. It MUST NOT appear in the BackendSelector
-      // TUI screen — a stub run looks like a real run from the UI's
-      // perspective but doesn't actually do anything, which is
-      // confusing for end users.
-      expect(selectBackend('stub').userSelectable).toBe(false);
+    it('maps each provider to its dispatch backend', () => {
+      expect(providerToBackend('openrouter')).toBe('pi');
+      expect(providerToBackend('azure')).toBe('azure');
+    });
+
+    it('maps each backend back to a provider (stub → openrouter)', () => {
+      expect(backendToProvider('pi')).toBe('openrouter');
+      expect(backendToProvider('azure')).toBe('azure');
+      expect(backendToProvider('stub')).toBe('openrouter');
+    });
+
+    it('parses provider strings and aliases', () => {
+      expect(parseProvider('openrouter')).toBe('openrouter');
+      expect(parseProvider('azure')).toBe('azure');
+      expect(parseProvider('foundry')).toBe('azure');
+      expect(parseProvider('nope')).toBeNull();
     });
   });
 });

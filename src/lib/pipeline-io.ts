@@ -75,6 +75,8 @@ const PortAllocationSchema = z.object({
 
 export const PipelineSchema = z.object({
   name: z.string().min(1),
+  /** One-line human-facing summary shown at launch. Optional (back-compat). */
+  description: z.string().max(280).optional(),
   steps: z.array(PipelineStepSchema).min(1),
   cardTimeoutMs: z.number().int().positive().optional(),
   singleFileCardTimeoutMs: z.number().int().positive().optional(),
@@ -332,6 +334,12 @@ export function listAllPipelines(localDir: string): PipelineEntry[] {
     seen.add(entry.pipeline.name);
     results.push(entry);
   }
+  // Pin the `_default` pipeline (the "pipeline zero") to the top so the
+  // Welcome screen can offer it as [0]. Stable: everything else keeps its
+  // alphabetical order from listPipelines.
+  results.sort(
+    (a, b) => Number(b.pipeline._default === true) - Number(a.pipeline._default === true),
+  );
   return results;
 }
 

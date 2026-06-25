@@ -55,8 +55,11 @@ wrapper puxa automaticamente:
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...
-huu run example.pipeline.json     # usa ghcr.io/frederico-kluser/huu:latest
+huu run pipelines/huu-test-suite.pipeline.json     # usa ghcr.io/frederico-kluser/huu:latest
 ```
+
+> O huu materializa os pipelines default empacotados em `./pipelines/` no
+> primeiro launch — escolha um na tela de boas-vindas ou passe o caminho.
 
 Por baixo dos panos, o wrapper monta o equivalente a:
 
@@ -66,7 +69,7 @@ docker run --rm -it \
   --user "$(id -u):$(id -g)" \
   -v "$PWD:$PWD" -w "$PWD" \
   -e OPENROUTER_API_KEY \
-  ghcr.io/frederico-kluser/huu:latest run example.pipeline.json
+  ghcr.io/frederico-kluser/huu:latest run pipelines/huu-test-suite.pipeline.json
 ```
 
 > **Por que montar `$PWD:$PWD` (mesmo path nos dois lados)?** git
@@ -145,7 +148,7 @@ ativos durante a execução — esse é o trade-off pelo speedup.
 ```bash
 # usa o compose.yaml do repo (compila a imagem na primeira execução)
 export OPENROUTER_API_KEY=sk-or-...
-docker compose run --rm huu run example.pipeline.json
+docker compose run --rm huu run pipelines/huu-test-suite.pipeline.json
 ```
 
 **Wrapper de conveniência:** jogue [`scripts/huu-docker`](../scripts/huu-docker)
@@ -253,6 +256,16 @@ Ordem de resolução por spec (primeira não-vazia vence):
 Qualquer key que resolve pra vazio E é `required: true` faz a TUI
 mostrar o prompt no caminho da primeira execução. Stub mode (`--stub`)
 curto-circuita o check de requisito.
+
+Como o passo 3 (env) vence o passo 4 (o store salvo), um
+`OPENROUTER_API_KEY` stale exportado por um perfil de shell sombreia em
+silêncio a key que você salvou no Options — o clássico "key válida ainda
+dá 401". `resolveApiKeyWithSource` reporta qual camada venceu, então a
+mensagem de abort nomeia a fonte real e, quando uma env var sobrescreve a
+key salva, manda você dar `unset` nela. A **interface web evita isso de
+vez**: uma key colada no navegador é validada contra o provider primeiro e
+fica só no `sessionStorage` daquela aba — enviada a cada run, nunca escrita
+em `~/.config`.
 
 ### Variáveis de ambiente
 
@@ -411,7 +424,7 @@ gastam tokens "consertando" um não-bug.
    `DATABASE_URL` e sete extras. Frameworks que respeitam dotenv
    (Next, Vite, Nest, Astro, dotenv-flow, …) carregam automaticamente.
 3. **Interceptor `bind()` nativo.** Uma biblioteca C compartilhada de
-   ~150 linhas em `native/port-shim/port-shim.c`. O orchestrator
+   ~170 linhas em `native/port-shim/port-shim.c`. O orchestrator
    compila com `cc` e faz preload via `LD_PRELOAD` (Linux) ou
    `DYLD_INSERT_LIBRARIES` (macOS). **O código do cliente nunca é
    modificado** — `app.listen(3000)` literal no source roda

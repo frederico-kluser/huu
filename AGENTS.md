@@ -45,9 +45,9 @@ the knowledge BEFORE implementation, and guarantees each task skill runs its
 (probation) and are promoted into skill bodies only by
 `meta-skill-consolidate`, always as uncommitted diffs for human review.
 
-16 skills: 1 router · 8 knowledge (architecture, orchestrator, git
-worktrees, LLM backends, ports, Docker, tests, docs) · 5 task (pipelines,
-default pipelines, TUI, commit gate, release) · 2 meta
+17 skills: 1 router · 9 knowledge (architecture, orchestrator, git
+worktrees, LLM backends, ports, Docker, tests, docs, agent-prompts) · 5 task
+(pipelines, default pipelines, TUI, commit gate, release) · 2 meta
 (evolution, consolidate). The catalog is canonical — consult it, not this
 paragraph, for the current list.
 
@@ -65,9 +65,11 @@ paragraph, for the current list.
               orchestrator/ (worker pool, stage lifecycle, merge)
                 ↓
               orchestrator/backends/ (pluggable agent SDKs:
-                pi/      — @mariozechner/pi-coding-agent (default, OpenRouter)
-                copilot/ — @github/copilot-sdk (GitHub subscription)
-                azure/   — Azure AI Foundry (see docs/azure-backend.md)
+                pi/      — @mariozechner/pi-coding-agent (the only user-facing
+                           backend; provider OpenRouter|Azure chosen via
+                           LlmProvider — see src/lib/providers.ts)
+                azure/   — internal dispatch kind serving the Azure AI Foundry
+                           provider (docs/azure-backend.md)
                 stub/    — no-LLM mock for smoke tests
                 registry.ts — single dispatch from kind → factory)
                 ↓
@@ -126,17 +128,30 @@ default pipelines into `pipelines/` on first run. Each one is idempotent
 
 | Pipeline | What it does | Methodology |
 |---|---|---|
-| `huu Test Suite` (`_default`) | Stack detection → test runner setup → unit tests for 3 representative files + user-selected files → prune failing blocks → add coverage badge to README. Prompts bake in mutation-surviving assertion rules and an anti-flaky determinism ruleset. | Google Testing Blog (behavior, not implementation) + [Fowler non-determinism](https://martinfowler.com/articles/nonDeterminism.html) + [Stryker](https://stryker-mutator.io/) follow-up |
+| `huu Test Suite` (`_default`) | Stack detection → test runner setup → **autonomous recon** picks the most test-worthy files (memory-scope, NO manual picking) → parallel per-file unit tests → cleanup + coverage badge, gated by a CheckStep loop that reworks until the suite is green. Prompts bake in mutation-surviving assertion rules and an anti-flaky determinism ruleset. | Google Testing Blog (behavior, not implementation) + [Fowler non-determinism](https://martinfowler.com/articles/nonDeterminism.html) + [Stryker](https://stryker-mutator.io/) follow-up |
 | `huu Knowledge System` | Builds the full knowledge-skills system on a shared `.huu/knowledge/` blackboard — fully autonomous via `scope: "memory"` (no user file-picking): recon writes the study list (with per-file hints) → memory fan-out deep study (findings) → ONE synthesis step (topics + routing ground truth, written before any skill exists) → per-topic dossiers → skills materialized one-parallel-agent-per-dossier (memory fan-out, judge-looped) → meta-skills + LEARNINGS + routing surface (router-aware: extends an existing router/`catalog.md`, else creates `project-knowledge`) → blind routing eval gated by a description-sharpening rework loop. Engineered for small models: one cognitive op per step, mechanical judges, stub-safe forward defaults. Setup pipeline — mutates the repo. | [Agent Skills spec](https://agentskills.io/specification) + CoALA memory taxonomy + Voyager self-verification |
 | `huu Docs Audit` | Inventories every doc, classifies via the Diátaxis compass, scores the README (standard-readme grounded), flags stale references, measures inline API-doc coverage. Report-only + judge gate. | [Diátaxis](https://diataxis.fr/) + [standard-readme](https://github.com/RichardLitt/standard-readme) |
 | `huu Quality Audit` | Sonar-style report: cyclomatic + cognitive complexity, size metrics, churn×complexity hotspots (git-log mining), duplication, dead code, hotspot-weighted composite score. Report-only + judge gate. | [SonarSource cognitive complexity](https://www.sonarsource.com/docs/CognitiveComplexity.pdf) + [Tornhill hotspots](https://docs.enterprise.codescene.io/versions/4.0.16/guides/technical/hotspots.html) |
 | `huu Performance Audit` | Static hotspot scan (N+1, big-O, sync I/O, memory leaks, unbounded concurrency, missing caching), Core Web Vitals scorecard (INP via TBT lab proxy, caveat explicit), USE-method checklist. Report-only + judge gate. | [USE method](https://www.brendangregg.com/usemethod.html) + [Core Web Vitals](https://web.dev/articles/vitals) |
 | `huu Refactor Plan` | Characterization-test baseline → per-file smell catalog → top-5 ranking by smell-weight × churn → STATIC Mikado-style graph per target → final Fowler recommendations. Report-only + judge gate. | [Fowler refactoring catalog](https://refactoring.com/catalog/) + [Mikado method](https://www.manning.com/books/the-mikado-method) + Tornhill hotspots |
-| `huu Security Audit` | Secrets sweep (gitleaks v8.19+ `git`/`dir`), OWASP Top 10:2025 per-file scan (semgrep when available), dependency CVE scan, supply-chain & CI posture (SLSA v1.2 / OpenSSF Scorecard informed), remediation roadmap. Report-only + judge gate. | [OWASP Top 10:2025](https://owasp.org/Top10/2025/) + [CWE Top 25 (2025)](https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html) + [SLSA](https://slsa.dev/spec/v1.2/) |
+| `huu Security Audit` | Secrets sweep (gitleaks v8.19+ `git`/`dir`), OWASP Top 10:2025 scan (autonomous memory-scope fan-out; semgrep when available), dependency CVE scan, supply-chain & CI posture (SLSA v1.2 / OpenSSF Scorecard informed), remediation roadmap. The four independent scan dimensions run as parallel `dependsOn` **waves** joined by consolidation. Report-only + judge gate. | [OWASP Top 10:2025](https://owasp.org/Top10/2025/) + [CWE Top 25 (2025)](https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html) + [SLSA](https://slsa.dev/spec/v1.2/) |
 
 Only `huu Test Suite` carries `_default: true` — it's the entry the Welcome
 screen highlights. The other six are surfaced in the pipeline picker but
 are not flagged as "the default".
+
+**Autonomy (v2) — no manual file-picking.** All six pipelines that used to
+require `scope: "per-file"` (Test Suite + the five audits) now discover their
+own targets: a recon step `produces` a `huu-memory-v1` list and the work step
+fans out via `scope: "memory"` + `filesFrom` (the proven Knowledge System
+pattern; huu auto-appends the MEMORY CONTRACT — see `src/lib/memory-contract.ts`).
+The shared recon prompt is `targetsRecon()` in `knowledge-protocol.ts`, and
+`registry.test.ts` enforces that NO default ever reintroduces `scope:
+"per-file"`. `huu Security Audit` additionally fans its four INDEPENDENT scan
+dimensions (recon, secrets, CVE, supply-chain) into parallel `dependsOn`
+**waves** joined by consolidation; `huu Test Suite` ends with a CheckStep
+cleanup loop. Step prompts follow `docs/prompting-playbook.md` (skill
+`authoring-agent-prompts`).
 
 Every report-only audit ENDS with a judge CheckStep (`N. Validate report`,
 shared `reportJudgeCondition()` in `knowledge-protocol.ts`): sections
@@ -151,7 +166,8 @@ already-materialized pipeline files keep them; delete
 ### Side-effect surface
 
 The five audits are **report-only**: they write ONLY to
-`.huu/audits/<topic>.md` and `.huu/audits/<topic>-faq.json` (working
+`.huu/audits/<topic>.md`, `.huu/audits/<topic>-faq.json`, and
+`.huu/audits/<topic>-targets.json` (the recon target list; working
 files under `.huu/audits/.tmp/`), plus at most ONE `.gitignore`
 adjustment (rewriting a committed `.huu/` line to `.huu/*` +
 `!.huu/audits/` so the reports survive the stage merge — without it,
@@ -165,7 +181,9 @@ to your project's manifests.
 
 Two pipelines mutate production state by design (setup pipelines, not
 audits): `huu Test Suite` (writes `huu-tests.md` to repo root + inserts
-a tests-coverage badge in `README.md`) and `huu Knowledge System`
+a tests-coverage badge in `README.md`; its recon hands off a transient
+`huu-tests-targets.json` at the root that the finalize step deletes) and
+`huu Knowledge System`
 (writes `.agents/skills/**` + `.huu/knowledge/**`, same single
 `.gitignore` adjustment rule with `!.huu/knowledge/`).
 

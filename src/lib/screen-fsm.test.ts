@@ -54,6 +54,31 @@ describe('screen-fsm', () => {
     });
   });
 
+  describe('options screen', () => {
+    it('welcome.options opens the options screen', () => {
+      const next = reduce(baseState(), { type: 'welcome.options' });
+      expect(next.screen).toEqual({ kind: 'options' });
+    });
+
+    it('options.close returns to welcome', () => {
+      const next = reduce(
+        baseState({ screen: { kind: 'options', focusSpecName: 'openrouter' } }),
+        { type: 'options.close' },
+      );
+      expect(next.screen).toEqual({ kind: 'welcome' });
+    });
+
+    it('run.authError opens options focused on the rejected provider', () => {
+      const next = reduce(
+        baseState({ screen: { kind: 'run', modelId: 'm', apiKey: 'k' }, backendKind: 'pi' }),
+        { type: 'run.authError', backendKind: 'azure', specName: 'azureApiKey' },
+      );
+      expect(next.screen).toEqual({ kind: 'options', focusSpecName: 'azureApiKey' });
+      // Backend is carried over so a follow-up run uses the right backend.
+      expect(next.backendKind).toBe('azure');
+    });
+  });
+
   describe('initialState', () => {
     it('starts on welcome when autoStart is false', () => {
       const s = initialState({
@@ -89,11 +114,11 @@ describe('screen-fsm', () => {
 
     it('uses provided initialBackend', () => {
       const s = initialState({
-        initialBackend: 'copilot',
+        initialBackend: 'azure',
         openrouterResolvedKey: '',
         requiresApiKey: true,
       });
-      expect(s.backendKind).toBe('copilot');
+      expect(s.backendKind).toBe('azure');
     });
   });
 
@@ -134,6 +159,18 @@ describe('screen-fsm', () => {
       const s = baseState({ screen: { kind: 'faq' } });
       const next = reduce(s, { type: 'faq.back' });
       expect(next.screen).toEqual({ kind: 'welcome' });
+    });
+    it('welcome.directory → directory-picker', () => {
+      const next = reduce(baseState(), { type: 'welcome.directory' });
+      expect(next.screen).toEqual({ kind: 'directory-picker' });
+    });
+    it('directory.select → welcome (dir applied by caller as side effect)', () => {
+      const s = baseState({ screen: { kind: 'directory-picker' } });
+      expect(reduce(s, { type: 'directory.select' }).screen).toEqual({ kind: 'welcome' });
+    });
+    it('directory.cancel → welcome', () => {
+      const s = baseState({ screen: { kind: 'directory-picker' } });
+      expect(reduce(s, { type: 'directory.cancel' }).screen).toEqual({ kind: 'welcome' });
     });
   });
 
@@ -223,13 +260,13 @@ describe('screen-fsm', () => {
         baseState({ screen: { kind: 'backend-selector' }, apiKey: 'AK' }),
         {
           type: 'backend.select',
-          backendKind: 'copilot',
+          backendKind: 'azure',
           requiresApiKey: false,
           skipModelSelector: true,
           firstStepModelId: 'gpt-z',
         },
       );
-      expect(next.backendKind).toBe('copilot');
+      expect(next.backendKind).toBe('azure');
       expect(next.requiresApiKey).toBe(false);
       expect(next.modelId).toBe('gpt-z');
       expect(next.screen).toEqual({ kind: 'run', modelId: 'gpt-z', apiKey: 'AK' });

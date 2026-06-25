@@ -9,6 +9,164 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Added
 
+- **Provider selection inside pi — OpenRouter or Azure AI Foundry.** huu now
+  exposes a single backend (pi) and lets you choose the LLM *provider*
+  underneath it. New `LlmProvider` type + `src/lib/providers.ts` mapping
+  (`openrouter` → `pi`, `azure` → `azure`); the TUI provider selector and the
+  web segmented control both show the two providers with live "key set / key
+  needed" status. Lock it from the CLI with `--provider=openrouter|azure`
+  (`huu auto` configs gain an optional `provider` field).
+- **Per-pipeline descriptions at launch.** `Pipeline.description` is now part
+  of the schema and surfaced under each pipeline's name in the TUI Welcome
+  list and on the web launch cards. All seven bundled defaults carry a
+  one-line summary of what they do.
+- **Filesystem folder navigation — choose where to run.** Default is the
+  current directory, but you can now browse the filesystem and pick a
+  different run directory: a `[D]` DirectoryPicker screen in the TUI, a
+  "Browse…" folder modal in the web UI (`GET /api/folders`), and a `--dir=`
+  CLI flag honored across native, Docker and headless runs. `RunConfig` gains
+  `workingDirectory`.
+- **Animated gooey-blob mark, loader and favicon.** huu's logo is now a
+  morphing "liquid" blob driven by an SVG goo filter (web) / graded-Unicode
+  metaball (`MorphLoader` in the TUI). It animates as the brand mark, as the
+  run loader while the orchestrator spins up, and as the favicon — in the
+  indigo→purple (AI-magenta) identity, honoring `prefers-reduced-motion`.
+- **Editable API key for the selected provider.** The launch screen loads the
+  current key status per provider and lets you set OR change each credential
+  in place (Azure shows both key + endpoint); saving persists to the same
+  global store pi reads from, so the change takes effect on the next run.
+- **Options screen for AI provider API keys (`[O]` on the Welcome screen).**
+  A new TUI screen lists every credential in the API-key registry with its
+  resolved (masked) value and source, and lets you overwrite any one in place
+  — persisted to the global config (`~/.config/huu/config.json`, mode 0600).
+  It also **opens automatically when a run aborts on an invalid key**: the
+  pre-run reachability probe (pi) and the Azure factory now throw a typed
+  `AuthError`, which the run dashboard routes to the Options screen
+  pre-focused on the rejected provider, so an invalid key is fixable without
+  editing env vars or files by hand.
+- **Reusable full-width `ActionBar` footer.** Keyboard hints now span the
+  whole width with per-key semantic colors — `G run` (green) and `ESC back`
+  (red, bold) stand out as the primary actions; the rest are muted blue.
+- **Web UI — now the default front-end.** Running `huu` opens an
+  Apple-inspired browser interface (Liquid Glass, light/dark, real-time)
+  instead of the Ink TUI; the new **`--cli`** flag (or `HUU_CLI=1`) keeps the
+  terminal UI. The web front-end is orthogonal to the Docker/native runtime, so
+  every combination works — notably `huu --yolo` is the web UI running natively
+  without Docker. New presentation layer under `src/web/` (a sibling to
+  `ui/`): a dependency-free `node:http` + Server-Sent-Events server drives the
+  same `Orchestrator` as the TUI and the headless runner. A live kanban of
+  agent/merge/judge cards (TODO → DOING → DONE) is clickable for per-card
+  tokens, cost, branch, files and streaming logs, with a global log console and
+  Auto · Manual · MAX concurrency control. In Docker the wrapper publishes the
+  web port to the host (`docker run -p`) and the in-container server binds
+  `0.0.0.0:$HUU_WEB_PORT`; natively it binds `0.0.0.0` so the LAN can reach it.
+  Knobs: `--port=<n>` / `HUU_WEB_PORT` (default 4888), `HUU_WEB_HOST`
+  (localhost-only via `127.0.0.1`), and an optional `HUU_WEB_TOKEN` shared
+  secret gating the data/action routes. Client assets ship in `dist/web/client`
+  (build copies them; no CDN, works offline and inside the image).
+- **Web UI keeps your API key in the browser, validated, never on disk.**
+  Pasting a key in the launch form now validates it against the provider
+  first (`POST /api/keys/validate` → OpenRouter / Azure reachability) and
+  refuses one the provider rejects (401/403). A valid key is held only in
+  the browser tab's `sessionStorage` and sent with each run (`apiKey` in
+  `POST /api/run`), so the server uses it in memory and never writes
+  `~/.config/huu/config.json`. `BackendInfo.apiKeySpecName` is now exposed
+  so the browser can look up its per-backend session key; the legacy
+  disk-saving `POST /api/keys` stays for CLI reuse but the browser no
+  longer calls it.
+
+### Changed
+
+- **The default pipeline (huu Test Suite) is pinned as "pipeline zero".** It
+  always appears first on the Welcome screen, labelled `[0]` (the `0` key
+  loads it) and colored distinctly with a `(default)` tag, so the
+  most-recommended entry is unmistakable. Remaining pipelines are labelled
+  `[1]`, `[2]`, … and the digit keys map directly to those indices.
+- **Steps that need fixing before a run are now colored in the editor.** An
+  invalid step's whole row turns yellow (in addition to the existing `⚠`
+  marker and the actionable problem hint), so the blocker is visible at a
+  glance.
+
+### Fixed
+
+- **"Valid API key still returns 401" — the resolver now names the source
+  that actually supplied the rejected key.** A stale `OPENROUTER_API_KEY`
+  exported from a shell profile (resolver step 3) silently shadowed the key
+  saved in the Options screen (step 4), so the pre-run probe sent the wrong
+  key and aborted with a misleading "update it in the Options screen" — a
+  no-op against the env var. The 401 message now reports the winning source
+  and, when an env var overrides the saved key, tells you to unset it
+  (`resolveApiKeyWithSource` + `keyRemedyHint` in `lib/api-key.ts`). The
+  Docker wrapper prints the same warning on the host before forwarding a
+  shadowing env value into the container.
+- **Run dashboard header no longer breaks on narrow terminals.** The status
+  row now wraps (`flexWrap`) instead of overflowing, every value carries an
+  explicit space after its label (so "stage" and "5/5" never read stuck
+  together), and the active provider + model are shown up front.
+- **Web UI background, header and mobile layout.** The ambient aurora is a
+  richer multi-blob drift; the topbar wraps and spaces its metrics so they
+  no longer jam; new phone/tablet breakpoints stack the layout, switch the
+  card drawer + folder modal to full-height sheets, and enforce 44px touch
+  targets on coarse pointers.
+
+### Removed
+
+- **GitHub Copilot backend.** huu is pi-only now (OpenRouter or Azure AI
+  Foundry via the provider toggle). Removed `src/orchestrator/backends/copilot/`,
+  the `@github/copilot-sdk` optional dependency, the `copilot` backend kind /
+  api-key spec / model catalog, and the `--copilot` flag. Existing `huu auto`
+  configs that set `"backend": "copilot"` no longer validate — switch to
+  `"provider": "azure"` or the default OpenRouter.
+
+> Note: the bundled `pipelines/*.pipeline.json` were re-rendered to include
+> the new `description` field. Existing users keep their materialized copies
+> (bootstrap never overwrites) — delete a file to pick up the new version, or
+> run `npx tsx scripts/regen-default-pipelines.ts`.
+
+
+## [2.1.0] - 2026-06-25
+
+### Changed
+
+- **Bundled pipelines are now fully autonomous — manual file-picking removed.**
+  The six defaults that used to require `scope: "per-file"` (huu Test Suite +
+  the five report-only audits) now discover their own targets: a recon step
+  `produces` a `huu-memory-v1` list (with per-file `hint`s) and the work step
+  fans out via `scope: "memory"` + `filesFrom` — the pattern huu Knowledge
+  System already used. A shared `targetsRecon()` helper in
+  `knowledge-protocol.ts` keeps the selection prompt identical across them, and
+  `registry.test.ts` now enforces that NO default ever reintroduces
+  `scope: "per-file"`. huu Test Suite additionally ends with a CheckStep cleanup
+  loop (reworks until the suite is green); huu Security Audit fans its four
+  independent scan dimensions (recon · secrets · CVE · supply-chain) into
+  parallel `dependsOn` waves joined by consolidation. Step prompts were sharpened
+  against the new prompting playbook. NOTE: `pipeline-bootstrap` never overwrites
+  — existing users keep their materialized JSONs; delete
+  `pipelines/<name>.pipeline.json` to re-materialize the autonomous version.
+
+### Added
+
+- **`docs/prompting-playbook.md` (+ pt-BR twin) and the `authoring-agent-prompts`
+  knowledge skill.** A research-grounded, cross-LLM playbook of 12 prompt
+  techniques (atomic decomposition, explicit output contracts, `$file`/`$hint`
+  injection, mechanical forward-default judges, lean pi-backend prompts, …) that
+  the bundled pipelines now follow; indexed from `docs/README.md` and the skill
+  catalog.
+
+### Removed
+
+- **Dropped the four loose sample pipelines.** `example.pipeline.json` and
+  `example.conditional.pipeline.json` (repo root) plus `demo-quick` /
+  `security-tests` (`pipelines/`) are gone; the README / onboarding / operations
+  quickstart and the pipeline-JSON guide now point at the bundled defaults
+  (`pipelines/huu-test-suite.pipeline.json`, materialized on first launch) and
+  use huu Security Audit / Knowledge System as the live check-step + `dependsOn`
+  wave examples.
+
+## [2.0.0] - 2026-06-25
+
+### Added
+
 - **MAX (greedy) auto-scaling mode.** Press `M` on the run dashboard to
   flood the worker pool with one agent per queued task (up to the hard
   ceiling) and let the always-on memory guard be the sole backstop;
@@ -369,7 +527,9 @@ Initial public release. Available on npm as `huu-pipe`
 - `safe.directory '*'` set system-wide in the image.
 
 
-[Unreleased]: https://github.com/frederico-kluser/huu/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/frederico-kluser/huu/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/frederico-kluser/huu/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/frederico-kluser/huu/compare/v1.4.0...v2.0.0
 [1.4.0]: https://github.com/frederico-kluser/huu/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.3.0
 [1.2.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.2.0

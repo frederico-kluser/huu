@@ -51,8 +51,11 @@ available, the wrapper pulls it automatically:
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...
-huu run example.pipeline.json     # auto-uses ghcr.io/frederico-kluser/huu:latest
+huu run pipelines/huu-test-suite.pipeline.json     # auto-uses ghcr.io/frederico-kluser/huu:latest
 ```
+
+> huu writes the bundled default pipelines into `./pipelines/` on first
+> launch — pick one on the welcome screen or pass its path.
 
 **Prerequisites:**
 
@@ -108,26 +111,27 @@ into its worktree and the orchestrator merges them. No tokens spent.
 
 ```bash
 export OPENROUTER_API_KEY=sk-or-...
-huu run example.pipeline.json
+huu run pipelines/huu-test-suite.pipeline.json
 ```
 
-`example.pipeline.json` (which ships with the repo) is:
+huu ships **seven bundled pipelines** and materializes them into
+`./pipelines/` on first launch. The default — highlighted on the welcome
+screen — is **huu Test Suite**: it autonomously selects the most
+test-worthy files and writes a unit-test suite for them. Pick any pipeline
+on the welcome screen (or pass its path, as above). A minimal pipeline of
+your own is just a list of steps with a `$file` token, e.g.:
 
 ```json
 {
-  "_format": "huu-pipeline-v1",
+  "_format": "huu-pipeline-v2",
   "pipeline": {
-    "name": "example-standardize-headers",
+    "name": "standardize-headers",
     "steps": [
       {
         "name": "Standardize headers",
         "prompt": "Add a JSDoc header at the top of $file with @author huu.",
-        "files": ["src/cli.tsx", "src/app.tsx"]
-      },
-      {
-        "name": "Generate CHANGELOG",
-        "prompt": "Create or update the CHANGELOG.md ...",
-        "files": []
+        "files": ["src/cli.tsx", "src/app.tsx"],
+        "scope": "per-file"
       }
     ]
   }
@@ -153,17 +157,16 @@ If you don't have a pipeline yet, press `A` on the welcome screen instead
 of `N` — the [Pipeline Assistant](#pipeline-assistant) runs an adaptive
 project recon and walks you through ≤8 questions to draft one for you.
 
-Bundled examples that ship with the repo:
+The bundled defaults that land in `./pipelines/` on first launch:
 
-| File | What it does |
-|---|---|
-| `example.pipeline.json` (pt-BR) | Adds JSDoc headers and writes a CHANGELOG entry. |
-| `pipelines/demo-rapida.pipeline.json` (pt-BR) | Sets up tests, writes one test per file, runs three audits (security, quality, performance). |
-| `pipelines/testes-seguranca.pipeline.json` (pt-BR) | Security-focused regression suite. |
+- **huu Test Suite** — autonomous unit-test suite (the default, highlighted
+  on the welcome screen).
+- **huu Knowledge System** — builds a skills/knowledge system from the repo.
+- Five report-only audits: **huu Docs Audit**, **huu Quality Audit**,
+  **huu Performance Audit**, **huu Refactor Plan**, **huu Security Audit**.
 
-> The bundled examples are in Portuguese (the author's native language).
-> The pipeline format is language-agnostic — write your prompts in any
-> language the model understands.
+See [Bundled default pipelines](#bundled-default-pipelines) for the full
+table.
 
 ---
 
@@ -171,7 +174,7 @@ Bundled examples that ship with the repo:
 
 ```bash
 export COPILOT_GITHUB_TOKEN=ghp_...      # fine-grained PAT, "Copilot Requests" scope
-huu --copilot run example.pipeline.json
+huu --copilot run pipelines/huu-test-suite.pipeline.json
 ```
 
 Same pipeline, same orchestrator, same merge logic — the only difference
@@ -504,8 +507,8 @@ files, `*.d.ts`, and lock files.
 
 ## Pipelines as a shared artifact
 
-A pipeline is a reusable artifact. A `security-tests.pipeline.json` that
-works on one Node repo works on another. The know-how of "how to
+A pipeline is a reusable artifact. A `huu-security-audit.pipeline.json`
+that works on one Node repo works on another. The know-how of "how to
 decompose this class of task" is captured in JSON — not in the head of
 whoever ran an interactive agent that afternoon.
 

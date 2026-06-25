@@ -6,10 +6,13 @@ import {
   API_KEY_REGISTRY,
   configFilePath,
   findMissingKeysForBackend,
+  findMissingKeysForProvider,
   findMissingRequiredKeys,
   findSpec,
+  keyRemedyHint,
   loadStoredApiKey,
   resolveApiKey,
+  resolveApiKeyWithSource,
   resolveOpenRouterApiKey,
   saveApiKey,
 } from './api-key.js';
@@ -23,8 +26,10 @@ describe('api-key registry', () => {
     'OPENROUTER_API_KEY_FILE',
     'ARTIFICIAL_ANALYSIS_API_KEY',
     'ARTIFICIAL_ANALYSIS_API_KEY_FILE',
-    'COPILOT_GITHUB_TOKEN',
-    'COPILOT_GITHUB_TOKEN_FILE',
+    'AZURE_OPENAI_API_KEY',
+    'AZURE_OPENAI_API_KEY_FILE',
+    'AZURE_OPENAI_BASE_URL',
+    'AZURE_OPENAI_BASE_URL_FILE',
     'XDG_CONFIG_HOME',
   ] as const;
   const saved: Record<string, string | undefined> = {};
@@ -131,6 +136,110 @@ describe('api-key registry', () => {
     });
   });
 
+  describe('resolveApiKeyWithSource', () => {
+    const spec = () => findSpec('openrouter')!;
+
+    it('reports source "none" when nothing is set', () => {
+      const r = resolveApiKeyWithSource(spec());
+      expect(r).toEqual({ value: '', source: 'none', shadowsStored: false });
+    });
+
+    it('reports source "stored" when only the global store has it', () => {
+      saveApiKey(spec(), 'sk-or-stored');
+      const r = resolveApiKeyWithSource(spec());
+      expect(r.value).toBe('sk-or-stored');
+      expect(r.source).toBe('stored');
+      // Nothing outranks the store, so it can never be shadowing itself.
+      expect(r.shadowsStored).toBe(false);
+    });
+
+    it('reports source "env" when the env var wins', () => {
+      process.env.OPENROUTER_API_KEY = 'sk-or-env';
+      const r = resolveApiKeyWithSource(spec());
+      expect(r.value).toBe('sk-or-env');
+      expect(r.source).toBe('env');
+      expect(r.shadowsStored).toBe(false);
+    });
+
+    it('reports source "env-file" when the _FILE var wins', () => {
+      const path = join(tmpDir, 'key.txt');
+      writeFileSync(path, 'sk-or-from-file\n');
+      process.env.OPENROUTER_API_KEY_FILE = path;
+      const r = resolveApiKeyWithSource(spec());
+      expect(r.value).toBe('sk-or-from-file');
+      expect(r.source).toBe('env-file');
+    });
+
+    it('flags shadowsStored when a DIFFERENT env key overrides the saved key', () => {
+      // The exact production bug: valid key saved in Options, stale key in
+      // the environment (e.g. exported from ~/.secrets) wins → 401.
+      saveApiKey(spec(), 'sk-or-v1-valid-saved');
+      process.env.OPENROUTER_API_KEY = 'sk-or-v1-stale-env';
+      const r = resolveApiKeyWithSource(spec());
+      expect(r.value).toBe('sk-or-v1-stale-env');
+      expect(r.source).toBe('env');
+      expect(r.shadowsStored).toBe(true);
+    });
+
+    it('does NOT flag shadowsStored when env and store hold the same key', () => {
+      saveApiKey(spec(), 'sk-or-same');
+      process.env.OPENROUTER_API_KEY = 'sk-or-same';
+      const r = resolveApiKeyWithSource(spec());
+      expect(r.source).toBe('env');
+      expect(r.shadowsStored).toBe(false);
+    });
+
+    it('value matches resolveApiKey for every tier (no behavior drift)', () => {
+      saveApiKey(spec(), 'sk-or-stored');
+      process.env.OPENROUTER_API_KEY = 'sk-or-env';
+      expect(resolveApiKeyWithSource(spec()).value).toBe(resolveApiKey(spec()));
+    });
+  });
+
+  describe('keyRemedyHint', () => {
+    const spec = () => findSpec('openrouter')!;
+
+    it('the shadow case names the env var AND says it overrides Options', () => {
+      const hint = keyRemedyHint(spec(), {
+        value: 'x',
+        source: 'env',
+        shadowsStored: true,
+      });
+      expect(hint).toContain('OPENROUTER_API_KEY');
+      expect(hint).toContain('OVERRIDES');
+      expect(hint).toContain('Options');
+      // Must point at where env vars actually live, not just "Options".
+      expect(hint).toMatch(/Unset OPENROUTER_API_KEY/);
+    });
+
+    it('the stored case is the only one that tells you to update Options', () => {
+      const hint = keyRemedyHint(spec(), {
+        value: 'x',
+        source: 'stored',
+        shadowsStored: false,
+      });
+      expect(hint).toContain('Options screen');
+      expect(hint).toContain('rejected');
+    });
+
+    it('the none case asks the user to add a key', () => {
+      const hint = keyRemedyHint(spec(), {
+        value: '',
+        source: 'none',
+        shadowsStored: false,
+      });
+      expect(hint).toContain('No OPENROUTER_API_KEY');
+    });
+
+    it('never leaks the key value into the hint', () => {
+      const secret = 'sk-or-v1-supersecret-value';
+      for (const source of ['env', 'env-file', 'secret-mount', 'stored', 'none'] as const) {
+        const hint = keyRemedyHint(spec(), { value: secret, source, shadowsStored: true });
+        expect(hint).not.toContain(secret);
+      }
+    });
+  });
+
   describe('saveApiKey', () => {
     it('writes the global store with mode 0600 in a 0700 dir', () => {
       const spec = findSpec('openrouter')!;
@@ -188,42 +297,51 @@ describe('api-key registry', () => {
       expect(names).not.toContain('openrouter');
     });
 
-    it('does not return copilot spec by default (required: false)', () => {
-      // The Copilot spec is `required: false` so legacy callers don't
-      // gate a Pi run on a missing Copilot token. This is the
-      // contract; if it changes, update both this test and the
-      // App's missing-key check.
+    it('the removed copilot spec is gone from the registry', () => {
+      const names = API_KEY_REGISTRY.map((s) => s.name);
+      expect(names).not.toContain('copilot');
+    });
+
+    it('does not require azure specs by default (required: false)', () => {
+      // Azure specs are `required: false` so an OpenRouter run never gates
+      // on a missing Azure key. They're enforced only when the Azure
+      // provider is active (see findMissingKeysForBackend below).
       const missing = findMissingRequiredKeys();
       const names = missing.map((s) => s.name);
-      expect(names).not.toContain('copilot');
+      expect(names).not.toContain('azureApiKey');
+      expect(names).not.toContain('azureEndpoint');
     });
   });
 
   describe('findMissingKeysForBackend (backend-aware)', () => {
-    it('pi backend: requires openrouter (AA is optional)', () => {
+    it('pi backend: requires openrouter (AA + azure optional)', () => {
       const missing = findMissingKeysForBackend('pi');
       const names = missing.map((s) => s.name);
       expect(names).toContain('openrouter');
       // AA is `required: false` — the run flow no longer gates on it.
       // The model selector still uses it when present (graceful degrade).
       expect(names).not.toContain('artificialAnalysis');
-      expect(names).not.toContain('copilot');
+      expect(names).not.toContain('azureApiKey');
     });
 
-    it('copilot backend: requires copilot (AA is optional)', () => {
-      const missing = findMissingKeysForBackend('copilot');
+    it('azure backend: requires the azure key + endpoint (not openrouter)', () => {
+      const missing = findMissingKeysForBackend('azure');
       const names = missing.map((s) => s.name);
-      expect(names).toContain('copilot');
-      expect(names).not.toContain('artificialAnalysis');
+      expect(names).toContain('azureApiKey');
+      expect(names).toContain('azureEndpoint');
       expect(names).not.toContain('openrouter');
     });
 
-    it('copilot backend: still requires copilot even though spec is required:false', () => {
+    it('azure backend: still requires the key even though spec is required:false', () => {
       // backend-bound specs are enforced regardless of `required` flag
-      // when the matching backend is active — choosing a backend IS
+      // when the matching backend is active — choosing a provider IS
       // the implicit "I need this credential" signal.
-      const missing = findMissingKeysForBackend('copilot');
-      expect(missing.find((s) => s.name === 'copilot')).toBeDefined();
+      const missing = findMissingKeysForBackend('azure');
+      expect(missing.find((s) => s.name === 'azureApiKey')).toBeDefined();
+    });
+
+    it('stub backend: requires nothing', () => {
+      expect(findMissingKeysForBackend('stub')).toEqual([]);
     });
 
     it('drops backend-bound spec when its key is set', () => {
@@ -234,12 +352,25 @@ describe('api-key registry', () => {
     });
 
     it('does not include other backend\'s spec', () => {
-      // Even if the user has openrouter set, switching to copilot
-      // shouldn't list openrouter as still-needed.
+      // Even with openrouter set, switching to azure shouldn't list
+      // openrouter as still-needed.
       process.env.OPENROUTER_API_KEY = 'sk-or-set';
-      const missing = findMissingKeysForBackend('copilot');
+      const missing = findMissingKeysForBackend('azure');
       const names = missing.map((s) => s.name);
       expect(names).not.toContain('openrouter');
+    });
+  });
+
+  describe('findMissingKeysForProvider', () => {
+    it('openrouter provider needs the openrouter key', () => {
+      const names = findMissingKeysForProvider('openrouter').map((s) => s.name);
+      expect(names).toContain('openrouter');
+    });
+
+    it('azure provider needs the azure key + endpoint', () => {
+      const names = findMissingKeysForProvider('azure').map((s) => s.name);
+      expect(names).toContain('azureApiKey');
+      expect(names).toContain('azureEndpoint');
     });
   });
 

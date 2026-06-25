@@ -17,6 +17,8 @@ export type Screen =
   | { kind: 'pipeline-import-paste' }
   | { kind: 'pipeline-export' }
   | { kind: 'saved-pipelines' }
+  | { kind: 'options'; focusSpecName?: string }
+  | { kind: 'directory-picker' }
   | { kind: 'backend-selector' }
   | { kind: 'model-selector'; backendKind: AgentBackendKind }
   | { kind: 'api-key'; missing: ApiKeySpec[] }
@@ -42,7 +44,14 @@ export type FsmEvent =
   | { type: 'welcome.saved' }
   | { type: 'welcome.selectPipeline'; pipeline: Pipeline }
   | { type: 'welcome.faq' }
+  | { type: 'welcome.options' }
+  | { type: 'welcome.directory' }
   | { type: 'welcome.quit' }
+  // options (provider/API-key editor)
+  | { type: 'options.close' }
+  // directory-picker (choose where to run)
+  | { type: 'directory.select' }
+  | { type: 'directory.cancel' }
   // faq
   | { type: 'faq.back' }
   // pipeline-assistant
@@ -115,6 +124,9 @@ export type FsmEvent =
   // run
   | { type: 'run.complete'; result: OrchestratorResult }
   | { type: 'run.abort' }
+  // run → auth failure: jump to the Options screen pre-focused on the
+  // rejected provider so the user can fix the key in place.
+  | { type: 'run.authError'; backendKind: AgentBackendKind; specName?: string }
   // summary
   | { type: 'summary.back' }
   | { type: 'summary.quit' };
@@ -177,6 +189,21 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
       return state;
     case 'welcome.faq':
       return { ...state, screen: { kind: 'faq' } };
+    case 'welcome.options':
+      return { ...state, screen: { kind: 'options' } };
+    case 'welcome.directory':
+      return { ...state, screen: { kind: 'directory-picker' } };
+
+    // ── options ───────────────────────────────────────────────────────────
+    case 'options.close':
+      return { ...state, screen: { kind: 'welcome' } };
+
+    // ── directory-picker ──────────────────────────────────────────────────
+    // The chosen directory is applied as a side effect by the caller
+    // (setRepoRoot); the reducer only navigates back to welcome.
+    case 'directory.select':
+    case 'directory.cancel':
+      return { ...state, screen: { kind: 'welcome' } };
 
     // ── faq ───────────────────────────────────────────────────────────────
     case 'faq.back':
@@ -425,6 +452,12 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
       return { ...state, screen: { kind: 'summary', result: event.result } };
     case 'run.abort':
       return { ...state, screen: { kind: 'pipeline-editor' } };
+    case 'run.authError':
+      return {
+        ...state,
+        backendKind: event.backendKind,
+        screen: { kind: 'options', focusSpecName: event.specName },
+      };
 
     // ── summary ──────────────────────────────────────────────────────────
     case 'summary.back':

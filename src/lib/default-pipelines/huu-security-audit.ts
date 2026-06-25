@@ -16,9 +16,13 @@ import {
   knowledgeProtocol,
   persistenceCheck,
   reportJudgeCondition,
+  targetsRecon,
   KNOWLEDGE_OPTIONAL_FIELDS_NOTE,
   KNOWLEDGE_ORDERING_NOTE,
 } from './knowledge-protocol.js';
+
+const OWASP_TARGETS_PATH = '.huu/audits/security-targets.json';
+const OWASP_TARGETS_MAX_FILES = 30;
 
 export const DEFAULT_PIPELINE_FILENAME = 'huu-security-audit.pipeline.json';
 export const DEFAULT_PIPELINE_NAME = 'huu Security Audit';
@@ -83,22 +87,22 @@ Path: \`./.huu/audits/security.md\`.
 - Tools unavailable: <list with reasons>
 
 ## 2. Secrets sweep
-(filled in by step 2)
+(filled in by the secrets-sweep step)
 
 ## 3. OWASP Top 10:2025 findings
-(filled in by step 3)
+(filled in by the OWASP scan)
 
 ## 4. Dependency CVEs
-(filled in by step 4)
+(filled in by the dependency-CVE step)
 
 ## 5. Supply chain & CI posture
-(filled in by step 5)
+(filled in by the supply-chain step)
 
 ## 6. Summary by severity
-(filled in by step 6)
+(filled in by the consolidation step)
 
 ## 7. Remediation roadmap
-(filled in by step 6)
+(filled in by the consolidation step)
 
 ## 8. Validation
 (filled in by the final step after the judge approves)
@@ -116,7 +120,24 @@ ${KNOWLEDGE_OPTIONAL_FIELDS_NOTE}
 - DO NOT exfiltrate any secrets you find — redact them in findings (first 4 + last 4 chars only).
 - DO NOT call external services beyond the listed scanners (e.g. don't curl arbitrary URLs from secrets, and never use trufflehog's live credential verification).`;
 
-const STEP2_PROMPT = `You are at step 2 — secrets sweep (whole-project). Goal: find committed secrets in current files AND in git history, redact them, append findings, populate section "2. Secrets sweep" of \`.huu/audits/security.md\`. NO code changes.
+const STEP_RECON_PROMPT = `${targetsRecon({
+  role: "huu's OWASP scan-target selector",
+  purpose: 'scanning for OWASP Top 10:2025 / CWE Top 25 weaknesses in',
+  prefer: [
+    'files that handle UNTRUSTED INPUT — HTTP route handlers, controllers, GraphQL/RPC resolvers, form/body/query parsers, webhook receivers',
+    'security-sensitive sinks — DB query builders, command/shell execution, file-path joins, template rendering, deserialization (pickle/yaml/ObjectInputStream)',
+    'auth & crypto code — login/session/token logic, password handling, signing/encryption, access-control middleware',
+    'configuration & integration code — CORS/headers setup, env/secret loading, outbound fetch/SSRF surfaces',
+  ],
+  hintGuide:
+    'name the concrete OWASP categories / sinks to inspect here (e.g. "raw SQL in getUser()", "fetch(req.body.url) — SSRF", "verify=False on the TLS client")',
+  maxFiles: OWASP_TARGETS_MAX_FILES,
+})}
+
+=== BEFORE YOU START ===
+Read \`./.huu/audits/security.md\` section 1 (the scaffold step recorded which scanners are available) — when Semgrep is present, lean toward the files its rulesets would flag. This step writes ONLY the target list; the per-file OWASP scan that follows does the actual finding.`;
+
+const STEP2_PROMPT = `You are at the secrets sweep step (whole-project). Goal: find committed secrets in current files AND in git history, redact them, append findings, populate section "2. Secrets sweep" of \`.huu/audits/security.md\`. NO code changes.
 
 ${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
 In particular: step 1 recorded which scanners are actually available (and which install attempts failed) — read those findings instead of re-probing every tool.
@@ -176,11 +197,11 @@ Top findings:
 - DO NOT attempt to "validate" found secrets by calling the related service.
 - DO NOT remove the secrets from source files in this step (that's a remediation decision for a human).`;
 
-const STEP3_PROMPT = `You are at step 3 — OWASP Top 10:2025 sweep for \`$file\`. Goal: scan \`$file\` for OWASP Top 10:2025 patterns, append findings to \`.huu/audits/security-faq.json\`. NO code changes.
+const STEP3_PROMPT = `You are the OWASP Top 10:2025 sweep for ONE file: \`$file\`. Goal: scan \`$file\` for OWASP Top 10:2025 patterns, append findings to \`.huu/audits/security-faq.json\`. NO code changes. You are one of many agents running in parallel; your whole job is this single file.
 
-=== STEP 0 — SCOPE NOTE + SKIP RULE ===
-This step spawns one agent per selected file. The pipeline caps total nodes at \`maxNodeExecutions: 50\`. If you are auditing a larger repo, narrow your file selection with Smart Select in the file picker.
+The recon step chose this file deliberately and left you a lead — start there: $hint
 
+=== STEP 0 — SKIP RULE ===
 SKIP IMMEDIATELY (no findings, no FAQ append) if \`$file\` matches: \`node_modules/\`, \`dist/\`, \`build/\`, \`out/\`, \`coverage/\`, \`.git/\`, \`vendor/\`, \`target/\`, \`__pycache__/\`, \`*.generated.*\`, \`*.min.js\`, \`*.min.css\`, \`*.d.ts\`, \`*.lock\`, \`*.snap\`.
 
 === OWASP Top 10:2025 checklist ===
@@ -276,10 +297,10 @@ Severity rules:
 - Append-only to FAQ (re-read before each append).
 - Skip generated/vendored files (\`*.generated.*\`, \`dist/\`, \`build/\`, \`vendor/\`, \`node_modules/\`).`;
 
-const STEP4_PROMPT = `You are at step 4 — dependency CVE scan (whole-project). Goal: scan each manifest for known-vulnerable dependencies, append findings, populate section "4. Dependency CVEs" of \`.huu/audits/security.md\`.
+const STEP4_PROMPT = `You are the dependency CVE scan step (whole-project). Goal: scan each manifest for known-vulnerable dependencies, append findings, populate section "4. Dependency CVEs" of \`.huu/audits/security.md\`.
 
 ${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
-In particular: if step 3 flagged owasp-a03 findings (unpinned CDN fetches, curl|bash installs), cross-reference them — a CVE in a package that step 3 already flagged at a call site deserves "priority": 1.
+In particular: if the FAQ already contains owasp-a03 findings (unpinned CDN fetches, curl|bash installs — the OWASP scan may be running concurrently), cross-reference what's present — a CVE in a package already flagged at a call site deserves "priority": 1.
 
 === STEP 1 — Detect manifests ===
 From step 1, you already know which manifests exist. For each, pick the most authoritative scanner.
@@ -351,7 +372,7 @@ Top critical findings:
 - DO NOT call \`npm install\` or any package manager beyond the audit commands.
 - If a scanner is unavailable for a stack, write an info-severity FAQ entry and continue.`;
 
-const STEP5_PROMPT = `You are at step 5 — supply chain & CI posture (whole-project). Goal: audit the repo's software-supply-chain hygiene (OWASP A03:2025), informed by SLSA v1.2 and the OpenSSF Scorecard checks. Append findings, populate section "5. Supply chain & CI posture" of \`.huu/audits/security.md\`. NO code changes.
+const STEP5_PROMPT = `You are the supply chain & CI posture step (whole-project). Goal: audit the repo's software-supply-chain hygiene (OWASP A03:2025), informed by SLSA v1.2 and the OpenSSF Scorecard checks. Append findings, populate section "5. Supply chain & CI posture" of \`.huu/audits/security.md\`. NO code changes.
 
 ${knowledgeProtocol(FAQ_PATH, FAQ_SCHEMA_LINE)}
 
@@ -393,7 +414,7 @@ SLSA orientation: build provenance <none observed | partial> (Build L0–L3, Sou
 - DO NOT modify workflows, Dockerfiles, or manifests — detection only.
 - DO NOT fetch remote actions or images to inspect them; static repo content only.`;
 
-const STEP6_PROMPT = `You are at step 6 — consolidation. Goal: consolidate all findings in \`.huu/audits/security-faq.json\` into a remediation roadmap, populate sections "6. Summary by severity" and "7. Remediation roadmap" of \`.huu/audits/security.md\`. Report-only — README is never touched.
+const STEP6_PROMPT = `You are the consolidation step. Goal: consolidate all findings in \`.huu/audits/security-faq.json\` into a remediation roadmap, populate sections "6. Summary by severity" and "7. Remediation roadmap" of \`.huu/audits/security.md\`. Report-only — README is never touched.
 
 === STEP 1 — Read inputs ===
 - \`./.huu/audits/security.md\` (sections 1–5 populated).
@@ -457,7 +478,7 @@ ${KNOWLEDGE_ORDERING_NOTE}
 - DO NOT rotate any secrets — that requires service-side action.
 - DO NOT auto-upgrade dependencies — that needs human review and testing.`;
 
-const STEP8_PROMPT = `You are the final agent — step 8 (post-validation). The judge approved the report. Goal: stamp section "8. Validation" of \`.huu/audits/security.md\` and leave the working tree clean.
+const STEP8_PROMPT = `You are the final agent (post-validation). The judge approved the report. Goal: stamp section "8. Validation" of \`.huu/audits/security.md\` and leave the working tree clean.
 
 === STEP 1 — Stamp the validation section ===
 Replace the "## 8. Validation" placeholder with:
@@ -475,57 +496,96 @@ Numbers MUST come from re-reading \`.huu/audits/security-faq.json\` — do not i
 - DO NOT modify the findings or the roadmap — stamp only.
 - DO NOT touch production files.`;
 
+// Step names as constants so the dependsOn wave wiring can't drift from the
+// `name` fields (a typo would fail validateTopology — but cheaper to prevent).
+const N_SCAFFOLD = '1. Detect stack, install scanners, scaffold report';
+const N_RECON = '2. Select OWASP scan targets';
+const N_SECRETS = '3. Secrets sweep';
+const N_OWASP = '4. OWASP Top 10:2025 scan for $file';
+const N_CVE = '5. Dependency CVE scan';
+const N_SUPPLY = '6. Supply chain & CI posture';
+const N_CONSOLIDATE = '7. Remediation roadmap';
+const N_JUDGE = '8. Validate report';
+const N_FINALIZE = '9. Finalize report';
+
 export function getDefaultPipeline(): Pipeline {
   return {
     name: DEFAULT_PIPELINE_NAME,
+    description:
+      'Secrets sweep, OWASP Top 10:2025 scan, dependency CVE check and supply-chain / CI posture, run as parallel waves and consolidated into a remediation roadmap. Report-only.',
     maxRetries: 1,
     maxNodeExecutions: 50,
+    // dependsOn switches the run into DETERMINISTIC WAVES. After the scaffold,
+    // the four INDEPENDENT scan dimensions (recon, secrets, CVE, supply-chain)
+    // fan out in one parallel wave; the OWASP per-file scan waits only on its
+    // target list; consolidation joins all four. Merges stay deterministic
+    // (array order). The judge loops back to consolidation on "rework".
     steps: [
       {
         type: 'work',
-        name: '1. Detect stack, install scanners, scaffold report',
+        name: N_SCAFFOLD,
         prompt: STEP1_PROMPT,
         files: [],
         scope: 'project',
+        dependsOn: [],
       },
       {
         type: 'work',
-        name: '2. Secrets sweep',
+        name: N_RECON,
+        prompt: STEP_RECON_PROMPT,
+        files: [],
+        scope: 'project',
+        // huu appends the huu-memory-v1 MEMORY CONTRACT (path + format + cap).
+        produces: OWASP_TARGETS_PATH,
+        dependsOn: [N_SCAFFOLD],
+      },
+      {
+        type: 'work',
+        name: N_SECRETS,
         prompt: STEP2_PROMPT,
         files: [],
         scope: 'project',
+        dependsOn: [N_SCAFFOLD],
       },
       {
         type: 'work',
-        name: '3. OWASP Top 10:2025 scan for $file',
+        name: N_OWASP,
         prompt: STEP3_PROMPT,
         files: [],
-        scope: 'per-file',
+        // Autonomous file set from the recon step — no per-file picker.
+        scope: 'memory',
+        filesFrom: OWASP_TARGETS_PATH,
+        maxFiles: OWASP_TARGETS_MAX_FILES,
+        dependsOn: [N_RECON],
       },
       {
         type: 'work',
-        name: '4. Dependency CVE scan',
+        name: N_CVE,
         prompt: STEP4_PROMPT,
         files: [],
         scope: 'project',
+        dependsOn: [N_SCAFFOLD],
       },
       {
         type: 'work',
-        name: '5. Supply chain & CI posture',
+        name: N_SUPPLY,
         prompt: STEP5_PROMPT,
         files: [],
         scope: 'project',
+        dependsOn: [N_SCAFFOLD],
       },
       {
         type: 'work',
-        name: '6. Remediation roadmap',
+        name: N_CONSOLIDATE,
         prompt: STEP6_PROMPT,
         files: [],
         scope: 'project',
+        // Join: waits on every scan dimension before building the roadmap.
+        dependsOn: [N_SECRETS, N_OWASP, N_CVE, N_SUPPLY],
       },
       {
         type: 'check',
-        name: '7. Validate report',
+        name: N_JUDGE,
         condition: reportJudgeCondition({
           reportPath: '.huu/audits/security.md',
           faqPath: '.huu/audits/security-faq.json',
@@ -543,17 +603,19 @@ export function getDefaultPipeline(): Pipeline {
           ],
         }),
         maxRuns: 2,
+        dependsOn: [N_CONSOLIDATE],
         outcomes: [
-          { label: 'approved', nextStepName: '8. Finalize report', default: true },
-          { label: 'rework', nextStepName: '6. Remediation roadmap' },
+          { label: 'approved', nextStepName: N_FINALIZE, default: true },
+          { label: 'rework', nextStepName: N_CONSOLIDATE },
         ],
       },
       {
         type: 'work',
-        name: '8. Finalize report',
+        name: N_FINALIZE,
         prompt: STEP8_PROMPT,
         files: [],
         scope: 'project',
+        dependsOn: [N_JUDGE],
       },
     ],
   } as Pipeline;
