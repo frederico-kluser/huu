@@ -397,9 +397,10 @@ always on in every mode. For sizing on CI runners, see
 [`docs/ci.md`](ci.md).
 
 API key resolution follows the same chain as the TUI:
-`/run/secrets/openrouter_api_key` → `OPENROUTER_API_KEY_FILE` →
-`OPENROUTER_API_KEY` → persisted global store. So
-`OPENROUTER_API_KEY=sk-or-... huu auto …` just works.
+`/run/secrets/openrouter_api_key` → the persisted global store →
+`OPENROUTER_API_KEY_FILE` → `OPENROUTER_API_KEY`. In CI there's no saved
+key, so `OPENROUTER_API_KEY=sk-or-... huu auto …` just works (the env var
+is the fallback); a key saved via the TUI takes precedence.
 
 ### Output
 

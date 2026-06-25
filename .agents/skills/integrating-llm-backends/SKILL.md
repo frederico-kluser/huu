@@ -30,14 +30,14 @@ Note: azure IS a real backend (`backends/azure/factory.ts`, `docs/azure-backend.
 ### API-key resolution chain (`src/lib/api-key.ts:24-27`)
 
 1. Secret mount: `/run/secrets/<name>` (Docker `--mount`, readonly)
-2. `<NAME>_FILE` env var pointing at a file (postgres-style `_FILE` convention)
-3. Plain env var
-4. Persisted store: `$XDG_CONFIG_HOME/huu/config.json` (fallback `~/.config/huu/config.json`)
-5. TUI prompt (which can persist to step 4)
+2. Persisted store: `$XDG_CONFIG_HOME/huu/config.json` (fallback `~/.config/huu/config.json`) — an explicitly saved key, now ABOVE the env var
+3. `<NAME>_FILE` env var pointing at a file (postgres-style `_FILE` convention)
+4. Plain env var — the fallback when nothing is saved (CI / headless)
+5. TUI prompt (which can persist to step 2)
 
 Per-backend specs live in `src/lib/api-key-registry.ts` (envVar / envFileVar / secretMountPath per key). The Docker wrapper forwards every registry envVar/envFileVar into the container and mounts secret files — add a new key spec there and the wrapper picks it up without edits.
 
-**Source-aware resolution (the "valid key still 401s" trap).** `resolveApiKey` delegates to `resolveApiKeyWithSource(spec) → { value, source, shadowsStored }`. `source` is which tier won (`secret-mount`/`env-file`/`env`/`stored`/`none`); `shadowsStored` is true when a higher tier won AND a *different* non-empty key sits in the store — i.e. an env var (step 3, often a stale `OPENROUTER_API_KEY` from a shell profile or a sourced `~/.secrets`) silently overrides what the user saved in the Options screen (step 4). Build user-facing remediation with `keyRemedyHint(spec, res)` — it names the actual source instead of the misleading "update it in Options" (a no-op against an env var). The orchestrator's 401 probe path and the docker-reexec host loop both use these; never re-hardcode the old blanket message. Diagnose mismatches by comparing `checkOpenRouterReachable` against a raw `curl https://openrouter.ai/api/v1/auth/key` — same endpoint, so curl-200 + huu-401 means key MISMATCH, not a bad key.
+**Source-aware resolution (the inverted "valid key still 401s" trap).** `resolveApiKey` delegates to `resolveApiKeyWithSource(spec) → { value, source, storedOverridesEnv }`. `source` is which tier won (`secret-mount`/`stored`/`env-file`/`env`/`none`); the saved store now OUTRANKS the env var, so an explicitly saved key beats a stale `OPENROUTER_API_KEY` from a shell profile or a sourced `~/.secrets` (the old foot-gun, reversed). `storedOverridesEnv` is true when the saved key won AND a *different* non-empty env value is present — i.e. an ambient env var is being deliberately ignored. Build user-facing remediation with `keyRemedyHint(spec, res)` — it names the actual source (update the saved key when stored won; fix the env var / save one when env was the fallback). The orchestrator's 401 probe path and the docker-reexec host loop both use these; never re-hardcode the old blanket message. Diagnose mismatches by comparing `checkOpenRouterReachable` against a raw `curl https://openrouter.ai/api/v1/auth/key` — same endpoint, so curl-200 + huu-401 means key MISMATCH, not a bad key.
 
 ### Web UI key flow is browser-only (never disk)
 
@@ -62,4 +62,4 @@ Per-backend specs live in `src/lib/api-key-registry.ts` (envVar / envFileVar / s
 - `src/orchestrator/backends/registry.ts`, `src/lib/api-key.ts`, `src/lib/api-key-registry.ts`, `docs/azure-backend.md` (pt-BR), `docs/pi-coding-agent.md`
 - Related skills: working-on-orchestrator, running-in-docker (secret mounts)
 
-> Facts verified against source on 2026-06-12; API-key source-awareness (`resolveApiKeyWithSource`/`keyRemedyHint`) + the web browser-only key flow verified and added 2026-06-25.
+> Facts verified against source on 2026-06-12; API-key source-awareness (`resolveApiKeyWithSource`/`keyRemedyHint`) + the web browser-only key flow verified and added 2026-06-25; resolver precedence inverted 2026-06-25 so the saved store now outranks the env var (`shadowsStored` → `storedOverridesEnv`).

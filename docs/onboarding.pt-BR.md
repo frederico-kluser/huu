@@ -415,9 +415,10 @@ de memória fica sempre ativa em todos os modos. Pra dimensionar em runners
 de CI, veja [`docs/ci.pt-BR.md`](ci.pt-BR.md).
 
 A API key resolve pela mesma cadeia da TUI:
-`/run/secrets/openrouter_api_key` → `OPENROUTER_API_KEY_FILE` →
-`OPENROUTER_API_KEY` → store global persistido. Então
-`OPENROUTER_API_KEY=sk-or-... huu auto …` simplesmente funciona.
+`/run/secrets/openrouter_api_key` → store global persistido →
+`OPENROUTER_API_KEY_FILE` → `OPENROUTER_API_KEY`. No CI não há key salva,
+então `OPENROUTER_API_KEY=sk-or-... huu auto …` simplesmente funciona (a
+env var é o fallback); uma key salva pela TUI tem precedência.
 
 ### Output
 

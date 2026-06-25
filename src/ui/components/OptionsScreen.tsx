@@ -4,9 +4,9 @@ import TextInput from 'ink-text-input';
 import {
   API_KEY_REGISTRY,
   configFilePath,
-  loadStoredApiKey,
-  resolveApiKey,
+  resolveApiKeyWithSource,
   saveApiKey,
+  type ApiKeyResolution,
   type ApiKeySpec,
 } from '../../lib/api-key.js';
 import { theme } from '../theme.js';
@@ -26,15 +26,24 @@ function maskValue(value: string): string {
 }
 
 /**
- * Best-effort label for where the value came from. We don't re-read the
- * secret/file paths here (resolveApiKey already did); env and the global
- * store are the cases the user can act on, so those are named precisely and
- * everything else falls back to a generic "env/secret".
+ * Label for where the value came from, driven by the resolver's own `source`
+ * so it stays truthful after the precedence change: a saved key now outranks
+ * the env var, so the "saved globally" label also notes when it is overriding
+ * an env var the user might have expected to win.
  */
-function describeSource(spec: ApiKeySpec): string {
-  if ((process.env[spec.envVar] ?? '').trim()) return `${spec.envVar} (env)`;
-  if (loadStoredApiKey(spec)) return 'saved globally';
-  return 'env/secret';
+function describeSource(res: ApiKeyResolution, spec: ApiKeySpec): string {
+  switch (res.source) {
+    case 'stored':
+      return res.storedOverridesEnv ? 'saved globally (overrides env)' : 'saved globally';
+    case 'env':
+      return `${spec.envVar} (env)`;
+    case 'env-file':
+      return `${spec.envFileVar} (file)`;
+    case 'secret-mount':
+      return 'mounted secret';
+    default:
+      return 'env/secret';
+  }
 }
 
 /**
@@ -129,8 +138,9 @@ export function OptionsScreen({ focusSpecName, onClose }: Props): React.JSX.Elem
         <Box key={`providers-${version}`} marginTop={1} flexDirection="column">
           {API_KEY_REGISTRY.map((spec, i) => {
             const isCursor = i === cursor;
-            const resolved = resolveApiKey(spec);
-            const source = describeSource(spec);
+            const res = resolveApiKeyWithSource(spec);
+            const resolved = res.value;
+            const source = describeSource(res, spec);
             return (
               <Box key={spec.name} flexDirection="column">
                 <Box>
@@ -155,6 +165,15 @@ export function OptionsScreen({ focusSpecName, onClose }: Props): React.JSX.Elem
                   )}
                   {spec.hint ? <Text dimColor>  ·  {spec.hint}</Text> : null}
                 </Box>
+                {res.storedOverridesEnv ? (
+                  <Box>
+                    <Text>{'    '}</Text>
+                    <Text color={theme.warning}>
+                      ⚠ {spec.envVar} is set but ignored — huu uses the saved key. Unset
+                      it (or clear the saved key) to use the env var instead.
+                    </Text>
+                  </Box>
+                ) : null}
               </Box>
             );
           })}

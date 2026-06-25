@@ -89,16 +89,20 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Fixed
 
-- **"Valid API key still returns 401" — the resolver now names the source
-  that actually supplied the rejected key.** A stale `OPENROUTER_API_KEY`
-  exported from a shell profile (resolver step 3) silently shadowed the key
-  saved in the Options screen (step 4), so the pre-run probe sent the wrong
-  key and aborted with a misleading "update it in the Options screen" — a
-  no-op against the env var. The 401 message now reports the winning source
-  and, when an env var overrides the saved key, tells you to unset it
-  (`resolveApiKeyWithSource` + `keyRemedyHint` in `lib/api-key.ts`). The
-  Docker wrapper prints the same warning on the host before forwarding a
-  shadowing env value into the container.
+- **"Valid API key still returns 401" — fixed at the root: a saved key now
+  takes precedence over the `OPENROUTER_API_KEY` environment variable.**
+  Previously a stale `OPENROUTER_API_KEY` exported from a shell profile
+  (resolver step 3) silently shadowed the key you saved in the Options screen
+  (step 4), so the pre-run probe sent the wrong key and aborted. The resolver
+  now ranks the explicitly saved store ABOVE the env var
+  (`secret-mount → stored → env-file → env`), so the key you saved is the key
+  huu uses; the env var is only the fallback when nothing is saved (CI/headless
+  behavior is unchanged — no saved key means the env var still wins). The
+  Options screen flags when an env var is set but ignored, the 401 message
+  names the winning source (`resolveApiKeyWithSource` + `keyRemedyHint` in
+  `lib/api-key.ts`, with `shadowsStored` reworked to `storedOverridesEnv`), and
+  the Docker wrapper notes on the host when it forwards the saved key over a
+  present env var.
 - **Run dashboard header no longer breaks on narrow terminals.** The status
   row now wraps (`flexWrap`) instead of overflowing, every value carries an
   explicit space after its label (so "stage" and "5/5" never read stuck

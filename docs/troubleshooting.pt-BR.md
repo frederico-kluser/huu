@@ -27,8 +27,8 @@
 
 | Sintoma | Causa → ação |
 |---|---|
-| prompt de key em loop / `401` nos logs | A cadeia é `/run/secrets/<nome>` → `<VAR>_FILE` → env → `~/.config/huu/config.json` → prompt da TUI (vence a primeira não-vazia). Exporte `OPENROUTER_API_KEY` (ou a var do backend), ou salve uma no Options, e tente de novo. |
-| **key *válida* ainda dá `401`** | Uma fonte de precedência maior está sombreando a key que você salvou: um `OPENROUTER_API_KEY` stale (env, passo 3 — comum em `~/.zshenv` / `~/.bashrc` / um `~/.secrets` sourceado) vence a key salva no Options (passo 4), então o huu manda a key errada. A mensagem de 401 agora nomeia a fonte vencedora — dê `unset OPENROUTER_API_KEY` (ou corrija o valor) pra cair na key salva. Confirme que a key de env é a morta com `curl -H "Authorization: Bearer $OPENROUTER_API_KEY" https://openrouter.ai/api/v1/auth/key` (um `401` aí = essa key de env está ruim). Na **interface web** a key colada é validada na hora e fica só no navegador, então uma env var não consegue sombrear. |
+| prompt de key em loop / `401` nos logs | A cadeia é `/run/secrets/<nome>` → `~/.config/huu/config.json` (key salva) → `<VAR>_FILE` → env → prompt da TUI (vence a primeira não-vazia). Salve uma no Options, ou exporte `OPENROUTER_API_KEY` (ou a var do backend), e tente de novo. |
+| **key *válida* ainda dá `401`** | A key que você salvou no Options agora tem precedência sobre a env var, então um `401` quer dizer que a key *salva* foi rejeitada — atualize-a no Options. (Se você queria usar um `OPENROUTER_API_KEY` do shell, limpe a key salva pra env var virar o fallback.) A mensagem de 401 nomeia a fonte vencedora. Confirme qual key está morta com `curl -H "Authorization: Bearer <key>" https://openrouter.ai/api/v1/auth/key` (um `401` aí = essa key está ruim). Na **interface web** a key colada é validada na hora e fica só no navegador. |
 | `402` / `429` nos logs | Créditos/rate-limit do provedor — não é falha do huu. Modelo mais barato ou aguarde. |
 | model id rejeitado | Use um id do seletor/catálogo (`recommended-models.json`); ids da OpenRouter têm a forma `vendor/model-name`. |
 

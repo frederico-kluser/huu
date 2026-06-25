@@ -546,10 +546,11 @@ export class Orchestrator {
           kind: reach.kind,
         });
         if (reach.kind === 'unauthorized') {
-          // Name the source that actually supplied the rejected key. The
-          // blanket "update it in Options" is a no-op (and a 30-minute
-          // mystery) when a stale env var shadows the saved key — env is
-          // resolver step 3, the Options store is step 4.
+          // Name the source that actually supplied the rejected key. The saved
+          // Options key now outranks the env var (store is resolver step 2, the
+          // env var is step 4), so the hint correctly says "update the saved
+          // key" when a saved key won, or "fix the env var / save one" when the
+          // env var was only the fallback — never a misdirecting blanket message.
           const spec = findSpec('openrouter');
           const hint = spec
             ? keyRemedyHint(spec, resolveApiKeyWithSource(spec))

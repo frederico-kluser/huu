@@ -559,24 +559,25 @@ export async function reexecInDocker(
   //   1. Value stays out of `docker inspect`.
   //   2. Value stays off `ps`/proc listings.
   //
-  // resolveApiKey() walks env → `_FILE` → global config store, so a key
-  // the user persisted in `~/.config/huu/config.json` is forwarded
-  // automatically without having to re-enter it.
+  // resolveApiKey() walks secret-mount → global config store → `_FILE` → env,
+  // so a key the user persisted in `~/.config/huu/config.json` wins over a
+  // stale shell `OPENROUTER_API_KEY` and is forwarded automatically without
+  // having to re-enter it.
   const secretMounts: SecretMount[] = [];
   const excludeFromEnv = new Set<string>();
   for (const spec of API_KEY_REGISTRY) {
     const res = resolveApiKeyWithSource(spec);
     if (!res.value) continue;
-    // Inside the container the key arrives via the secret mount, so the
-    // container-side resolver can't see that a host env var shadowed the
-    // saved key. Surface it here, on the host, before forwarding — else a
-    // stale env var silently overrides what the user saved in Options and
-    // every agent 401s with no clue why.
-    if (res.shadowsStored && (res.source === 'env' || res.source === 'env-file')) {
+    // The saved key now takes precedence over the env var. When a saved key
+    // wins while a DIFFERENT env var is also set, say so here on the host —
+    // otherwise a user who expected the env var to apply is left wondering
+    // why huu used another key (the in-container resolver can't see this,
+    // since the key arrives pre-resolved via the secret mount).
+    if (res.storedOverridesEnv) {
       process.stderr.write(
-        `huu: warning: ${spec.envVar} from your environment overrides the different ` +
-          `${spec.label} key saved in Options — forwarding the environment value into the container. ` +
-          `Unset ${spec.envVar} to use the saved key.\n`,
+        `huu: note: ${spec.envVar} is set in your environment, but huu is using the ` +
+          `${spec.label} key you saved in Options (a saved key takes precedence) — forwarding the ` +
+          `saved key into the container. Clear the saved key in Options to use ${spec.envVar} instead.\n`,
       );
     }
     secretMounts.push({

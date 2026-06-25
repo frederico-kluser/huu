@@ -27,8 +27,8 @@
 
 | Symptom | Cause → fix |
 |---|---|
-| key prompt loops / `401` in agent logs | The resolver chain is `/run/secrets/<name>` → `<VAR>_FILE` → env → `~/.config/huu/config.json` → TUI prompt (first non-empty wins). Export `OPENROUTER_API_KEY` (or the backend's var), or save one in the Options screen, and retry. |
-| **a *valid* key still `401s`** | A higher-precedence source is shadowing the key you saved: a stale `OPENROUTER_API_KEY` (env, step 3 — often exported from `~/.zshenv` / `~/.bashrc` / a sourced `~/.secrets`) outranks the Options-saved key (step 4), so huu sends the wrong key. The 401 message now names the winning source — `unset OPENROUTER_API_KEY` (or fix its value) to fall back to the saved key. Confirm the env key is the dead one with `curl -H "Authorization: Bearer $OPENROUTER_API_KEY" https://openrouter.ai/api/v1/auth/key` (a `401` there = that env key is bad). In the **web UI** the key you paste is validated up front and kept only in the browser, so an env var can't shadow it. |
+| key prompt loops / `401` in agent logs | The resolver chain is `/run/secrets/<name>` → `~/.config/huu/config.json` (saved key) → `<VAR>_FILE` → env → TUI prompt (first non-empty wins). Save one in the Options screen, or export `OPENROUTER_API_KEY` (or the backend's var), and retry. |
+| **a *valid* key still `401s`** | A key you saved in the Options screen now takes precedence over the env var, so a `401` means the *saved* key was rejected — update it in the Options screen. (If you meant to use a shell `OPENROUTER_API_KEY`, clear the saved key so the env var becomes the fallback.) The 401 message names the winning source. Confirm which key is dead with `curl -H "Authorization: Bearer <key>" https://openrouter.ai/api/v1/auth/key` (a `401` there = that key is bad). In the **web UI** the key you paste is validated up front and kept only in the browser. |
 | `402` / `429` in agent logs | Provider credits/rate limit — not a huu failure. Pick a cheaper model or wait. |
 | model id rejected | Use an id from the selector/catalog (`recommended-models.json`); OpenRouter ids look like `vendor/model-name`. |
 

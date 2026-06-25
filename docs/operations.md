@@ -240,36 +240,41 @@ The current registry:
 | `ARTIFICIAL_ANALYSIS_API_KEY` (`artificialAnalysis`) | yes | all | Model recommendations / live capability lookups in the picker. |
 | `COPILOT_GITHUB_TOKEN` (`copilot`) | yes (when `--copilot`) | Copilot | The Copilot SDK agent. Fine-grained PAT with "Copilot Requests" scope, or `GH_TOKEN`. |
 
-Resolution order for every spec (first non-empty wins):
+Resolution order for every spec (first non-empty wins) — the EXPLICIT
+choice beats the AMBIENT one:
 
 1. Container secret mount at `/run/secrets/<snake_case_name>` — same
-   convention as the postgres / mysql Docker images.
-2. `<NAME>_FILE` env var pointing at a file with the value.
-3. `<NAME>` env var (plain).
-4. The persisted global store at `$XDG_CONFIG_HOME/huu/config.json`
+   convention as the postgres / mysql Docker images. (On a Docker run the
+   host resolves the key with this same order and re-mounts it here.)
+2. The persisted global store at `$XDG_CONFIG_HOME/huu/config.json`
    (fallback `~/.config/huu/config.json`, mode `0600` in a `0700`
    directory). The TUI offers "save globally" the first time you paste
-   a key and writes there.
+   a key and writes there. A key you explicitly saved now OUTRANKS the
+   env var below it.
+3. `<NAME>_FILE` env var pointing at a file with the value.
+4. `<NAME>` env var (plain) — the fallback when nothing is saved (the
+   standard CI / headless path).
 
 Any key that resolves to empty AND is `required: true` causes the TUI
 to pop the prompt on the way to the first run. Stub mode (`--stub`)
 short-circuits the requirement check.
 
-Because step 3 (env) outranks step 4 (the saved store), a stale
-`OPENROUTER_API_KEY` exported from a shell profile silently shadows a key
-you saved in the Options screen — the classic "valid key still 401s".
-`resolveApiKeyWithSource` reports which tier won, so the abort message names
-the real source and, when an env var overrides the saved key, tells you to
-unset it. The **web UI sidesteps this entirely**: a key pasted in the
-browser is validated against the provider first and kept only in that tab's
-`sessionStorage` — sent with each run, never written to `~/.config`.
+Because the saved store (step 2) now outranks the env var (step 4), a key you
+explicitly saved in the Options screen takes precedence — a stale
+`OPENROUTER_API_KEY` left in a shell profile no longer shadows it. If you
+*want* the env var to apply, clear the saved key. `resolveApiKeyWithSource`
+reports which tier won, so the abort message names the real source: update the
+saved key when that one was used, or fix the env var / save a key when the env
+var was only the fallback. The **web UI** keeps a key pasted in the browser
+only in that tab's `sessionStorage` — validated against the provider first,
+sent with each run, never written to `~/.config`.
 
 ### Environment variables
 
 | Variable | Required | Purpose |
 |---|---|---|
 | `OPENROUTER_API_KEY` | yes (without `--stub`) | Sent to OpenRouter through the Pi SDK. If missing, the TUI prompts on first real run; "save globally" persists to `~/.config/huu/config.json`. |
-| `OPENROUTER_API_KEY_FILE` | no | Path to a file containing the key. Wins over `OPENROUTER_API_KEY` when both are set; the canonical Docker-secret mount at `/run/secrets/openrouter_api_key` wins over both. |
+| `OPENROUTER_API_KEY_FILE` | no | Path to a file containing the key. Wins over `OPENROUTER_API_KEY` when both are set; the canonical Docker-secret mount at `/run/secrets/openrouter_api_key` wins over both. A key saved via the Options screen (`~/.config/huu/config.json`) now outranks all three — clear it if you want an env var to apply. |
 | `ARTIFICIAL_ANALYSIS_API_KEY` | yes | Used for live model-capability lookups (`supportsThinking`, pricing). Same precedence chain via `ARTIFICIAL_ANALYSIS_API_KEY_FILE` and `/run/secrets/artificial_analysis_api_key`. |
 | `COPILOT_GITHUB_TOKEN` | yes (when `--copilot`) | GitHub fine-grained PAT with "Copilot Requests" scope (or `GH_TOKEN`). Required only when `--backend=copilot` is active. Same precedence chain via `COPILOT_GITHUB_TOKEN_FILE` and `/run/secrets/copilot_token`. |
 | `HUU_WORKTREE_BASE` | no | Override the base directory for per-run worktrees. Absolute paths are used verbatim; relative paths are resolved against the repo root. Default: `<repo>/.huu-worktrees`. Used by the isolated-volume container mode. |

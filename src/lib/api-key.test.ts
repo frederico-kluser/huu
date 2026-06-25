@@ -122,11 +122,11 @@ describe('api-key registry', () => {
       expect(resolveApiKey(spec)).toBe('sk-or-from-store');
     });
 
-    it('env wins over the global store', () => {
+    it('the saved store wins over the env var (explicit beats ambient)', () => {
       const spec = findSpec('openrouter')!;
       saveApiKey(spec, 'sk-or-from-store');
       process.env.OPENROUTER_API_KEY = 'sk-or-from-env';
-      expect(resolveApiKey(spec)).toBe('sk-or-from-env');
+      expect(resolveApiKey(spec)).toBe('sk-or-from-store');
     });
 
     it('resolves arbitrary specs (artificialAnalysis)', () => {
@@ -141,7 +141,7 @@ describe('api-key registry', () => {
 
     it('reports source "none" when nothing is set', () => {
       const r = resolveApiKeyWithSource(spec());
-      expect(r).toEqual({ value: '', source: 'none', shadowsStored: false });
+      expect(r).toEqual({ value: '', source: 'none', storedOverridesEnv: false });
     });
 
     it('reports source "stored" when only the global store has it', () => {
@@ -149,16 +149,16 @@ describe('api-key registry', () => {
       const r = resolveApiKeyWithSource(spec());
       expect(r.value).toBe('sk-or-stored');
       expect(r.source).toBe('stored');
-      // Nothing outranks the store, so it can never be shadowing itself.
-      expect(r.shadowsStored).toBe(false);
+      // No ambient env var, so nothing is being overridden.
+      expect(r.storedOverridesEnv).toBe(false);
     });
 
-    it('reports source "env" when the env var wins', () => {
+    it('reports source "env" when the env var is the only key (no saved key)', () => {
       process.env.OPENROUTER_API_KEY = 'sk-or-env';
       const r = resolveApiKeyWithSource(spec());
       expect(r.value).toBe('sk-or-env');
       expect(r.source).toBe('env');
-      expect(r.shadowsStored).toBe(false);
+      expect(r.storedOverridesEnv).toBe(false);
     });
 
     it('reports source "env-file" when the _FILE var wins', () => {
@@ -170,23 +170,24 @@ describe('api-key registry', () => {
       expect(r.source).toBe('env-file');
     });
 
-    it('flags shadowsStored when a DIFFERENT env key overrides the saved key', () => {
-      // The exact production bug: valid key saved in Options, stale key in
-      // the environment (e.g. exported from ~/.secrets) wins → 401.
+    it('flags storedOverridesEnv when a saved key overrides a DIFFERENT env var', () => {
+      // The inverted production bug: a valid key saved in Options now WINS over
+      // a stale key in the environment (e.g. exported from ~/.secrets), so the
+      // saved key is used and the env var is flagged as ignored.
       saveApiKey(spec(), 'sk-or-v1-valid-saved');
       process.env.OPENROUTER_API_KEY = 'sk-or-v1-stale-env';
       const r = resolveApiKeyWithSource(spec());
-      expect(r.value).toBe('sk-or-v1-stale-env');
-      expect(r.source).toBe('env');
-      expect(r.shadowsStored).toBe(true);
+      expect(r.value).toBe('sk-or-v1-valid-saved');
+      expect(r.source).toBe('stored');
+      expect(r.storedOverridesEnv).toBe(true);
     });
 
-    it('does NOT flag shadowsStored when env and store hold the same key', () => {
+    it('does NOT flag storedOverridesEnv when env and store hold the same key', () => {
       saveApiKey(spec(), 'sk-or-same');
       process.env.OPENROUTER_API_KEY = 'sk-or-same';
       const r = resolveApiKeyWithSource(spec());
-      expect(r.source).toBe('env');
-      expect(r.shadowsStored).toBe(false);
+      expect(r.source).toBe('stored');
+      expect(r.storedOverridesEnv).toBe(false);
     });
 
     it('value matches resolveApiKey for every tier (no behavior drift)', () => {
@@ -199,24 +200,24 @@ describe('api-key registry', () => {
   describe('keyRemedyHint', () => {
     const spec = () => findSpec('openrouter')!;
 
-    it('the shadow case names the env var AND says it overrides Options', () => {
-      const hint = keyRemedyHint(spec(), {
-        value: 'x',
-        source: 'env',
-        shadowsStored: true,
-      });
-      expect(hint).toContain('OPENROUTER_API_KEY');
-      expect(hint).toContain('OVERRIDES');
-      expect(hint).toContain('Options');
-      // Must point at where env vars actually live, not just "Options".
-      expect(hint).toMatch(/Unset OPENROUTER_API_KEY/);
-    });
-
-    it('the stored case is the only one that tells you to update Options', () => {
+    it('the stored-overrides-env case names the ignored env var and points at Options', () => {
       const hint = keyRemedyHint(spec(), {
         value: 'x',
         source: 'stored',
-        shadowsStored: false,
+        storedOverridesEnv: true,
+      });
+      expect(hint).toContain('OPENROUTER_API_KEY');
+      expect(hint).toContain('IGNORED');
+      expect(hint).toContain('Options');
+      expect(hint).toContain('precedence');
+      expect(hint).toContain('rejected');
+    });
+
+    it('the plain stored case tells you to update the saved key in Options', () => {
+      const hint = keyRemedyHint(spec(), {
+        value: 'x',
+        source: 'stored',
+        storedOverridesEnv: false,
       });
       expect(hint).toContain('Options screen');
       expect(hint).toContain('rejected');
@@ -226,7 +227,7 @@ describe('api-key registry', () => {
       const hint = keyRemedyHint(spec(), {
         value: '',
         source: 'none',
-        shadowsStored: false,
+        storedOverridesEnv: false,
       });
       expect(hint).toContain('No OPENROUTER_API_KEY');
     });
@@ -234,7 +235,7 @@ describe('api-key registry', () => {
     it('never leaks the key value into the hint', () => {
       const secret = 'sk-or-v1-supersecret-value';
       for (const source of ['env', 'env-file', 'secret-mount', 'stored', 'none'] as const) {
-        const hint = keyRemedyHint(spec(), { value: secret, source, shadowsStored: true });
+        const hint = keyRemedyHint(spec(), { value: secret, source, storedOverridesEnv: true });
         expect(hint).not.toContain(secret);
       }
     });

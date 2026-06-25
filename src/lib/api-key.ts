@@ -32,65 +32,88 @@ export interface ApiKeyResolution {
   /** Which precedence tier supplied `value`. */
   source: ApiKeySource;
   /**
-   * True when a NON-EMPTY value also exists in the persisted store (the
-   * Options screen's "save key globally" path) AND it differs from the
-   * winning value — i.e. a higher-precedence source is silently shadowing
-   * what the user saved in Options. This is the #1 cause of the
-   * "I updated the key in Options but it still returns 401" support case:
-   * a stale `OPENROUTER_API_KEY` exported from a shell profile (or a
-   * `~/.secrets` it sources) outranks the stored key (env is step 3, the
-   * store is step 4). When `source` is already `'stored'` this is always
-   * false — nothing outranks it.
+   * True when the user's EXPLICITLY SAVED key won (`source === 'stored'`) AND a
+   * DIFFERENT non-empty ambient credential is also present (an `<NAME>_FILE`
+   * file, or the `<NAME>` env var) — i.e. huu is deliberately IGNORING an
+   * ambient value in favor of what the user saved in Options. This is the
+   * inverted successor to the old `shadowsStored`: the resolver now ranks the
+   * saved store ABOVE the env var (the explicit choice beats the ambient one),
+   * so the old "a stale `OPENROUTER_API_KEY` exported from a shell profile
+   * silently shadows the saved key → 401" foot-gun is gone and the diagnostic
+   * points the other way. Only ever true when `source === 'stored'`.
    */
-  shadowsStored: boolean;
+  storedOverridesEnv: boolean;
+}
+
+/**
+ * The ambient (non-explicit) credential for a spec: the `<NAME>_FILE` file
+ * contents if set, else the plain `<NAME>` env var (trimmed). Used only to
+ * tell whether a winning stored key is overriding something the environment
+ * also offers — never as a resolved value on its own.
+ */
+function ambientEnvValue(spec: ApiKeySpec): string {
+  const fileVar = process.env[spec.envFileVar];
+  if (fileVar) {
+    const fromFile = readKeyFile(fileVar);
+    if (fromFile) return fromFile;
+  }
+  return (process.env[spec.envVar] ?? '').trim();
 }
 
 /**
  * Generic resolver for the API keys declared in the registry, reporting
- * WHICH tier won so callers can give an actionable error instead of a
- * blanket "update it in Options" (which is a no-op when an env var
- * shadows the saved key).
+ * WHICH tier won so callers can give an actionable error.
  *
- * Resolution order (first non-empty wins):
- *   1. Container secret mount (`spec.secretMountPath`).
- *   2. `<NAME>_FILE` env var pointing at a file with the value.
- *   3. `<NAME>` env var (plain).
- *   4. Persisted global store at `$XDG_CONFIG_HOME/huu/config.json`
- *      (fallback `~/.config/huu/config.json`). Populated by the TUI's
- *      "save key globally" path. Lives on the HOST and is reachable
- *      from the container only because the wrapper re-mounts the
- *      resolved value as a secret file.
+ * Resolution order (first non-empty wins) — the EXPLICIT choice beats the
+ * AMBIENT one:
+ *   1. Container secret mount (`spec.secretMountPath`). In Docker the host
+ *      resolves the key with this same order and re-mounts it here, so the
+ *      mount already reflects the host's decision.
+ *   2. Persisted global store at `$XDG_CONFIG_HOME/huu/config.json`
+ *      (fallback `~/.config/huu/config.json`) — the key the user explicitly
+ *      saved via the TUI's "save key globally" path. This now OUTRANKS the
+ *      env var, so a stale `OPENROUTER_API_KEY` left in a shell profile no
+ *      longer shadows what the user deliberately saved.
+ *   3. `<NAME>_FILE` env var pointing at a file with the value.
+ *   4. `<NAME>` env var (plain) — the fallback when nothing is saved (the
+ *      standard CI / headless path: no Options save, so the env var wins).
  *
  * Never throws on missing files — callers (TUI, agent factory, docker
  * re-exec) handle the empty case explicitly.
  */
 export function resolveApiKeyWithSource(spec: ApiKeySpec): ApiKeyResolution {
-  // Read the store up front so we can flag shadowing of a saved key no
-  // matter which higher tier wins. Read-only + cheap (a small JSON file);
-  // the returned `value` is identical to the lazy walk below.
-  const stored = loadStoredApiKey(spec);
-  const shadows = (winning: string): boolean => stored !== '' && stored !== winning;
-
   const fromMount = readKeyFile(spec.secretMountPath);
   if (fromMount) {
-    return { value: fromMount, source: 'secret-mount', shadowsStored: shadows(fromMount) };
+    return { value: fromMount, source: 'secret-mount', storedOverridesEnv: false };
+  }
+
+  // The explicitly saved key wins over the ambient env var/file. When it does,
+  // flag whether a DIFFERENT ambient value is being ignored so the UI/CLI can
+  // say so, instead of leaving the user wondering which key huu used.
+  const stored = loadStoredApiKey(spec);
+  if (stored !== '') {
+    const ambient = ambientEnvValue(spec);
+    return {
+      value: stored,
+      source: 'stored',
+      storedOverridesEnv: ambient !== '' && ambient !== stored,
+    };
   }
 
   const fileVar = process.env[spec.envFileVar];
   if (fileVar) {
     const fromFile = readKeyFile(fileVar);
     if (fromFile) {
-      return { value: fromFile, source: 'env-file', shadowsStored: shadows(fromFile) };
+      return { value: fromFile, source: 'env-file', storedOverridesEnv: false };
     }
   }
 
   const fromEnv = (process.env[spec.envVar] ?? '').trim();
   if (fromEnv) {
-    return { value: fromEnv, source: 'env', shadowsStored: shadows(fromEnv) };
+    return { value: fromEnv, source: 'env', storedOverridesEnv: false };
   }
 
-  if (stored !== '') return { value: stored, source: 'stored', shadowsStored: false };
-  return { value: '', source: 'none', shadowsStored: false };
+  return { value: '', source: 'none', storedOverridesEnv: false };
 }
 
 /** Value-only resolver. Thin wrapper over {@link resolveApiKeyWithSource}. */
@@ -101,35 +124,37 @@ export function resolveApiKey(spec: ApiKeySpec): string {
 /**
  * Human-facing, value-free remediation hint for a key that was rejected
  * (401/403) or is needed. Names the ACTUAL winning source so the fix is
- * actionable — the whole point is to stop telling users to "update it in
- * Options" when an env var is shadowing what they already saved there.
+ * actionable. Because the saved store now OUTRANKS the env var, the foot-gun
+ * message lives on the `stored` case: an env var can be present but ignored
+ * in favor of the key the user explicitly saved in Options.
  */
 export function keyRemedyHint(spec: ApiKeySpec, res: ApiKeyResolution): string {
-  const saved = 'the different key saved in the Options screen';
   switch (res.source) {
+    case 'stored':
+      return res.storedOverridesEnv
+        ? `huu used the key you saved in the Options screen (a saved key takes precedence), and ` +
+            `it was rejected. ${spec.envVar} is also set in your environment but is IGNORED while ` +
+            `a saved key exists — update the saved key in the Options screen, or clear it to fall ` +
+            `back to ${spec.envVar}.`
+        : `huu used the key saved in the Options screen and it was rejected. Update it there.`;
     case 'env':
-      return res.shadowsStored
-        ? `huu used the ${spec.envVar} environment variable, which OVERRIDES ${saved}. ` +
-            `Unset ${spec.envVar} — it is often exported from a shell profile ` +
-            `(~/.zshenv, ~/.bashrc, ~/.profile) or a ~/.secrets file one of them sources — ` +
-            `so huu falls back to the saved key, or correct its value there.`
-        : `huu used the ${spec.envVar} environment variable. Correct it where it is ` +
-            `exported (shell profile, ~/.secrets, CI secret), or unset it and save a key in the Options screen.`;
+      return (
+        `huu used the ${spec.envVar} environment variable as the fallback (no key is saved in the ` +
+        `Options screen). Correct it where it is exported (shell profile, ~/.secrets, CI secret), ` +
+        `or save a key in the Options screen — a saved key takes precedence.`
+      );
     case 'env-file':
       return (
-        `huu read the key from the file named by ${spec.envFileVar}` +
-        (res.shadowsStored ? `, which OVERRIDES ${saved}` : '') +
-        `. Fix that file or unset ${spec.envFileVar}.`
+        `huu read the key from the file named by ${spec.envFileVar} (no key is saved in the Options ` +
+        `screen). Fix that file or unset ${spec.envFileVar}, or save a key in the Options screen — ` +
+        `a saved key takes precedence.`
       );
     case 'secret-mount':
       return (
-        `huu read the key from the mounted secret ${spec.secretMountPath}` +
-        (res.shadowsStored ? ` (it OVERRIDES ${saved})` : '') +
-        `. On a Docker run the host resolved this value (from ${spec.envVar} or the global ` +
-        `store) before forwarding it — fix ${spec.envVar} on the host.`
+        `huu read the key from the mounted secret ${spec.secretMountPath}. On a Docker run the host ` +
+        `resolved this value (the key you saved in Options, or ${spec.envVar}) before forwarding ` +
+        `it — fix it on the host.`
       );
-    case 'stored':
-      return `Update ${spec.envVar} in the Options screen — the saved key was rejected.`;
     case 'none':
     default:
       return `No ${spec.envVar} key is set. Add one in the Options screen.`;

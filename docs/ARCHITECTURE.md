@@ -16,7 +16,7 @@ src/
 │   ├── run-logger.ts          # per-run chronological + per-agent logs
 │   ├── debug-logger.ts        # NDJSON tracing under .huu/
 │   ├── api-key-registry.ts    # declarative spec list (openrouter, artificialAnalysis, …)
-│   ├── api-key.ts             # generic resolver (mount → _FILE → env → ~/.config/huu/config.json)
+│   ├── api-key.ts             # generic resolver (mount → ~/.config/huu/config.json → _FILE → env)
 │   ├── docker-reexec.ts       # auto-execs into the official image; signal-safe; secret-file mount
 │   ├── active-run-sentinel.ts # /tmp/huu/active for the HEALTHCHECK probe
 │   ├── init-docker.ts         # `huu init-docker` scaffolder
