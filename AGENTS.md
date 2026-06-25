@@ -104,7 +104,10 @@ concurrency target is memory-headroom based: `ramAvailableBytes` minus a
 10%/512MiB safety margin, divided by an EMA-observed per-agent footprint
 (seeded 250MiB, clamped 128MiB–2GiB). `--concurrency=N` or
 `--no-auto-scale` (or `RunConfig.concurrency` in headless) pins `manual`
-mode. The MEMORY GUARD runs in BOTH modes: at ≥95% RAM/CPU it kills the
+mode. A third mode, `greedy` (TUI label **MAX**, the `M` hotkey), floods
+one agent per queued task up to the hard ceiling and lets the guard be the
+sole backstop, so concurrency settles at the destroy threshold. The MEMORY
+GUARD runs in ALL THREE modes: at ≥95% RAM/CPU it kills the
 NEWEST agent (least work done — picked by `startedAt`), resets its card to
 `pending` with a `requeues` counter (TODO column, `↻N` badge), and requeues
 the task at the front of the queue. The killed-attempt marker is the

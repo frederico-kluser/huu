@@ -186,8 +186,10 @@ UI via `OrchestratorState.autoScale` (`AutoScaleStatus`):
 | `COOLDOWN` | 30s pause after a destroy/back-off event so the system doesn't oscillate. |
 
 Manual `+`/`-` on the run dashboard disables auto-scale (a single `A`
-press re-enables it). Killed agents land on the `killed_by_autoscaler`
-lifecycle phase, preserved in the run summary.
+press re-enables it); `M` toggles **MAX mode** (`greedy`) — flood one
+agent per queued task and let the memory guard alone hold the line,
+surfaced as a blue `MAX` chip. Killed agents land on the
+`killed_by_autoscaler` lifecycle phase, preserved in the run summary.
 
 ## Docker layer (host wrapper + container runtime)
 

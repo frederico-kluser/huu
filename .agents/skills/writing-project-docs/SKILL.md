@@ -31,7 +31,7 @@ huu "designs pipelines that make thinking agents follow a deterministic processâ
 
 ### Visual conventions (when documenting UI)
 
-`theme.ai` magenta/fuchsia means "AI-driven UI" in both TUI and web; README's "Visual conventions" section is the user-facing source. Screenshots/descriptions should respect that mapping.
+`theme.ai` magenta/fuchsia means "AI-driven UI" in the TUI; README's "Visual conventions" section is the user-facing source. Screenshots/descriptions should respect that mapping.
 
 ### Pointers
 

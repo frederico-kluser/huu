@@ -7,6 +7,15 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ## [Unreleased]
 
+### Added
+
+- **MAX (greedy) auto-scaling mode.** Press `M` on the run dashboard to
+  flood the worker pool with one agent per queued task (up to the hard
+  ceiling) and let the always-on memory guard be the sole backstop;
+  concurrency settles at the memory limit, cooldown-damped to avoid
+  thrashing. Surfaced as a blue `MAX` status chip. `+`/`-` still pin
+  manual from any mode, `A` returns to auto.
+
 ### Removed
 
 - **Web UI mode (`huu --web`) removed entirely.** huu is now terminal-only

@@ -346,6 +346,14 @@ contador de kills). O bloco de status também mostra `CPU%` e `RAM%`
 ao vivo, espelhando o `SystemMetricsBar` pra você não ter que
 correlacionar dois readouts.
 
+**Modo MAX (`M`)** é um terceiro modo, ganancioso: inunda o pool com um
+agente por tarefa na fila (até o teto rígido) e deixa a guarda de
+memória sempre-ativa como único backstop, então a concorrência se
+acomoda exatamente no threshold de destruição. O header mostra um chip
+azul `MAX <ESTADO>` com a contagem de kills; o amortecimento por
+cooldown evita thrashing. Pressione `M` de novo (ou `A`) pra voltar ao
+auto, `+`/`-` pra cair pro manual.
+
 Sobrescreva defaults setando `agentMemoryEstimateMb`,
 `stopThresholdPercent`, `destroyThresholdPercent`, `cooldownMs` e
 `maxAgents` no código se você embarca o orchestrator; o CLI expõe
@@ -466,8 +474,9 @@ A guarda de memória sempre-ativa disparou: em ~95% de RAM (ou CPU)
 ela mata o agente **mais novo** — o que tem menos trabalho feito —
 pra que o trabalho dos agentes mais antigos sobreviva. O cartão volta
 pra coluna TODO com um contador de requeue `↻N` e a tarefa recomeça
-do zero quando a memória liberar. A guarda fica ativa nos dois modos
-de concorrência. O auto-scale memória-aware é o padrão; pine um
+do zero quando a memória liberar. A guarda fica ativa em todos os
+modos de concorrência (auto, manual e MAX). O auto-scale memória-aware
+é o padrão; pine um
 número fixo de agentes com `--concurrency=N` ou `--no-auto-scale`
 (ou `"concurrency": N` num config headless).
 

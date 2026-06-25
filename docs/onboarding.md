@@ -390,7 +390,7 @@ Setting `"concurrency": N` **pins manual mode** at N agents. Omit it to
 get the default memory-aware auto-scale, which adapts concurrency to
 the real memory headroom (cgroup-aware — it respects the container's
 limit); `"autoScale": true` forces auto explicitly. The memory guard is
-always on in both modes. For sizing on CI runners, see
+always on in every mode. For sizing on CI runners, see
 [`docs/ci.md`](ci.md).
 
 API key resolution follows the same chain as the TUI:

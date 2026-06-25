@@ -405,7 +405,7 @@ Setar `"concurrency": N` **pina o modo manual** em N agentes. Omita pra
 ter o auto-scale memória-aware padrão, que adapta a concorrência ao
 headroom real de memória (cgroup-aware — respeita o limite do
 container); `"autoScale": true` força o auto explicitamente. A guarda
-de memória fica sempre ativa nos dois modos. Pra dimensionar em runners
+de memória fica sempre ativa em todos os modos. Pra dimensionar em runners
 de CI, veja [`docs/ci.pt-BR.md`](ci.pt-BR.md).
 
 A API key resolve pela mesma cadeia da TUI:

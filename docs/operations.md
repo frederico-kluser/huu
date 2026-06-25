@@ -343,6 +343,13 @@ kill count). The status block also shows live `CPU%` and `RAM%`,
 mirroring the `SystemMetricsBar` so you don't have to correlate two
 readouts.
 
+**MAX mode (`M`)** is a third, greedy mode: it floods the pool with one
+agent per queued task (up to the hard ceiling) and lets the always-on
+memory guard be the sole backstop, so concurrency settles right at the
+destroy threshold. The header shows a blue `MAX <STATE>` chip with the
+kill count; cooldown damping keeps it from thrashing. Press `M` again
+(or `A`) to return to auto, `+`/`-` to drop to manual.
+
 Override defaults by setting `agentMemoryEstimateMb`,
 `stopThresholdPercent`, `destroyThresholdPercent`, `cooldownMs`, and
 `maxAgents` in code if you embed the orchestrator; the CLI exposes
@@ -460,7 +467,7 @@ The always-on memory guard fired: at ~95% RAM (or CPU) it kills the
 **newest** agent — the one with the least work done — so the older
 agents' work survives. The card returns to the TODO column with a `↻N`
 requeue counter and the task restarts from zero once memory frees up.
-The guard is active in both concurrency modes. Memory-aware auto-scale
+The guard is active in every concurrency mode (auto, manual, and MAX). Memory-aware auto-scale
 is the default; pin a fixed agent count with `--concurrency=N` or
 `--no-auto-scale` (or `"concurrency": N` in a headless config).
 

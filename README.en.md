@@ -352,8 +352,7 @@ Controls:
 | Where | How |
 |---|---|
 | CLI | `--concurrency=N` pins manual at N · `--no-auto-scale` turns the dynamic mode off |
-| TUI | `+`/`-` adjust (and pin manual) · `A` re-enables auto-scale |
-| Web | concurrency control + auto-scale toggle in the run header |
+| TUI | `+`/`-` adjust (and pin manual) · `A` re-enables auto-scale · `M` MAX mode (floods to the memory limit) |
 | Headless | `"concurrency": N` in the config pins manual; omit it for the dynamic mode |
 
 ---
@@ -387,18 +386,6 @@ Docker for anything real on your laptop. (`--no-docker` is the
 neutral-spelling alias of `--yolo`, meant for CI runners — see below.)
 Full install matrix (macOS / Windows / Linux, OrbStack notes, WSL2
 caveats): [`docs/onboarding.md#install`](docs/onboarding.md#install).
-
-### Web UI (`huu --web`)
-
-A browser front-end that swaps the Ink TUI for React while **reusing 100%
-of the back-end** (orchestrator, FSM, handlers). In phase 1 it requires
-`--yolo` (Docker port-publishing is not implemented yet):
-
-```bash
-huu --web --yolo               # opens the browser on the web UI
-```
-
-Details: [`docs/WEB-UI.md`](docs/WEB-UI.md).
 
 ---
 

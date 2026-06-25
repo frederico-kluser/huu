@@ -15,7 +15,7 @@ Every time a change is ready to commit/push. Also when explaining or scripting v
 ## Injected knowledge
 
 - There is NO automated CI. The gate is `npm run typecheck && npm test` before every commit — skipping it means nothing else will catch the break. Opt-in enforcement: `git config core.hooksPath .githooks` (pre-push hook).
-- Conventional Commits, types observed in history: `feat`, `fix`, `docs`, `chore` (releases), `refactor`, `merge`. Scopes actually used: `pipelines`, `cli`, `orchestrator`, `docker`, `azure`, `ui,web`, `smoke`, `tui`, `kanban`, `backend`, `readme`, `merges`. Subject in English, imperative.
+- Conventional Commits, types observed in history: `feat`, `fix`, `docs`, `chore` (releases), `refactor`, `merge`. Scopes actually used: `pipelines`, `cli`, `orchestrator`, `docker`, `azure`, `ui`, `smoke`, `tui`, `kanban`, `backend`, `readme`, `merges`. Subject in English, imperative.
 - Never force-push to `main`.
 - Docker smoke suite — run when the change touches the wrapper, Dockerfile, or before any release (not for ordinary src-only changes):
   ```bash
@@ -29,7 +29,7 @@ Every time a change is ready to commit/push. Also when explaining or scripting v
 ## Procedure
 
 1. `npm run typecheck && npm test` — both green, no exceptions.
-2. Smokes if Docker/wrapper/web-server surface changed (commands above).
+2. Smokes if Docker/wrapper surface changed (commands above).
 3. Stage deliberately (`git add` specific paths — the repo often carries unrelated working files).
 4. Commit as `<type>(<scope>): <imperative subject>`; body explains why when non-obvious.
 5. Update `CHANGELOG.md [Unreleased]` for user-visible changes.

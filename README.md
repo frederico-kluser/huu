@@ -358,8 +358,7 @@ Controles:
 | Onde | Como |
 |---|---|
 | CLI | `--concurrency=N` pina manual em N · `--no-auto-scale` desliga o modo dinâmico |
-| TUI | `+`/`-` ajustam (e pinam manual) · `A` religa o auto-scale |
-| Web | controle de concorrência + toggle de auto-scale no header do run |
+| TUI | `+`/`-` ajustam (e pinam manual) · `A` religa o auto-scale · `M` modo MAX (inunda até o limite de memória) |
 | Headless | `"concurrency": N` no config pina manual; omita para o modo dinâmico |
 
 ---
@@ -394,18 +393,6 @@ o alias de grafia neutra do `--yolo`, pensado pra runners de CI — veja
 abaixo.) Matriz completa de instalação (macOS / Windows / Linux, notas
 do OrbStack, caveats do WSL2):
 [`docs/onboarding.pt-BR.md#instalação`](docs/onboarding.pt-BR.md#instalação).
-
-### Web UI (`huu --web`)
-
-Front-end de browser que troca a TUI Ink por React, **reutilizando 100%
-do back-end** (orchestrator, FSM, handlers). Na fase 1 exige `--yolo`
-(o publish de portas no Docker ainda não foi implementado):
-
-```bash
-huu --web --yolo               # abre o navegador na UI web
-```
-
-Detalhes: [`docs/WEB-UI.md`](docs/WEB-UI.md).
 
 ---
 
