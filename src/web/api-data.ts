@@ -18,6 +18,8 @@ import {
   findMissingKeysForBackend,
   type ApiKeySpec,
 } from '../lib/api-key.js';
+import { checkOpenRouterReachable } from '../lib/openrouter.js';
+import { checkAzureReachable } from '../lib/azure.js';
 import { loadRecommendedModels } from '../models/catalog.js';
 import { supportsThinking } from '../lib/model-factory.js';
 import {
@@ -40,6 +42,12 @@ export interface BackendInfo {
   requiresApiKey: boolean;
   /** True when a usable key is already resolvable (env, mount, or saved). */
   hasKey: boolean;
+  /**
+   * Registry name of this backend's primary credential (e.g. 'openrouter').
+   * The browser uses it to look up the per-session key it keeps in memory
+   * and to send that key with each run — see the browser-only key flow.
+   */
+  apiKeySpecName?: string;
   /** False for stub — surfaced as a no-cost "demo" backend in the UI. */
   userSelectable: boolean;
 }
@@ -111,9 +119,56 @@ export function listBackendsInfo(): BackendInfo[] {
       description: b.description,
       requiresApiKey: b.requiresApiKey,
       hasKey: backendHasKey(id),
+      apiKeySpecName: b.apiKeySpecName,
       userSelectable: b.userSelectable,
     };
   });
+}
+
+/**
+ * Result of validating a pasted key BEFORE it is used. The browser-only
+ * key flow blocks on this: a key that comes back `invalid` (the provider
+ * actively rejected it with 401/403 — the exact failure that motivated
+ * this) is never accepted; `unverifiable` (offline/VPN, or a backend with
+ * no cheap probe) is accepted with a warning so users aren't hard-blocked.
+ */
+export type KeyValidation =
+  | { status: 'valid' }
+  | { status: 'invalid'; httpStatus: number }
+  | { status: 'unverifiable'; reason: string };
+
+/**
+ * Validate a key value against its provider without persisting anything.
+ * Backend-aware: OpenRouter (pi) and Azure have real reachability probes;
+ * other specs (Copilot token, the Azure endpoint URL) have no cheap
+ * check and come back `unverifiable`.
+ */
+export async function validateKeyValue(
+  spec: ApiKeySpec,
+  value: string,
+  opts?: { endpoint?: string },
+): Promise<KeyValidation> {
+  const v = value.trim();
+  if (!v) return { status: 'unverifiable', reason: 'empty value' };
+
+  if (spec.name === 'openrouter') {
+    const r = await checkOpenRouterReachable(v);
+    if (r.kind === 'ok') return { status: 'valid' };
+    if (r.kind === 'unauthorized') return { status: 'invalid', httpStatus: r.status };
+    return { status: 'unverifiable', reason: r.reason };
+  }
+
+  if (spec.name === 'azureApiKey') {
+    const endpoint = opts?.endpoint?.trim();
+    if (!endpoint) return { status: 'unverifiable', reason: 'endpoint required to validate' };
+    const r = await checkAzureReachable(v, endpoint);
+    if (r.kind === 'ok') return { status: 'valid' };
+    if (r.kind === 'unauthorized') return { status: 'invalid', httpStatus: r.status };
+    return { status: 'unverifiable', reason: r.reason };
+  }
+
+  // Copilot token / Azure endpoint URL / future specs: no cheap probe.
+  return { status: 'unverifiable', reason: 'no validator for this key' };
 }
 
 /** Selectable models for a backend, with thinking-capability annotation. */

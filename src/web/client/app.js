@@ -44,6 +44,28 @@ const S = {
   logOpen: false,
 };
 
+/* ---------------- Browser-only API keys ----------------
+   The user's key never touches disk. We validate it server-side, keep it in
+   THIS browser's sessionStorage (gone when the tab closes), and send it with
+   every /api/run. The server uses it in memory only. */
+const keyStoreName = (name) => 'huu.key.' + name;
+function sessionKey(name) {
+  if (!name) return '';
+  try { return sessionStorage.getItem(keyStoreName(name)) || ''; } catch { return ''; }
+}
+function setSessionKey(name, value) {
+  if (!name) return;
+  try { sessionStorage.setItem(keyStoreName(name), value); } catch {}
+}
+function backendSpecName(id) {
+  const b = ((S.boot && S.boot.backends) || []).find((x) => x.id === id);
+  return b ? b.apiKeySpecName : undefined;
+}
+/** Ready if the server resolves a key (env/mount/disk) OR we hold one in this session. */
+function backendReady(b) {
+  return b.hasKey || !!sessionKey(b.apiKeySpecName);
+}
+
 const PIPE_ICONS = { test: '✓', audit: '◎', security: '🛡', performance: '⚡', docs: '✦', quality: '◆', refactor: '↻', knowledge: '✸' };
 function pipeIcon(name) {
   const n = name.toLowerCase();
@@ -68,7 +90,7 @@ async function boot() {
 }
 
 function pickDefaultBackend(backends) {
-  const usable = (backends || []).find((x) => x.userSelectable && x.hasKey);
+  const usable = (backends || []).find((x) => x.userSelectable && backendReady(x));
   if (usable) return usable.id;
   const sel = (backends || []).find((x) => x.userSelectable);
   return sel ? sel.id : 'pi';
@@ -126,7 +148,7 @@ function renderBackendSeg() {
     btn.type = 'button';
     btn.className = S.backend === b.id ? 'on' : '';
     btn.textContent = b.id === 'stub' ? 'Demo' : b.label.replace(/\s*\(.*\)/, '');
-    btn.title = b.description + (b.requiresApiKey ? (b.hasKey ? ' · key ✓' : ' · key needed') : '');
+    btn.title = b.description + (b.requiresApiKey ? (backendReady(b) ? ' · key ✓' : ' · key needed') : '');
     if (locked && b.id !== S.boot.lockedBackend) btn.disabled = true;
     btn.addEventListener('click', async () => { S.backend = b.id; renderBackendSeg(); await refreshModelsAndKeys(); });
     seg.appendChild(btn);
@@ -159,6 +181,12 @@ async function refreshModelsAndKeys() {
   if (S.backend === 'stub') { S.keyStatus = { ok: true, missing: [] }; }
   else {
     try { S.keyStatus = await api('/api/keys?backend=' + S.backend); } catch { S.keyStatus = { ok: true, missing: [] }; }
+    // A spec we already hold a validated key for (this browser session) is
+    // satisfied even though the server — which never saw it — reports it missing.
+    if (S.keyStatus && Array.isArray(S.keyStatus.missing) && S.keyStatus.missing.length) {
+      const stillMissing = S.keyStatus.missing.filter((s) => !sessionKey(s.name));
+      S.keyStatus = { ok: stillMissing.length === 0, missing: stillMissing };
+    }
   }
   renderKeyField();
   updateRunBtn();
@@ -188,12 +216,35 @@ $('keySave').addEventListener('click', async () => {
   const name = $('keyInput').dataset.spec;
   const value = $('keyInput').value.trim();
   if (!name || !value) return;
+  const btn = $('keySave');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Validating…';
   try {
-    await api('/api/keys', { method: 'POST', body: JSON.stringify({ name, value }) });
-    $('keyInput').value = '';
-    toast('Key saved');
-    await refreshModelsAndKeys();
+    // Validate BEFORE accepting — a key the provider rejects (the exact 401
+    // that motivated this) is never stored. On success the value lives only
+    // in this browser's session memory and is sent with each run.
+    const r = await api('/api/keys/validate', {
+      method: 'POST',
+      body: JSON.stringify({ name, value, backend: S.backend, endpoint: sessionKey('azureEndpoint') || undefined }),
+    });
+    if (r.status === 'valid') {
+      setSessionKey(name, value);
+      $('keyInput').value = '';
+      toast('Key validated ✓ — kept in this browser only');
+      await refreshModelsAndKeys();
+    } else if (r.status === 'invalid') {
+      toast(`Key rejected (HTTP ${r.httpStatus}). Check it and paste again.`, true);
+    } else {
+      // Couldn't reach the provider (offline/VPN) or no validator for this
+      // key — don't hard-block; keep it for this session with a warning.
+      setSessionKey(name, value);
+      $('keyInput').value = '';
+      toast(`Couldn't verify the key (${r.reason}) — using it for this session anyway.`);
+      await refreshModelsAndKeys();
+    }
   } catch (e) { toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = label; }
 });
 
 $('modelSelect').addEventListener('change', (e) => { S.modelId = e.target.value; updateModelHint(); });
@@ -229,6 +280,9 @@ $('configForm').addEventListener('submit', async (e) => {
         modelId: S.modelId,
         mode: S.mode,
         concurrency: S.mode === 'manual' ? S.manualN : undefined,
+        // Browser-only key: send the validated, in-memory key for this run.
+        // Omitted → server falls back to its env/mount/disk resolver.
+        apiKey: sessionKey(backendSpecName(S.backend)) || undefined,
       }),
     });
     showView('run');

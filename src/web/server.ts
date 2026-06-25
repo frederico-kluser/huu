@@ -24,6 +24,7 @@ import {
   listModelsInfo,
   keyStatus,
   findKeySpec,
+  validateKeyValue,
   listPipelinesInfo,
   getPipelineByName,
   repoName,
@@ -189,7 +190,24 @@ export function createWebServer(opts: WebServerOptions): {
       if (!backend) return sendJson(res, 400, { error: 'unknown backend' });
       return sendJson(res, 200, keyStatus(backend));
     }
+    if (method === 'POST' && path === '/api/keys/validate') {
+      // Browser-only key flow: validate a pasted key against its provider
+      // WITHOUT persisting it. The browser keeps the value in session
+      // memory and sends it back with each run; nothing is written to disk.
+      const body = await readJsonBody(req);
+      const name = String(body.name ?? '');
+      const value = String(body.value ?? '');
+      const endpoint = body.endpoint ? String(body.endpoint) : undefined;
+      const spec = findKeySpec(name);
+      if (!spec) return sendJson(res, 400, { error: `unknown key: ${name}` });
+      if (!value.trim()) return sendJson(res, 400, { error: 'empty value' });
+      const result = await validateKeyValue(spec, value, { endpoint });
+      return sendJson(res, 200, result);
+    }
     if (method === 'POST' && path === '/api/keys') {
+      // Optional disk persistence (CLI/headless reuse). The browser UI does
+      // NOT call this — it keeps keys in session memory only. Left in place
+      // so a user who WANTS a saved key can still POST here.
       const body = await readJsonBody(req);
       const name = String(body.name ?? '');
       const value = String(body.value ?? '');
@@ -248,6 +266,10 @@ export function createWebServer(opts: WebServerOptions): {
           : undefined,
       backend,
       modelId: String(body.modelId ?? ''),
+      // Browser-only key: the client sends the in-memory key it validated
+      // earlier. Used for this run only; never persisted. Absent → the
+      // run manager falls back to the env/mount/disk resolver (CLI path).
+      apiKey: body.apiKey ? String(body.apiKey) : undefined,
       concurrency:
         typeof body.concurrency === 'number' ? body.concurrency : undefined,
       mode: ['auto', 'manual', 'greedy'].includes(String(body.mode))

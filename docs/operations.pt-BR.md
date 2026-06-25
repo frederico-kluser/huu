@@ -257,6 +257,16 @@ Qualquer key que resolve pra vazio E é `required: true` faz a TUI
 mostrar o prompt no caminho da primeira execução. Stub mode (`--stub`)
 curto-circuita o check de requisito.
 
+Como o passo 3 (env) vence o passo 4 (o store salvo), um
+`OPENROUTER_API_KEY` stale exportado por um perfil de shell sombreia em
+silêncio a key que você salvou no Options — o clássico "key válida ainda
+dá 401". `resolveApiKeyWithSource` reporta qual camada venceu, então a
+mensagem de abort nomeia a fonte real e, quando uma env var sobrescreve a
+key salva, manda você dar `unset` nela. A **interface web evita isso de
+vez**: uma key colada no navegador é validada contra o provider primeiro e
+fica só no `sessionStorage` daquela aba — enviada a cada run, nunca escrita
+em `~/.config`.
+
 ### Variáveis de ambiente
 
 | Variável | Obrigatória | Pra que serve |
