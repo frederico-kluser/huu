@@ -13,12 +13,16 @@
 </p>
 
 <p align="center">
+  <em>The agent orchestrator where the <strong>method is yours</strong> and the <strong>intelligence is the model's</strong>.</em>
+</p>
+
+<p align="center">
   <a href="MANIFESTO.en.md">Manifesto</a> · <strong>English</strong> · <a href="README.md">Português (BR)</a>
 </p>
 
 <p align="center">
   <a href="#license"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
-  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-1.3.0-blueviolet"></a>
+  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-1.4.0-blueviolet"></a>
   <img alt="Node.js 20+" src="https://img.shields.io/badge/node-%E2%89%A5%2020-339933?logo=node.js&logoColor=white">
   <img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.x-3178C6?logo=typescript&logoColor=white">
   <img alt="Built with Ink" src="https://img.shields.io/badge/TUI-Ink%204-000000">
@@ -73,7 +77,101 @@ That sentence has a few claims worth unpacking:
   it as a gist, contribute it to the cookbook. The know-how of *how
   to decompose this class of task* lives in plain JSON.
 
-### Stage → merge → stage
+---
+
+## Where huu fits — and how it differs from the competition
+
+We surveyed ~20 open-source agent-orchestration tools. They split along
+**two questions**: *who decides the scope* (the human or the LLM?) and
+*how is the work integrated back* (deterministic merge or manual?).
+Almost everyone lands in two crowded corners — and huu's corner is empty.
+
+```
+              DETERMINISTIC MERGE, stage by stage
+                          ▲
+                          │            ┌─────────┐
+        (nobody)          │            │   huu   │  ← human pipeline +
+                          │            └─────────┘    fan-out + --no-ff
+   SCOPE ◀────────────────┼───────────────────────▶ SCOPE
+   BY LLM                 │                          BY HUMAN
+   OpenHands              │   Conductor · Crystal
+   SWE-agent              │   Claude Squad · uzi · vibe-kanban
+   Cursor · Amp           │   container-use · Sculptor
+                          │   LangGraph · CrewAI · AutoGen
+                          ▼   Dify · n8n · Flowise
+              MANUAL MERGE (PR / per-session cherry-pick)
+```
+
+The combination that defines huu — **and that no competitor ships out of
+the box** — is: *a human-authored deterministic pipeline* (no LLM planner
+invents scope) **+** *one git worktree per agent* (physical isolation)
+**+** *a deterministic `--no-ff` merge at the end of every stage* **+** *a
+Docker sandbox that hides your credentials* **+** *ready-made audit/test
+pipelines that end in a judge agent*.
+
+| Tool | Who decides scope | Isolation | Per-file fan-out | Integration / merge | Credential sandbox | Focus |
+|---|---|---|---|---|---|---|
+| **huu** | **human — versioned JSON** | **git worktree + Docker** | **✅ native** | **deterministic `--no-ff`, every stage** | **✅ by default** | **audits · tests · knowledge** |
+| Conductor · Crystal · Claude Squad · vibe-kanban · uzi | human — ad-hoc, per session | git worktree | ❌ | manual (diff/PR/rebase per session) | ❌ (worktree on host) | building features |
+| container-use · Sculptor | human — ad-hoc | container | ❌ | manual (`cu merge` · PR) | ✅ container | building features |
+| OpenHands · SWE-agent · Cursor · Amp | **LLM plans everything** | container / VM | ❌ | PR opened by the agent | ✅ (cloud/local) | building features · fixing issues |
+| LangGraph · CrewAI · AutoGen / MAF | dev — graph in code | in-process | ❌ | shared in-memory state | ❌ | building agents (SDK) |
+| Dify · n8n · Flowise | human — visual canvas | persistent server | ❌ | database | ❌ | LLM apps & automation |
+
+### The three neighboring camps, one sentence each
+
+- **Worktree-parallel runners** (Conductor, Crystal, Claude Squad,
+  vibe-kanban, uzi) — the closest relatives: they also isolate each agent
+  in a worktree and run many in parallel. The difference is the **shape of
+  the work**: they are *interactive* ("you become the manager of N
+  agents," partition tasks by hand and **merge manually per session** via
+  diff/PR/rebase). huu trades interactivity for a **contract**: the
+  pipeline defines the order, the fan-out is per file, and the ascending
+  `--no-ff` merge happens by itself at the end of every stage.
+- **Container sandboxes** (Dagger's container-use, Imbue's Sculptor) —
+  they validate huu's isolation thesis (container-use even combines
+  container + worktree + auto-commit, the closest thing out there to our
+  audit trail). They stay **interactive** and **manual-merge**; there is
+  no ordered pipeline and no deterministic merge.
+- **Autonomous agents** (OpenHands, SWE-agent, Cursor/Amp background
+  agents) — the philosophical opposite: **the LLM invents the scope and
+  plans**, and the result is a **PR**. They shine at "fix this issue" end
+  to end; huu refuses that work by design.
+- **Orchestration frameworks** (LangGraph, CrewAI, AutoGen/MAF, Dify,
+  n8n, Flowise) — these are *SDKs* or *canvases* you program against. They
+  run agents **in the same process** (no worktree, no per-agent credential
+  sandbox), and several default to a flow **decided by the LLM** at
+  runtime. huu is the finished product of a narrow method, not a
+  general-purpose toolbox.
+
+### Where the competition wins (and when NOT to use huu)
+
+Honesty first: huu is niche. The competitors have **much larger
+ecosystems** (tens of thousands of stars, native desktop apps, integration
+marketplaces, managed clouds, corporate backing — Microsoft merged AutoGen
++ Semantic Kernel into the Agent Framework). And there are things they do
+better by construction:
+
+- **"Just fix this bug" / "build this feature."** Open-ended, one-off work
+  with no repeatable method? Use an interactive agent (Claude Code,
+  Cursor) or an autonomous one (OpenHands). Writing a pipeline for that is
+  overhead.
+- **Compare 3 solutions and pick the best.** Crystal and uzi do
+  *candidate generation* (same prompt × N → you keep the winner) as a
+  first-class flow. huu has no native ergonomics for that.
+- **Steer the agent mid-run.** Sculptor's Pairing Mode and vibe-kanban's
+  per-session diff review are interactive; huu runs the contract to the
+  end and hands you the merged result.
+
+huu wins at **one thing**, on purpose: making thinking agents follow a
+**deterministic, auditable process** over N files — audits, test
+generation, knowledge extraction. When the method is known and the value
+is in executing it with discipline and reproducibility, none of the others
+ship the same contract.
+
+---
+
+## Stage → merge → stage
 
 ```mermaid
 flowchart LR
@@ -159,15 +257,19 @@ Step-by-step walkthrough with prompts:
 
 The **plan → fan-out → merge** shape shines in processes with real,
 predictable value — where the method fits in a file and the result is
-auditable:
+auditable. Seven pipelines ship bundled (only `huu Test Suite` is flagged
+as the default):
 
-- **Audits** (five bundled defaults: Security, Quality, Docs,
-  Performance, Refactor Plan) — strict report-only, never touch your
-  manifests or production source. Each one is anchored in published
-  methodology (OWASP Top 10:2025, churn×complexity, Diátaxis, Core
-  Web Vitals, Fowler/Mikado) and **ends with a judge agent** that
-  validates the report and sends it back for rework if the numbers
-  don't add up.
+- **Audits** (five defaults: Security, Quality, Docs, Performance,
+  Refactor Plan) — strict report-only: they write **only** to
+  `.huu/audits/<topic>.md` + `<topic>-faq.json`, never touching
+  `README.md`, `package.json`, lockfiles, or production source.
+  Auxiliary tools (gitleaks, semgrep, jscpd, lighthouse-ci…) run
+  ephemerally via `npx --yes`/`pipx run` — they never enter your
+  manifests. Each one is anchored in published methodology (OWASP Top
+  10:2025, churn×complexity, Diátaxis, Core Web Vitals, Fowler/Mikado)
+  and **ends with a judge agent** that validates the report and sends it
+  back for rework (`rework`, `maxRuns 2`) if the numbers don't add up.
 - **Test generation** (`huu Test Suite`, the default) — assertion
   rules that survive mutation testing and anti-flaky determinism
   rules baked into the prompts.
@@ -203,9 +305,10 @@ Bundled defaults: [`docs/onboarding.md#bundled-default-pipelines`](docs/onboardi
 
 ```mermaid
 flowchart LR
-    K["kind: 'pi' | 'copilot' | 'stub'"]
+    K["kind: 'pi' | 'azure' | 'copilot' | 'stub'"]
     K --> R["selectBackend()<br/>registry.ts"]
     R --> P["Pi<br/>(OpenRouter, any model)"]
+    R --> Z["Azure AI Foundry<br/>(any deployment)"]
     R --> C["Copilot<br/>(stabilizing)"]
     R --> S["Stub<br/>(no LLM, smoke)"]
 ```
@@ -213,13 +316,14 @@ flowchart LR
 | Backend | Flag | Cost model | Status |
 |---|---|---|---|
 | **Pi** (default) | `--backend=pi` | Pay-per-token via `OPENROUTER_API_KEY` — **any OpenRouter model** | Recommended |
+| Azure AI Foundry | `--backend=azure` | Per endpoint via `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` — any deployment ([guide](docs/azure-backend.md)) | Stable |
 | GitHub Copilot | `--copilot` | Subscription via `COPILOT_GITHUB_TOKEN` | Stabilizing |
 | Stub | `--stub` | Free, no LLM — smoke tests / demos | Stable |
 
 The Pi factory enables `thinking=medium` by default for every model
 that supports it — the model is allowed to draft, critique, and revise
 internally before emitting a final answer. For per-file work (one
-agent, one mission), this is the right trade-off. All three backends
+agent, one mission), this is the right trade-off. All four backends
 share the same orchestrator, worktree lifecycle, and merge logic.
 
 Adding a future backend (ACP, Claude Code, …) is a one-folder +
@@ -283,6 +387,18 @@ Docker for anything real on your laptop. (`--no-docker` is the
 neutral-spelling alias of `--yolo`, meant for CI runners — see below.)
 Full install matrix (macOS / Windows / Linux, OrbStack notes, WSL2
 caveats): [`docs/onboarding.md#install`](docs/onboarding.md#install).
+
+### Web UI (`huu --web`)
+
+A browser front-end that swaps the Ink TUI for React while **reusing 100%
+of the back-end** (orchestrator, FSM, handlers). In phase 1 it requires
+`--yolo` (Docker port-publishing is not implemented yet):
+
+```bash
+huu --web --yolo               # opens the browser on the web UI
+```
+
+Details: [`docs/WEB-UI.md`](docs/WEB-UI.md).
 
 ---
 
@@ -367,11 +483,12 @@ gating. Full recipes (GitHub Actions and GitLab CI, dynamic config via
 ```
 
 `scope` controls decomposition: `project` = one whole-project task,
-`per-file` = one task per file (the parallelism sweet spot),
-`flexible` = user picks at edit time.
+`per-file` = one task per file (the parallelism sweet spot), `memory` =
+the pipeline discovers the files, `flexible` = user picks at edit time.
 
-Full schema (timeouts, retries, conditional `check` steps, model
-overrides, port allocation): [`docs/pipeline-json-guide.md`](docs/pipeline-json-guide.md).
+Full schema (timeouts, retries, conditional `check` steps,
+`dependsOn`/deterministic waves, model overrides, port allocation):
+[`docs/pipeline-json-guide.md`](docs/pipeline-json-guide.md).
 
 ---
 
