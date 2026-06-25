@@ -51,7 +51,7 @@
   "scripts": {
     "dev": "HUU_NO_DOCKER=1 tsx --watch src/cli.tsx",
     "start": "HUU_NO_DOCKER=1 tsx src/cli.tsx",
-    "build": "tsc && chmod +x dist/cli.js",
+    "build": "tsc && chmod +x dist/cli.js && mkdir -p dist/web/client && cp -R src/web/client/. dist/web/client/",
     "build:link": "npm run build && npm link && tsx scripts/link-pipelines.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
