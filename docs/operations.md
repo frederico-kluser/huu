@@ -255,6 +255,15 @@ Any key that resolves to empty AND is `required: true` causes the TUI
 to pop the prompt on the way to the first run. Stub mode (`--stub`)
 short-circuits the requirement check.
 
+Because step 3 (env) outranks step 4 (the saved store), a stale
+`OPENROUTER_API_KEY` exported from a shell profile silently shadows a key
+you saved in the Options screen — the classic "valid key still 401s".
+`resolveApiKeyWithSource` reports which tier won, so the abort message names
+the real source and, when an env var overrides the saved key, tells you to
+unset it. The **web UI sidesteps this entirely**: a key pasted in the
+browser is validated against the provider first and kept only in that tab's
+`sessionStorage` — sent with each run, never written to `~/.config`.
+
 ### Environment variables
 
 | Variable | Required | Purpose |

@@ -8,8 +8,10 @@ import {
   findMissingKeysForBackend,
   findMissingRequiredKeys,
   findSpec,
+  keyRemedyHint,
   loadStoredApiKey,
   resolveApiKey,
+  resolveApiKeyWithSource,
   resolveOpenRouterApiKey,
   saveApiKey,
 } from './api-key.js';
@@ -128,6 +130,110 @@ describe('api-key registry', () => {
       const spec = findSpec('artificialAnalysis')!;
       process.env.ARTIFICIAL_ANALYSIS_API_KEY = 'aa-12345';
       expect(resolveApiKey(spec)).toBe('aa-12345');
+    });
+  });
+
+  describe('resolveApiKeyWithSource', () => {
+    const spec = () => findSpec('openrouter')!;
+
+    it('reports source "none" when nothing is set', () => {
+      const r = resolveApiKeyWithSource(spec());
+      expect(r).toEqual({ value: '', source: 'none', shadowsStored: false });
+    });
+
+    it('reports source "stored" when only the global store has it', () => {
+      saveApiKey(spec(), 'sk-or-stored');
+      const r = resolveApiKeyWithSource(spec());
+      expect(r.value).toBe('sk-or-stored');
+      expect(r.source).toBe('stored');
+      // Nothing outranks the store, so it can never be shadowing itself.
+      expect(r.shadowsStored).toBe(false);
+    });
+
+    it('reports source "env" when the env var wins', () => {
+      process.env.OPENROUTER_API_KEY = 'sk-or-env';
+      const r = resolveApiKeyWithSource(spec());
+      expect(r.value).toBe('sk-or-env');
+      expect(r.source).toBe('env');
+      expect(r.shadowsStored).toBe(false);
+    });
+
+    it('reports source "env-file" when the _FILE var wins', () => {
+      const path = join(tmpDir, 'key.txt');
+      writeFileSync(path, 'sk-or-from-file\n');
+      process.env.OPENROUTER_API_KEY_FILE = path;
+      const r = resolveApiKeyWithSource(spec());
+      expect(r.value).toBe('sk-or-from-file');
+      expect(r.source).toBe('env-file');
+    });
+
+    it('flags shadowsStored when a DIFFERENT env key overrides the saved key', () => {
+      // The exact production bug: valid key saved in Options, stale key in
+      // the environment (e.g. exported from ~/.secrets) wins → 401.
+      saveApiKey(spec(), 'sk-or-v1-valid-saved');
+      process.env.OPENROUTER_API_KEY = 'sk-or-v1-stale-env';
+      const r = resolveApiKeyWithSource(spec());
+      expect(r.value).toBe('sk-or-v1-stale-env');
+      expect(r.source).toBe('env');
+      expect(r.shadowsStored).toBe(true);
+    });
+
+    it('does NOT flag shadowsStored when env and store hold the same key', () => {
+      saveApiKey(spec(), 'sk-or-same');
+      process.env.OPENROUTER_API_KEY = 'sk-or-same';
+      const r = resolveApiKeyWithSource(spec());
+      expect(r.source).toBe('env');
+      expect(r.shadowsStored).toBe(false);
+    });
+
+    it('value matches resolveApiKey for every tier (no behavior drift)', () => {
+      saveApiKey(spec(), 'sk-or-stored');
+      process.env.OPENROUTER_API_KEY = 'sk-or-env';
+      expect(resolveApiKeyWithSource(spec()).value).toBe(resolveApiKey(spec()));
+    });
+  });
+
+  describe('keyRemedyHint', () => {
+    const spec = () => findSpec('openrouter')!;
+
+    it('the shadow case names the env var AND says it overrides Options', () => {
+      const hint = keyRemedyHint(spec(), {
+        value: 'x',
+        source: 'env',
+        shadowsStored: true,
+      });
+      expect(hint).toContain('OPENROUTER_API_KEY');
+      expect(hint).toContain('OVERRIDES');
+      expect(hint).toContain('Options');
+      // Must point at where env vars actually live, not just "Options".
+      expect(hint).toMatch(/Unset OPENROUTER_API_KEY/);
+    });
+
+    it('the stored case is the only one that tells you to update Options', () => {
+      const hint = keyRemedyHint(spec(), {
+        value: 'x',
+        source: 'stored',
+        shadowsStored: false,
+      });
+      expect(hint).toContain('Options screen');
+      expect(hint).toContain('rejected');
+    });
+
+    it('the none case asks the user to add a key', () => {
+      const hint = keyRemedyHint(spec(), {
+        value: '',
+        source: 'none',
+        shadowsStored: false,
+      });
+      expect(hint).toContain('No OPENROUTER_API_KEY');
+    });
+
+    it('never leaks the key value into the hint', () => {
+      const secret = 'sk-or-v1-supersecret-value';
+      for (const source of ['env', 'env-file', 'secret-mount', 'stored', 'none'] as const) {
+        const hint = keyRemedyHint(spec(), { value: secret, source, shadowsStored: true });
+        expect(hint).not.toContain(secret);
+      }
     });
   });
 

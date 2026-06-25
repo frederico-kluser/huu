@@ -32,6 +32,13 @@ export interface StartRunParams {
   pipeline?: Pipeline;
   backend: AgentBackendKind;
   modelId: string;
+  /**
+   * Per-run API key supplied by the browser (validated client-side, kept in
+   * session memory, sent with the request). Takes precedence over the
+   * env/mount/disk resolver and is NEVER persisted. Absent for CLI/headless
+   * callers, which fall back to the resolver.
+   */
+  apiKey?: string;
   /** Manual concurrency seed (used when mode === 'manual'). */
   concurrency?: number;
   /** Concurrency strategy. Defaults to 'auto' (memory-aware). */
@@ -114,10 +121,12 @@ export class WebRunManager {
     if (bundle.requiresApiKey) {
       const specName = bundle.apiKeySpecName;
       const spec = specName ? findSpec(specName) : undefined;
-      apiKey = spec ? resolveApiKey(spec) : '';
+      // Browser-supplied key (in memory, validated) wins; otherwise resolve
+      // from env/mount/disk for the CLI path. Either way nothing is saved.
+      apiKey = params.apiKey?.trim() || (spec ? resolveApiKey(spec) : '');
       if (!apiKey) {
         throw new Error(
-          `${bundle.label} needs an API key. Add it under Settings → Keys first.`,
+          `${bundle.label} needs an API key. Paste one in the launch form first.`,
         );
       }
       if (params.backend === 'azure') {

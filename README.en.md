@@ -191,6 +191,11 @@ terminal TUI back.
   flowing TODO → DOING → DONE; click a card for **per-agent tokens, cost,
   branch, files and live logs**. Global log console, concurrency control
   (Auto · Manual · MAX) and a stop button up top.
+- **Your key, in the browser.** Paste your `OPENROUTER_API_KEY` in the
+  launch form — it's **validated against the provider on the spot** and
+  kept only in the browser tab (`sessionStorage`), sent with each run and
+  **never written to disk**. A stray shell `OPENROUTER_API_KEY` can't
+  shadow it.
 
 > **Today the web runs existing pipelines** (list, pick, execute, tune
 > concurrency, stop). The **guided builders** (Pipeline Assistant and the

@@ -57,6 +57,7 @@ import { log as dlog } from '../lib/debug-logger.js';
 import { attachProcessLogSink } from '../lib/process-log-bridge.js';
 import { checkOpenRouterReachable } from '../lib/openrouter.js';
 import { AuthError } from '../lib/auth-error.js';
+import { findSpec, keyRemedyHint, resolveApiKeyWithSource } from '../lib/api-key.js';
 
 function ensureGitignored(repoRoot: string, line: string): void {
   const gitignorePath = join(repoRoot, '.gitignore');
@@ -545,12 +546,18 @@ export class Orchestrator {
           kind: reach.kind,
         });
         if (reach.kind === 'unauthorized') {
+          // Name the source that actually supplied the rejected key. The
+          // blanket "update it in Options" is a no-op (and a 30-minute
+          // mystery) when a stale env var shadows the saved key — env is
+          // resolver step 3, the Options store is step 4.
+          const spec = findSpec('openrouter');
+          const hint = spec
+            ? keyRemedyHint(spec, resolveApiKeyWithSource(spec))
+            : 'Update OPENROUTER_API_KEY in the Options screen.';
           throw new AuthError({
             backendKind: 'pi',
             specName: 'openrouter',
-            message:
-              `OpenRouter rejected the API key (HTTP ${reach.status}). ` +
-              `Update OPENROUTER_API_KEY in the Options screen.`,
+            message: `OpenRouter rejected the API key (HTTP ${reach.status}). ${hint}`,
           });
         }
         if (reach.kind === 'unreachable') {

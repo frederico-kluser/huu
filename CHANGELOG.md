@@ -38,6 +38,16 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
   (localhost-only via `127.0.0.1`), and an optional `HUU_WEB_TOKEN` shared
   secret gating the data/action routes. Client assets ship in `dist/web/client`
   (build copies them; no CDN, works offline and inside the image).
+- **Web UI keeps your API key in the browser, validated, never on disk.**
+  Pasting a key in the launch form now validates it against the provider
+  first (`POST /api/keys/validate` → OpenRouter / Azure reachability) and
+  refuses one the provider rejects (401/403). A valid key is held only in
+  the browser tab's `sessionStorage` and sent with each run (`apiKey` in
+  `POST /api/run`), so the server uses it in memory and never writes
+  `~/.config/huu/config.json`. `BackendInfo.apiKeySpecName` is now exposed
+  so the browser can look up its per-backend session key; the legacy
+  disk-saving `POST /api/keys` stays for CLI reuse but the browser no
+  longer calls it.
 
 ### Changed
 
@@ -50,6 +60,20 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
   invalid step's whole row turns yellow (in addition to the existing `⚠`
   marker and the actionable problem hint), so the blocker is visible at a
   glance.
+
+### Fixed
+
+- **"Valid API key still returns 401" — the resolver now names the source
+  that actually supplied the rejected key.** A stale `OPENROUTER_API_KEY`
+  exported from a shell profile (resolver step 3) silently shadowed the key
+  saved in the Options screen (step 4), so the pre-run probe sent the wrong
+  key and aborted with a misleading "update it in the Options screen" — a
+  no-op against the env var. The 401 message now reports the winning source
+  and, when an env var overrides the saved key, tells you to unset it
+  (`resolveApiKeyWithSource` + `keyRemedyHint` in `lib/api-key.ts`). The
+  Docker wrapper prints the same warning on the host before forwarding a
+  shadowing env value into the container.
+
 ## [2.1.0] - 2026-06-25
 
 ### Changed

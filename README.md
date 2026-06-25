@@ -192,6 +192,10 @@ TUI no terminal.
   TODO → DOING → DONE; clique num card pra ver **tokens, custo, branch,
   arquivos e logs ao vivo** por agente. Console de log global, controle
   de concorrência (Auto · Manual · MAX) e botão de parar no topo.
+- **Sua key, no navegador.** Cole sua `OPENROUTER_API_KEY` no formulário de
+  launch — ela é **validada na hora** contra o provider e fica só na aba do
+  navegador (`sessionStorage`), enviada a cada run e **nunca escrita em
+  disco**. Uma `OPENROUTER_API_KEY` solta no shell não consegue sombrear.
 
 > **Hoje a web roda pipelines existentes** (listar, escolher, executar,
 > ajustar concorrência, parar). Os **construtores guiados** (Pipeline

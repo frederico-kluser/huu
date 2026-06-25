@@ -11,7 +11,7 @@ import {
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { API_KEY_REGISTRY, resolveApiKey } from './api-key.js';
+import { API_KEY_REGISTRY, resolveApiKeyWithSource } from './api-key.js';
 
 /**
  * Transparent re-exec from the host into the official Docker image.
@@ -565,10 +565,22 @@ export async function reexecInDocker(
   const secretMounts: SecretMount[] = [];
   const excludeFromEnv = new Set<string>();
   for (const spec of API_KEY_REGISTRY) {
-    const value = resolveApiKey(spec);
-    if (!value) continue;
+    const res = resolveApiKeyWithSource(spec);
+    if (!res.value) continue;
+    // Inside the container the key arrives via the secret mount, so the
+    // container-side resolver can't see that a host env var shadowed the
+    // saved key. Surface it here, on the host, before forwarding — else a
+    // stale env var silently overrides what the user saved in Options and
+    // every agent 401s with no clue why.
+    if (res.shadowsStored && (res.source === 'env' || res.source === 'env-file')) {
+      process.stderr.write(
+        `huu: warning: ${spec.envVar} from your environment overrides the different ` +
+          `${spec.label} key saved in Options — forwarding the environment value into the container. ` +
+          `Unset ${spec.envVar} to use the saved key.\n`,
+      );
+    }
     secretMounts.push({
-      hostPath: makeSecretFile(value, spec.hostSecretScope),
+      hostPath: makeSecretFile(res.value, spec.hostSecretScope),
       containerPath: spec.secretMountPath,
     });
     excludeFromEnv.add(spec.envVar);
