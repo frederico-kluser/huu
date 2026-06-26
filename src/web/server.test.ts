@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { execSync } from 'node:child_process';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { createWebServer } from './server.js';
+import { resetCapabilitiesCache } from '../lib/openrouter.js';
 import type { WebRunManager } from './run-manager.js';
 import type { Pipeline } from '../lib/types.js';
 
@@ -99,13 +100,45 @@ describe('web server', () => {
     expect(json.run.phase).toBe('idle');
   });
 
-  it('lists models for a backend and 400s on an unknown one', async () => {
-    const ok = await fetch(base + '/api/models?backend=pi');
-    expect(ok.status).toBe(200);
-    expect(Array.isArray((await ok.json()).models)).toBe(true);
+  it('lists the full public catalog for a backend and 400s on an unknown one', async () => {
+    // OpenRouter's /models is public, so the server downloads the full catalog
+    // with NO key. Intercept ONLY the openrouter.ai call so the test stays
+    // hermetic; every other (localhost) fetch passes through untouched.
+    const realFetch = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const u =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url;
+      if (u.includes('openrouter.ai')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                { id: 'z/live-model', name: 'Live Model', context_length: 8, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools', 'reasoning'] },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        );
+      }
+      return realFetch(input, init);
+    });
+    try {
+      const ok = await fetch(base + '/api/models?backend=pi');
+      expect(ok.status).toBe(200);
+      const body = await ok.json();
+      expect(body.source).toBe('openrouter-live');
+      expect(body.models.some((m: { id: string }) => m.id === 'z/live-model')).toBe(true);
 
-    const bad = await fetch(base + '/api/models?backend=nope');
-    expect(bad.status).toBe(400);
+      const bad = await fetch(base + '/api/models?backend=nope');
+      expect(bad.status).toBe(400);
+    } finally {
+      spy.mockRestore();
+      resetCapabilitiesCache();
+    }
   });
 
   it('reports stub needs no key', async () => {

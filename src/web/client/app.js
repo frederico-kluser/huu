@@ -224,9 +224,10 @@ function renderProviderSeg() {
 }
 
 async function refreshModelsAndKeys() {
-  // Models (by provider). For OpenRouter we attach the validated session key so
-  // the server returns the LIVE catalog filtered to tool-calling + reasoning
-  // models; without a key it returns the static recommended list.
+  // Models (by provider). OpenRouter's /models is public, so the server returns
+  // the FULL live catalog even with no key — the user sees every model the
+  // moment this screen opens. We still forward a validated session key when we
+  // have one (per-account view); it's optional for listing.
   try {
     const orKey = S.provider === 'openrouter' ? sessionKey(backendSpecName(S.backend)) : '';
     const m = await api(
@@ -362,8 +363,9 @@ $('keyArea').addEventListener('click', async (e) => {
 
 /* ---------------- Searchable model combobox ----------------
    Replaces the old <select>: type to filter the list. For OpenRouter that list
-   is the LIVE catalog of every model with tool calling + reasoning, loaded with
-   the validated session key (see refreshModelsAndKeys). */
+   is the FULL live catalog — every model, no capability filter — downloaded
+   from the public /models endpoint with or without a key (see
+   refreshModelsAndKeys). Type any id to use one that isn't listed. */
 const combo = { open: false, active: -1, matches: [], query: '' };
 
 function modelById(id) { return S.models.find((m) => m.id === id) || null; }
@@ -393,7 +395,7 @@ function updateModelCap() {
   if (S.modelSource === 'openrouter-live') {
     cap.innerHTML = `<span class="live">${n} models</span> · full OpenRouter catalog · or type any model id`;
   } else {
-    cap.textContent = 'Showing recommended models — validate your OpenRouter key to load the full catalog, or just type any model id';
+    cap.textContent = "Couldn't reach OpenRouter — showing recommended models; type any model id to use it anyway";
   }
 }
 

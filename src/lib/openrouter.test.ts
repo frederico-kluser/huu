@@ -79,6 +79,27 @@ describe('fetchModelCapabilities — per-API-key cache', () => {
     const r = await fetchModelCapabilities('keyA');
     expect(Array.from(r.keys())).toEqual(['m']);
   });
+
+  it('fetches the PUBLIC catalog with no key and sends no Authorization header', async () => {
+    let sentAuth: string | null = 'unset';
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      sentAuth = new Headers(init?.headers).get('authorization');
+      return new Response(JSON.stringify(fakeBody(['m'])), { status: 200 });
+    });
+    const r = await fetchModelCapabilities(); // argless → public list
+    expect(Array.from(r.keys())).toEqual(['m']);
+    expect(sentAuth).toBeNull();
+  });
+
+  it('sends a Bearer Authorization header when a key IS provided', async () => {
+    let sentAuth: string | null = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      sentAuth = new Headers(init?.headers).get('authorization');
+      return new Response(JSON.stringify(fakeBody(['m'])), { status: 200 });
+    });
+    await fetchModelCapabilities('sk-or-abc');
+    expect(sentAuth).toBe('Bearer sk-or-abc');
+  });
 });
 
 describe('filterToolReasoningModels', () => {
@@ -226,5 +247,21 @@ describe('listAllModels', () => {
     const plain = out.find((o) => o.id === 'p/plain')!;
     expect(plain.supportsTools).toBe(false);
     expect(plain.supportsReasoning).toBe(false);
+  });
+
+  it('lists the public catalog with NO key (argless)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: [
+              { id: 'p/a', name: 'A', context_length: 2, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'] },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    const out = await listAllModels(); // no key → public list
+    expect(out.map((o) => o.id)).toEqual(['p/a']);
   });
 });

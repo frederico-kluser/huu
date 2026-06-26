@@ -209,10 +209,11 @@ export function createWebServer(opts: WebServerOptions): {
         ? providerToBackend(provider)
         : parseBackendKind(url.searchParams.get('backend') ?? 'pi');
       if (!backend) return sendJson(res, 400, { error: 'unknown backend' });
-      // Browser-only key: once the user validates an OpenRouter key the client
-      // sends it here (x-huu-key) so we can return the FULL LIVE catalog (every
-      // model, capability-annotated). No key → the static recommended list.
-      // Used in memory only; never logged or persisted.
+      // OpenRouter's /models is public, so we return the FULL LIVE catalog
+      // (every model, capability-annotated) WITH OR WITHOUT a key. When the
+      // user has validated an OpenRouter key the client forwards it here
+      // (x-huu-key) for the per-account view; it's optional, used in memory
+      // only, never logged or persisted.
       const hk = req.headers['x-huu-key'];
       const openrouterKey = (Array.isArray(hk) ? hk[0] : hk ?? '').toString();
       const { models, source } = await listModelsForBackend(

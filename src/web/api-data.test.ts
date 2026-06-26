@@ -24,13 +24,22 @@ describe('listModelsForBackend', () => {
   const catalog = (rows: unknown[]) =>
     new Response(JSON.stringify({ data: rows }), { status: 200 });
 
-  it('returns the recommended catalog with no key, without hitting the network', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+  it('downloads the FULL public catalog for pi even with NO key (no auth header)', async () => {
+    // OpenRouter's /models is public — a key-less user must still see every
+    // model, not just the static recommended shortlist. The request must NOT
+    // carry an Authorization header (an empty `Bearer ` is rejected with 401).
+    let sentAuth: string | null = 'unset';
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      sentAuth = new Headers(init?.headers).get('authorization');
+      return catalog([
+        { id: 'p/dual', name: 'Dual', context_length: 4, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools', 'reasoning'] },
+        { id: 'p/plain', name: 'Plain', context_length: 4, pricing: { prompt: '0', completion: '0' }, supported_parameters: [] },
+      ]);
+    }));
     const r = await listModelsForBackend(process.cwd(), 'pi', '');
-    expect(r.source).toBe('recommended');
-    expect(r.models.length).toBeGreaterThan(0);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(r.source).toBe('openrouter-live');
+    expect(r.models.map((m) => m.id)).toEqual(['p/dual', 'p/plain']);
+    expect(sentAuth).toBeNull();
   });
 
   it('returns the FULL live catalog for pi when a key is provided, capability-annotated', async () => {
@@ -57,9 +66,9 @@ describe('listModelsForBackend', () => {
     expect(byId['p/toolsonly'].tools).toBe(true);
   });
 
-  it('falls back to the recommended catalog when the live fetch fails', async () => {
+  it('falls back to the recommended catalog when the live fetch fails (even with no key)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
-    const r = await listModelsForBackend(process.cwd(), 'pi', 'sk-or-x');
+    const r = await listModelsForBackend(process.cwd(), 'pi', '');
     expect(r.source).toBe('recommended');
     expect(r.models.length).toBeGreaterThan(0);
   });

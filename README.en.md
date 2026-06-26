@@ -207,12 +207,14 @@ terminal TUI back.
   kept only in the browser tab (`sessionStorage`), sent with each run and
   **never written to disk**. A stray shell `OPENROUTER_API_KEY` can't
   shadow it.
-- **Searchable model picker — every tool-calling + reasoning model.** Once
-  your OpenRouter key is validated, the **Model** field becomes a
-  type-to-filter combobox over the **live OpenRouter catalog**, narrowed to
-  the models that support **both tool calling and reasoning** (what huu's
-  agents need) — no more two-item dropdown. Without a key it falls back to a
-  short recommended list.
+- **Searchable model picker — the entire OpenRouter catalog.** The **Model**
+  field is a type-to-filter combobox over the **full live OpenRouter catalog**
+  (every model — 339 today) — no more two-item dropdown. OpenRouter's `/models`
+  endpoint is **public**, so the list loads **with or without a key**, the
+  moment you open the picker. Models are **badged** (`reasoning`, plus a soft
+  `no tools` warning) instead of hidden, and you can **type any model id** —
+  even one not in the list — to run it verbatim. The short recommended list is
+  only a fallback for when OpenRouter is unreachable.
 
 > **Today the web runs existing pipelines** (list, pick, queue and run in
 > sequence, tune concurrency, stop). The **guided builders** (Pipeline

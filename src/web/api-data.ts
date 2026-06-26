@@ -208,27 +208,29 @@ export function listModelsInfo(
 /**
  * Models offered for a backend in the web UI.
  *
- * For OpenRouter (`pi`) WITH a usable key this is the FULL LIVE catalog — every
- * model, annotated with `tools`/`thinking` so the picker can badge capability
- * instead of hiding models. (It used to hard-filter to tool+reasoning models,
- * which silently dropped brand-new and non-reasoning models the user wanted.)
- * On any failure (no key, network/timeout, empty result) it falls back to the
- * static recommended catalog, so the picker is never empty. Azure and stub
- * always use the static catalog.
+ * For OpenRouter (`pi`) this is the FULL LIVE catalog — every model, annotated
+ * with `tools`/`thinking` so the picker can badge capability instead of hiding
+ * models. OpenRouter's `GET /models` is PUBLIC, so the catalog is downloaded
+ * even with NO key: the user sees all ~339 models the moment they open the
+ * Model picker, not just the handful of static presets. (It used to require a
+ * validated key AND hard-filter to tool+reasoning models, which left a key-less
+ * user staring at the recommended shortlist.) Only on a real failure
+ * (network/timeout/empty result) does it fall back to the static recommended
+ * catalog, so the picker is never empty. Azure and stub always use the static
+ * catalog.
  *
  * `openrouterKey` arrives via the browser-only flow (the `x-huu-key` header the
- * client sends once the user has validated it); used in memory only, never
- * logged or persisted here.
+ * client sends once the user has validated it); OPTIONAL for listing — used in
+ * memory only when present, never logged or persisted here.
  */
 export async function listModelsForBackend(
   cwd: string,
   backend: AgentBackendKind,
   openrouterKey: string,
 ): Promise<{ models: ModelInfo[]; source: 'openrouter-live' | 'recommended' }> {
-  const key = openrouterKey.trim();
-  if (backend === 'pi' && key) {
+  if (backend === 'pi') {
     try {
-      const live = await listAllModels(key);
+      const live = await listAllModels(openrouterKey.trim());
       if (live.length > 0) {
         return {
           source: 'openrouter-live',
