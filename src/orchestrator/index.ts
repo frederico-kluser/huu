@@ -169,6 +169,20 @@ export interface OrchestratorOptions {
 }
 
 /**
+ * Short, stable name for an AgentEvent, used as the key of
+ * `AgentStatus.actionCounts` and the value of `AgentStatus.lastAction`.
+ * `state_change` splits into `stream`/`tool`; every other event maps to its
+ * own `type`. Keep these in sync with the kanban renderer's ACTION_ORDER.
+ */
+function actionName(event: AgentEvent): string {
+  if (event.type === 'state_change') {
+    return event.state === 'tool_running' ? 'tool' : 'stream';
+  }
+  if (event.type === 'file_write') return 'file';
+  return event.type; // 'log' | 'usage' | 'done' | 'error'
+}
+
+/**
  * Linear pipeline orchestrator. For each step:
  *   decompose into tasks → spawn workers (worker pool, +/- mutable) →
  *   wait for terminal state → finalize (commit + cleanup) → merge stage branches
@@ -1551,6 +1565,10 @@ export class Orchestrator {
 
   private handleAgentEvent(agentId: number, event: AgentEvent): void {
     this.runLogger?.appendEvent(agentId, event);
+    // Count EVERY event as a card action before the type-specific handling
+    // below: it mutates the map in place (no emit), and the switch's
+    // updateAgentStatus/appendAgentLog read a fresh snapshot that preserves it.
+    this.bumpAction(agentId, actionName(event));
     switch (event.type) {
       case 'log':
         this.log({ level: event.level ?? 'info', message: event.message, agentId });
@@ -2058,6 +2076,19 @@ export class Orchestrator {
     if (!cur) return;
     const next = { ...cur, logs: [...cur.logs, message].slice(-100) };
     this.agents.set(agentId, next);
+  }
+
+  /**
+   * Increment the per-action counter for `action` and record it as the most
+   * recent one. Like {@link appendAgentLog}, mutates the agents map without
+   * emitting — `handleAgentEvent` emits once after the type-specific handler.
+   */
+  private bumpAction(agentId: number, action: string): void {
+    const cur = this.agents.get(agentId);
+    if (!cur) return;
+    const actionCounts = { ...(cur.actionCounts ?? {}) };
+    actionCounts[action] = (actionCounts[action] ?? 0) + 1;
+    this.agents.set(agentId, { ...cur, actionCounts, lastAction: action });
   }
 
   private appendManifestEntry(agentId: number): void {

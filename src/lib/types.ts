@@ -411,6 +411,15 @@ export interface AgentStatus {
    */
   requeues?: number;
   /**
+   * Per-action occurrence counts, keyed by a short action name
+   * (`stream`, `tool`, `file`, `log`, `usage`, `done`, `error`). Bumped once
+   * per AgentEvent in `handleAgentEvent`; drives the kanban "actions" label.
+   * Accumulates across guard requeues like tokens/logs (never reset).
+   */
+  actionCounts?: Record<string, number>;
+  /** Most recent action name (last key bumped in {@link actionCounts}). */
+  lastAction?: string;
+  /**
    * @deprecated No longer produced — the memory guard now resets the card to
    * `pending` (see `requeues`). Kept so old manifests/run-logs still parse.
    */

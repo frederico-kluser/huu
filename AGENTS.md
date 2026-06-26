@@ -116,7 +116,14 @@ the task at the front of the queue. The killed-attempt marker is the
 consumable `killedAgentIds` Set in `orchestrator/index.ts` — never a status
 flag (see `requeue.test.ts` for the race + stale-flag regression).
 CheckStep judges surface as kanban cards via `OrchestratorState.checkRuns`
-(persisted to `RunManifest.checkRuns`).
+(persisted to `RunManifest.checkRuns`). Each agent card also tracks
+`AgentStatus.actionCounts` (keyed `stream`/`tool`/`file`/`log`/`usage`/`done`/
+`error`) and `lastAction`, bumped once per `AgentEvent` in `handleAgentEvent`
+(via `bumpAction`, mutating the map without emitting — the trailing `emit()`
+publishes; accumulates like tokens/logs, NOT reset on requeue). The Ink kanban
+(`RunKanban.tsx`) renders them as a per-action counters label plus a colored
+`→ <action>` marker folded onto the `log:` line (the merge costs no extra
+`cardHeight()` row; the counters label does — keep them in sync).
 
 ## Bundled default pipelines
 

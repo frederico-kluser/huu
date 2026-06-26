@@ -41,6 +41,10 @@ interface BoardCard {
   filesModifiedCount: number;
   errorLine?: string;
   lastLog?: string;
+  /** Formatted per-action counters (e.g. `stream:8 tool:7 done:1`). */
+  actionsLabel?: string;
+  /** Most recent action name, merged onto the log line as `→ <action>`. */
+  lastAction?: string;
   startedAt?: number;
   finishedAt?: number;
 }
@@ -180,6 +184,30 @@ function fmtClock(epoch: number): string {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
+// Fixed display order for the per-action counters label. Action names not
+// listed here (future event types) are appended after, in map order. Keep the
+// names in sync with `actionName()` in orchestrator/index.ts.
+const ACTION_ORDER = ['stream', 'tool', 'file', 'log', 'usage', 'done', 'error'];
+
+/** `{ stream: 8, tool: 7 }` → `"stream:8 tool:7"`; undefined when empty. */
+function formatActionCounts(counts: Record<string, number> | undefined): string | undefined {
+  if (!counts) return undefined;
+  const keys = Object.keys(counts);
+  if (keys.length === 0) return undefined;
+  const known = ACTION_ORDER.filter((k) => counts[k]);
+  const extra = keys.filter((k) => !ACTION_ORDER.includes(k));
+  return [...known, ...extra].map((k) => `${k}:${counts[k] ?? 0}`).join(' ');
+}
+
+// Semantic color for the most-recent-action token. NOT AI-driven UI, so no
+// theme.ai (magenta) — it maps to the same status palette the cards already use.
+function actionColor(action: string): string {
+  if (action === 'error') return 'red';
+  if (action === 'done') return 'green';
+  if (action === 'stream' || action === 'tool') return 'cyan';
+  return 'gray';
+}
+
 function buildCard(
   agent: AgentStatus,
   effectiveModelId: string,
@@ -213,6 +241,8 @@ function buildCard(
     filesModifiedCount: agent.filesModified.length,
     errorLine: agent.error ? truncate(agent.error, 80) : undefined,
     lastLog: log ? truncate(log, 80) : undefined,
+    actionsLabel: formatActionCounts(agent.actionCounts),
+    lastAction: agent.lastAction,
     startedAt: agent.startedAt,
     finishedAt: agent.finishedAt,
   };
@@ -381,7 +411,8 @@ function cardHeight(card: BoardCard): number {
   if (hasMeta) lines += 1;
   if (card.errorLine) lines += 1;
   if (card.startedAt) lines += 1;
-  lines += 1; // `log:` row is always rendered (shows '—' when empty)
+  if (card.actionsLabel) lines += 1; // per-action counters row
+  lines += 1; // `log:` / `→ action` row is always rendered (shows '—' when empty)
   return lines + 2; // top + bottom border
 }
 
@@ -489,9 +520,22 @@ function Card({ card, focused, nowMs }: CardProps): React.JSX.Element {
           {timeLine}
         </Text>
       )}
-      {/* `log:` prefix marks this as pi-coding-agent telemetry, not card scope. */}
+      {card.actionsLabel && (
+        <Text color="gray" wrap="truncate-end">
+          {card.actionsLabel}
+        </Text>
+      )}
+      {/* Most recent action (`→ name`, colored) leads the pi telemetry line.
+          The `log:` prefix only shows before any action has been recorded. */}
       <Text color="gray" dimColor wrap="truncate-end">
-        log: {card.lastLog ?? '—'}
+        {card.lastAction ? (
+          <>
+            <Text color={actionColor(card.lastAction)}>→ {card.lastAction}</Text>
+            {card.lastLog ? ` · ${card.lastLog}` : ''}
+          </>
+        ) : (
+          `log: ${card.lastLog ?? '—'}`
+        )}
       </Text>
     </Box>
   );
