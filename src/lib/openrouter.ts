@@ -34,16 +34,25 @@ export function resetCapabilitiesCache(): void {
 }
 
 function buildAuthHeaders(apiKey: string): HeadersInit {
-  return {
-    Authorization: `Bearer ${apiKey}`,
+  // OpenRouter's GET /models is a PUBLIC endpoint — the full catalog lists with
+  // no Authorization. The web picker downloads it BEFORE the user pastes a key,
+  // so we omit the header entirely when no key is held (an empty `Bearer ` is
+  // rejected as malformed). A non-empty key is still sent so the authenticated
+  // probes (auth/key) and any per-account view keep working.
+  const headers: Record<string, string> = {
     'HTTP-Referer': 'https://github.com/huu',
     'X-OpenRouter-Title': 'huu',
   };
+  const trimmed = apiKey.trim();
+  if (trimmed) headers.Authorization = `Bearer ${trimmed}`;
+  return headers;
 }
 
 export async function fetchModelCapabilities(
-  apiKey: string,
+  apiKey = '',
 ): Promise<Map<string, OpenRouterModel>> {
+  // Empty key → public catalog fetch (no Authorization header), cached under
+  // the '' key like any other. The endpoint needs no auth to list models.
   const key = apiKey.trim();
   const cached = capabilitiesCacheByKey.get(key);
   if (cached) return cached;
@@ -172,13 +181,17 @@ export async function listToolReasoningModels(
 }
 
 /**
- * Fetch the FULL OpenRouter catalog for `apiKey` (every model, capability-
- * annotated). Composes the per-key-cached, 5s-timeout
+ * Fetch the FULL OpenRouter catalog (every model, capability-annotated) and
+ * project it for the picker. Composes the per-key-cached, 5s-timeout
  * {@link fetchModelCapabilities} with {@link projectAllModels}. This is what the
  * web model picker downloads so the user can pick — or type — any model.
+ *
+ * `apiKey` is OPTIONAL: OpenRouter's `GET /models` is public, so the picker
+ * downloads the ENTIRE catalog BEFORE the user has pasted a key. A key, when
+ * held, is forwarded for the per-account view but is never required to list.
  */
 export async function listAllModels(
-  apiKey: string,
+  apiKey = '',
 ): Promise<OpenRouterModelOption[]> {
   return projectAllModels(await fetchModelCapabilities(apiKey));
 }

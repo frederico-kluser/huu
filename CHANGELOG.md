@@ -11,11 +11,15 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 - **Web model picker lists the FULL OpenRouter catalog and accepts any model
   id.** The web UI's Model field is a searchable combobox — type to filter,
-  instead of a two-item dropdown. Once you validate your OpenRouter key,
-  `GET /api/models` downloads the **entire** live catalog (every model — 339
-  today, up from the ~170 that passed the old tool+reasoning filter), sent via
-  the browser-only `x-huu-key` header; with no key it falls back to the static
-  recommended list. Models are no longer hidden by capability: each row is
+  instead of a two-item dropdown. `GET /api/models` downloads the **entire**
+  live catalog (every model — 339 today, up from the ~170 that passed the old
+  tool+reasoning filter) the moment you open the Model picker: OpenRouter's
+  `/models` endpoint is **public**, so this happens **with or without a key** —
+  no more staring at the two-item recommended shortlist until you paste one. A
+  validated key, when held, is forwarded via the browser-only `x-huu-key`
+  header for the per-account view; the static recommended list is now only a
+  **fallback** for when OpenRouter is unreachable. Models are no longer hidden
+  by capability: each row is
   **badged** (`reasoning`, and `no tools` as a soft warning) so the choice is
   informed without dropping models like `deepseek/deepseek-chat` or one
   OpenRouter shipped yesterday. You can also **type any model id** that isn't in

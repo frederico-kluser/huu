@@ -6,3 +6,4 @@ States: probation (default) -> promoted (distilled into SKILL.md by meta-skill-c
 Learnings are routed here when THIS skill owns the domain of the fact — regardless of which skill ran the task.
 
 <!-- entries below this line -->
+- [2026-06-26][source:inference][task:openrouter-models-keyless-public-catalog][probation] `web` is a real Conventional-Commit scope in this repo (the web front-end under `src/web/`), but the SKILL.md "Scopes actually used" list OMITS it. Precedent: HEAD `feat(web): download full OpenRouter catalog…` and this task's `feat(web): load full OpenRouter catalog…`. Consolidate should add `web` to the scope list. A markdown-only follow-up commit (docs + skills) still runs the FULL gate (`npm run typecheck && npm test`) because it ships alongside the code change it documents — both stayed green (704 passed, 1 skipped).

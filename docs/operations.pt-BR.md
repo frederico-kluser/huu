@@ -315,11 +315,14 @@ do picker de modelo. Cada entrada pode carregar metadados opcionais:
 (`flagship` / `workhorse` / `fast`), e `provider`
 (`openrouter` ou `azure`).
 
-Na **UI web**, depois de validar sua key do OpenRouter o campo Model
-carrega o **catálogo ao vivo do OpenRouter** filtrado pros modelos que
-suportam **tool calling e reasoning** (`GET /api/models` →
-`listToolReasoningModels` em `src/lib/openrouter.ts`); a lista curta
-curada acima é o fallback sem-key / offline.
+Na **UI web**, o campo Model carrega o **catálogo ao vivo completo do
+OpenRouter** — todo modelo, com anotação de capacidade (`GET /api/models`
+→ `listAllModels` em `src/lib/openrouter.ts`). O endpoint `/models` do
+OpenRouter é **público**, então o catálogo carrega **com ou sem key do
+OpenRouter**, assim que você abre o picker; modelos sem tool calling
+recebem **selo** (`no tools`) em vez de serem escondidos, e você pode
+digitar qualquer id de modelo pra usar verbatim. A lista curta curada
+acima é só o fallback offline / falha de fetch.
 
 Quando `ARTIFICIAL_ANALYSIS_API_KEY` está setada, o quick picker
 renderiza uma tabela de largura fixa com métricas ao vivo do
