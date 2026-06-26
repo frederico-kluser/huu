@@ -12,6 +12,7 @@ import { z } from 'zod';
  * - `fast`       — baixa latência, fan-out per-file, alto throughput
  * - `cheap`      — workhorse barato pra tarefas simples (lint, rename)
  * - `general`    — bom em tudo, default flagship
+ * - `planning`   — esboço/arquitetura de pipeline (Pipeline Architect); alavancagem máxima
  */
 export const ModelUseCaseSchema = z.enum([
   'coding',
@@ -20,15 +21,17 @@ export const ModelUseCaseSchema = z.enum([
   'fast',
   'cheap',
   'general',
+  'planning',
 ]);
 export type ModelUseCase = z.infer<typeof ModelUseCaseSchema>;
 
 /**
  * Tier classification. Used to bucket the catalog rendering and to gate
  * cost-conscious defaults (the assistant biases toward `workhorse` unless the
- * step calls for flagship-grade reasoning).
+ * step calls for flagship-grade reasoning). `planning` is the maximum-leverage
+ * tier surfaced in the Pipeline Architect's model picker.
  */
-export const ModelTierSchema = z.enum(['flagship', 'workhorse', 'fast']);
+export const ModelTierSchema = z.enum(['planning', 'flagship', 'workhorse', 'fast']);
 export type ModelTier = z.infer<typeof ModelTierSchema>;
 
 /**

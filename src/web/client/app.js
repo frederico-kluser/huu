@@ -8,6 +8,13 @@ import {
 import { createBoardOrder } from './board-order.js';
 
 const $ = (id) => document.getElementById(id);
+
+// Canonical default model — mirrors DEFAULT_MODEL_ID in src/models/catalog.ts
+// (the client is vanilla JS with no build, so it can't import the TS constant).
+// Preselected when the user hasn't picked a model and it's in the loaded list;
+// otherwise we fall back to the first model the catalog returned.
+const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-flash';
+
 const TOKEN = new URLSearchParams(location.search).get('token') || '';
 const withTok = (url) => (TOKEN ? url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(TOKEN) : url);
 
@@ -254,8 +261,13 @@ async function refreshModelsAndKeys() {
   // Keep the current pick across a provider/key refresh — INCLUDING a custom id
   // the user typed that isn't in the catalog (that's the point of free-text).
   // Only seed a default when there's no pick at all. The provider switch handler
-  // clears S.modelId so a typed id never leaks across providers.
-  if (!S.modelId && S.models.length) S.modelId = S.models[0].id;
+  // clears S.modelId so a typed id never leaks across providers. Prefer the
+  // canonical default model when the catalog offers it (the live OpenRouter list
+  // is sorted alphabetically, so models[0] is NOT a meaningful default).
+  if (!S.modelId && S.models.length) {
+    const preferred = S.models.find((m) => m.id === DEFAULT_MODEL_ID);
+    S.modelId = preferred ? preferred.id : S.models[0].id;
+  }
   syncModelInput();
   updateModelCap();
   if (combo.open) renderModelOptions();
@@ -467,7 +479,7 @@ function renderModelOptions() {
   if (!matches.length) {
     list.innerHTML = S.models.length
       ? '<li class="combo__empty">No matches — type a full model id to use it as-is</li>'
-      : '<li class="combo__empty">Type a model id, e.g. deepseek/deepseek-v4-pro</li>';
+      : '<li class="combo__empty">Type a model id, e.g. deepseek/deepseek-v4-flash</li>';
     return;
   }
   list.innerHTML = matches.map((m, i) => modelOptionHtml(m, i, i === combo.active, m.id === S.modelId)).join('');

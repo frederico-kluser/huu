@@ -312,10 +312,12 @@ on the first run.
 ### Recommended models
 
 `recommended-models.json` ships a curated short-list shown at the top
-of the model picker. Each entry can carry optional metadata:
-`description`, `bestFor` (use-case tags), `tier`
-(`flagship` / `workhorse` / `fast`), and `provider`
-(`openrouter` or `azure`).
+of the model picker; its first entry is the **default model**,
+`deepseek/deepseek-v4-flash` (fast, cheap, 1M context, tools +
+reasoning) — it leads the recommended list and the web UI preselects
+it. Each entry can carry optional metadata: `description`, `bestFor`
+(use-case tags), `tier` (`planning` / `flagship` / `workhorse` /
+`fast`), and `provider` (`openrouter` or `azure`).
 
 In the **web UI**, the Model field loads the **full live OpenRouter
 catalog** — every model, capability-annotated (`GET /api/models` →

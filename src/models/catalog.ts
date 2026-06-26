@@ -8,7 +8,27 @@ import {
 } from '../contracts/models.js';
 import type { AgentBackendKind } from '../lib/types.js';
 
+/**
+ * The single canonical default model id — the headline of the recommended
+ * catalog and the value both front-ends preselect when the user hasn't picked
+ * one. Keep in sync with the FIRST entry of `recommended-models.json` (the
+ * shipped catalog) and of `DEFAULT_RECOMMENDED_MODELS` below (the in-code
+ * fallback used when that file is absent or fails to parse). The web client
+ * mirrors this string in `src/web/client/app.js` (vanilla JS, no TS import).
+ */
+export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-flash';
+
 const DEFAULT_RECOMMENDED_MODELS: readonly ModelEntry[] = [
+  {
+    id: DEFAULT_MODEL_ID,
+    label: 'DeepSeek V4 Flash',
+    inputPrice: 0.09,
+    outputPrice: 0.18,
+    description:
+      'Default — fast, cheap, capable (1M context, tools + reasoning). The general-purpose default for running pipeline steps.',
+    bestFor: ['fast', 'cheap', 'coding'],
+    tier: 'fast',
+  },
   {
     id: 'minimax/minimax-m2.7',
     label: 'MiniMax M2.7',

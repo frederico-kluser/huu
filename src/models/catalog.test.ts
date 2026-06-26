@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadRecommendedModels } from './catalog.js';
+import { loadRecommendedModels, DEFAULT_MODEL_ID } from './catalog.js';
+import { RecommendedModelsFileSchema } from '../contracts/models.js';
 
 describe('loadRecommendedModels (provider filter)', () => {
   // The catalog merges the OpenRouter defaults with the Azure built-ins.
@@ -52,5 +53,33 @@ describe('loadRecommendedModels (provider filter)', () => {
     const providers = new Set(all.map((m) => m.provider ?? 'openrouter'));
     expect(providers.has('openrouter')).toBe(true);
     expect(providers.has('azure')).toBe(true);
+  });
+
+  it('in-code fallback (no file) leads with the default model', () => {
+    // tmpDir has no recommended-models.json, so this exercises
+    // DEFAULT_RECOMMENDED_MODELS — the fallback must headline the default.
+    const fallback = loadRecommendedModels(tmpDir, 'pi');
+    expect(fallback[0]?.id).toBe(DEFAULT_MODEL_ID);
+  });
+});
+
+describe('recommended-models.json (shipped catalog)', () => {
+  // Regression: the shipped file once carried tier/bestFor values that were
+  // NOT in the schema enums, so it failed zod validation and the catalog
+  // silently fell back to the 2-entry in-code list — the documented default
+  // never loaded. These guards keep the file authoritative.
+  const repoFile = join(process.cwd(), 'recommended-models.json');
+
+  it('parses against the schema (no silent fallback)', () => {
+    const raw = JSON.parse(readFileSync(repoFile, 'utf-8'));
+    const parsed = RecommendedModelsFileSchema.safeParse(raw);
+    expect(
+      parsed.success ? '' : JSON.stringify(parsed.error.issues[0]),
+    ).toBe('');
+  });
+
+  it('leads with the default model', () => {
+    const models = loadRecommendedModels(process.cwd(), 'pi');
+    expect(models[0]?.id).toBe(DEFAULT_MODEL_ID);
   });
 });

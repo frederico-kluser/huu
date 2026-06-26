@@ -476,6 +476,8 @@ Each step can optionally specify a `modelId` to override the global model select
 
 | ID | Tier | Best for |
 |---|---|---|
+| `deepseek/deepseek-v4-flash` | fast | **Default** — fast, cheap, capable (1M ctx, tools + reasoning); general-purpose default for running steps |
+| `deepseek/deepseek-v4-pro` | planning | Pipeline Architect / planning: best cost-benefit for sketching pipelines, deep reasoning |
 | `minimax/minimax-m2.7` | fast | Cheap/fast tasks: per-file fan-out, lint, rename, JSDoc, translation, boilerplate |
 | `moonshotai/kimi-k2.6` | workhorse | Complex coding, multi-file refactors, reasoning, agentic planning |
 
@@ -483,6 +485,7 @@ Each step can optionally specify a `modelId` to override the global model select
 
 | Step characteristic | Recommended model |
 |---|---|
+| General / balanced (the default) → | `deepseek/deepseek-v4-flash` |
 | Simple, mechanical, per-file → | Fast/cheap model (e.g., `minimax/minimax-m2.7`) |
 | Complex reasoning, cross-file, architecture → | Workhorse model (e.g., `moonshotai/kimi-k2.6`) |
 

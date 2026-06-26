@@ -1,6 +1,15 @@
 {
   "models": [
     {
+      "id": "deepseek/deepseek-v4-flash",
+      "label": "DeepSeek V4 Flash",
+      "inputPrice": 0.09,
+      "outputPrice": 0.18,
+      "description": "★ default — rápido, barato e capaz (1M de contexto, tools + reasoning). O modelo padrão para rodar os steps; troque por um tier planning só para arquitetar.",
+      "bestFor": ["fast", "cheap", "coding"],
+      "tier": "fast"
+    },
+    {
       "id": "deepseek/deepseek-v4-pro",
       "label": "DeepSeek V4 Pro",
       "inputPrice": 0.435,

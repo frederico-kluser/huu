@@ -171,6 +171,13 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Changed
 
+- **Default model is now `deepseek/deepseek-v4-flash`.** It headlines the
+  recommended catalog (`recommended-models.json` + the in-code fallback) and is
+  preselected by both front-ends when you haven't picked a model — fast, cheap
+  ($0.09/$0.18 per M tokens), 1M context, tools + reasoning. The web picker
+  previously seeded from the alphabetically-first live OpenRouter model; it now
+  prefers this canonical default (`DEFAULT_MODEL_ID`) when the catalog offers
+  it. DeepSeek V4 Pro stays available as a `planning`-tier model.
 - **The default pipeline (huu Test Suite) is pinned as "pipeline zero".** It
   always appears first on the Welcome screen, labelled `[0]` (the `0` key
   loads it) and colored distinctly with a `(default)` tag, so the
@@ -197,6 +204,14 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Fixed
 
+- **`recommended-models.json` is loaded again instead of being silently
+  dropped.** The shipped catalog declared a `planning` tier and `bestFor`
+  values that were missing from the zod enums, so the whole file failed
+  validation and the catalog fell back to a 2-entry in-code list — the
+  documented planning models (DeepSeek V4 Pro, GPT-5.4, Claude Opus 4.6) never
+  loaded. The `planning` enum value was added to `ModelTier`/`ModelUseCase`,
+  and a `catalog.test.ts` regression now fails if the shipped file ever stops
+  parsing.
 - **Editing a queued project no longer crashes (web).** `editQueueItem` read a
   `#modelSelect` `<select>` that the combobox migration had removed, throwing on
   `null.value`; it now restores the saved model id (catalog **or** custom)
