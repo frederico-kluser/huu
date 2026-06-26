@@ -1,6 +1,11 @@
 /* huu web UI — vanilla ES module. Real-time over one SSE stream, actions over
    fetch POSTs. No framework, no build, no CDN: works offline and in Docker. */
 
+import {
+  saveRun, listRuns, deleteRun, clearRuns,
+  buildRunRecord, buildSyntheticRecord, exportRunsJson, downloadText, uid,
+} from './db.js';
+
 const $ = (id) => document.getElementById(id);
 const TOKEN = new URLSearchParams(location.search).get('token') || '';
 const withTok = (url) => (TOKEN ? url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(TOKEN) : url);
@@ -46,6 +51,20 @@ const S = {
   run: { phase: 'idle' },
   openCardKey: null,
   logOpen: false,
+  /* Sequential project queue. Each item carries its OWN config; items run one
+     after another (never concurrently). Finished runs are archived to
+     IndexedDB (see db.js). The queue config (no keys) is mirrored to
+     localStorage so a half-built queue survives a reload. */
+  queue: {
+    items: [],          // [{ id, pipelineName, provider, backend, modelId, modelLabel, providerLabel, mode, concurrency, runDirectory, status }]
+    running: false,
+    index: -1,          // index of the in-flight item
+    current: null,      // { id, item, runId, archived, retries } for the active dispatch
+    processed: null,    // Set<runId> already archived (guards SSE replay)
+    stopping: false,    // a Stop-queue is in progress
+    editingId: null,    // item being edited back in the form
+    id: '',             // id shared by all runs of one queue execution
+  },
 };
 
 /* ---------------- Browser-only API keys ----------------
@@ -110,6 +129,11 @@ async function boot() {
   if (b.initialPipeline) selectPipelineByName(b.initialPipeline);
   ingestRun(b.run);
   connectSse();
+  // Restore a half-built queue (config only — keys are never persisted) and
+  // reflect the saved-history count on the topbar.
+  restoreQueue();
+  renderQueue();
+  refreshHistoryBadge();
 }
 
 function pickDefaultProvider(providers) {
@@ -331,40 +355,473 @@ for (const btn of $('modeSeg').children) {
 $('concRange').addEventListener('input', (e) => { S.manualN = +e.target.value; $('concOut').textContent = S.manualN; });
 
 function updateRunBtn() {
-  const ok = S.selectedPipe && S.keyStatus.ok;
-  $('runBtn').disabled = !ok;
+  // The form now ADDS a project to the queue; a key isn't required to add (it's
+  // resolved per project at run time, and the queued item shows a "key needed"
+  // marker until then). Enable as soon as a pipeline is selected.
+  $('addBtn').disabled = !S.selectedPipe;
 }
 
-/* ---------------- Run submit ---------------- */
-$('configForm').addEventListener('submit', async (e) => {
+/* ====================================================================
+   Sequential project queue
+   The config form ADDS a fully-configured project to the queue. "Run queue"
+   executes them one after another: dispatch → wait for the run to settle over
+   SSE → archive it to IndexedDB → dispatch the next. The server stays
+   single-run and stateless; the browser owns the sequence and the history.
+   ==================================================================== */
+
+const QUEUE_LS = 'huu.queue.v1';
+
+/** Snapshot the current form into a queue item (no key — resolved at run time). */
+function captureFormConfig() {
+  if (!S.selectedPipe) return null;
+  const md = S.models.find((x) => x.id === S.modelId);
+  const prov = providerInfoById(S.provider);
+  return {
+    id: uid(),
+    pipelineName: S.selectedPipe.name,
+    pipelineDesc: S.selectedPipe.description || '',
+    provider: S.provider,
+    backend: S.backend,
+    modelId: S.modelId,
+    modelLabel: md ? md.label : (S.modelId || 'default model'),
+    providerLabel: prov ? prov.label : S.provider,
+    mode: S.mode,
+    concurrency: S.mode === 'manual' ? S.manualN : undefined,
+    runDirectory: S.runDir || S.cwd,
+    status: 'pending',
+  };
+}
+
+// Form submit → add (or update when editing) a queued project.
+$('configForm').addEventListener('submit', (e) => {
   e.preventDefault();
-  if (!S.selectedPipe) return;
+  const cfg = captureFormConfig();
+  if (!cfg) return;
   $('runError').hidden = true;
-  $('runBtn').disabled = true;
+  if (S.queue.editingId) {
+    const i = S.queue.items.findIndex((x) => x.id === S.queue.editingId);
+    if (i >= 0) { cfg.id = S.queue.editingId; S.queue.items[i] = cfg; }
+    S.queue.editingId = null;
+    setAddBtnLabel('Add to queue');
+    toast('Project updated');
+  } else {
+    S.queue.items.push(cfg);
+    toast('Added to queue');
+  }
+  persistQueue();
+  renderQueue();
+});
+
+function setAddBtnLabel(t) { $('addBtnLabel').textContent = t; }
+
+/* ---------------- Queue rendering ---------------- */
+function itemReady(it) { return providerReady(providerInfoById(it.provider)); }
+
+function statusBadge(s) {
+  if (s === 'running') return '<span class="queue-status running">running</span>';
+  if (s === 'done') return '<span class="queue-status done">done</span>';
+  if (s === 'error') return '<span class="queue-status error">failed</span>';
+  return '';
+}
+
+function renderQueue() {
+  const q = S.queue;
+  $('queuePanel').hidden = q.items.length === 0;
+  $('queueCount').textContent = q.items.length ? String(q.items.length) : '';
+  const list = $('queueList');
+  list.innerHTML = '';
+  q.items.forEach((it, i) => {
+    const ready = itemReady(it);
+    const el = document.createElement('div');
+    el.className = 'queue-item ' + (it.status || 'pending');
+    el.innerHTML = `
+      <div class="queue-item__idx">${i + 1}</div>
+      <div class="queue-item__main">
+        <div class="queue-item__name"><span class="ico">${pipeIcon(it.pipelineName)}</span><span class="txt">${esc(it.pipelineName)}</span></div>
+        <div class="queue-item__meta">${esc(shortDir(it.runDirectory))}<span class="sep">·</span>${esc(it.modelLabel || 'default')}<span class="sep">·</span>${esc(it.providerLabel || it.provider)}${ready ? '' : '<span class="sep">·</span><span class="warn">key needed</span>'}</div>
+      </div>
+      <div class="queue-item__actions">
+        ${statusBadge(it.status)}
+        <button class="qbtn" data-act="up" data-id="${it.id}" title="Move up" ${i === 0 || q.running ? 'disabled' : ''}>↑</button>
+        <button class="qbtn" data-act="down" data-id="${it.id}" title="Move down" ${i === q.items.length - 1 || q.running ? 'disabled' : ''}>↓</button>
+        <button class="qbtn" data-act="edit" data-id="${it.id}" title="Edit" ${q.running ? 'disabled' : ''}>✎</button>
+        <button class="qbtn qbtn--danger" data-act="remove" data-id="${it.id}" title="Remove" ${q.running ? 'disabled' : ''}>✕</button>
+      </div>`;
+    list.appendChild(el);
+  });
+  $('queueRun').disabled = q.running || q.items.length === 0;
+  $('queueRunLabel').textContent = q.running ? 'Running…' : `Run queue${q.items.length ? ` (${q.items.length})` : ''}`;
+  $('queueClear').disabled = q.running || q.items.length === 0;
+}
+
+// Delegated queue-item actions (remove / edit / reorder).
+$('queueList').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const id = btn.getAttribute('data-id');
+  switch (btn.getAttribute('data-act')) {
+    case 'remove': removeQueueItem(id); break;
+    case 'edit': editQueueItem(id); break;
+    case 'up': moveQueueItem(id, -1); break;
+    case 'down': moveQueueItem(id, 1); break;
+  }
+});
+
+function removeQueueItem(id) {
+  if (S.queue.running) return;
+  S.queue.items = S.queue.items.filter((x) => x.id !== id);
+  if (S.queue.editingId === id) { S.queue.editingId = null; setAddBtnLabel('Add to queue'); }
+  persistQueue();
+  renderQueue();
+}
+function moveQueueItem(id, dir) {
+  if (S.queue.running) return;
+  const items = S.queue.items;
+  const i = items.findIndex((x) => x.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= items.length) return;
+  [items[i], items[j]] = [items[j], items[i]];
+  persistQueue();
+  renderQueue();
+}
+$('queueClear').addEventListener('click', () => {
+  if (S.queue.running) return;
+  S.queue.items = [];
+  S.queue.editingId = null;
+  setAddBtnLabel('Add to queue');
+  persistQueue();
+  renderQueue();
+});
+
+// Load a queued project back into the form to tweak + re-save.
+async function editQueueItem(id) {
+  if (S.queue.running) return;
+  const it = S.queue.items.find((x) => x.id === id);
+  if (!it) return;
+  const pipe = S.pipelines.find((p) => p.name === it.pipelineName);
+  if (!pipe) { toast('Pipeline no longer available', true); return; }
+  S.runDir = it.runDirectory;
+  S.provider = it.provider;
+  S.backend = providerBackend(it.provider);
+  await selectPipeline(pipe);            // renders provider seg + models + keys for S.provider
+  const sel = $('modelSelect');
+  sel.value = it.modelId;
+  S.modelId = sel.value || S.modelId;
+  updateModelHint();
+  S.mode = it.mode || 'auto';
+  S.manualN = it.concurrency || S.manualN;
+  renderModeSeg();
+  S.queue.editingId = id;
+  setAddBtnLabel('Update project');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  toast('Editing project — change config, then Update');
+}
+
+/* ---------------- Queue persistence (localStorage; no keys) ---------------- */
+function persistQueue() {
+  try {
+    const slim = S.queue.items.map((it) => ({ ...it, status: undefined }));
+    localStorage.setItem(QUEUE_LS, JSON.stringify(slim));
+  } catch { /* storage full / disabled — queue just won't survive reload */ }
+}
+function restoreQueue() {
+  try {
+    const raw = localStorage.getItem(QUEUE_LS);
+    if (!raw) return;
+    const items = JSON.parse(raw);
+    if (Array.isArray(items)) S.queue.items = items.map((it) => ({ ...it, status: 'pending' }));
+  } catch { /* corrupt — start empty */ }
+}
+
+/* ---------------- Sequential runner ---------------- */
+$('queueRun').addEventListener('click', startQueue);
+
+function startQueue() {
+  const q = S.queue;
+  if (q.running || !q.items.length) return;
+  for (const it of q.items) it.status = 'pending';
+  q.running = true;
+  q.index = -1;
+  q.current = null;
+  q.processed = new Set();
+  q.stopping = false;
+  q.id = uid();
+  persistQueue();
+  renderQueue();
+  advanceQueue();             // → dispatch item 0
+}
+
+function advanceQueue() {
+  const q = S.queue;
+  q.current = null;
+  if (!q.running) return;
+  const next = q.index + 1;
+  if (next < q.items.length) dispatchQueueItem(next);
+  else finishQueue();
+}
+
+function dispatchQueueItem(i) {
+  const q = S.queue;
+  const item = q.items[i];
+  if (!item) { finishQueue(); return; }
+  q.index = i;
+  item.status = 'running';
+  q.current = { id: item.id, item, runId: null, archived: false, retries: 0 };
+  renderQueue();
+  updateQueueChrome();
+  postRun(i);
+}
+
+async function postRun(i) {
+  const q = S.queue;
+  const item = q.items[i];
+  // Resolve THIS project's session key (validated earlier, browser-only).
+  const apiKey = sessionKey(backendSpecName(item.backend));
+  const endpoint = sessionKey('azureEndpoint');
   try {
     await api('/api/run', {
       method: 'POST',
       body: JSON.stringify({
-        pipelineName: S.selectedPipe.name,
-        provider: S.provider,
-        modelId: S.modelId,
-        mode: S.mode,
-        concurrency: S.mode === 'manual' ? S.manualN : undefined,
-        // Browser-only key: send the validated, in-memory key for this run.
-        // Omitted → server falls back to its env/mount/disk resolver.
-        apiKey: sessionKey(backendSpecName(S.backend)) || undefined,
-        // Azure also needs its endpoint URL; harmless (empty) for OpenRouter.
-        endpoint: sessionKey('azureEndpoint') || undefined,
-        runDirectory: S.runDir || undefined,
+        pipelineName: item.pipelineName,
+        provider: item.provider,
+        modelId: item.modelId,
+        mode: item.mode,
+        concurrency: item.mode === 'manual' ? item.concurrency : undefined,
+        apiKey: apiKey || undefined,
+        endpoint: endpoint || undefined,
+        runDirectory: item.runDirectory || undefined,
       }),
     });
     showView('run');
   } catch (err) {
-    $('runError').textContent = err.message;
-    $('runError').hidden = false;
-    updateRunBtn();
+    // The previous run may still be settling server-side (HTTP 409) — retry.
+    if (q.current && q.current.id === item.id && /in progress/i.test(err.message) && q.current.retries < 30) {
+      q.current.retries++;
+      setTimeout(() => { if (q.running && q.current && q.current.id === item.id) postRun(i); }, 350);
+      return;
+    }
+    // Couldn't start at all (missing key, bad dir, …). Record the failure and
+    // keep going — the queue completes even with isolated failures.
+    item.status = 'error';
+    await archiveSynthetic(item, err.message);
+    renderQueue();
+    refreshHistoryBadge();
+    advanceQueue();
   }
+}
+
+/**
+ * Called for every run SSE frame. Archives + advances when the in-flight
+ * project settles. Guards against a replayed/duplicated terminal frame via a
+ * processed-runId Set and a latched current.runId.
+ */
+function onRunFrame(run) {
+  const q = S.queue;
+  if (!q.running || !q.current) return;
+  if (run.runId && q.processed.has(run.runId)) return;     // already archived
+  const cur = q.current;
+  if (!cur.runId && run.runId) cur.runId = run.runId;        // latch our run's id
+  if (cur.archived) return;
+  if (run.phase !== 'done' && run.phase !== 'error') return;
+  if (cur.runId && run.runId && run.runId !== cur.runId) return;  // not ours
+  cur.archived = true;
+  if (run.runId) q.processed.add(run.runId);
+  cur.item.status = run.phase === 'done' ? 'done' : 'error';
+  archiveRun(run, cur.item);
+  renderQueue();
+  refreshHistoryBadge();
+  if (q.stopping) { stopFinalize(); return; }
+  advanceQueue();
+}
+
+function queueCtx(item) {
+  return { ...item, queue: { id: S.queue.id, index: S.queue.index, size: S.queue.items.length } };
+}
+async function archiveRun(run, item) {
+  try { await saveRun(buildRunRecord({ run, item: queueCtx(item), archivedAt: Date.now() })); }
+  catch (e) { console.warn('huu: failed to archive run', e); }
+}
+async function archiveSynthetic(item, reason) {
+  try { await saveRun(buildSyntheticRecord({ item: queueCtx(item), errorReason: reason, archivedAt: Date.now() })); }
+  catch (e) { console.warn('huu: failed to archive synthetic run', e); }
+}
+
+function finishQueue() {
+  const q = S.queue;
+  q.running = false;
+  q.current = null;
+  persistQueue();
+  renderQueue();
+  updateQueueChrome();
+  const errs = q.items.filter((it) => it.status === 'error').length;
+  toast(errs ? `Queue finished — ${errs} failed` : 'Queue finished ✓');
+}
+
+// Stop the WHOLE queue: abort the active run, archive it, then halt.
+$('stopQueueBtn').addEventListener('click', () => {
+  const q = S.queue;
+  if (!q.running) return;
+  q.stopping = true;
+  toast('Stopping queue…');
+  api('/api/run/abort', { method: 'POST' }).catch(() => {});
+  if (!q.current) stopFinalize();   // nothing live → finalize immediately
 });
+function stopFinalize() {
+  const q = S.queue;
+  q.running = false;
+  q.stopping = false;
+  q.current = null;
+  persistQueue();
+  renderQueue();
+  updateQueueChrome();
+  toast('Queue stopped');
+}
+
+/* ---------------- Run-view chrome for the queue ---------------- */
+function updateQueueChrome() {
+  const q = S.queue;
+  const active = S.run.phase === 'running';
+  const inQueue = q.running;
+  // During a queue run the per-run abort is replaced by a queue-wide stop.
+  $('abortBtn').hidden = !active || inQueue;
+  $('stopQueueBtn').hidden = !inQueue || !active;
+  if (inQueue) $('backToLaunch').hidden = true;   // no wandering off mid-queue
+  renderQueueProgress();
+}
+function renderQueueProgress() {
+  const q = S.queue;
+  const el = $('queueProgress');
+  if (!q.running) { el.hidden = true; return; }
+  el.hidden = false;
+  const pos = q.index + 1;
+  const name = q.items[q.index] ? q.items[q.index].pipelineName : '';
+  const dots = q.items.map((it) => `<span class="qp-dot ${it.status || 'pending'}"></span>`).join('');
+  el.innerHTML = `<span>Project ${pos}/${q.items.length} · ${esc(name)}</span><span class="qp-bar">${dots}</span>`;
+}
+
+/* ====================================================================
+   Run history (IndexedDB) + JSON export
+   ==================================================================== */
+let historyCache = [];
+
+$('historyBtn').addEventListener('click', openHistory);
+$('historyClose').addEventListener('click', closeHistory);
+$('historyScrim').addEventListener('click', closeHistory);
+
+async function openHistory() {
+  $('historyScrim').hidden = false;
+  $('historyModal').hidden = false;
+  await renderHistory();
+}
+function closeHistory() { $('historyScrim').hidden = true; $('historyModal').hidden = true; }
+
+async function renderHistory() {
+  const list = $('historyList');
+  list.innerHTML = '<div class="history-empty">Loading…</div>';
+  let runs = [];
+  try { runs = await listRuns(); }
+  catch (e) { list.innerHTML = `<div class="history-empty">History unavailable: ${esc(e.message)}</div>`; return; }
+  historyCache = runs;
+  const total = runs.reduce((s, r) => s + (r.totalCost || 0), 0);
+  $('historyMeta').textContent = runs.length
+    ? `${runs.length} run${runs.length > 1 ? 's' : ''} · $${total.toFixed(2)} total`
+    : 'No runs yet';
+  $('historyExport').disabled = runs.length === 0;
+  $('historyClear').disabled = runs.length === 0;
+  if (!runs.length) { list.innerHTML = '<div class="history-empty">No runs yet. Run a queue to build history.</div>'; return; }
+  list.innerHTML = '';
+  for (const r of runs) list.appendChild(historyRow(r));
+}
+
+function historyRow(r) {
+  const wrap = document.createElement('div');
+  wrap.className = 'history-row';
+  const when = r.archivedAt ? new Date(r.archivedAt).toLocaleString() : '';
+  const cards = r.counts ? r.counts.total : (r.cards || []).length;
+  const sub = [shortDir(r.runDirectory), r.modelLabel || r.modelId, r.provider, when]
+    .filter(Boolean).map(esc).join(' · ');
+  wrap.innerHTML = `
+    <button type="button" class="history-row__head">
+      <span class="history-row__icon">${pipeIcon(r.pipelineName)}</span>
+      <span class="history-row__main">
+        <span class="history-row__name">${esc(r.pipelineName)}</span>
+        <span class="history-row__sub">${sub} · ${cards} cards</span>
+      </span>
+      <span class="history-row__status ${r.status}">${r.status === 'done' ? 'done' : 'failed'}</span>
+      <span class="history-row__cost">$${(r.totalCost || 0).toFixed(3)}<small>${fmtDur(r.elapsedMs || 0)}</small></span>
+      <svg class="history-row__chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>
+    </button>
+    <div class="history-cards">${historyCardsHtml(r)}</div>`;
+  wrap.querySelector('.history-row__head').addEventListener('click', () => wrap.classList.toggle('open'));
+  return wrap;
+}
+
+function historyCardsHtml(r) {
+  const errLine = r.errorReason ? `<div class="history-err">⚠ ${esc(r.errorReason)}</div>` : '';
+  const rows = (r.cards || []).map((c) => {
+    const cost = c.cost == null ? '—' : '$' + Number(c.cost).toFixed(4);
+    const tok = c.kind === 'agent' ? fmtNum((c.tokensIn || 0) + (c.tokensOut || 0)) : '—';
+    return `<tr>
+      <td><span class="hc-kind ${c.kind}">${c.kind}</span></td>
+      <td class="ttl">${esc(c.title)}${c.error ? ' <span style="color:var(--red)">⚠</span>' : ''}</td>
+      <td>${esc(humanize(c.phase || ''))}</td>
+      <td class="num">${tok}</td>
+      <td class="num">${cost}</td>
+    </tr>`;
+  }).join('');
+  const table = (r.cards && r.cards.length)
+    ? `<table class="hc-table">
+         <thead><tr><th>Kind</th><th>Card</th><th>Phase</th><th class="num">Tokens</th><th class="num">Cost</th></tr></thead>
+         <tbody>${rows}</tbody>
+       </table>`
+    : '<div class="history-empty" style="padding:16px 0">No cards recorded for this run.</div>';
+  const foot = `<div class="queue-foot" style="margin-top:12px">
+      <span class="muted" style="font-size:12px">Project total <b style="color:var(--text)">$${(r.totalCost || 0).toFixed(4)}</b> · card costs sum $${(r.cardCostSum || 0).toFixed(4)}</span>
+      <button class="btn btn--ghost btn--sm history-del" data-del="${r.id}" style="margin-left:auto">Delete</button>
+    </div>`;
+  return errLine + table + foot;
+}
+
+// Delegated: delete one history record (button lives inside the expanded body).
+$('historyList').addEventListener('click', async (e) => {
+  const del = e.target.closest('button[data-del]');
+  if (!del) return;
+  e.stopPropagation();
+  try { await deleteRun(del.getAttribute('data-del')); } catch { /* ignore */ }
+  await renderHistory();
+  refreshHistoryBadge();
+});
+
+$('historyExport').addEventListener('click', async () => {
+  let runs = historyCache;
+  try { if (!runs || !runs.length) runs = await listRuns(); } catch { /* ignore */ }
+  if (!runs || !runs.length) { toast('Nothing to export', true); return; }
+  const { filename, text } = exportRunsJson(runs, Date.now());
+  downloadText(filename, text);
+  toast(`Exported ${runs.length} run${runs.length > 1 ? 's' : ''}`);
+});
+
+$('historyClear').addEventListener('click', async () => {
+  if (!confirm('Clear all run history? This cannot be undone.')) return;
+  try { await clearRuns(); } catch { /* ignore */ }
+  await renderHistory();
+  refreshHistoryBadge();
+});
+
+async function refreshHistoryBadge() {
+  let n = 0;
+  try { n = (await listRuns()).length; } catch { /* unavailable */ }
+  const b = $('historyBadge');
+  if (n > 0) { b.textContent = n > 99 ? '99+' : String(n); b.hidden = false; }
+  else b.hidden = true;
+}
+
+/** "…/parent/dir" for a long absolute path; left untouched when already short. */
+function shortDir(p) {
+  if (!p) return '';
+  const parts = String(p).replace(/\/+$/, '').split('/');
+  return parts.length <= 3 ? p : '…/' + parts.slice(-2).join('/');
+}
 
 /* ---------------- Folder picker (run directory) ---------------- */
 const folderState = { path: '' };
@@ -470,6 +927,11 @@ function ingestRun(run) {
       ? `<b style="color:var(--red)">Failed:</b> ${esc(run.errorReason)}`
       : `<b>Done.</b> Pipeline “${esc(run.pipelineName)}” finished.`;
   } else { $('runSummary').textContent = ''; }
+
+  // Drive the sequential queue: archive + advance when a project settles, and
+  // keep the run-view chrome (stop-queue button, progress strip) in sync.
+  onRunFrame(run);
+  updateQueueChrome();
 }
 
 function setStatus(phase) {

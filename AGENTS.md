@@ -45,9 +45,9 @@ the knowledge BEFORE implementation, and guarantees each task skill runs its
 (probation) and are promoted into skill bodies only by
 `meta-skill-consolidate`, always as uncommitted diffs for human review.
 
-17 skills: 1 router · 9 knowledge (architecture, orchestrator, git
-worktrees, LLM backends, ports, Docker, tests, docs, agent-prompts) · 5 task
-(pipelines, default pipelines, TUI, commit gate, release) · 2 meta
+18 skills: 1 router · 9 knowledge (architecture, orchestrator, git
+worktrees, LLM backends, ports, Docker, tests, docs, agent-prompts) · 6 task
+(pipelines, default pipelines, TUI, web UI, commit gate, release) · 2 meta
 (evolution, consolidate). The catalog is canonical — consult it, not this
 paragraph, for the current list.
 

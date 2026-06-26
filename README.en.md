@@ -191,14 +191,21 @@ terminal TUI back.
   flowing TODO → DOING → DONE; click a card for **per-agent tokens, cost,
   branch, files and live logs**. Global log console, concurrency control
   (Auto · Manual · MAX) and a stop button up top.
+- **Project queue, in sequence.** Select **several projects** — each with its
+  own config (directory, provider, model, concurrency) — and run them **one
+  after another** (sequential, never in parallel). If one fails, the queue
+  keeps going and marks that project failed. Every execution is archived to
+  the browser **history** (IndexedDB) with all cards, per-card costs and the
+  per-project total — **exportable as JSON** in one click.
 - **Your key, in the browser.** Paste your `OPENROUTER_API_KEY` in the
   launch form — it's **validated against the provider on the spot** and
   kept only in the browser tab (`sessionStorage`), sent with each run and
   **never written to disk**. A stray shell `OPENROUTER_API_KEY` can't
   shadow it.
 
-> **Today the web runs existing pipelines** (list, pick, execute, tune
-> concurrency, stop). The **guided builders** (Pipeline Assistant and the
+> **Today the web runs existing pipelines** (list, pick, queue and run in
+> sequence, tune concurrency, stop). The **guided builders** (Pipeline
+> Assistant and the
 > step-by-step editor) still live in the **TUI** — use `huu --cli`.
 > Web-based pipeline authoring is roadmap.
 
