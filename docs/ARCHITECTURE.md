@@ -42,6 +42,7 @@ src/
 │   ├── index.ts               # Orchestrator class (pool, lifecycle, abort, destroyAgent)
 │   ├── task-decomposer.ts     # step → tasks
 │   ├── stub-agent.ts          # synthetic lifecycle for demos / tests
+│   ├── simulation/            # SimulationEngine: synthetic /simulation web demo (no git/LLM/key)
 │   ├── real-agent.ts          # real LLM agent via pi-coding-agent
 │   ├── integration-agent.ts   # LLM conflict resolver
 │   ├── auto-scaler.ts         # resource-bound concurrency state machine

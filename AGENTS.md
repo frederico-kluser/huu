@@ -62,7 +62,9 @@ paragraph, for the current list.
                 ↓
               web/ (node:http + SSE server + vanilla-JS browser client:
                 kanban, real-time run log, and an agent-output firehose
-                mirrored to the browser console — see the building-web-ui skill)
+                mirrored to the browser console; the `/simulation` route serves
+                a fully synthetic demo run — SimulationEngine, no git/LLM/key
+                — see the building-web-ui skill)
               ui/components/ (Ink React views — the --cli TUI)
                 ↓ (both front-ends drive ONE Orchestrator)
               orchestrator/ (worker pool, stage lifecycle, merge)

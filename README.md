@@ -240,6 +240,22 @@ huu --cli                 # TUI no terminal
 | `HUU_WEB_TOKEN` | Segredo compartilhado exigido nas rotas de dados/ações. |
 | `HUU_CLI=1` | Default pra TUI (igual a `--cli`). |
 
+### Modo simulação (`/simulation`)
+
+Abra **`http://localhost:4888/simulation`** para uma **simulação completa** do
+huu em ação — kanban, agentes, logs ao vivo e contadores de custo — **sem
+criar nenhuma branch, sem chave de API e sem custo**. Tudo é sintético: um
+`SimulationEngine` fabrica os mesmos frames de estado que o Orchestrator real
+emite, então a mesma tela renderiza sem mudança nenhuma. É feito para **demos
+e material de divulgação**.
+
+Ao abrir, você escolhe **os modelos** (viram rótulos nos cards), a **quantidade
+de arquivos** e a **quantidade de agentes simultâneos**, e inicia. Cada execução
+**sorteia o mix completo de cenários**: streaming, requeues do memory-guard
+(`↻`), retries, erros, merges de stage e o **loop de rework do juiz**
+(`rework → approved`). Tem **play/pause** durante a corrida e um botão **"Run
+again"** ao terminar. Nenhum arquivo do seu projeto é tocado.
+
 ---
 
 ## Monte um pipeline sem escrever JSON na mão

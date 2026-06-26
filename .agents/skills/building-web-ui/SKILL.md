@@ -2,7 +2,7 @@
 name: building-web-ui
 description: Procedure and conventions for huu's BROWSER UI (src/web) — the vanilla-ESM no-build client (index.html/app.js/styles.css), the stateless single-run server over node:http + SSE with its TWO frame types (throttled run snapshot vs the un-throttled agent-stream output firehose mirrored to the browser console), the browser-owns-state rule (keys in sessionStorage, run history in IndexedDB), the provider→backend dispatch gotcha, and how to verify client logic with no browser. Use for any change under src/web/ — client screens, the SSE/run-manager server, api-data, or web run/queue/history behavior.
 metadata:
-  version: 0.1.0
+  version: 0.2.0
   type: task
 ---
 
@@ -10,7 +10,7 @@ metadata:
 
 ## When to use
 
-Anything under `src/web/`: the browser client (`client/index.html`, `client/app.js`, `client/styles.css`, sibling ES modules), the HTTP+SSE server (`server.ts`), `api-data.ts`, `run-manager.ts`, `serve.ts`, `interface-mode.ts`. The web UI is huu's DEFAULT front-end (`--cli`/`--tui` switches to Ink); see `running-in-docker` for web-vs-cli vs docker-vs-native.
+Anything under `src/web/`: the browser client (`client/index.html`, `client/app.js`, `client/styles.css`, sibling ES modules), the HTTP+SSE server (`server.ts`), `api-data.ts`, `run-manager.ts`, `serve.ts`, `interface-mode.ts`. The web UI is huu's DEFAULT front-end (`--cli`/`--tui` switches to Ink); see `running-in-docker` for web-vs-cli vs docker-vs-native. Also covers the synthetic `/simulation` demo surface — the `SimulationEngine` lives in `src/orchestrator/simulation/` but is wired in and driven entirely from `run-manager.ts` / `server.ts` / the client.
 
 ## Injected knowledge
 
@@ -33,6 +33,7 @@ Anything under `src/web/`: the browser client (`client/index.html`, `client/app.
 - **Provider derives the backend; `lockedBackend` is ignored by `startRun`.** `server.startRun` does `provider ? providerToBackend(provider) : parseBackendKind(body.backend)` (openrouter→pi, azure→azure). So `--stub` does NOT force stub for browser-initiated runs. To drive a stub run, POST `{backend:'stub'}` with **NO `provider`** (stub `requiresApiKey:false`).
 - `/api/run` already accepts per-run `provider, modelId, mode, concurrency, apiKey, endpoint, runDirectory, timeoutMinutes` — **heterogeneous sequential runs need ZERO server change**.
 - **Cards & cost.** `OrchestratorState` cards = `agents[]` (only these carry per-card `cost` + tokens), `stageIntegrations[]` (merge), `checkRuns[]` (judge). Merge/judge LLM cost is NOT metered per-card — it folds into `state.totalCost` (the authoritative project cost). The terminal SSE frame carries the full final `state` (`trimState` only caps `agent.logs` to 200 lines), so the browser can archive every card + cost on settle.
+- **Synthetic `/simulation` demo run.** `run-manager.ts` drives runs through a tiny `RunDriver` seam — `subscribe` + `subscribeAgentOutput` + `start():Promise<{runId,manifest:{errorReason?}}>` — satisfied structurally by BOTH the real `Orchestrator` and a `SimulationEngine` (`src/orchestrator/simulation/`), so a private `launch()` wires either through the SAME snapshot/SSE machinery and the real-run path is untouched. The engine fabricates byte-identical `OrchestratorState` snapshots + `agent-stream` frames with NO git/LLM/key, so the existing kanban/log/drawer render a believable run unchanged. Routes: `GET /simulation` serves the SPA shell (explicit route placed BEFORE the catch-all static handler, else the bare path 404s; the client routes on `location.pathname`); `POST /api/run {simulate:true,modelIds,fileCount,concurrency}` branches at the TOP of `startRun` (no backend/provider/key resolution) → `manager.startSimulation()`; `POST /api/run/pause {paused}` → `manager.setPaused()`. Each run randomly samples the full scenario mix (streaming, requeue ↻, retries, errors, stage merges, judge rework→approved). See LEARNINGS for the seam + the timer-free determinism recipe (`advance()` + seeded PRNG).
 
 ### Styling (`client/styles.css`)
 
@@ -53,9 +54,10 @@ Apple "Liquid Glass" system: CSS-var tokens (`--accent` indigo, `--accent-2` pur
 
 - `src/web/server.ts` (`createWebServer`, `startRun`, SSE throttle), `src/web/run-manager.ts` (`WebRunManager`), `src/web/api-data.ts`, `src/web/interface-mode.ts` (`decideInterfaceMode`, default web).
 - `src/lib/providers.ts` (`providerToBackend`/`backendToProvider`), `src/lib/types.ts` (`OrchestratorState`, `AgentStatus`, `StageIntegration`, `CheckRun`).
+- `src/orchestrator/simulation/engine.ts` + `corpus.ts` (the `/simulation` `SimulationEngine`), `engine.test.ts` + `src/web/run-manager.test.ts` (its specs).
 - Related: `following-architecture-conventions`, `working-on-orchestrator`, `integrating-llm-backends`, `running-in-docker`, `building-tui-screens` (the Ink counterpart).
 
-> Facts verified against source on 2026-06-25.
+> Facts verified against source on 2026-06-25; `/simulation` synthetic demo surface added + verified 2026-06-26.
 
 ## <evolution>
 

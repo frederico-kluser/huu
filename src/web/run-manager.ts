@@ -12,6 +12,8 @@
 
 import { existsSync, statSync } from 'node:fs';
 import { Orchestrator } from '../orchestrator/index.js';
+import { SimulationEngine } from '../orchestrator/simulation/engine.js';
+import type { SimulationOptions } from '../orchestrator/simulation/engine.js';
 import type { AgentOutputChunk } from '../orchestrator/types.js';
 import {
   selectBackend,
@@ -82,8 +84,22 @@ const IDLE_SNAPSHOT: RunSnapshot = {
   state: null,
 };
 
+/**
+ * The minimal contract the manager drives a run through. Both the real
+ * {@link Orchestrator} and the {@link SimulationEngine} satisfy it structurally,
+ * so {@link WebRunManager.launch} wires either one through the SAME snapshot /
+ * SSE machinery.
+ */
+interface RunDriver {
+  subscribe(cb: (state: OrchestratorState) => void): () => void;
+  subscribeAgentOutput(cb: (chunk: AgentOutputChunk) => void): () => void;
+  start(): Promise<{ runId: string; manifest: { errorReason?: string } }>;
+}
+
 export class WebRunManager {
   private orch: Orchestrator | null = null;
+  /** Set instead of `orch` while a `/simulation` run is live. */
+  private sim: SimulationEngine | null = null;
   private unsubscribe: (() => void) | null = null;
   private unsubscribeOutput: (() => void) | null = null;
   private snapshot: RunSnapshot = IDLE_SNAPSHOT;
@@ -194,7 +210,7 @@ export class WebRunManager {
 
     if (mode === 'greedy') orch.enableGreedyMode();
 
-    this.snapshot = {
+    const seed: RunSnapshot = {
       phase: 'running',
       runId: '',
       pipelineName: effectivePipeline.name,
@@ -203,9 +219,41 @@ export class WebRunManager {
       startedAt: Date.now(),
       state: null,
     };
+    return this.launch(orch, seed);
+  }
 
-    this.unsubscribe = orch.subscribe((state) => {
-      // Keep the freshest runId the orchestrator assigns.
+  /**
+   * Start a synthetic `/simulation` run. No backend/key/pipeline resolution,
+   * no git, no LLM — the {@link SimulationEngine} fabricates the kanban. Reuses
+   * the exact same snapshot + SSE plumbing as a real run.
+   */
+  startSimulation(opts: SimulationOptions): RunSnapshot {
+    if (this.isActive()) {
+      throw new Error('A run is already in progress.');
+    }
+    const engine = new SimulationEngine(opts);
+    this.sim = engine;
+    const seed: RunSnapshot = {
+      phase: 'running',
+      runId: opts.runId,
+      pipelineName: engine.pipelineName,
+      backend: 'stub',
+      modelId: opts.modelIds[0] || 'simulation',
+      startedAt: Date.now(),
+      state: null,
+    };
+    return this.launch(engine, seed);
+  }
+
+  /**
+   * Subscribe a driver (real or simulated) to the snapshot + firehose
+   * channels and kick it off fire-and-forget, flipping phase on settle.
+   */
+  private launch(driver: RunDriver, seed: RunSnapshot): RunSnapshot {
+    this.snapshot = seed;
+
+    this.unsubscribe = driver.subscribe((state) => {
+      // Keep the freshest runId the driver assigns.
       this.snapshot = {
         ...this.snapshot,
         runId: state.runId || this.snapshot.runId,
@@ -215,12 +263,10 @@ export class WebRunManager {
     });
 
     if (this.onAgentOutput) {
-      this.unsubscribeOutput = orch.subscribeAgentOutput(this.onAgentOutput);
+      this.unsubscribeOutput = driver.subscribeAgentOutput(this.onAgentOutput);
     }
 
-    // Fire-and-forget: the run resolves asynchronously; we flip phase on
-    // settle and emit a final snapshot so the browser shows the summary.
-    orch
+    driver
       .start()
       .then((result) => {
         this.snapshot = {
@@ -251,6 +297,7 @@ export class WebRunManager {
           this.unsubscribeOutput = null;
         }
         this.orch = null;
+        this.sim = null;
         this.onUpdate(this.snapshot);
       });
 
@@ -261,26 +308,35 @@ export class WebRunManager {
   /** Hard-stop the active run. No-op when idle. */
   abort(): void {
     this.orch?.abort();
+    this.sim?.abort();
+  }
+
+  /** Pause/resume a simulation run. No-op for real runs (or when idle). */
+  setPaused(paused: boolean): void {
+    this.sim?.setPaused(paused);
   }
 
   /** Pin manual concurrency at `value` (also flips out of auto/greedy). */
   setConcurrency(value: number): void {
     this.orch?.setConcurrency(value);
+    this.sim?.setConcurrency(value);
   }
 
   /** Nudge concurrency up/down by one. */
   adjust(delta: number): void {
-    if (!this.orch) return;
-    if (delta > 0) this.orch.increaseConcurrency();
-    else if (delta < 0) this.orch.decreaseConcurrency();
+    const driver = this.orch ?? this.sim;
+    if (!driver) return;
+    if (delta > 0) driver.increaseConcurrency();
+    else if (delta < 0) driver.decreaseConcurrency();
   }
 
   /** Switch concurrency strategy mid-run. */
   setMode(mode: 'auto' | 'manual' | 'greedy'): void {
-    if (!this.orch) return;
-    if (mode === 'auto') this.orch.enableAutoScale();
-    else if (mode === 'manual') this.orch.disableAutoScale();
-    else this.orch.enableGreedyMode();
+    const driver = this.orch ?? this.sim;
+    if (!driver) return;
+    if (mode === 'auto') driver.enableAutoScale();
+    else if (mode === 'manual') driver.disableAutoScale();
+    else driver.enableGreedyMode();
   }
 }
 

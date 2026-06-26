@@ -738,3 +738,37 @@ input[type='range'] { flex: 1; accent-color: var(--accent); }
   /* Snap the morphing blob to a stable, pleasant shape instead of freezing mid-morph. */
   .blob::before, .blob__i::before { clip-path: polygon(50% 4%, 86% 22%, 96% 60%, 70% 94%, 30% 94%, 4% 60%); }
 }
+
+/* ============================================================
+   Simulation setup (/simulation) — synthetic demo run.
+   Web palette uses --accent / --accent-2 freely (the "magenta = AI only"
+   rule is Ink-specific, not the browser UI).
+   ============================================================ */
+.view--sim { max-width: 700px; margin: 0 auto; }
+.sim-grid { display: grid; gap: 16px; }
+.sim-modeladd { display: flex; gap: 8px; }
+.sim-modeladd .combo__input { flex: 1 1 auto; }
+.sim-suggest { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.sim-sug {
+  border: 1px solid var(--separator); background: var(--elev-2); color: var(--text-2);
+  border-radius: 999px; padding: 5px 11px; font-size: 12.5px; cursor: pointer;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sim-sug:hover { color: var(--text); border-color: var(--accent); }
+.sim-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.sim-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px;
+  border-radius: 999px; font-size: 12.5px; color: var(--accent-ink);
+  background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 76%, #000));
+  box-shadow: var(--shadow-sm);
+}
+.sim-chip button {
+  border: 0; cursor: pointer; color: inherit; line-height: 1; font-size: 13px;
+  width: 18px; height: 18px; border-radius: 999px; background: rgba(255, 255, 255, 0.25);
+}
+.sim-chip button:hover { background: rgba(255, 255, 255, 0.45); }
+.view--sim .field > label output { float: right; font-weight: 700; color: var(--accent-2); }
+.view--sim input[type="range"] { width: 100%; }
+.sim-foot { text-align: center; margin-top: 18px; }
+.sim-back { text-decoration: none; }
+.sim-back:hover { color: var(--accent); }
