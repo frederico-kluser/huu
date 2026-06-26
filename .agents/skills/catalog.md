@@ -25,6 +25,7 @@
 - [authoring-pipelines](authoring-pipelines/SKILL.md) `task` — pipeline JSON v2 schema + design + stub dry-run; for any *.pipeline.json.
 - [editing-default-pipelines](editing-default-pipelines/SKILL.md) `task` — the 7 bundled defaults, registry.test contract, knowledge-protocol helpers, never-overwrite trap.
 - [building-tui-screens](building-tui-screens/SKILL.md) `task` — FSM + app.tsx routing, theme.ai rule, cardHeight sync, useInput ref-stability; for Ink UI work.
+- [building-web-ui](building-web-ui/SKILL.md) `task` — vanilla-ESM no-build client (app.js/db.js), stateless single-run node:http+SSE server, browser-owns-state (sessionStorage keys + IndexedDB history), provider→backend dispatch gotcha, no-browser verification; for any src/web work.
 - [committing-and-validating](committing-and-validating/SKILL.md) `task` — typecheck+test gate (no CI), Conventional Commits, smoke triggers; for every commit/push.
 - [releasing-versions](releasing-versions/SKILL.md) `task` — manual release steps, GHCR multi-arch publish, published-image smoke.
 
@@ -35,3 +36,4 @@
 
 - Any code change → following-architecture-conventions + the domain skill → writing-tests → committing-and-validating.
 - Pipeline work: authoring-pipelines for user JSONs; editing-default-pipelines when the change is under src/lib/default-pipelines/.
+- UI work: building-tui-screens for Ink (src/ui/, app.tsx); building-web-ui for the browser client + web server (src/web/).

@@ -52,6 +52,11 @@
           <button class="conc__btn" id="concUp" title="More agents">+</button>
         </div>
         <button class="btn btn--danger" id="abortBtn" hidden>Stop</button>
+        <button class="btn btn--danger" id="stopQueueBtn" hidden title="Stop the whole queue">Stop queue</button>
+        <button class="iconbtn iconbtn--badge" id="historyBtn" title="Run history" aria-label="Run history">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l4 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="badge" id="historyBadge" hidden>0</span>
+        </button>
         <button class="iconbtn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">
           <svg viewBox="0 0 24 24" class="i-theme" width="18" height="18" aria-hidden="true"><use href="#ic-auto"></use></svg>
         </button>
@@ -130,14 +135,31 @@
                 </div>
               </div>
 
-              <button type="submit" class="btn btn--primary btn--lg" id="runBtn">
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
-                <span>Run pipeline</span>
+              <button type="submit" class="btn btn--primary btn--lg" id="addBtn">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span id="addBtnLabel">Add to queue</span>
               </button>
+              <div class="config-hint muted" id="addHint">Build a queue of projects, then run them one after another.</div>
               <div class="run-error" id="runError" hidden></div>
             </form>
           </aside>
         </div>
+
+        <!-- QUEUE: projects run sequentially, each with its own config. -->
+        <section class="panel glass panel--queue" id="queuePanel" hidden>
+          <div class="panel__title">
+            <span>Queue</span>
+            <span class="count" id="queueCount"></span>
+          </div>
+          <div class="queue-list" id="queueList"></div>
+          <div class="queue-foot">
+            <button type="button" class="btn btn--ghost btn--sm" id="queueClear">Clear all</button>
+            <button type="button" class="btn btn--primary" id="queueRun">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+              <span id="queueRunLabel">Run queue</span>
+            </button>
+          </div>
+        </section>
       </section>
 
       <!-- RUN VIEW -->
@@ -176,6 +198,7 @@
 
         <div class="run-footer">
           <button class="btn btn--ghost" id="backToLaunch" hidden>← New run</button>
+          <div class="queue-progress" id="queueProgress" hidden></div>
           <div class="run-summary" id="runSummary"></div>
         </div>
       </section>
@@ -210,6 +233,25 @@
         <button class="btn btn--ghost btn--sm" id="folderUp">↑ Parent</button>
         <button class="btn btn--primary btn--sm" id="folderUse">Run here</button>
       </div>
+    </div>
+
+    <!-- Run history modal (per-project executions saved in IndexedDB) -->
+    <div class="modal-scrim" id="historyScrim" hidden></div>
+    <div class="history-modal glass" id="historyModal" hidden role="dialog" aria-label="Run history">
+      <div class="folder-modal__head">
+        <div class="folder-modal__title">Run history</div>
+        <button class="iconbtn" id="historyClose" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="history-sub">
+        <span class="muted" id="historyMeta">—</span>
+        <div class="history-actions">
+          <button class="btn btn--ghost btn--sm" id="historyClear">Clear all</button>
+          <button class="btn btn--primary btn--sm" id="historyExport">Export JSON</button>
+        </div>
+      </div>
+      <div class="history-list" id="historyList"></div>
     </div>
 
     <!-- Toast -->

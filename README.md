@@ -192,13 +192,20 @@ TUI no terminal.
   TODO → DOING → DONE; clique num card pra ver **tokens, custo, branch,
   arquivos e logs ao vivo** por agente. Console de log global, controle
   de concorrência (Auto · Manual · MAX) e botão de parar no topo.
+- **Fila de projetos, em sequência.** Selecione **vários projetos** — cada
+  um com sua própria config (diretório, provider, modelo, concorrência) — e
+  rode-os **um após o outro** (sequencial, nunca em paralelo). Se um falha, a
+  fila segue e marca o projeto como falho. Cada execução é arquivada no
+  **histórico** do navegador (IndexedDB) com todos os cards, os custos por
+  card e o total por projeto — **exportável em JSON** com um clique.
 - **Sua key, no navegador.** Cole sua `OPENROUTER_API_KEY` no formulário de
   launch — ela é **validada na hora** contra o provider e fica só na aba do
   navegador (`sessionStorage`), enviada a cada run e **nunca escrita em
   disco**. Uma `OPENROUTER_API_KEY` solta no shell não consegue sombrear.
 
-> **Hoje a web roda pipelines existentes** (listar, escolher, executar,
-> ajustar concorrência, parar). Os **construtores guiados** (Pipeline
+> **Hoje a web roda pipelines existentes** (listar, escolher, enfileirar e
+> executar em sequência, ajustar concorrência, parar). Os **construtores
+> guiados** (Pipeline
 > Assistant e o editor passo a passo) ainda vivem na **TUI** — use
 > `huu --cli`. Autoria de pipeline pela web é roadmap.
 

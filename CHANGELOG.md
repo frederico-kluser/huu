@@ -9,6 +9,16 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Added
 
+- **Sequential project queue + run history (web).** The web launch screen now
+  builds a **queue of projects**, each with its OWN config (pipeline,
+  directory, provider, model, concurrency), and runs them **sequentially** —
+  when one settles the next starts; a failure marks that project failed and
+  the queue keeps going. Every execution is archived to the browser's
+  **IndexedDB** history with all kanban cards, per-card costs and the
+  per-project total, and the whole history is **exportable as JSON**. Entirely
+  client-side (new `src/web/client/db.js` for the store + pure record builders,
+  plus the queue runner in `app.js`); the single-run server is unchanged. New
+  `building-web-ui` agent skill documents the browser layer.
 - **Provider selection inside pi — OpenRouter or Azure AI Foundry.** huu now
   exposes a single backend (pi) and lets you choose the LLM *provider*
   underneath it. New `LlmProvider` type + `src/lib/providers.ts` mapping
