@@ -1212,12 +1212,18 @@ function ingestRun(run) {
   const active = run.phase === 'running';
   const hasRun = run.phase !== 'idle';
 
-  $('runStatusGroup').hidden = !hasRun;
+  // Open the run board ONLY while a pipeline is actively running. An
+  // idle/done/error run opens on home (the launch view) — so reopening the app
+  // after a run finished lands on home, not on a stale board. We only ever
+  // switch TO the board here; a run that settles while you're watching it keeps
+  // you on the board (the guard simply stops re-asserting the board view).
+  if (active && $('viewRun').hidden) showView('run');
+  const onRunView = !$('viewRun').hidden;
+
+  // Topbar run chrome belongs to the board context, not the home screen.
+  $('runStatusGroup').hidden = !hasRun || !onRunView;
   $('concControl').hidden = !active;
   $('abortBtn').hidden = !active;
-
-  // Auto-switch to the run view while a run is live or just finished.
-  if (hasRun && $('viewRun').hidden) showView('run');
   $('backToLaunch').hidden = active || !hasRun;
 
   setStatus(run.phase);

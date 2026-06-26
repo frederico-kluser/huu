@@ -188,6 +188,11 @@ TUI no terminal.
   outra máquina via `http://<ip-da-sua-máquina>:4888`. Tempo real por
   Server-Sent Events (reconecta sozinho), zero dependência nova (só
   `node:http`).
+- **Feche a aba, a execução continua.** `huu` abre na tela **inicial**, ou já
+  vai direto pro **kanban** ao vivo quando um pipeline já está rodando. A
+  execução vive no processo do huu, não no navegador — feche a aba e reabra
+  quando quiser pra re-sincronizar; só o botão **Parar** ou encerrar o `huu`
+  (Ctrl+C) finaliza a execução.
 - **Tudo clicável.** Kanban de cards (agentes, merges, juízes) fluindo
   TODO → DOING → DONE — quando um card muda de coluna ele **desliza até a
   primeira posição da nova coluna** (animação por GPU, só `transform`, sem

@@ -187,6 +187,11 @@ terminal TUI back.
   phone or another machine at `http://<your-machine-ip>:4888`. Real-time
   over Server-Sent Events (auto-reconnecting), zero new dependencies
   (just `node:http`).
+- **Close the tab, the run keeps going.** `huu` opens on the **home** screen,
+  or jumps straight to the live **kanban** when a pipeline is already running.
+  The run lives in the huu process, not the browser — close the tab and reopen
+  any time to re-sync; only the **Stop** button or quitting `huu` (Ctrl+C) ends
+  a run.
 - **Everything is clickable.** A kanban of cards (agents, merges, judges)
   flowing TODO → DOING → DONE — when a card changes column it **glides to the
   first slot of the new one** (GPU-composited, `transform`-only, jank-free),

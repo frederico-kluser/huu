@@ -169,6 +169,14 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
   reply text, so a card's log matches what the console streams (the
   verbose trace still stays out of the global run log). The per-agent log
   buffer was raised 100 → 200 lines to match the server's per-frame cap.
+- **The web UI opens on home unless a pipeline is running.** Reopening huu (or
+  refreshing the tab) lands on the launch screen by default and jumps straight
+  to the live **kanban** only while a pipeline is actively running — a finished
+  or failed run no longer hijacks the landing view. Closing the browser
+  **never** interrupts a run: the run lives in the huu process, so you can close
+  the tab and reopen to re-sync, and only the **Stop** button or quitting huu
+  (Ctrl+C) ends it. A new `server.test.ts` regression drops the SSE connection
+  mid-run and asserts the run stays alive.
 
 ### Fixed
 
