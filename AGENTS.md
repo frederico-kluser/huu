@@ -58,10 +58,13 @@ paragraph, for the current list.
                 ↓ (when not in container, not --help, not init-docker/status)
          docker run --cidfile … ghcr.io/…/huu:latest
                 ↓
-[container]  cli.tsx → app.tsx (entry + screen router)
+[container]  cli.tsx → web/serve.ts (DEFAULT front-end) | app.tsx (TUI, via --cli)
                 ↓
-              ui/components/ (Ink React views)
-                ↓
+              web/ (node:http + SSE server + vanilla-JS browser client:
+                kanban, real-time run log, and an agent-output firehose
+                mirrored to the browser console — see the building-web-ui skill)
+              ui/components/ (Ink React views — the --cli TUI)
+                ↓ (both front-ends drive ONE Orchestrator)
               orchestrator/ (worker pool, stage lifecycle, merge)
                 ↓
               orchestrator/backends/ (pluggable agent SDKs:

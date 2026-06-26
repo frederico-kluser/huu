@@ -19,7 +19,6 @@
 - [writing-tests](writing-tests/SKILL.md) `knowledge` — vitest colocated, real git in temp dirs, stub factories, regression-tests-as-spec; load before touching any test, and include in any chain that changes runtime code.
 - [writing-project-docs](writing-project-docs/SKILL.md) `knowledge` — pt-BR/EN twin files, docs/ layout, Keep-a-Changelog, identity framing; for any markdown work.
 - [authoring-agent-prompts](authoring-agent-prompts/SKILL.md) `knowledge` — cross-LLM step-prompt techniques (atomic ops, output contract, $file/$hint injection, mechanical forward-default judges, lean pi prompts); for writing/sharpening any step prompt, judge condition or memory recon prompt.
-
 ## Task skills (end with `<evolution>`)
 
 - [authoring-pipelines](authoring-pipelines/SKILL.md) `task` — pipeline JSON v2 schema + design + stub dry-run; for any *.pipeline.json.
@@ -36,4 +35,4 @@
 
 - Any code change → following-architecture-conventions + the domain skill → writing-tests → committing-and-validating.
 - Pipeline work: authoring-pipelines for user JSONs; editing-default-pipelines when the change is under src/lib/default-pipelines/.
-- UI work: building-tui-screens for Ink (src/ui/, app.tsx); building-web-ui for the browser client + web server (src/web/).
+- UI work: building-tui-screens for Ink (src/ui/, app.tsx); building-web-ui for the browser client + web server (src/web/) — pair with working-on-orchestrator when the change spans run state/streaming.

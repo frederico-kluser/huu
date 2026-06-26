@@ -35,7 +35,14 @@ import { decomposeTasks } from './task-decomposer.js';
 import { resolveMemoryFiles, MemoryFileError } from './memory-files.js';
 import { memoryContract, memoryCapForPath } from '../lib/memory-contract.js';
 import { hasDagEdges, computeWave, descendantsOf } from './wave-scheduler.js';
-import type { AgentEvent, AgentFactory, SpawnedAgent } from './types.js';
+import type {
+  AgentEvent,
+  AgentFactory,
+  AgentOutputChunk,
+  AgentOutputSubscriber,
+  SpawnedAgent,
+} from './types.js';
+import { StreamLineBuffer } from './stream-line-buffer.js';
 import { generateRunId } from '../lib/run-id.js';
 import { RunLogger, RUN_LOG_DIR } from '../lib/run-logger.js';
 import { runStageIntegrationWithResolver } from './integration-agent.js';
@@ -222,6 +229,15 @@ export class Orchestrator {
   private conflictResolverFactory?: AgentFactory;
   private startedAt = 0;
   private subscribers: Set<OrchestratorSubscriber> = new Set();
+  /** Firehose consumers for raw, line-coalesced agent output (see subscribeAgentOutput). */
+  private agentOutputSubscribers: Set<AgentOutputSubscriber> = new Set();
+  /**
+   * Per-agent, per-channel line coalescers for streamed deltas. Keyed by
+   * agentId; created lazily on the first `stream` event and dropped when the
+   * agent reaches a terminal state (so a requeued agentId starts clean).
+   */
+  private streamBuffers: Map<number, { assistant: StreamLineBuffer; thinking: StreamLineBuffer }> =
+    new Map();
   private worktreeManager: WorktreeManager | null = null;
   private preflight: PreflightResult | null = null;
   private manifest: RunManifest | null = null;
@@ -316,6 +332,30 @@ export class Orchestrator {
     this.subscribers.add(handler);
     handler(this.getState());
     return () => this.subscribers.delete(handler);
+  }
+
+  /**
+   * Subscribe to the raw agent-output firehose: one callback per coalesced
+   * line of streamed assistant/thinking text, for EVERY agent. Separate from
+   * {@link subscribe} (which pushes throttled state snapshots) because this is
+   * append-only and unbounded — a presentation layer mirrors it verbatim (the
+   * web server relays it to the browser console). Unlike subscribe(), it does
+   * NOT replay history; you only see lines emitted after you subscribe.
+   */
+  subscribeAgentOutput(handler: AgentOutputSubscriber): () => void {
+    this.agentOutputSubscribers.add(handler);
+    return () => this.agentOutputSubscribers.delete(handler);
+  }
+
+  private emitAgentOutput(chunk: AgentOutputChunk): void {
+    for (const sub of this.agentOutputSubscribers) {
+      // A misbehaving consumer (e.g. a dead SSE socket) must never break the run.
+      try {
+        sub(chunk);
+      } catch {
+        /* best-effort fan-out */
+      }
+    }
   }
 
   getState(): OrchestratorState {
@@ -1110,6 +1150,10 @@ export class Orchestrator {
         }
 
         this.updateAgentStatus(task.agentId, { phase: 'session_starting' });
+        // Retries and memory-guard requeues reuse the same agentId, so drop any
+        // partial line a previous attempt left buffered — otherwise its tail
+        // would prepend to this attempt's first streamed line.
+        this.streamBuffers.delete(task.agentId);
         const stepConfig = step.modelId
           ? { ...this.config, modelId: step.modelId }
           : this.config;
@@ -1574,6 +1618,14 @@ export class Orchestrator {
         this.log({ level: event.level ?? 'info', message: event.message, agentId });
         this.appendAgentLog(agentId, event.message);
         break;
+      case 'stream':
+        // Live streamed output. Coalesce into lines, then surface them — this
+        // is the difference between a run log that advances token-by-token and
+        // one that only updates at tool/turn boundaries. Returns early WITHOUT
+        // a state-snapshot emit() when no line completed, so per-token deltas
+        // don't trigger a getState() each (the firehose handles per-line push).
+        this.handleStreamDelta(agentId, event.channel, event.delta);
+        return;
       case 'state_change':
         this.updateAgentStatus(agentId, { state: event.state, phase: event.state });
         break;
@@ -1598,14 +1650,64 @@ export class Orchestrator {
         break;
       }
       case 'done':
+        this.flushStreamBuffers(agentId);
         this.updateAgentStatus(agentId, { state: 'done' });
         break;
       case 'error':
+        this.flushStreamBuffers(agentId);
         this.updateAgentStatus(agentId, { state: 'error', error: event.message });
         this.log({ level: 'error', message: event.message, agentId });
         break;
     }
     this.emit();
+  }
+
+  /**
+   * Feed a streamed delta through the agent's per-channel line coalescer and
+   * surface every completed line. Assistant lines advance the live run log
+   * (global + per-agent) AND the firehose; thinking lines go to the firehose
+   * only (the reasoning trace is verbose — it belongs in the developer console
+   * mirror, not the bounded on-screen log). emit() runs once per line so the
+   * snapshot ticks in real time without a getState() per token.
+   */
+  private handleStreamDelta(
+    agentId: number,
+    channel: 'assistant' | 'thinking',
+    delta: string,
+  ): void {
+    let buffers = this.streamBuffers.get(agentId);
+    if (!buffers) {
+      buffers = { assistant: new StreamLineBuffer(), thinking: new StreamLineBuffer() };
+      this.streamBuffers.set(agentId, buffers);
+    }
+    const lines = buffers[channel].push(delta);
+    for (const line of lines) this.emitStreamLine(agentId, channel, line);
+  }
+
+  private emitStreamLine(
+    agentId: number,
+    channel: 'assistant' | 'thinking',
+    line: string,
+  ): void {
+    if (line.length === 0) return; // skip blank lines — pure noise in a log view
+    // Firehose: every line, both channels, verbatim (browser-console mirror).
+    this.emitAgentOutput({ agentId, channel, text: line });
+    if (channel !== 'assistant') return;
+    // Visible run log: assistant text only, tagged to the worker.
+    this.log({ level: 'info', message: line, agentId, kind: 'worker' });
+    this.appendAgentLog(agentId, line);
+    this.emit();
+  }
+
+  /** Drain any buffered partial lines for an agent and forget its buffers. */
+  private flushStreamBuffers(agentId: number): void {
+    const buffers = this.streamBuffers.get(agentId);
+    if (!buffers) return;
+    for (const channel of ['assistant', 'thinking'] as const) {
+      const rest = buffers[channel].flush();
+      if (rest !== null) this.emitStreamLine(agentId, channel, rest);
+    }
+    this.streamBuffers.delete(agentId);
   }
 
   /**

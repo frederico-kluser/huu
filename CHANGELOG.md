@@ -28,6 +28,14 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
   client-side (new `src/web/client/db.js` for the store + pure record builders,
   plus the queue runner in `app.js`); the single-run server is unchanged. New
   `building-web-ui` agent skill documents the browser layer.
+- **Live pi agent output mirrored to the browser console.** The web UI now
+  streams everything the pi coding agent emits — its reply text *and* its
+  thinking trace — to the browser DevTools console in real time over a
+  dedicated `agent-stream` SSE channel (the orchestrator exposes it via
+  `subscribeAgentOutput`, separate from the throttled state snapshot). Each
+  line is tagged with its agent id; silence it with
+  `window.HUU_LOG_STREAM = false`.
+
 - **Provider selection inside pi — OpenRouter or Azure AI Foundry.** huu now
   exposes a single backend (pi) and lets you choose the LLM *provider*
   underneath it. New `LlmProvider` type + `src/lib/providers.ts` mapping
@@ -118,6 +126,15 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
   glance.
 
 ### Fixed
+
+- **The run log now advances in real time instead of only when the run
+  stops.** The pi event translator was dropping every `message_update`
+  streaming event, so between tool calls — i.e. for most of a generation — the
+  orchestrator emitted no state and the log appeared frozen until the run
+  settled. huu now maps pi's streamed `text_delta`/`thinking_delta` events into
+  a new `stream` agent event, coalesces them into whole lines, and surfaces the
+  assistant's text live in the run log (web log panel, per-agent drawer, TUI
+  and headless logs all benefit, since they read the same buffer).
 
 - **"Valid API key still returns 401" — fixed at the root: a saved key now
   takes precedence over the `OPENROUTER_API_KEY` environment variable.**

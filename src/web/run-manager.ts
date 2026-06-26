@@ -12,6 +12,7 @@
 
 import { existsSync, statSync } from 'node:fs';
 import { Orchestrator } from '../orchestrator/index.js';
+import type { AgentOutputChunk } from '../orchestrator/types.js';
 import {
   selectBackend,
   type AgentBackendKind,
@@ -84,12 +85,20 @@ const IDLE_SNAPSHOT: RunSnapshot = {
 export class WebRunManager {
   private orch: Orchestrator | null = null;
   private unsubscribe: (() => void) | null = null;
+  private unsubscribeOutput: (() => void) | null = null;
   private snapshot: RunSnapshot = IDLE_SNAPSHOT;
 
   constructor(
     private readonly cwd: string,
     /** Called on every orchestrator state change (server throttles + fans out). */
     private readonly onUpdate: (snap: RunSnapshot) => void,
+    /**
+     * Called for every coalesced line of streamed agent output (the raw
+     * firehose). Optional — CLI/headless callers don't mirror it. The web
+     * server relays each chunk to connected browsers as an `agent-stream`
+     * SSE frame so the developer console shows what the agent is producing.
+     */
+    private readonly onAgentOutput?: (chunk: AgentOutputChunk) => void,
   ) {}
 
   getSnapshot(): RunSnapshot {
@@ -205,6 +214,10 @@ export class WebRunManager {
       this.onUpdate(this.snapshot);
     });
 
+    if (this.onAgentOutput) {
+      this.unsubscribeOutput = orch.subscribeAgentOutput(this.onAgentOutput);
+    }
+
     // Fire-and-forget: the run resolves asynchronously; we flip phase on
     // settle and emit a final snapshot so the browser shows the summary.
     orch
@@ -232,6 +245,10 @@ export class WebRunManager {
         if (this.unsubscribe) {
           this.unsubscribe();
           this.unsubscribe = null;
+        }
+        if (this.unsubscribeOutput) {
+          this.unsubscribeOutput();
+          this.unsubscribeOutput = null;
         }
         this.orch = null;
         this.onUpdate(this.snapshot);

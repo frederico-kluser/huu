@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { extname, join, normalize } from 'node:path';
 import type { AgentBackendKind } from '../orchestrator/backends/registry.js';
 import { parseBackendKind } from '../orchestrator/backends/registry.js';
+import type { AgentOutputChunk } from '../orchestrator/types.js';
 import type { OrchestratorState, Pipeline } from '../lib/types.js';
 import { backendToProvider, parseProvider, providerToBackend } from '../lib/providers.js';
 import {
@@ -123,7 +124,17 @@ export function createWebServer(opts: WebServerOptions): {
     else if (!timer) timer = setTimeout(flush, BROADCAST_INTERVAL_MS - since);
   };
 
-  const manager = new WebRunManager(opts.cwd, scheduleBroadcast);
+  // Raw agent-output firehose: relay each coalesced line straight to every
+  // connected browser as its own SSE frame. Deliberately NOT throttled or
+  // batched into the run snapshot — it's append-only and low-frequency (one
+  // frame per line, not per token), and the browser mirrors it to the console.
+  const broadcastAgentStream = (chunk: AgentOutputChunk): void => {
+    if (sseClients.size === 0) return;
+    const frame = JSON.stringify({ type: 'agent-stream', ...chunk });
+    for (const client of sseClients) writeSse(client.res, 'message', frame);
+  };
+
+  const manager = new WebRunManager(opts.cwd, scheduleBroadcast, broadcastAgentStream);
 
   const requireToken = (req: IncomingMessage, res: ServerResponse): boolean => {
     if (!opts.token) return true;

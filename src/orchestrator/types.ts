@@ -6,6 +6,24 @@ export type AgentEvent =
   | { type: 'state_change'; state: 'streaming' | 'tool_running' }
   | { type: 'file_write'; file: string }
   | {
+      /**
+       * Incremental text the agent is STREAMING back, token by token, as the
+       * provider produces it. `assistant` is the model's visible reply text;
+       * `thinking` is its reasoning trace. Backends emit one of these per
+       * streamed delta (pi `message_update` → `text_delta`/`thinking_delta`).
+       *
+       * The orchestrator coalesces deltas into whole lines and (a) surfaces
+       * assistant lines in the live run log and (b) fans EVERY line — both
+       * channels — to `subscribeAgentOutput` so a presentation layer can
+       * mirror the raw agent output (e.g. the web UI streams it to the
+       * browser console). This is what makes the run log advance in real time
+       * instead of only at tool/turn boundaries.
+       */
+      type: 'stream';
+      channel: 'assistant' | 'thinking';
+      delta: string;
+    }
+  | {
       type: 'usage';
       /**
        * Token / cost telemetry. Emitted by backends whenever the underlying
@@ -23,6 +41,21 @@ export type AgentEvent =
     }
   | { type: 'done' }
   | { type: 'error'; message: string };
+
+/**
+ * One coalesced line of an agent's streamed output, fanned out to
+ * `Orchestrator.subscribeAgentOutput` consumers. Distinct from the throttled
+ * state snapshot: this is an append-only firehose of exactly what the agent
+ * emitted, so a UI can mirror it verbatim (the web server forwards it to the
+ * browser console). `text` carries no trailing newline.
+ */
+export interface AgentOutputChunk {
+  agentId: number;
+  channel: 'assistant' | 'thinking';
+  text: string;
+}
+
+export type AgentOutputSubscriber = (chunk: AgentOutputChunk) => void;
 
 /**
  * A spawned worker — abstracts both stub and real LLM agents so the
