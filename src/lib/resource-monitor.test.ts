@@ -33,6 +33,7 @@ import {
   getSystemMetrics,
   resetCpuSnapshot,
   resetDarwinAvailableCache,
+  SystemMetricsSampler,
 } from './resource-monitor.js';
 
 function mockCpus(user: number, nice: number, sys: number, idle: number, irq: number) {
@@ -354,5 +355,50 @@ describe('getSystemMetrics', () => {
     expect(m.processRssBytes).toBe(123456789);
 
     usageSpy.mockRestore();
+  });
+});
+
+describe('SystemMetricsSampler', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (os.totalmem as unknown as Mock).mockReturnValue(16 * 1024 ** 3);
+    (os.freemem as unknown as Mock).mockReturnValue(8 * 1024 ** 3);
+    (os.loadavg as unknown as Mock).mockReturnValue([1.5, 1.2, 1.0]);
+    (fs.existsSync as unknown as Mock).mockReturnValue(false);
+    (execFileSync as unknown as Mock).mockImplementation(() => {
+      throw new Error('vm_stat unavailable (mock)');
+    });
+  });
+
+  it('two samplers keep independent CPU-delta snapshots (no shared prevCpu)', () => {
+    const a = new SystemMetricsSampler();
+    const b = new SystemMetricsSampler();
+
+    mockCpus(1000, 0, 0, 9000, 0); // state1
+    expect(a.sample().cpuPercent).toBe(0); // A's first-ever sample → 0
+
+    mockCpus(5000, 0, 0, 9000, 0); // state2: cpu became very busy
+    // B's first-ever sample must ALSO be 0 — it has no prior snapshot of its
+    // own. With a shared module-global prevCpu (the pre-de-globalization bug)
+    // B would diff against A's state1 snapshot and report a bogus nonzero %.
+    expect(b.sample().cpuPercent).toBe(0);
+
+    mockCpus(5500, 0, 0, 12500, 0); // state3
+    // A still holds its OWN state1 snapshot (B's samples never advanced it),
+    // so A measures the state1→state3 delta = 56.25%, NOT state2→state3
+    // (which would be 12.5% had B corrupted A's snapshot).
+    expect(a.sample().cpuPercent).toBeCloseTo(56.25, 2);
+  });
+
+  it('getSystemMetrics() default singleton is independent of a fresh sampler', () => {
+    mockCpus(1000, 0, 0, 9000, 0);
+    resetCpuSnapshot();
+    getSystemMetrics(); // primes the default singleton's snapshot
+
+    const fresh = new SystemMetricsSampler();
+    mockCpus(5000, 0, 0, 9000, 0);
+    // The fresh sampler has never sampled → 0, regardless of the default
+    // singleton already holding a snapshot.
+    expect(fresh.sample().cpuPercent).toBe(0);
   });
 });

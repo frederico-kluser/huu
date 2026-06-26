@@ -56,6 +56,7 @@ import {
 } from './agent-env.js';
 import { ensureNativeShim, type NativeShim } from './native-shim.js';
 import { AutoScaler } from './auto-scaler.js';
+import type { GlobalScheduler, RunDriverHandle } from './global-scheduler.js';
 import { getSystemMetrics } from '../lib/resource-monitor.js';
 import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -173,6 +174,14 @@ export interface OrchestratorOptions {
    * active in both modes.
    */
   autoScale?: boolean;
+  /**
+   * When set, this run is SUBORDINATE to a GlobalScheduler (multi-run
+   * scheduling): the scheduler owns the concurrency target (`grantFor`) and the
+   * cross-run memory-guard kill (lowest-priority newest first), and this run's
+   * own AutoScaler stays dormant (display-only). Omit for the normal single-run
+   * path — every code path below then behaves exactly as before.
+   */
+  scheduler?: GlobalScheduler;
 }
 
 /**
@@ -257,6 +266,13 @@ export class Orchestrator {
   private autoScaler: AutoScaler;
   private autoScaleDisabledByUser = false;
   /**
+   * Set when this run is subordinate to a GlobalScheduler (multi-run). Null on
+   * the normal single-run path, where the per-run AutoScaler drives the pool.
+   */
+  private scheduler: GlobalScheduler | null = null;
+  /** Handle for unregistering from the scheduler in the finally block. */
+  private schedulerHandle: RunDriverHandle | null = null;
+  /**
    * Agent ids whose in-flight attempt was killed by the memory guard.
    * Consumed (checked + deleted) by spawnAndRun's catch so the old
    * attempt's rejection skips retry accounting. A consumable Set — not a
@@ -315,11 +331,15 @@ export class Orchestrator {
     // Memory-aware concurrency is the default; autoScale: false pins the
     // pool at initialConcurrency but keeps the always-on memory guard.
     const autoMode = options.autoScale !== false;
+    this.scheduler = options.scheduler ?? null;
     this.portAllocator = new PortAllocator({
       basePort: pipeline.portAllocation?.basePort,
       windowSize: pipeline.portAllocation?.windowSize,
       enabled: pipeline.portAllocation?.enabled ?? true,
       maxAgents: autoMode ? AUTO_SCALE_MAX_INSTANCES : MAX_INSTANCES,
+      // Multi-run: share the scheduler's reservation set so two concurrent runs
+      // never hand out the same physical port window.
+      sharedReservedPorts: this.scheduler?.sharedReservedPorts,
     });
     this.autoScaler = new AutoScaler({
       resourceMonitor: getSystemMetrics,
@@ -558,6 +578,28 @@ export class Orchestrator {
     this.poolWakeup?.();
   }
 
+  // --- GlobalScheduler RunDriver surface (multi-run subordinate mode) ---
+
+  /** Slots this run could use right now: active + spawning + pending. */
+  private getDemand(): number {
+    return this.activeAgents.size + this.spawningIds.size + this.pendingTasks.length;
+  }
+
+  /**
+   * Running TASK agents with their work-start time, for the scheduler's victim
+   * selection (newest = least work lost — mirrors the in-pool guard's
+   * `startedAt ?? createdAt`). Reserved integration/judge agents never enter
+   * `activeAgents`, so they are naturally excluded as kill victims.
+   */
+  private activeAgentAges(): Array<{ agentId: number; startedAt: number }> {
+    const out: Array<{ agentId: number; startedAt: number }> = [];
+    for (const id of this.activeAgents.keys()) {
+      const st = this.agents.get(id);
+      out.push({ agentId: id, startedAt: st?.startedAt ?? st?.createdAt ?? 0 });
+    }
+    return out;
+  }
+
   async start(): Promise<OrchestratorResult> {
     if (this.status !== 'idle') throw new Error('Orchestrator already running');
     this.startedAt = Date.now();
@@ -715,11 +757,23 @@ export class Orchestrator {
       }
       this.emit();
 
-      // Always running: in auto mode it drives the concurrency target, in
-      // manual mode it is the memory guard (kill newest at the destroy
-      // threshold). The port-allocator cap was already set per-mode in the
-      // constructor and is adjusted by enable/disableAutoScale.
-      this.autoScaler.start();
+      // Multi-run: register as a subordinate driver so the GlobalScheduler
+      // grants this run slots and (under RAM pressure) can pick its agents as
+      // kill victims. The per-run AutoScaler then stays DORMANT — the scheduler
+      // owns the single machine read. Single-run: start the per-run AutoScaler
+      // as before (auto = drives the target, manual = the memory guard). The
+      // port-allocator cap was set per-mode in the constructor.
+      if (this.scheduler) {
+        this.schedulerHandle = this.scheduler.register({
+          runId,
+          getDemand: () => this.getDemand(),
+          activeAgentAges: () => this.activeAgentAges(),
+          destroyAgent: (id) => this.destroyAgent(id),
+          acceptMetrics: (m) => this.autoScaler.acceptMetrics(m),
+        });
+      } else {
+        this.autoScaler.start();
+      }
 
       // --- Graph cursor: walk the steps array, honoring `next` overrides
       // and check-step outcomes. CheckSteps spawn the judge agent and pick
@@ -903,6 +957,13 @@ export class Orchestrator {
         this.processLogUnsubscribe = null;
       }
 
+      // Multi-run: leave the scheduler so the freed budget flows to the other
+      // runs. Guarded — start() may have thrown before registration.
+      if (this.schedulerHandle) {
+        this.scheduler?.unregister(this.schedulerHandle);
+        this.schedulerHandle = null;
+      }
+      // Idempotent — safe even when subordinate mode never started it.
       this.autoScaler.stop();
 
       // Wait for in-flight finalize+dispose with a bounded timeout. The
@@ -987,33 +1048,43 @@ export class Orchestrator {
       !this.aborted &&
       (this.pendingTasks.length > 0 || this.activeAgents.size > 0 || this.spawningIds.size > 0 || this.finalizingIds.size > 0)
     ) {
-      this.autoScaler.notifyTaskQueued(this.pendingTasks.length);
-      // Auto mode drives the concurrency target from memory headroom; greedy
-      // (MAX) mode drives it from the queue depth; manual mode keeps the
-      // user's pinned value. Both scaler modes recompute every tick.
-      const scaleMode = this.autoScaler.getMode();
-      if (scaleMode === 'auto' || scaleMode === 'greedy') {
-        this.instanceCount = this.autoScaler.targetConcurrency();
-      }
-
-      // Memory guard (both modes): at the destroy threshold, kill the
-      // NEWEST agent — the one with the least work done — and requeue its
-      // task to TODO so older agents' progress is never lost.
-      if (this.autoScaler.shouldDestroy() && this.activeAgents.size > 0) {
-        let newestId = -1;
-        let newestTime = 0;
-        for (const [id, _agent] of this.activeAgents) {
-          const status = this.agents.get(id);
-          const since = status?.startedAt ?? status?.createdAt;
-          if (since && since > newestTime) {
-            newestTime = since;
-            newestId = id;
-          }
+      if (this.scheduler) {
+        // SUBORDINATE (multi-run): the GlobalScheduler owns the concurrency
+        // target AND the cross-run, priority-ordered memory-guard kill. Refresh
+        // grants so this run's current demand is reflected, then read our slice.
+        // No in-pool guard here — selectGlobalVictim() runs in the scheduler
+        // tick so the victim is the LOWEST-priority run's newest agent.
+        this.scheduler.recomputeGrants();
+        this.instanceCount = this.scheduler.grantFor(this.manifest!.runId);
+      } else {
+        this.autoScaler.notifyTaskQueued(this.pendingTasks.length);
+        // Auto mode drives the concurrency target from memory headroom; greedy
+        // (MAX) mode drives it from the queue depth; manual mode keeps the
+        // user's pinned value. Both scaler modes recompute every tick.
+        const scaleMode = this.autoScaler.getMode();
+        if (scaleMode === 'auto' || scaleMode === 'greedy') {
+          this.instanceCount = this.autoScaler.targetConcurrency();
         }
-        if (newestId >= 0) {
-          await this.destroyAgent(newestId);
-          this.autoScaler.notifyAgentDestroyed();
-          // Re-evaluation: next poll cycle will check shouldDestroy() again
+
+        // Memory guard (both modes): at the destroy threshold, kill the
+        // NEWEST agent — the one with the least work done — and requeue its
+        // task to TODO so older agents' progress is never lost.
+        if (this.autoScaler.shouldDestroy() && this.activeAgents.size > 0) {
+          let newestId = -1;
+          let newestTime = 0;
+          for (const [id, _agent] of this.activeAgents) {
+            const status = this.agents.get(id);
+            const since = status?.startedAt ?? status?.createdAt;
+            if (since && since > newestTime) {
+              newestTime = since;
+              newestId = id;
+            }
+          }
+          if (newestId >= 0) {
+            await this.destroyAgent(newestId);
+            this.autoScaler.notifyAgentDestroyed();
+            // Re-evaluation: next poll cycle will check shouldDestroy() again
+          }
         }
       }
 
@@ -1021,7 +1092,7 @@ export class Orchestrator {
       const busyCount = this.activeAgents.size + this.spawningIds.size;
       const slotsAvailable = Math.max(0, this.instanceCount - busyCount);
       for (let i = 0; i < slotsAvailable && this.pendingTasks.length > 0; i++) {
-        if (!this.autoScaler.shouldSpawn()) {
+        if (!(this.scheduler ? this.scheduler.shouldSpawn() : this.autoScaler.shouldSpawn())) {
           break;
         }
         const task = this.pendingTasks.shift()!;

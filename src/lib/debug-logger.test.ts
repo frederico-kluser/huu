@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { redactSecrets } from './debug-logger.js';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { redactSecrets, initDebugLogger, scopedDebugLog } from './debug-logger.js';
 
 describe('redactSecrets', () => {
   it('redacts OpenRouter API keys', () => {
@@ -49,5 +52,29 @@ describe('redactSecrets', () => {
   it('does not over-match short non-secret strings', () => {
     // A short string starting with sk- but not key-shaped should not be touched.
     expect(redactSecrets('sk-foo')).toBe('sk-foo');
+  });
+});
+
+describe('scopedDebugLog', () => {
+  it('stamps every event with the runId in the shared NDJSON file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'huu-dlog-'));
+    try {
+      const logPath = initDebugLogger(dir);
+      const slog = scopedDebugLog('run-abc123');
+      slog('orch', 'unit_probe', { detail: 42 });
+
+      const line = readFileSync(logPath, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => JSON.parse(l) as Record<string, unknown>)
+        .find((e) => e.ev === 'unit_probe');
+
+      expect(line).toBeDefined();
+      expect(line?.runId).toBe('run-abc123');
+      expect(line?.detail).toBe(42);
+      expect(line?.cat).toBe('orch');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

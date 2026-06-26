@@ -9,6 +9,19 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Added
 
+- **Multi-run scheduling engine (foundation — not yet user-facing).** A new
+  `GlobalScheduler` (`src/orchestrator/global-scheduler.ts`) runs MULTIPLE
+  pipeline runs in one process under a single shared RAM/concurrency budget:
+  earlier runs have priority, later runs **backfill** the idle slots of earlier
+  ones (e.g. while a higher-priority run's merge agent runs for minutes), a
+  lower-priority run **drains** (stops spawning) when capacity is reclaimed, and
+  under memory pressure (≥95%) the **lowest-priority run's newest agent is killed
+  first**. Driven headlessly via `src/lib/run-many.ts`; pinned by the new
+  `multi-run-priority.test.ts`. Single-run behavior is unchanged — the scheduler
+  is opt-in (`OrchestratorOptions.scheduler`), and the supporting refactors
+  (a `SystemMetricsSampler` class, `scopedDebugLog`, a shared port-reservation
+  set, `repo-lock`) all landed flag-off. The browser project selector that
+  surfaces when more than one run is active is not wired yet.
 - **Simulation mode (`/simulation`) — a synthetic, no-cost demo run.** A new
   browser route renders a FULL huu run — kanban cards flowing TODO → DOING →
   DONE, live per-agent logs, the agent-output firehose, token/cost counters —
