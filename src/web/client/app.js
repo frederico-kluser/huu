@@ -6,6 +6,7 @@ import {
   buildRunRecord, buildSyntheticRecord, exportRunsJson, downloadText, uid,
 } from './db.js';
 import { createBoardOrder } from './board-order.js';
+import { settleQueue } from './queue-util.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -857,11 +858,18 @@ function finishQueue() {
   const q = S.queue;
   q.running = false;
   q.live = null;
+  // Settled projects are now archived in History (IndexedDB) — drop them from
+  // the queue so returning home doesn't show finished runs and re-run the same
+  // pipelines on the next "Run queue". A clean finish settles every item, so the
+  // queue empties; anything that somehow never ran stays for a later run.
+  const { keep, error } = settleQueue(q.items);
+  q.items = keep;
+  q.editingId = null;
+  setAddBtnLabel('Add to queue');
   persistQueue();
   renderQueue();
   updateQueueChrome();
-  const errs = q.items.filter((it) => it.status === 'error').length;
-  toast(errs ? `Queue finished — ${errs} failed` : 'Queue finished ✓');
+  toast(error ? `Queue finished — ${error} failed · saved to History` : 'Queue finished ✓ · saved to History');
 }
 
 // Stop the WHOLE queue: abort the active run, archive it, then halt.
@@ -879,6 +887,9 @@ function stopFinalize() {
   q.running = false;
   q.stopping = false;
   q.live = null;
+  // Keep only what never finished; runs that already settled (incl. the ones
+  // just aborted) are archived in History, so drop them from the queue.
+  q.items = settleQueue(q.items).keep;
   persistQueue();
   renderQueue();
   updateQueueChrome();
