@@ -227,8 +227,9 @@ terminal TUI back.
 
 > **About "cost":** **per-card / per-agent** cost and tokens are real
 > (accumulated from the backend's usage events, when the provider reports
-> them). The **aggregate run total** is not yet summed — see the caveat
-> under [headless mode](#headless--one-command-mode).
+> them). The **header sums those per-card costs in real time**
+> (`totalCost`). The only caveat: **merge/judge** LLM cost isn't metered
+> yet — only the worker agents.
 
 ```bash
 huu                       # web UI (default) — http://localhost:4888
@@ -640,13 +641,10 @@ huu auto pipeline.json --config config.json
   `tokensIn`, `tokensOut`, `cost`, branch, commit, files).
 - **Exit code** — `0` if `status === 'done'`, `1` otherwise.
 
-> **Cost caveat (roadmap).** The final JSON also carries a `totalCost`
-> field, but the **run aggregate is not yet summed** — it always comes
-> out `0` (marked `// M5 will populate` in
-> `src/orchestrator/index.ts`). Per-agent tokens and cost in the
-> `agents[]` array are real (when the provider reports cost); the
-> **consolidated total** is roadmap. Don't build billing on `totalCost`
-> yet.
+> **Aggregate cost.** The final JSON carries `totalCost`, now **summed in
+> real time** from the per-agent cost in the `agents[]` array (real when
+> the provider reports cost). Caveat: **merge/judge** LLM cost isn't part
+> of this total yet — only the worker agents.
 
 Build pipes on top: `huu auto … | jq .runId`. Full doc:
 [`docs/onboarding.md#headless-mode`](docs/onboarding.md#headless-mode).
@@ -742,9 +740,9 @@ So nobody confuses intent with done:
 
 | State | What |
 |---|---|
-| ✅ **Implemented** | Pipeline JSON v2 (work · check · memory · `dependsOn`/waves); `per-file` and `memory` fan-out; deterministic `--no-ff` merge with an LLM conflict-resolver fallback; Docker sandbox with secret mounts; web UI (default) + TUI (`--cli`); headless `auto` mode; Pi · Azure · Stub backends; memory-aware concurrency + memory guard; native-shim port isolation; 7 autonomous default pipelines; **per-agent** token/cost telemetry. |
+| ✅ **Implemented** | Pipeline JSON v2 (work · check · memory · `dependsOn`/waves); `per-file` and `memory` fan-out; deterministic `--no-ff` merge with an LLM conflict-resolver fallback; Docker sandbox with secret mounts; web UI (default) + TUI (`--cli`); headless `auto` mode; Pi · Azure · Stub backends; memory-aware concurrency + memory guard; native-shim port isolation; 7 autonomous default pipelines; **per-agent** token/cost telemetry + a real-time summed run total (`totalCost`). |
 | 🟡 **Stabilizing** | GitHub Copilot backend (optional dependency, SDK 0.3.x); Azure backend (new); Pipeline Assistant / Architect flow (TUI). |
-| 🧭 **Roadmap** | **Aggregate run cost** (`totalCost` is `0` today); **mutation score** as a first-class metric (prompts already aim for mutation-surviving assertions, but the pipeline doesn't run the mutator); **web-based pipeline authoring** (TUI-only today); more backends (ACP, Claude Code). |
+| 🧭 **Roadmap** | **mutation score** as a first-class metric (prompts already aim for mutation-surviving assertions, but the pipeline doesn't run the mutator); **web-based pipeline authoring** (TUI-only today); more backends (ACP, Claude Code); **merge/judge cost** in the aggregate total. |
 
 ---
 

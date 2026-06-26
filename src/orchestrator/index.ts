@@ -43,6 +43,7 @@ import type {
   SpawnedAgent,
 } from './types.js';
 import { StreamLineBuffer } from './stream-line-buffer.js';
+import { THINKING_LOG_PREFIX } from './types.js';
 import { generateRunId } from '../lib/run-id.js';
 import { RunLogger, RUN_LOG_DIR } from '../lib/run-logger.js';
 import { runStageIntegrationWithResolver } from './integration-agent.js';
@@ -359,12 +360,13 @@ export class Orchestrator {
   }
 
   getState(): OrchestratorState {
+    const agents = Array.from(this.agents.values());
     return {
       status: this.status,
       runId: this.manifest?.runId ?? '',
-      agents: Array.from(this.agents.values()),
+      agents,
       logs: this.logs.slice(-200),
-      totalCost: 0, // M5 will populate
+      totalCost: this.currentTotalCost(),
       completedTasks: this.completedTasks,
       totalTasks: this.totalTasksAcrossStages,
       integrationStatus: this.integrationStatus,
@@ -380,6 +382,20 @@ export class Orchestrator {
       activeAgentCount: this.activeAgents.size,
       autoScale: this.autoScaler.getStatus(),
     };
+  }
+
+  /**
+   * Live project cost = Σ per-agent cost. Each agent's `cost` accumulates the
+   * authoritative `usage.cost` the backend reports per turn (OpenRouter returns
+   * it, in credits = USD, on every completion incl. the final streaming chunk),
+   * so the web header AND the headless result's `totalCost` stay correct in
+   * real time with no token×price estimate. (Merge/judge agents aren't in
+   * `this.agents`, so their LLM cost is not metered into this total yet.)
+   */
+  private currentTotalCost(): number {
+    let sum = 0;
+    for (const a of this.agents.values()) sum += a.cost ?? 0;
+    return +sum.toFixed(4);
   }
 
   increaseConcurrency(): void {
@@ -877,7 +893,7 @@ export class Orchestrator {
         runId,
         agents: Array.from(this.agents.values()),
         logs: this.logs,
-        totalCost: 0,
+        totalCost: this.currentTotalCost(),
         filesModified: this.collectFilesModified(),
         conflicts: this.integrationStatus.conflicts.map((c) => ({ file: c.file, agents: [] })),
         duration: Date.now() - this.startedAt,
@@ -1664,11 +1680,13 @@ export class Orchestrator {
 
   /**
    * Feed a streamed delta through the agent's per-channel line coalescer and
-   * surface every completed line. Assistant lines advance the live run log
-   * (global + per-agent) AND the firehose; thinking lines go to the firehose
-   * only (the reasoning trace is verbose — it belongs in the developer console
-   * mirror, not the bounded on-screen log). emit() runs once per line so the
-   * snapshot ticks in real time without a getState() per token.
+   * surface every completed line. Assistant lines advance the GLOBAL run log
+   * AND the per-agent log AND the firehose. Thinking lines go to the firehose
+   * AND the per-agent log (tagged with {@link THINKING_LOG_PREFIX}) so a card's
+   * drawer shows the same stream the browser console mirrors — but NOT the
+   * global run log, where the verbose reasoning trace would drown everything
+   * else. emit() runs once per line so the snapshot ticks in real time without
+   * a getState() per token.
    */
   private handleStreamDelta(
     agentId: number,
@@ -1692,10 +1710,16 @@ export class Orchestrator {
     if (line.length === 0) return; // skip blank lines — pure noise in a log view
     // Firehose: every line, both channels, verbatim (browser-console mirror).
     this.emitAgentOutput({ agentId, channel, text: line });
-    if (channel !== 'assistant') return;
-    // Visible run log: assistant text only, tagged to the worker.
-    this.log({ level: 'info', message: line, agentId, kind: 'worker' });
-    this.appendAgentLog(agentId, line);
+    if (channel === 'assistant') {
+      // Reply text: the global run log + the per-agent log, tagged to the worker.
+      this.log({ level: 'info', message: line, agentId, kind: 'worker' });
+      this.appendAgentLog(agentId, line);
+    } else {
+      // Reasoning trace: into the per-agent log too (so the card drawer matches
+      // the console firehose), tagged so it reads apart from reply text; kept
+      // OUT of the global run log to avoid drowning it.
+      this.appendAgentLog(agentId, `${THINKING_LOG_PREFIX}${line}`);
+    }
     this.emit();
   }
 
@@ -2176,7 +2200,10 @@ export class Orchestrator {
   private appendAgentLog(agentId: number, message: string): void {
     const cur = this.agents.get(agentId);
     if (!cur) return;
-    const next = { ...cur, logs: [...cur.logs, message].slice(-100) };
+    // Retain up to the web server's per-frame bound (MAX_AGENT_LOG_LINES = 200)
+    // so the drawer's live tail and the full set from /api/agent-logs agree.
+    // 100 was too tight now that the reasoning trace shares this buffer.
+    const next = { ...cur, logs: [...cur.logs, message].slice(-200) };
     this.agents.set(agentId, next);
   }
 

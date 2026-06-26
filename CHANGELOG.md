@@ -163,6 +163,12 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
   invalid step's whole row turns yellow (in addition to the existing `⚠`
   marker and the actionable problem hint), so the blocker is visible at a
   glance.
+- **Per-agent card logs now include the reasoning ("thinking") trace,
+  tagged `🧠`.** Previously the thinking stream was mirrored only to the
+  browser-console firehose; the card drawer now shows it alongside the
+  reply text, so a card's log matches what the console streams (the
+  verbose trace still stays out of the global run log). The per-agent log
+  buffer was raised 100 → 200 lines to match the server's per-frame cap.
 
 ### Fixed
 
@@ -202,6 +208,19 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
   no longer jam; new phone/tablet breakpoints stack the layout, switch the
   card drawer + folder modal to full-height sheets, and enforce 44px touch
   targets on coarse pointers.
+- **Run cost now sums live in the header — it was stuck at `$0.00`.**
+  `Orchestrator.getState()` (and the headless `auto` result) hardcoded
+  `totalCost: 0`, so the dashboard header never moved even though every
+  agent card metered its own spend. `totalCost` is now the live sum of
+  each per-agent `cost` (the authoritative `usage.cost` OpenRouter returns
+  per turn); the header reads it in real time and renders 4 decimals for
+  sub-cent totals so a running meter is visible. (Merge/judge LLM cost is
+  still not metered — only worker agents count toward the total.)
+- **The per-agent log drawer no longer jumps to the bottom on every
+  update.** It rewrote its text and force-scrolled to the end on each
+  ~120 ms snapshot, yanking you back the moment you scrolled up to read.
+  It now follows the tail only when you're already pinned to the bottom
+  (or on first open) and preserves your scroll position otherwise.
 
 ### Removed
 

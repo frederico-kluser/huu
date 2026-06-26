@@ -58,6 +58,16 @@ export interface AgentOutputChunk {
 export type AgentOutputSubscriber = (chunk: AgentOutputChunk) => void;
 
 /**
+ * Prefix tagging a reasoning ("thinking") line where it shares a log buffer
+ * with normal reply text — the per-agent log the web card drawer renders. The
+ * firehose / browser-console mirror tags thinking with the same brain glyph, so
+ * the drawer and the console read consistently. Defined here (the shared
+ * orchestrator IO-types module) so the real path, the SimulationEngine and the
+ * tests all reference ONE literal.
+ */
+export const THINKING_LOG_PREFIX = '🧠 ';
+
+/**
  * A spawned worker — abstracts both stub and real LLM agents so the
  * orchestrator stays agnostic of the SDK.
  */

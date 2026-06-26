@@ -228,8 +228,9 @@ TUI no terminal.
 
 > **Sobre "custo":** o custo e os tokens **por card/agente** são reais
 > (acumulados dos eventos de uso do backend, quando o provider os
-> reporta). O **total agregado da run** ainda não é somado — veja a
-> ressalva no [modo headless](#modo-headless--um-comando).
+> reporta). O **header soma esses custos por card em tempo real**
+> (`totalCost`). Única ressalva: o custo de LLM dos cards de
+> **merge/judge** ainda não é medido — só os agentes de trabalho.
 
 ```bash
 huu                       # UI web (padrão) — http://localhost:4888
@@ -645,13 +646,11 @@ huu auto pipeline.json --config config.json
   `tokensIn`, `tokensOut`, `cost`, branch, commit, arquivos).
 - **Exit code** — `0` se `status === 'done'`, `1` caso contrário.
 
-> **Ressalva de custo (roadmap).** O JSON final também carrega um campo
-> `totalCost`, mas o **agregado da run ainda não é somado** — ele sai
-> sempre `0` (marcado `// M5 will populate` em
-> `src/orchestrator/index.ts`). Tokens e custo **por agente** no array
-> `agents[]` são reais (quando o provider reporta custo); o **total
-> consolidado** é roadmap. Não construa billing em cima de `totalCost`
-> ainda.
+> **Custo agregado.** O JSON final carrega `totalCost`, agora **somado
+> em tempo real** a partir do custo por agente do array `agents[]` (real
+> quando o provider reporta custo). Ressalva: o custo de LLM dos passos
+> de **merge/judge** ainda não entra nesse total — só os agentes de
+> trabalho.
 
 Construa pipes em cima: `huu auto … | jq .runId`. Doc completa:
 [`docs/onboarding.pt-BR.md#modo-headless`](docs/onboarding.pt-BR.md#modo-headless).
@@ -748,9 +747,9 @@ Pra ninguém confundir intenção com pronto:
 
 | Estado | O quê |
 |---|---|
-| ✅ **Implementado** | Pipeline JSON v2 (work · check · memory · `dependsOn`/ondas); fan-out `per-file` e `memory`; merge determinístico `--no-ff` com fallback de conflito por agente LLM; sandbox Docker com secret-mounts; UI web (padrão) + TUI (`--cli`); modo headless `auto`; backends Pi · Azure · Stub; concorrência memória-aware + guarda de memória; isolamento de portas via shim nativo; 7 pipelines default autônomas; telemetria de tokens/custo **por agente**. |
+| ✅ **Implementado** | Pipeline JSON v2 (work · check · memory · `dependsOn`/ondas); fan-out `per-file` e `memory`; merge determinístico `--no-ff` com fallback de conflito por agente LLM; sandbox Docker com secret-mounts; UI web (padrão) + TUI (`--cli`); modo headless `auto`; backends Pi · Azure · Stub; concorrência memória-aware + guarda de memória; isolamento de portas via shim nativo; 7 pipelines default autônomas; telemetria de tokens/custo **por agente** + total agregado da run (`totalCost`) somado em tempo real. |
 | 🟡 **Estabilizando** | Backend GitHub Copilot (dependência opcional, SDK 0.3.x); backend Azure (novo); Pipeline Assistant / Architect flow (TUI). |
-| 🧭 **Roadmap** | **Total de custo agregado da run** (`totalCost` hoje é `0`); **mutation score** como métrica de primeira classe (hoje os prompts miram asserções mutation-surviving, mas o pipeline não roda o mutador); **autoria de pipeline pela web** (hoje só TUI); mais backends (ACP, Claude Code). |
+| 🧭 **Roadmap** | **mutation score** como métrica de primeira classe (hoje os prompts miram asserções mutation-surviving, mas o pipeline não roda o mutador); **autoria de pipeline pela web** (hoje só TUI); mais backends (ACP, Claude Code); **custo de merge/judge** no total agregado. |
 
 ---
 
