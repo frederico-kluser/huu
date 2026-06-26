@@ -140,9 +140,11 @@ is the sole owner of the machine read — one `SystemMetricsSampler`
 (`resource-monitor.ts`, de-globalized so concurrent samplers no longer corrupt
 the CPU delta) plus one budget `AutoScaler`; per-run AutoScalers go DORMANT.
 Each `Orchestrator` becomes a subordinate "run driver" via
-`OrchestratorOptions.scheduler`. **When that option is ABSENT every path is
-byte-identical to single-run** — the de-globalization (`scopedDebugLog`,
-shared-Set `port-allocator`, `repo-lock`) all landed flag-off.
+`OrchestratorOptions.scheduler`. **When that option is ABSENT the scheduling
+path is unchanged** — the shared-Set `port-allocator`, the per-repo git lock
+(`WorktreeManager`'s `serializeGitOps`, which keeps two SAME-repo runs from
+racing on `.git` worktree/branch ops; merges are excluded), and the dormant
+per-run AutoScaler all engage only in multi-run.
 
 Distribution is the pure `distributeBudget(demands, B)`: top-down by
 registration order (= priority). Earlier runs are served first, later runs

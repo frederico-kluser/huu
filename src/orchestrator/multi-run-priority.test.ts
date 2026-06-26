@@ -155,6 +155,43 @@ describe('multi-run priority scheduling', () => {
   );
 
   it(
+    'two runs on the SAME repo complete without git races (repo-lock)',
+    async () => {
+      // ONE repo shared by both runs — they create worktrees/branches on the
+      // same .git concurrently. runMany injects a scheduler, so the Orchestrator
+      // turns on serializeGitOps and the per-repo lock guards worktree add /
+      // branch create. Overlapping work (80ms agents, fast admission) forces the
+      // two runs' git plumbing to actually interleave.
+      const repo = freshRepo();
+      const specs: RunSpec[] = [
+        {
+          pipeline: twoFileStage('A', ['a.ts', 'b.ts', 'c.ts']),
+          config: CONFIG,
+          cwd: repo,
+          agentFactory: fastFactory(80),
+          label: 'A',
+        },
+        {
+          pipeline: twoFileStage('B', ['d.ts', 'e.ts', 'f.ts']),
+          config: CONFIG,
+          cwd: repo,
+          agentFactory: fastFactory(80),
+          label: 'B',
+        },
+      ];
+
+      const results = await runMany(specs, { admitCheckMs: 25, admitHysteresisChecks: 1 });
+
+      expect(results.map((r) => r.status)).toEqual(['done', 'done']);
+      // Each run's branches are runId-namespaced, so both fully merge despite
+      // sharing one repo.
+      expect(results[0]!.result!.integration.branchesMerged).toHaveLength(3);
+      expect(results[1]!.result!.integration.branchesMerged).toHaveLength(3);
+    },
+    30_000,
+  );
+
+  it(
     'under memory pressure the lowest-priority run is the kill victim, not the higher-priority one',
     async () => {
       // Budget driven by a mutable metrics ref; start healthy so both runs spawn.

@@ -82,7 +82,11 @@ export async function runMany(
 
   const scheduler = options.scheduler ?? new GlobalScheduler();
   const ownsScheduler = options.scheduler === undefined;
-  if (ownsScheduler) scheduler.start();
+  // Always start (idempotent): an injected scheduler that the caller forgot to
+  // start would otherwise leave the budget AutoScaler disabled — which silently
+  // turns OFF the RAM spawn-gate AND the OOM guard (shouldSpawn→true,
+  // shouldDestroy→false when not enabled). Only stop() the one we own.
+  scheduler.start();
 
   const runPromises: Array<Promise<void>> = [];
   const unsubscribes: Array<() => void> = [];

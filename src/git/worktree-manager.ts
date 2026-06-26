@@ -8,6 +8,7 @@ import {
   integrationWorktreePath,
   worktreeBaseDir,
 } from './branch-namer.js';
+import { withRepoLock } from '../lib/repo-lock.js';
 import type { RunManifest } from '../lib/types.js';
 
 export interface WorktreeInfo {
@@ -23,26 +24,46 @@ export class WorktreeManager {
     private repoRoot: string,
     private runId: string,
     private baseCommit: string,
+    /**
+     * Serialize the SHORT git-plumbing ops (worktree add/remove, branch
+     * create/delete, prune) per repoRoot. Worktree DIRS and branch names are
+     * runId-namespaced so they never collide, but git derives its worktree
+     * ADMIN name from the path basename (`integration`, `agent-0`) which is NOT
+     * runId-scoped, and `worktree add` touches shared `.git/config`/`packed-refs`
+     * locks — so two runs on the SAME repo would race. Set true ONLY in multi-run
+     * (subordinate) mode; single-run keeps the uncontended-but-unlocked path
+     * (one run per repo, agent names already unique). NOT applied to merges
+     * (long, on distinct runId-namespaced refs — serializing them would defeat
+     * the whole point of overlapping a run's merge with another run's work).
+     */
+    private serializeGitOps = false,
   ) {
     this.git = new GitClient(repoRoot);
   }
 
+  /** Run `fn` under the per-repo lock when serializing (multi-run), else directly. */
+  private withLock<T>(fn: () => Promise<T>): Promise<T> {
+    return this.serializeGitOps ? withRepoLock(this.repoRoot, fn) : fn();
+  }
+
   async createIntegrationWorktree(): Promise<WorktreeInfo> {
-    const branch = integrationBranchName(this.runId);
-    const wtPath = integrationWorktreePath(this.repoRoot, this.runId);
-    this.ensureParentDir(wtPath);
-    await this.git.createBranch(branch, this.baseCommit);
-    try {
-      await this.git.addWorktree(wtPath, branch);
-    } catch (err) {
-      // Roll back the orphan branch so a retried run can recreate it
-      // under the same name. Without this, the next createBranch fails
-      // with "branch already exists" and the run can't recover.
-      await this.git.deleteBranch(branch);
-      throw err;
-    }
-    this.createdWorktrees.set(wtPath, branch);
-    return { branchName: branch, worktreePath: wtPath };
+    return this.withLock(async () => {
+      const branch = integrationBranchName(this.runId);
+      const wtPath = integrationWorktreePath(this.repoRoot, this.runId);
+      this.ensureParentDir(wtPath);
+      await this.git.createBranch(branch, this.baseCommit);
+      try {
+        await this.git.addWorktree(wtPath, branch);
+      } catch (err) {
+        // Roll back the orphan branch so a retried run can recreate it
+        // under the same name. Without this, the next createBranch fails
+        // with "branch already exists" and the run can't recover.
+        await this.git.deleteBranch(branch);
+        throw err;
+      }
+      this.createdWorktrees.set(wtPath, branch);
+      return { branchName: branch, worktreePath: wtPath };
+    });
   }
 
   async createAgentWorktree(
@@ -50,49 +71,53 @@ export class WorktreeManager {
     startRef?: string,
     attempt = 1,
   ): Promise<WorktreeInfo> {
-    const branch = agentBranchName(this.runId, agentId, attempt);
-    const wtPath = agentWorktreePath(this.repoRoot, this.runId, agentId, attempt);
-    this.ensureParentDir(wtPath);
-    await this.git.createBranch(branch, startRef ?? this.baseCommit);
-    try {
-      await this.git.addWorktree(wtPath, branch);
-    } catch (err) {
-      await this.git.deleteBranch(branch);
-      throw err;
-    }
-    this.createdWorktrees.set(wtPath, branch);
-    return { branchName: branch, worktreePath: wtPath };
+    return this.withLock(async () => {
+      const branch = agentBranchName(this.runId, agentId, attempt);
+      const wtPath = agentWorktreePath(this.repoRoot, this.runId, agentId, attempt);
+      this.ensureParentDir(wtPath);
+      await this.git.createBranch(branch, startRef ?? this.baseCommit);
+      try {
+        await this.git.addWorktree(wtPath, branch);
+      } catch (err) {
+        await this.git.deleteBranch(branch);
+        throw err;
+      }
+      this.createdWorktrees.set(wtPath, branch);
+      return { branchName: branch, worktreePath: wtPath };
+    });
   }
 
   async removeAgentWorktree(agentId: number, attempt = 1): Promise<void> {
     const wtPath = agentWorktreePath(this.repoRoot, this.runId, agentId, attempt);
-    await this.git.removeWorktree(wtPath);
+    await this.withLock(() => this.git.removeWorktree(wtPath));
     this.createdWorktrees.delete(wtPath);
   }
 
   async removeIntegrationWorktree(): Promise<void> {
     const wtPath = integrationWorktreePath(this.repoRoot, this.runId);
-    await this.git.removeWorktree(wtPath);
+    await this.withLock(() => this.git.removeWorktree(wtPath));
     this.createdWorktrees.delete(wtPath);
   }
 
   async cleanupAll(): Promise<{ removed: number; failures: { path: string; error: string }[] }> {
-    const failures: { path: string; error: string }[] = [];
-    let removed = 0;
-    for (const [wtPath] of this.createdWorktrees) {
-      try {
-        await this.git.removeWorktree(wtPath);
-        removed++;
-      } catch (err) {
-        failures.push({
-          path: wtPath,
-          error: err instanceof Error ? err.message : String(err),
-        });
+    return this.withLock(async () => {
+      const failures: { path: string; error: string }[] = [];
+      let removed = 0;
+      for (const [wtPath] of this.createdWorktrees) {
+        try {
+          await this.git.removeWorktree(wtPath);
+          removed++;
+        } catch (err) {
+          failures.push({
+            path: wtPath,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
-    }
-    this.createdWorktrees.clear();
-    await this.git.pruneWorktrees();
-    return { removed, failures };
+      this.createdWorktrees.clear();
+      await this.git.pruneWorktrees();
+      return { removed, failures };
+    });
   }
 
   getGitClient(): GitClient {
@@ -107,58 +132,60 @@ export class WorktreeManager {
     manifest: RunManifest,
     deleteRemote: boolean,
   ): Promise<{ worktreesRemoved: number; localBranchesDeleted: number; remoteBranchesDeleted: number }> {
-    let worktreesRemoved = 0;
-    let localBranchesDeleted = 0;
-    let remoteBranchesDeleted = 0;
+    return this.withLock(async () => {
+      let worktreesRemoved = 0;
+      let localBranchesDeleted = 0;
+      let remoteBranchesDeleted = 0;
 
-    for (const entry of manifest.agentEntries) {
-      if (entry.worktreePath && !entry.cleanupDone) {
+      for (const entry of manifest.agentEntries) {
+        if (entry.worktreePath && !entry.cleanupDone) {
+          try {
+            await this.git.removeWorktree(entry.worktreePath);
+            worktreesRemoved++;
+          } catch {
+            /* best effort */
+          }
+        }
+        if (entry.branchName) {
+          try {
+            await this.git.deleteBranch(entry.branchName);
+            localBranchesDeleted++;
+          } catch {
+            /* best effort */
+          }
+          if (deleteRemote && entry.pushStatus === 'pushed') {
+            if (await this.git.deleteRemoteBranch(entry.branchName)) {
+              remoteBranchesDeleted++;
+            }
+          }
+        }
+      }
+
+      if (manifest.integrationWorktreePath) {
         try {
-          await this.git.removeWorktree(entry.worktreePath);
+          await this.git.removeWorktree(manifest.integrationWorktreePath);
           worktreesRemoved++;
         } catch {
           /* best effort */
         }
       }
-      if (entry.branchName) {
+      if (manifest.integrationBranch) {
         try {
-          await this.git.deleteBranch(entry.branchName);
+          await this.git.deleteBranch(manifest.integrationBranch);
           localBranchesDeleted++;
         } catch {
           /* best effort */
         }
-        if (deleteRemote && entry.pushStatus === 'pushed') {
-          if (await this.git.deleteRemoteBranch(entry.branchName)) {
-            remoteBranchesDeleted++;
-          }
+        if (deleteRemote && (await this.git.deleteRemoteBranch(manifest.integrationBranch))) {
+          remoteBranchesDeleted++;
         }
       }
-    }
 
-    if (manifest.integrationWorktreePath) {
-      try {
-        await this.git.removeWorktree(manifest.integrationWorktreePath);
-        worktreesRemoved++;
-      } catch {
-        /* best effort */
-      }
-    }
-    if (manifest.integrationBranch) {
-      try {
-        await this.git.deleteBranch(manifest.integrationBranch);
-        localBranchesDeleted++;
-      } catch {
-        /* best effort */
-      }
-      if (deleteRemote && (await this.git.deleteRemoteBranch(manifest.integrationBranch))) {
-        remoteBranchesDeleted++;
-      }
-    }
+      await this.git.pruneWorktrees();
+      this.createdWorktrees.clear();
 
-    await this.git.pruneWorktrees();
-    this.createdWorktrees.clear();
-
-    return { worktreesRemoved, localBranchesDeleted, remoteBranchesDeleted };
+      return { worktreesRemoved, localBranchesDeleted, remoteBranchesDeleted };
+    });
   }
 
   private ensureParentDir(path: string): void {

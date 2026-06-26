@@ -269,6 +269,16 @@ export class AutoScaler {
     this.currentMetrics = metrics;
   }
 
+  /**
+   * The latest metrics this scaler is working from. The GlobalScheduler reads
+   * its budget scaler's metrics once per tick and pushes them into each
+   * subordinate run's dormant scaler via {@link acceptMetrics}, so per-run
+   * RAM%/CPU% displays stay live without every scaler polling the machine.
+   */
+  metrics(): SystemMetrics {
+    return this.currentMetrics;
+  }
+
   getStatus(): AutoScaleStatus {
     const now = Date.now();
     const cooldownRemainingMs = this.cooldownEndAt > now ? this.cooldownEndAt - now : 0;

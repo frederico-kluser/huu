@@ -18,8 +18,13 @@ import { SystemMetricsSampler, type SystemMetrics } from '../lib/resource-monito
  * module, not vice-versa) and the scheduler stays unit-testable with stubs.
  */
 
-/** Scheduler re-evaluation cadence. */
-const SCHED_TICK_MS = 1_000;
+/**
+ * Scheduler re-evaluation + memory-guard cadence. Matches the single-run pool
+ * guard (POLL_INTERVAL_MS = 500ms) so multi-run sheds RAM at the same rate —
+ * the in-pool guard is OFF in subordinate mode, making this tick the sole
+ * killer.
+ */
+const SCHED_TICK_MS = 500;
 /**
  * Overflow guard on a single run's demand. Real bounding is the global budget
  * B (≤ AutoScaler maxAgents); this only stops a bogus getDemand() (e.g. a
@@ -268,10 +273,21 @@ export class GlobalScheduler {
     this.ticking = true;
     try {
       this.recomputeGrants();
+      this.pushMetrics();
       await this.enforceMemoryGuard();
     } finally {
       this.ticking = false;
     }
+  }
+
+  /**
+   * Forward the budget scaler's single machine read into each subordinate run's
+   * dormant scaler, so per-run RAM%/CPU% (and the guard-kill log line, which
+   * reads the dormant scaler) stay live instead of frozen at run-start.
+   */
+  private pushMetrics(): void {
+    const m = this.budget.metrics();
+    for (const s of this.slots) s.driver.acceptMetrics?.(m);
   }
 
   /**
