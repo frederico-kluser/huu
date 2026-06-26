@@ -262,6 +262,33 @@ describe('web server', () => {
     manager.abort();
   });
 
+  it('keeps the run alive when the browser (SSE) disconnects — closing the site never aborts', async () => {
+    // Start a stub run. Stub agents sleep 2–5s, so the run stays active well
+    // past the disconnect below — the assertion can't race the run settling.
+    await fetch(base + '/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pipelineName: 'web-test-pipe', backend: 'stub', modelId: 'stub' }),
+    });
+    expect(manager.isActive()).toBe(true);
+
+    // Open the SSE stream (a "browser"), read its first replayed frame, then
+    // drop the connection — exactly what closing the tab does.
+    const sse = await fetch(base + '/events');
+    const reader = sse.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    await new Promise((r) => setTimeout(r, 150)); // let req 'close' land server-side
+
+    // The run lives in the server process, not the browser: disconnect ≠ abort.
+    expect(manager.isActive()).toBe(true);
+    // A freshly reopened page re-syncs to the still-running run.
+    const boot = await (await fetch(base + '/api/bootstrap')).json();
+    expect(boot.run.phase).toBe('running');
+
+    manager.abort();
+  });
+
   it('404s unknown API routes and missing assets', async () => {
     expect((await fetch(base + '/api/nope')).status).toBe(404);
     expect((await fetch(base + '/does-not-exist.js')).status).toBe(404);
