@@ -9,6 +9,17 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Added
 
+- **Scrollable run-board columns + animated card moves (web UI).** Kanban
+  columns now **scroll** when they fill up instead of squashing the cards
+  flat (the cards are flex children that were shrinking to fit before the
+  scrollbar could appear; they now hold their natural height). When a card
+  changes column it **animates to the first slot of the destination** — a
+  `transform`-only FLIP flight rendered by a ghost on a body-level overlay,
+  so it glides across the gap GPU-composited and jank-free; reads/writes are
+  batched into a single reflow + one `requestAnimationFrame`, and the whole
+  effect honours `prefers-reduced-motion`. The pure lane-ordering (a moved
+  card floats to the top, newest first; new cards keep insertion order) is
+  extracted to a DOM-free, unit-tested `src/web/client/board-order.js`.
 - **Simulation mode (`/simulation`) — a synthetic, no-cost demo run.** A new
   browser route renders a FULL huu run — kanban cards flowing TODO → DOING →
   DONE, live per-agent logs, the agent-output firehose, token/cost counters —
