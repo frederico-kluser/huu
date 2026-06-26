@@ -1237,7 +1237,7 @@ function ingestRun(run) {
     lastStartedAt = st.startedAt || run.startedAt || 0;
     $('mStage').textContent = st.wave != null ? `wave ${st.wave}` : `${st.currentStage}/${st.totalStages}`;
     $('mTasks').textContent = `${st.completedTasks}/${st.totalTasks}`;
-    $('mCost').textContent = '$' + (st.totalCost || 0).toFixed(2);
+    $('mCost').textContent = fmtCost(st.totalCost || 0);
     updateConc(st);
     renderBoard(st);
     renderLog(st.logs || []);
@@ -1424,10 +1424,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawe
 async function openDrawer(key) {
   S.openCardKey = key;
   drawer.hidden = false; scrim.hidden = false;
+  $('drawerLogs').textContent = ''; // fresh element → first render starts pinned to bottom
   if (S.run.state) refreshDrawer(S.run.state);
   if (key[0] === 'a') {
     const id = +key.slice(1);
-    try { const r = await api('/api/agent-logs?id=' + id); $('drawerLogs').textContent = (r.logs || []).join('\n') || '(no logs yet)'; scrollLogs(); } catch {}
+    try { const r = await api('/api/agent-logs?id=' + id); setDrawerLogs((r.logs || []).join('\n') || '(no logs yet)', true); } catch {}
   }
 }
 
@@ -1446,17 +1447,30 @@ function refreshDrawer(st) {
   if (S.openCardKey[0] === 'a') {
     // live tail from streamed state (full set fetched on open)
     const logs = c.raw.logs;
-    if (logs && logs.length) { $('drawerLogs').textContent = logs.join('\n'); scrollLogs(); }
+    if (logs && logs.length) setDrawerLogs(logs.join('\n'));
   } else {
     const lines = [];
     if (c.raw.condition) lines.push('Condition:\n' + c.raw.condition);
     if (c.raw.reason) lines.push('\nReason:\n' + c.raw.reason);
     if (c.raw.lastLog) lines.push('\n' + c.raw.lastLog);
     if (c.raw.error) lines.push('\nError:\n' + c.raw.error);
-    $('drawerLogs').textContent = lines.join('\n') || '(no detail)';
+    setDrawerLogs(lines.join('\n') || '(no detail)');
   }
 }
-function scrollLogs() { const l = $('drawerLogs'); l.scrollTop = l.scrollHeight; }
+
+/* Swap the drawer's log text WITHOUT yanking the reader to the bottom on every
+   snapshot. Follow the tail only when they were already pinned there (or `force`
+   on first open); if they scrolled up to read, their position is preserved.
+   Bailing on identical text avoids a needless scroll reset between snapshots. */
+const STICK_THRESHOLD_PX = 28;
+function setDrawerLogs(text, force) {
+  const el = $('drawerLogs');
+  if (el.textContent === text) return;
+  const pinned = force || el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_THRESHOLD_PX;
+  const prevTop = el.scrollTop;
+  el.textContent = text;
+  el.scrollTop = pinned ? el.scrollHeight : prevTop;
+}
 
 function kv(k, v, opts = {}) {
   if (v === undefined || v === null || v === '') return '';
@@ -1518,6 +1532,10 @@ function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp
 function cap(s) { return s[0].toUpperCase() + s.slice(1); }
 function humanize(s) { return String(s || '').replace(/_/g, ' '); }
 function fmtNum(n) { return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n); }
+// Costs are summed per-card from OpenRouter's authoritative usage.cost (USD).
+// They're often sub-cent, so show 4 decimals until the total clears $1 —
+// otherwise a live run reads "$0.00" and looks like it isn't metering.
+function fmtCost(n) { return '$' + (n >= 1 ? n.toFixed(2) : n.toFixed(4)); }
 function fmtDur(ms) {
   const s = Math.max(0, Math.floor(ms / 1000)); const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); const ss = s % 60;
   return (h ? `${h}:${String(m).padStart(2, '0')}` : `${m}`) + ':' + String(ss).padStart(2, '0');

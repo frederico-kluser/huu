@@ -27,6 +27,7 @@ import type {
   StageIntegration,
 } from '../../lib/types.js';
 import type { AgentOutputChunk } from '../types.js';
+import { THINKING_LOG_PREFIX } from '../types.js';
 import {
   ASSISTANT_LINES,
   FATAL_ERRORS,
@@ -738,7 +739,12 @@ export class SimulationEngine {
     card.status.tokensOut += 30 + Math.floor(this.rng() * 130);
     this.recost(card);
     if (this.rng() < 0.5) {
-      this.emitOutput(card.id, 'thinking', fill(pick(THINKING_LINES, this.rng), vars));
+      const think = fill(pick(THINKING_LINES, this.rng), vars);
+      this.emitOutput(card.id, 'thinking', think);
+      // Mirror the reasoning trace into the card's per-agent log too (tagged) —
+      // matches the real orchestrator; kept OUT of the global run log like it.
+      card.status.logs.push(`${THINKING_LOG_PREFIX}${think}`);
+      if (card.status.logs.length > 400) card.status.logs.shift();
     }
     // Mirror some of the reply text into the on-page run log (not every line).
     if (this.rng() < 0.35) this.cardLog(card, reply);
