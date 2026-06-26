@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchModelCapabilities, resetCapabilitiesCache } from './openrouter.js';
+import {
+  fetchModelCapabilities,
+  filterToolReasoningModels,
+  listToolReasoningModels,
+  resetCapabilitiesCache,
+  type OpenRouterModel,
+} from './openrouter.js';
 
 const fakeBody = (ids: string[]): { data: { id: string; name: string; context_length: number; pricing: { prompt: string; completion: string }; supported_parameters: string[] }[] } => ({
   data: ids.map((id) => ({
@@ -70,5 +76,76 @@ describe('fetchModelCapabilities — per-API-key cache', () => {
     );
     const r = await fetchModelCapabilities('keyA');
     expect(Array.from(r.keys())).toEqual(['m']);
+  });
+});
+
+describe('filterToolReasoningModels', () => {
+  const model = (
+    id: string,
+    params: string[],
+    prompt = '0',
+    completion = '0',
+    ctx = 1000,
+  ): OpenRouterModel => ({
+    id,
+    name: id.toUpperCase(),
+    context_length: ctx,
+    pricing: { prompt, completion },
+    supported_parameters: params,
+  });
+
+  it('keeps only models that support BOTH tools and reasoning, sorted by id', () => {
+    const caps = new Map<string, OpenRouterModel>([
+      ['b', model('b', ['tools'])],
+      ['a', model('a', ['tools', 'reasoning'])],
+      ['c', model('c', ['reasoning'])],
+      ['d', model('d', [])],
+      ['e', model('e', ['reasoning', 'tools', 'temperature'])],
+    ]);
+    expect(filterToolReasoningModels(caps).map((o) => o.id)).toEqual(['a', 'e']);
+  });
+
+  it('normalizes per-token price strings to $/1M and carries the context window', () => {
+    const caps = new Map([['x', model('x', ['tools', 'reasoning'], '0.0000006', '0.0000025', 200000)]]);
+    const [o] = filterToolReasoningModels(caps);
+    expect(o.inputPricePerM).toBeCloseTo(0.6, 6);
+    expect(o.outputPricePerM).toBeCloseTo(2.5, 6);
+    expect(o.contextLength).toBe(200000);
+    expect(o.name).toBe('X');
+  });
+
+  it('ignores a model with no supported_parameters array', () => {
+    const bad = {
+      id: 'z',
+      name: 'z',
+      context_length: 1,
+      pricing: { prompt: '0', completion: '0' },
+    } as OpenRouterModel;
+    expect(filterToolReasoningModels(new Map([['z', bad]]))).toEqual([]);
+  });
+});
+
+describe('listToolReasoningModels', () => {
+  beforeEach(() => resetCapabilitiesCache());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetCapabilitiesCache();
+  });
+
+  it('fetches the catalog and returns only tool+reasoning models', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: [
+              { id: 'p/keep', name: 'Keep', context_length: 2, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools', 'reasoning'] },
+              { id: 'p/drop', name: 'Drop', context_length: 2, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'] },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    const out = await listToolReasoningModels('k');
+    expect(out.map((o) => o.id)).toEqual(['p/keep']);
   });
 });

@@ -9,6 +9,15 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Added
 
+- **Web model picker lists every OpenRouter tool-calling + reasoning model.**
+  The web UI's Model field is now a searchable combobox — type to filter the
+  full catalog — instead of a two-item dropdown. Once you validate your
+  OpenRouter key, `GET /api/models` fetches the live catalog and keeps only the
+  models that support BOTH tool calling and reasoning (~170 today), sent via the
+  browser-only `x-huu-key` header; with no key it falls back to the static
+  recommended list. New `filterToolReasoningModels` / `listToolReasoningModels`
+  in `src/lib/openrouter.ts` and `listModelsForBackend` in `src/web/api-data.ts`
+  (`ModelInfo` gains an optional `contextLength`).
 - **Provider selection inside pi — OpenRouter or Azure AI Foundry.** huu now
   exposes a single backend (pi) and lets you choose the LLM *provider*
   underneath it. New `LlmProvider` type + `src/lib/providers.ts` mapping

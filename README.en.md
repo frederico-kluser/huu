@@ -196,6 +196,12 @@ terminal TUI back.
   kept only in the browser tab (`sessionStorage`), sent with each run and
   **never written to disk**. A stray shell `OPENROUTER_API_KEY` can't
   shadow it.
+- **Searchable model picker — every tool-calling + reasoning model.** Once
+  your OpenRouter key is validated, the **Model** field becomes a
+  type-to-filter combobox over the **live OpenRouter catalog**, narrowed to
+  the models that support **both tool calling and reasoning** (what huu's
+  agents need) — no more two-item dropdown. Without a key it falls back to a
+  short recommended list.
 
 > **Today the web runs existing pipelines** (list, pick, execute, tune
 > concurrency, stop). The **guided builders** (Pipeline Assistant and the

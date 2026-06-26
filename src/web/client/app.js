@@ -5,10 +5,17 @@ const $ = (id) => document.getElementById(id);
 const TOKEN = new URLSearchParams(location.search).get('token') || '';
 const withTok = (url) => (TOKEN ? url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(TOKEN) : url);
 
-async function api(path, opts) {
+async function api(path, opts = {}) {
+  // Merge caller headers (e.g. x-huu-key) on top of the defaults instead of
+  // letting `...opts` clobber the header object and drop the token header.
+  const { headers: extra, ...rest } = opts;
   const res = await fetch(withTok(path), {
-    headers: { 'Content-Type': 'application/json', ...(TOKEN ? { 'x-huu-token': TOKEN } : {}) },
-    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(TOKEN ? { 'x-huu-token': TOKEN } : {}),
+      ...extra,
+    },
+    ...rest,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -40,6 +47,7 @@ const S = {
   cwd: '',
   models: [],
   modelId: '',
+  modelSource: 'recommended', // 'openrouter-live' once loaded with a key
   mode: 'auto',
   manualN: 10,
   keyStatus: { ok: true, missing: [] },
@@ -189,26 +197,24 @@ function renderProviderSeg() {
 }
 
 async function refreshModelsAndKeys() {
-  // Models (by provider)
+  // Models (by provider). For OpenRouter we attach the validated session key so
+  // the server returns the LIVE catalog filtered to tool-calling + reasoning
+  // models; without a key it returns the static recommended list.
   try {
-    const m = await api('/api/models?provider=' + encodeURIComponent(S.provider));
+    const orKey = S.provider === 'openrouter' ? sessionKey(backendSpecName(S.backend)) : '';
+    const m = await api(
+      '/api/models?provider=' + encodeURIComponent(S.provider),
+      orKey ? { headers: { 'x-huu-key': orKey } } : undefined,
+    );
     S.models = m.models || [];
-  } catch { S.models = []; }
-  const sel = $('modelSelect');
-  sel.innerHTML = '';
-  if (!S.models.length) {
-    const o = document.createElement('option'); o.value = ''; o.textContent = 'default model'; sel.appendChild(o);
-    S.modelId = '';
-  } else {
-    for (const md of S.models) {
-      const o = document.createElement('option');
-      o.value = md.id;
-      o.textContent = md.label + (md.tier ? `  ·  ${md.tier}` : '');
-      sel.appendChild(o);
-    }
-    S.modelId = S.models[0].id;
-    sel.value = S.modelId;
-  }
+    S.modelSource = m.source || 'recommended';
+  } catch { S.models = []; S.modelSource = 'recommended'; }
+  // Keep the current pick if it survived the provider/key change; else default.
+  if (!S.models.length) S.modelId = '';
+  else if (!S.models.some((x) => x.id === S.modelId)) S.modelId = S.models[0].id;
+  syncModelInput();
+  updateModelCap();
+  if (combo.open) renderModelOptions();
   updateModelHint();
   // Keys (by provider). A spec we already hold a validated key for in THIS
   // browser session is satisfied even though the server — which never saw it —
@@ -228,8 +234,10 @@ function updateModelHint() {
   const h = $('modelHint');
   if (!md) { h.innerHTML = ''; return; }
   const price = md.inputPrice != null ? `$${md.inputPrice}/M in · $${md.outputPrice ?? '?'}/M out` : '';
-  const think = md.thinking ? `<span class="thinking">thinking</span> · ` : '';
-  h.innerHTML = `${think}${esc(md.description || '')} ${price ? `<br>${price}` : ''}`;
+  const head = [md.thinking ? '<span class="thinking">thinking</span>' : '', esc(md.description || '')]
+    .filter(Boolean).join(' · ');
+  const tail = [price, fmtCtx(md.contextLength)].filter(Boolean).join(' · ');
+  h.innerHTML = [head, tail].filter(Boolean).join('<br>');
 }
 
 /* Render one row per credential the selected provider needs. Each value can be
@@ -317,7 +325,135 @@ $('keyArea').addEventListener('click', async (e) => {
   finally { btn.disabled = false; btn.textContent = label; }
 });
 
-$('modelSelect').addEventListener('change', (e) => { S.modelId = e.target.value; updateModelHint(); });
+/* ---------------- Searchable model combobox ----------------
+   Replaces the old <select>: type to filter the list. For OpenRouter that list
+   is the LIVE catalog of every model with tool calling + reasoning, loaded with
+   the validated session key (see refreshModelsAndKeys). */
+const combo = { open: false, active: -1, matches: [], query: '' };
+
+function modelById(id) { return S.models.find((m) => m.id === id) || null; }
+
+function fmtCtx(n) {
+  if (!n || n <= 0) return '';
+  if (n >= 1000000) return (n % 1000000 ? (n / 1000000).toFixed(1) : n / 1000000) + 'M ctx';
+  if (n >= 1000) return Math.round(n / 1000) + 'k ctx';
+  return n + ' ctx';
+}
+
+/** Reflect the current selection as the input's display value. */
+function syncModelInput() {
+  const input = $('modelInput');
+  const md = modelById(S.modelId);
+  input.value = md ? md.label : '';
+  input.placeholder = S.models.length ? 'Search models…' : 'default model';
+}
+
+function updateModelCap() {
+  const cap = $('modelCap');
+  if (!cap) return;
+  const n = S.models.length;
+  if (S.provider !== 'openrouter') { cap.textContent = n ? `${n} model${n === 1 ? '' : 's'} available` : ''; return; }
+  if (S.modelSource === 'openrouter-live') {
+    cap.innerHTML = `<span class="live">${n} models</span> · tool calling + reasoning · via your OpenRouter key`;
+  } else {
+    cap.textContent = 'Showing recommended models — validate your OpenRouter key to load every tool-calling + reasoning model';
+  }
+}
+
+function comboMatches() {
+  const q = combo.query.trim().toLowerCase();
+  if (!q) return S.models.slice();
+  return S.models.filter((m) =>
+    m.id.toLowerCase().includes(q) || (m.label || '').toLowerCase().includes(q));
+}
+
+function modelOptionHtml(m, i, active, sel) {
+  const price = m.inputPrice != null ? `$${m.inputPrice}/M·$${m.outputPrice ?? '?'}/M` : '';
+  const meta = [m.tier, fmtCtx(m.contextLength), price].filter(Boolean).join(' · ');
+  return `<li class="combo__opt${active ? ' active' : ''}${sel ? ' sel' : ''}" role="option" id="opt-${i}" data-id="${esc(m.id)}" aria-selected="${sel ? 'true' : 'false'}">` +
+    `<span class="combo__opt-name">${esc(m.label || m.id)}</span>` +
+    (m.thinking ? '<span class="combo__badge">reasoning</span>' : '') +
+    (meta ? `<span class="combo__opt-meta">${esc(meta)}</span>` : '') +
+    `<span class="combo__opt-id">${esc(m.id)}</span></li>`;
+}
+
+function renderModelOptions() {
+  const list = $('modelList');
+  const matches = comboMatches();
+  combo.matches = matches;
+  if (combo.active >= matches.length) combo.active = matches.length - 1;
+  if (!S.models.length) { list.innerHTML = '<li class="combo__empty">No models available</li>'; return; }
+  if (!matches.length) { list.innerHTML = '<li class="combo__empty">No matches</li>'; return; }
+  list.innerHTML = matches.map((m, i) => modelOptionHtml(m, i, i === combo.active, m.id === S.modelId)).join('');
+  const input = $('modelInput');
+  if (combo.active >= 0) input.setAttribute('aria-activedescendant', 'opt-' + combo.active);
+  else input.removeAttribute('aria-activedescendant');
+  const act = list.querySelector('.combo__opt.active');
+  if (act) act.scrollIntoView({ block: 'nearest' });
+}
+
+function openCombo() {
+  if (!combo.open) { combo.open = true; $('modelInput').setAttribute('aria-expanded', 'true'); $('modelList').hidden = false; }
+  renderModelOptions();
+}
+function closeCombo() {
+  combo.open = false; combo.active = -1;
+  $('modelInput').setAttribute('aria-expanded', 'false');
+  $('modelList').hidden = true;
+}
+function selectModel(id) {
+  if (id && !modelById(id)) return;
+  S.modelId = id;
+  combo.query = '';
+  syncModelInput();
+  closeCombo();
+  updateModelHint();
+}
+
+(function setupModelCombo() {
+  const input = $('modelInput');
+  const list = $('modelList');
+  if (!input || !list) return;
+  input.addEventListener('focus', () => {
+    // Clear to an empty filter so the user sees the COMPLETE list and can type
+    // to narrow it; the current pick is restored on blur/Escape if untouched.
+    combo.query = '';
+    input.value = '';
+    const all = comboMatches();
+    combo.active = Math.max(0, all.findIndex((m) => m.id === S.modelId));
+    openCombo();
+  });
+  input.addEventListener('input', () => { combo.query = input.value; combo.active = -1; openCombo(); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!combo.open) { openCombo(); return; }
+      combo.active = Math.min(combo.active + 1, combo.matches.length - 1);
+      renderModelOptions();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      combo.active = Math.max(combo.active - 1, 0);
+      renderModelOptions();
+    } else if (e.key === 'Enter') {
+      e.preventDefault(); // never submit the run form from the model field
+      if (combo.open && combo.matches.length) {
+        const pick = combo.active >= 0 ? combo.matches[combo.active] : combo.matches[0];
+        if (pick) selectModel(pick.id);
+      } else openCombo();
+    } else if (e.key === 'Escape') {
+      if (combo.open) { e.preventDefault(); combo.query = ''; syncModelInput(); closeCombo(); }
+    }
+  });
+  // Delay so a click on an option (mousedown below) wins over the blur-close.
+  input.addEventListener('blur', () => { setTimeout(() => { combo.query = ''; syncModelInput(); closeCombo(); }, 150); });
+  // mousedown (not click) fires before the input blur, so the selection sticks.
+  list.addEventListener('mousedown', (e) => {
+    const li = e.target.closest ? e.target.closest('.combo__opt') : null;
+    if (!li || !li.dataset.id) return;
+    e.preventDefault();
+    selectModel(li.dataset.id);
+  });
+})();
 
 /* ---------------- Launch: concurrency mode ---------------- */
 function renderModeSeg() {

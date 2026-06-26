@@ -79,6 +79,67 @@ export function modelSupportsReasoning(
   );
 }
 
+/**
+ * UI-friendly projection of an OpenRouter model: the subset the model picker
+ * needs, with prices normalized to USD per 1M tokens.
+ */
+export interface OpenRouterModelOption {
+  id: string;
+  name: string;
+  /** USD per 1M prompt tokens (undefined when OpenRouter omits a price). */
+  inputPricePerM?: number;
+  /** USD per 1M completion tokens. */
+  outputPricePerM?: number;
+  contextLength?: number;
+}
+
+/** OpenRouter quotes prices per token as strings ("0.0000006"); show $/1M. */
+function pricePerMillion(perToken?: string): number | undefined {
+  if (perToken == null) return undefined;
+  const n = Number.parseFloat(perToken);
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  // Round to 4 decimals so $/1M reads cleanly ($0.6, not $0.5999999999).
+  return Math.round(n * 1_000_000 * 1e4) / 1e4;
+}
+
+/**
+ * Keep only the models that support BOTH tool calling (`tools`) and reasoning
+ * (`reasoning`) — the two capabilities huu's agents require — and project them
+ * to {@link OpenRouterModelOption}, sorted by id. Pure: takes an already
+ * fetched capability map so it is trivially testable.
+ */
+export function filterToolReasoningModels(
+  capabilities: Map<string, OpenRouterModel>,
+): OpenRouterModelOption[] {
+  const out: OpenRouterModelOption[] = [];
+  for (const m of capabilities.values()) {
+    const params = Array.isArray(m.supported_parameters)
+      ? m.supported_parameters
+      : [];
+    if (!params.includes('tools') || !params.includes('reasoning')) continue;
+    out.push({
+      id: m.id,
+      name: m.name,
+      inputPricePerM: pricePerMillion(m.pricing?.prompt),
+      outputPricePerM: pricePerMillion(m.pricing?.completion),
+      contextLength: m.context_length,
+    });
+  }
+  out.sort((a, b) => a.id.localeCompare(b.id));
+  return out;
+}
+
+/**
+ * Fetch the OpenRouter catalog for `apiKey` and return only the models that
+ * support tool calling AND reasoning. Composes the per-key-cached, 5s-timeout
+ * {@link fetchModelCapabilities} with {@link filterToolReasoningModels}.
+ */
+export async function listToolReasoningModels(
+  apiKey: string,
+): Promise<OpenRouterModelOption[]> {
+  return filterToolReasoningModels(await fetchModelCapabilities(apiKey));
+}
+
 export async function validateApiKey(apiKey: string): Promise<boolean> {
   const trimmed = apiKey.trim();
   if (!trimmed) return false;

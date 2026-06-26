@@ -23,7 +23,7 @@ import { backendToProvider, parseProvider, providerToBackend } from '../lib/prov
 import {
   listBackendsInfo,
   listProvidersInfo,
-  listModelsInfo,
+  listModelsForBackend,
   keyStatus,
   findKeySpec,
   validateKeyValue,
@@ -198,7 +198,18 @@ export function createWebServer(opts: WebServerOptions): {
         ? providerToBackend(provider)
         : parseBackendKind(url.searchParams.get('backend') ?? 'pi');
       if (!backend) return sendJson(res, 400, { error: 'unknown backend' });
-      return sendJson(res, 200, { models: listModelsInfo(opts.cwd, backend) });
+      // Browser-only key: once the user validates an OpenRouter key the client
+      // sends it here (x-huu-key) so we can return the LIVE catalog filtered to
+      // tool-calling + reasoning models. No key → the static recommended list.
+      // Used in memory only; never logged or persisted.
+      const hk = req.headers['x-huu-key'];
+      const openrouterKey = (Array.isArray(hk) ? hk[0] : hk ?? '').toString();
+      const { models, source } = await listModelsForBackend(
+        opts.cwd,
+        backend,
+        openrouterKey,
+      );
+      return sendJson(res, 200, { models, source });
     }
     if (method === 'GET' && path === '/api/keys') {
       const provider = parseProvider(url.searchParams.get('provider') ?? '');
