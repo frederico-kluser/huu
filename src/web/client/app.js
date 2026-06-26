@@ -5,6 +5,7 @@ import {
   saveRun, listRuns, deleteRun, clearRuns,
   buildRunRecord, buildSyntheticRecord, exportRunsJson, downloadText, uid,
 } from './db.js';
+import { createBoardOrder } from './board-order.js';
 
 const $ = (id) => document.getElementById(id);
 const TOKEN = new URLSearchParams(location.search).get('token') || '';
@@ -1239,6 +1240,7 @@ function ingestRun(run) {
     $('mTasks').textContent = `${st.completedTasks}/${st.totalTasks}`;
     $('mCost').textContent = '$' + (st.totalCost || 0).toFixed(2);
     updateConc(st);
+    if (run.runId && run.runId !== boardRunId) { boardRunId = run.runId; resetBoardState(); }
     renderBoard(st);
     renderLog(st.logs || []);
     if (S.openCardKey) refreshDrawer(st);
@@ -1296,6 +1298,118 @@ $('abortBtn').addEventListener('click', async () => {
 /* ---------------- Board reconciler ---------------- */
 const ACTIVE_PHASES = new Set(['worktree_creating','worktree_ready','session_starting','streaming','tool_running','finalizing','validating','committing','pushing','cleaning_up']);
 const cardEls = new Map(); // key -> element
+
+// --- Card-move animation (FLIP) ---------------------------------------------
+// Cards are REUSED dom nodes keyed by card.key, so a lane change is the SAME
+// node re-parented into another lane body. We animate that move with the FLIP
+// technique (First/Last/Invert/Play): measure the old box, let the reconciler
+// drop the node into the new lane's FIRST slot, then animate old -> new with a
+// `transform` only (GPU-composited; never width/height/top/left → no layout
+// thrash). Cross-column flights ride a body-level overlay so the lane's
+// overflow clip doesn't cut them off mid-air.
+const boardOrder = createBoardOrder();  // pure lane-ordering + mover detection (board-order.js)
+const ghosts = new Map();     // key -> { node } for an in-flight cross-lane ghost
+let boardRunId = null;        // wipe board state when the run changes
+let flipLayer = null;         // lazy body-level overlay for cross-column ghosts
+const FLIP_MS = 400, FLIP_EASE = 'cubic-bezier(.2,.7,.3,1)', MAX_FLIP_CARDS = 400;
+
+function prefersReducedMotion() { return matchMedia('(prefers-reduced-motion: reduce)').matches; }
+function ensureFlipLayer() {
+  if (!flipLayer) { flipLayer = document.createElement('div'); flipLayer.className = 'flip-layer'; document.body.appendChild(flipLayer); }
+  return flipLayer;
+}
+function killGhost(key) {
+  const g = ghosts.get(key);
+  if (!g) return;
+  ghosts.delete(key);
+  g.node.remove();
+  const el = cardEls.get(key);
+  if (el) el.style.visibility = '';
+}
+// Full reset between runs: keys (a1, a2…) repeat across runs, so without this a
+// fresh run's pending cards would be mistaken for movers and fly in from nowhere.
+function resetBoardState() {
+  for (const k of [...ghosts.keys()]) killGhost(k);
+  for (const [, el] of cardEls) el.remove();
+  cardEls.clear(); boardOrder.reset();
+  for (const lane of ['todo', 'doing', 'done']) { const b = $('lane' + cap(lane)); if (b) b.innerHTML = ''; }
+}
+function captureCardRects() {
+  const m = new Map();
+  for (const [k, el] of cardEls) {
+    if (!el.isConnected) continue;
+    const r = el.getBoundingClientRect();
+    if (!r.width && !r.height) continue;
+    m.set(k, { left: r.left, top: r.top, width: r.width, height: r.height });
+  }
+  return m;
+}
+// Last + Invert + Play. Reads are batched (one layout flush), then all inverts
+// are written, then a SINGLE forced reflow commits them, then one rAF plays the
+// whole batch — so N moving cards animate in lockstep with zero per-card thrash.
+function playCardFlip(first, movers) {
+  const tasks = [];
+  for (const [k, el] of cardEls) {
+    const f = first.get(k);
+    if (!f || !el.isConnected) continue;
+    const r = el.getBoundingClientRect();
+    if (!r.width && !r.height) continue;
+    const dx = f.left - r.left, dy = f.top - r.top;
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) continue;
+    tasks.push({ key: k, el, last: r, dx, dy, cross: movers.has(k) });
+  }
+  if (!tasks.length) return;
+
+  const layer = tasks.some((t) => t.cross) ? ensureFlipLayer() : null;
+  for (const t of tasks) {
+    if (t.cross) {
+      killGhost(t.key);                                   // re-entrancy: drop any prior ghost
+      const g = t.el.cloneNode(true);
+      g.className = t.el.className + ' card--ghost';
+      g.style.left = t.last.left + 'px';
+      g.style.top = t.last.top + 'px';
+      g.style.width = t.last.width + 'px';
+      g.style.height = t.last.height + 'px';
+      g.style.visibility = '';                            // the source may be mid-hide; the ghost must show
+      g.style.transition = 'none';
+      g.style.transform = `translate(${t.dx}px, ${t.dy}px)`;
+      layer.appendChild(g);
+      t.el.style.visibility = 'hidden';                   // hold the destination slot; no reflow
+      t.ghost = g;
+      ghosts.set(t.key, { node: g });
+    } else {
+      t.el.style.transition = 'none';
+      t.el.style.willChange = 'transform';
+      t.el.style.transform = `translate(${t.dx}px, ${t.dy}px)`;
+    }
+  }
+
+  void document.body.offsetWidth;                         // one reflow → commit the inverted state
+
+  requestAnimationFrame(() => {
+    for (const t of tasks) {
+      const node = t.cross ? t.ghost : t.el;
+      let settled = false;
+      const finish = () => {
+        if (settled) return; settled = true;
+        node.removeEventListener('transitionend', onEnd);
+        clearTimeout(timer);
+        if (t.cross) {
+          if (ghosts.get(t.key) && ghosts.get(t.key).node === node) ghosts.delete(t.key);
+          node.remove();
+          if (t.el.isConnected) t.el.style.visibility = '';
+        } else {
+          node.style.transition = ''; node.style.willChange = '';
+        }
+      };
+      const onEnd = (e) => { if (!e || e.propertyName === 'transform') finish(); };
+      node.addEventListener('transitionend', onEnd);
+      const timer = setTimeout(finish, FLIP_MS + 140);    // fallback if transitionend is missed (e.g. backgrounded tab)
+      node.style.transition = `transform ${FLIP_MS}ms ${FLIP_EASE}`;
+      node.style.transform = t.cross ? 'translate(0, 0)' : '';
+    }
+  });
+}
 
 function cardsFromState(st) {
   const out = [];
@@ -1368,18 +1482,33 @@ function footBits(parts, requeue) {
 
 function renderBoard(st) {
   const cards = cardsFromState(st);
-  const byLane = { todo: [], doing: [], done: [] };
-  const seen = new Set();
-  for (const c of cards) { byLane[laneOf(c)].push(c); seen.add(c.key); }
+  for (const c of cards) c.lane = laneOf(c);   // normalize to todo|doing|done
+  const seen = new Set(cards.map((c) => c.key));
 
-  // Remove stale
-  for (const [k, el] of cardEls) { if (!seen.has(k)) { el.remove(); cardEls.delete(k); } }
+  // A card that CHANGED lane floats to the destination's FIRST slot (newest
+  // mover on top); new cards keep natural order. See board-order.js.
+  const { movers, byLane } = boardOrder.place(cards);
 
+  // Positions only change when a card is added, removed, or moved lane — so only
+  // then is it worth measuring boxes for the FLIP (keeps idle frames cheap).
+  let structural = movers.size > 0;
+  if (!structural) for (const c of cards) if (!cardEls.has(c.key)) { structural = true; break; }
+  if (!structural) for (const k of cardEls.keys()) if (!seen.has(k)) { structural = true; break; }
+  const animate = structural && !prefersReducedMotion() && !$('viewRun').hidden && cardEls.size <= MAX_FLIP_CARDS;
+
+  // FLIP — First: snapshot current boxes BEFORE mutating the DOM.
+  const first = animate ? captureCardRects() : null;
+
+  // Remove stale cards (cancel any in-flight ghost + drop tracking entries).
+  for (const [k, el] of cardEls) {
+    if (!seen.has(k)) { killGhost(k); el.remove(); cardEls.delete(k); boardOrder.drop(k); }
+  }
+
+  // Reconcile each lane in rank order.
   for (const lane of ['todo', 'doing', 'done']) {
     const body = $('lane' + cap(lane));
     const list = byLane[lane];
     $('cnt' + cap(lane)).textContent = list.length;
-    // Build in order, moving/creating as needed.
     let anchor = null;
     for (const c of list) {
       let el = cardEls.get(c.key);
@@ -1395,6 +1524,9 @@ function renderBoard(st) {
     if (!list.length) { if (!ph) { ph = document.createElement('div'); ph.className = 'lane__empty'; ph.textContent = '—'; body.appendChild(ph); } }
     else if (ph) ph.remove();
   }
+
+  // FLIP — Last + Invert + Play.
+  if (animate) playCardFlip(first, movers);
 }
 
 function paintCard(el, c) {

@@ -458,10 +458,23 @@ input[type='range'] { flex: 1; accent-color: var(--accent); }
 .lane__dot.todo { background: var(--text-3); }
 .lane__dot.doing { background: var(--blue); }
 .lane__dot.done { background: var(--green); }
-.lane__body { overflow: auto; padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 9px; min-height: 0; }
+/* The lane body is the per-column SCROLL container: it fills the lane (flex:1)
+   and scrolls vertically once its cards overflow. The cards themselves must NOT
+   shrink (see .card flex below) — otherwise flexbox squashes them to fit and the
+   scrollbar never appears. */
+.lane__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 9px;
+  overscroll-behavior: contain; scroll-behavior: smooth; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; scrollbar-color: var(--separator-strong) transparent; }
+.lane__body::-webkit-scrollbar { width: 9px; }
+.lane__body::-webkit-scrollbar-track { background: transparent; }
+.lane__body::-webkit-scrollbar-thumb { background: var(--separator-strong); border-radius: 999px;
+  border: 2px solid transparent; background-clip: padding-box; }
+.lane__body::-webkit-scrollbar-thumb:hover { background: var(--text-3); background-clip: padding-box; }
 
 .card {
   position: relative; text-align: left; width: 100%;
+  flex: 0 0 auto;   /* keep natural height: never shrink — that's what makes the lane scroll instead of squashing cards */
   background: var(--elev); border: 1px solid var(--separator); border-radius: var(--radius-sm);
   padding: 12px 13px; cursor: pointer; overflow: hidden;
   transition: transform .14s ease, box-shadow .15s, border-color .15s;
@@ -496,6 +509,15 @@ input[type='range'] { flex: 1; accent-color: var(--accent); }
   animation: scan 1.1s linear infinite; }
 @keyframes scan { from { background-position: -50% 0; } to { background-position: 150% 0; } }
 .lane__empty { color: var(--text-3); font-size: 13px; text-align: center; padding: 22px 0; }
+
+/* Card-move animation (FLIP). When a card changes lane it travels to the
+   destination's first slot. The lane bodies clip (overflow), so a cross-column
+   flight is rendered by a GHOST on this body-level, non-clipping overlay. Only
+   `transform` is animated → GPU-composited, no per-frame layout/paint (the "no
+   jank / fluid" contract). */
+.flip-layer { position: fixed; inset: 0; z-index: 35; pointer-events: none; overflow: visible; }
+.card--ghost { position: fixed; margin: 0; pointer-events: none; animation: none;
+  box-shadow: var(--shadow); will-change: transform; }
 
 /* log drawer */
 .logbar { margin: 0 clamp(14px,3vw,28px); border-radius: var(--radius) var(--radius) 0 0;

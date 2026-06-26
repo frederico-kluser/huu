@@ -188,9 +188,12 @@ terminal TUI back.
   over Server-Sent Events (auto-reconnecting), zero new dependencies
   (just `node:http`).
 - **Everything is clickable.** A kanban of cards (agents, merges, judges)
-  flowing TODO → DOING → DONE; click a card for **per-agent tokens, cost,
-  branch, files and live logs**. Global log console, concurrency control
-  (Auto · Manual · MAX) and a stop button up top.
+  flowing TODO → DOING → DONE — when a card changes column it **glides to the
+  first slot of the new one** (GPU-composited, `transform`-only, jank-free),
+  and each column **scrolls** once it fills up instead of squashing the cards
+  flat. Click a card for **per-agent tokens, cost, branch, files and live
+  logs**. Global log console, concurrency control (Auto · Manual · MAX) and a
+  stop button up top.
 - **Project queue, in sequence.** Select **several projects** — each with its
   own config (directory, provider, model, concurrency) — and run them **one
   after another** (sequential, never in parallel). If one fails, the queue

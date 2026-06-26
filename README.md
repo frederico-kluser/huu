@@ -189,9 +189,12 @@ TUI no terminal.
   Server-Sent Events (reconecta sozinho), zero dependência nova (só
   `node:http`).
 - **Tudo clicável.** Kanban de cards (agentes, merges, juízes) fluindo
-  TODO → DOING → DONE; clique num card pra ver **tokens, custo, branch,
-  arquivos e logs ao vivo** por agente. Console de log global, controle
-  de concorrência (Auto · Manual · MAX) e botão de parar no topo.
+  TODO → DOING → DONE — quando um card muda de coluna ele **desliza até a
+  primeira posição da nova coluna** (animação por GPU, só `transform`, sem
+  travar), e cada coluna **rola sozinha** quando enche em vez de achatar os
+  cards. Clique num card pra ver **tokens, custo, branch, arquivos e logs ao
+  vivo** por agente. Console de log global, controle de concorrência
+  (Auto · Manual · MAX) e botão de parar no topo.
 - **Fila de projetos, em sequência.** Selecione **vários projetos** — cada
   um com sua própria config (diretório, provider, modelo, concorrência) — e
   rode-os **um após o outro** (sequencial, nunca em paralelo). Se um falha, a
