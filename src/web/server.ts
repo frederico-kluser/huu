@@ -168,6 +168,11 @@ export function createWebServer(opts: WebServerOptions): {
     if (method === 'GET' && (path === '/' || path === '/index.html')) {
       return serveStatic(res, root, 'index.html');
     }
+    if (method === 'GET' && (path === '/simulation' || path === '/simulation/')) {
+      // SPA shell for the synthetic /simulation demo. The client routes on
+      // location.pathname and shows the simulation setup instead of launch.
+      return serveStatic(res, root, 'index.html');
+    }
     if (method === 'GET' && path === '/api/health') {
       return sendJson(res, 200, { ok: true, name: 'huu', repo: repoName(opts.cwd) });
     }
@@ -271,6 +276,13 @@ export function createWebServer(opts: WebServerOptions): {
       manager.abort();
       return sendJson(res, 200, { ok: true });
     }
+    if (method === 'POST' && path === '/api/run/pause') {
+      // Pause/resume a /simulation run (no-op for real runs).
+      const body = await readJsonBody(req);
+      const paused = body.paused === true || body.paused === 'true';
+      manager.setPaused(paused);
+      return sendJson(res, 200, { ok: true, paused });
+    }
     if (method === 'POST' && path === '/api/run/concurrency') {
       const body = await readJsonBody(req);
       if (typeof body.mode === 'string') {
@@ -296,6 +308,29 @@ export function createWebServer(opts: WebServerOptions): {
     res: ServerResponse,
   ): Promise<void> {
     const body = await readJsonBody(req);
+    // `/simulation` runs: synthetic, no backend/key/pipeline resolution.
+    if (body.simulate === true || body.simulate === 'true') {
+      try {
+        const modelIds = Array.isArray(body.modelIds)
+          ? (body.modelIds as unknown[]).map((m) => String(m)).filter((m) => m.trim())
+          : body.modelId
+            ? [String(body.modelId)]
+            : [];
+        const snap = manager.startSimulation({
+          runId: `sim-${Date.now().toString(36)}`,
+          modelIds,
+          fileCount: clampInt(body.fileCount, 12, 1, 200),
+          concurrency: clampInt(body.concurrency, 6, 1, 64),
+          pipelineName: body.pipelineName ? String(body.pipelineName) : undefined,
+          presetName: body.presetName ? String(body.presetName) : undefined,
+        });
+        return sendJson(res, 200, { ok: true, run: serializeSnapshot(snap) });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const status = /already in progress/.test(message) ? 409 : 400;
+        return sendJson(res, status, { error: message });
+      }
+    }
     // Provider (openrouter|azure) is the user-facing choice; it maps to the
     // dispatch backend. Falls back to a raw `backend` for older clients.
     const provider = parseProvider(String(body.provider ?? ''));
@@ -426,6 +461,13 @@ function trimState(state: OrchestratorState): OrchestratorState {
         : a,
     ),
   };
+}
+
+/** Coerce an unknown body field to an integer within [lo, hi], else `dflt`. */
+function clampInt(v: unknown, dflt: number, lo: number, hi: number): number {
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
+  if (!Number.isFinite(n)) return dflt;
+  return Math.min(hi, Math.max(lo, Math.round(n)));
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {

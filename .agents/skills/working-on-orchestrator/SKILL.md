@@ -2,7 +2,7 @@
 name: working-on-orchestrator
 description: Explains huu's run lifecycle and its invariants — stage loop, task decomposition, worker pool, AutoScaler memory math, the memory-guard kill/requeue path with its consumable killedAgentIds Set, CheckStep judge execution (reserved agentId 9998) and checkRuns kanban state. Use when changing anything in src/orchestrator/ — scheduling, concurrency, requeue, check execution, run state — or when debugging why agents are killed, requeued or misrouted.
 metadata:
-  version: 0.2.0
+  version: 0.3.0
   type: knowledge
 ---
 
@@ -51,9 +51,13 @@ The marker for "this failure was a guard kill, not a real error" is the consumab
 - Per-agent ports come from `port-allocator.ts` before launch (see isolating-agent-ports).
 - Backends are resolved once via `backends/registry.ts` (see integrating-llm-backends).
 
+### Synthetic simulation driver (`simulation/`)
+
+`src/orchestrator/simulation/` (`SimulationEngine`) is a no-side-effect stand-in for the Orchestrator, used by the web `/simulation` demo: it emits the SAME `OrchestratorState` snapshots + `agent-stream` firehose through the SAME `subscribe` / `subscribeAgentOutput` / `start` contract, but with NO worktrees, LLM, key or filesystem writes. Consequence for orchestrator changes: if you ADD a field to `OrchestratorState`, change how cards/columns are derived, or touch `checkRuns`/`stageIntegrations`/`requeues`/`actionCounts`, mirror it in the engine (and `engine.test.ts`) or the demo silently diverges from real runs. Progression is a logical-tick state machine (public `advance()`, driven by `start()`'s `setInterval`) seeded by a mulberry32 PRNG — deterministic and timer-free in tests; it lives under `orchestrator/` but depends only on `lib/` types (never on git/ui/web).
+
 ## References
 
 - `src/orchestrator/index.ts`, `src/orchestrator/auto-scaler.ts`, `src/orchestrator/requeue.test.ts` (the race spec)
 - Related skills: orchestrating-git-worktrees, isolating-agent-ports, writing-tests
 
-> Facts verified against source on 2026-06-12 (line refs included above); greedy/MAX auto-scaling mode verified against source on 2026-06-25.
+> Facts verified against source on 2026-06-12 (line refs included above); greedy/MAX auto-scaling mode verified against source on 2026-06-25; `simulation/` SimulationEngine demo driver added 2026-06-26.

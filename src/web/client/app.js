@@ -58,6 +58,14 @@ const S = {
   keyStatus: { ok: true, missing: [] },
   run: { phase: 'idle' },
   openCardKey: null,
+  // --- /simulation mode (synthetic demo run; no branches, no key) ---
+  sim: false,
+  simModels: [],
+  simSuggest: [],
+  simFiles: 12,
+  simAgents: 6,
+  simPaused: false,
+  lastSim: null,
   logOpen: false,
   /* Sequential project queue. Each item carries its OWN config; items run one
      after another (never concurrently). Finished runs are archived to
@@ -129,6 +137,8 @@ async function boot() {
   S.runDir = b.cwd || '';
   $('repoName').textContent = b.repo || '';
   document.title = `huu · ${b.repo || 'web'}`;
+  // /simulation is a self-contained demo surface — short-circuit the launch flow.
+  if (location.pathname.replace(/\/+$/, '') === '/simulation') { bootSimulation(b); return; }
   if (b.defaults && typeof b.defaults.concurrency === 'number') { S.manualN = b.defaults.concurrency; }
   if (b.defaults && b.defaults.autoScale === false) { S.mode = 'manual'; }
   S.provider = b.lockedProvider || pickDefaultProvider(b.providers);
@@ -1055,8 +1065,111 @@ async function loadFolder(path) {
 function showView(which) {
   $('viewLaunch').hidden = which !== 'launch';
   $('viewRun').hidden = which !== 'run';
+  $('viewSim').hidden = which !== 'sim';
 }
-$('backToLaunch').addEventListener('click', () => { showView('launch'); renderGallery(); });
+$('backToLaunch').addEventListener('click', () => {
+  if (S.sim) { showView('sim'); return; }
+  showView('launch'); renderGallery();
+});
+
+/* ---------------- Simulation mode (/simulation) ----------------
+   A fully synthetic run: no branches, no API key, no LLM. The kanban, logs and
+   agents are fabricated server-side by the SimulationEngine and streamed over
+   the SAME SSE channel as a real run, so the run view renders unchanged. */
+function bootSimulation(b) {
+  S.sim = true;
+  document.title = 'huu · simulation';
+  $('backToLaunch').textContent = '← New simulation';
+  $('simFiles').value = S.simFiles; $('simFilesOut').textContent = S.simFiles;
+  $('simAgents').value = S.simAgents; $('simAgentsOut').textContent = S.simAgents;
+  setPauseLabel();
+  renderSimModels();
+  fetchSimSuggestions();
+  ingestRun(b.run);
+  if (!b.run || b.run.phase === 'idle') showView('sim');
+  connectSse();
+}
+
+function setPauseLabel() { const el = $('pauseBtn'); if (el) el.textContent = S.simPaused ? 'Resume' : 'Pause'; }
+
+function addSimModel(id) {
+  id = (id || '').trim();
+  if (!id) return;
+  if (!S.simModels.includes(id)) S.simModels.push(id);
+  $('simModelInput').value = '';
+  renderSimModels();
+}
+function removeSimModel(id) { S.simModels = S.simModels.filter((x) => x !== id); renderSimModels(); }
+
+function renderSimModels() {
+  const chips = $('simModelChips'); if (!chips) return;
+  chips.innerHTML = '';
+  for (const id of S.simModels) {
+    const el = document.createElement('span'); el.className = 'sim-chip';
+    el.innerHTML = `<span>${esc(id)}</span><button type="button" aria-label="remove">×</button>`;
+    el.querySelector('button').addEventListener('click', () => removeSimModel(id));
+    chips.appendChild(el);
+  }
+  const sug = $('simModelSuggest'); if (!sug) return;
+  sug.innerHTML = '';
+  for (const m of (S.simSuggest || [])) {
+    if (S.simModels.includes(m.id)) continue;
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'sim-sug'; btn.title = m.id;
+    btn.textContent = m.label || m.id;
+    btn.addEventListener('click', () => addSimModel(m.id));
+    sug.appendChild(btn);
+    if (sug.children.length >= 8) break;
+  }
+}
+async function fetchSimSuggestions() {
+  try {
+    const r = await api('/api/models?provider=openrouter');
+    S.simSuggest = (r.models || []).slice(0, 20);
+    renderSimModels();
+  } catch { /* offline / no catalog — the free-text input still works */ }
+}
+
+async function startSimulation(allowRetry = true) {
+  const cfg = { simulate: true, modelIds: S.simModels.slice(), fileCount: S.simFiles, concurrency: S.simAgents };
+  S.lastSim = cfg;
+  S.simPaused = false; setPauseLabel();
+  try { const r = await api('/api/run', { method: 'POST', body: JSON.stringify(cfg) }); ingestRun(r.run); }
+  catch (e) {
+    if (allowRetry && /in progress|409/i.test(e.message)) { setTimeout(() => startSimulation(false), 400); return; }
+    toast(e.message, true);
+  }
+}
+function regenerate() { showView('run'); startSimulation(); }
+
+async function togglePause() {
+  S.simPaused = !S.simPaused; setPauseLabel();
+  try { await api('/api/run/pause', { method: 'POST', body: JSON.stringify({ paused: S.simPaused }) }); }
+  catch (e) { toast(e.message, true); }
+}
+
+function updateSimChrome(run) {
+  const active = run.phase === 'running';
+  const ended = run.phase === 'done' || run.phase === 'error';
+  $('pauseBtn').hidden = !active;
+  $('regenBtn').hidden = !ended;
+  if (!active && S.simPaused) { S.simPaused = false; setPauseLabel(); }
+}
+
+// Controls live in the markup unconditionally; wiring them is harmless on the
+// launch page (the elements just stay hidden there).
+(function setupSimControls() {
+  const form = $('simForm'); if (!form) return;
+  form.addEventListener('submit', (e) => { e.preventDefault(); showView('run'); startSimulation(); });
+  $('simModelAdd').addEventListener('click', () => addSimModel($('simModelInput').value));
+  $('simModelInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addSimModel(e.target.value); }
+  });
+  $('simFiles').addEventListener('input', (e) => { S.simFiles = +e.target.value; $('simFilesOut').textContent = S.simFiles; });
+  $('simAgents').addEventListener('input', (e) => { S.simAgents = +e.target.value; $('simAgentsOut').textContent = S.simAgents; });
+  $('pauseBtn').addEventListener('click', togglePause);
+  $('regenBtn').addEventListener('click', regenerate);
+})();
 
 /* ---------------- SSE ---------------- */
 let es = null;
@@ -1136,10 +1249,14 @@ function ingestRun(run) {
       : `<b>Done.</b> Pipeline “${esc(run.pipelineName)}” finished.`;
   } else { $('runSummary').textContent = ''; }
 
-  // Drive the sequential queue: archive + advance when a project settles, and
-  // keep the run-view chrome (stop-queue button, progress strip) in sync.
-  onRunFrame(run);
-  updateQueueChrome();
+  // /simulation drives its own chrome (pause / run-again); the launch flow
+  // drives the sequential queue (archive + advance + stop-queue strip).
+  if (S.sim) {
+    updateSimChrome(run);
+  } else {
+    onRunFrame(run);
+    updateQueueChrome();
+  }
 }
 
 function setStatus(phase) {

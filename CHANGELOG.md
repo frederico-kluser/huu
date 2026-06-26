@@ -9,6 +9,21 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Added
 
+- **Simulation mode (`/simulation`) — a synthetic, no-cost demo run.** A new
+  browser route renders a FULL huu run — kanban cards flowing TODO → DOING →
+  DONE, live per-agent logs, the agent-output firehose, token/cost counters —
+  with **no git branches, no API key and no LLM call**. A new `SimulationEngine`
+  (`src/orchestrator/simulation/`) fabricates byte-identical `OrchestratorState`
+  snapshots + `agent-stream` frames and is driven through the SAME
+  `WebRunManager` channel as a real run (new `startSimulation()` + `setPaused()`;
+  the subscribe/start/cleanup wiring is now shared via a `RunDriver` seam, so the
+  real-run path is unchanged). The setup screen picks **models, number of files
+  and simultaneous agents**; each run randomly draws the full scenario mix —
+  streaming, memory-guard requeues (`↻`), retries, permanent errors, stage
+  merges and the judge **rework → approved** loop. Controls: **play/pause**
+  mid-run and **Run again** on completion. New endpoints: `GET /simulation`
+  (SPA shell), `POST /api/run {simulate:true}`, `POST /api/run/pause`. Intended
+  for demos / advertising.
 - **Web model picker lists the FULL OpenRouter catalog and accepts any model
   id.** The web UI's Model field is a searchable combobox — type to filter,
   instead of a two-item dropdown. `GET /api/models` downloads the **entire**
