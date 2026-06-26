@@ -26,11 +26,18 @@ export const stubAgentFactory: AgentFactory = async (
       await lifecycle.dispose();
     },
     async prompt(message: string): Promise<void> {
+      const target = task.files.length === 0 ? 'whole project' : task.files[0];
       onEvent({
         type: 'log',
-        message: `stub agent #${task.agentId} starting on ${task.files.length === 0 ? 'whole project' : task.files[0]}`,
+        message: `stub agent #${task.agentId} starting on ${target}`,
       });
       onEvent({ type: 'state_change', state: 'streaming' });
+
+      // Simulate streamed output the way a real backend does: deltas that do
+      // NOT line up with line boundaries, plus a thinking channel. Exercises
+      // the orchestrator's line coalescing and the web firehose end-to-end.
+      onEvent({ type: 'stream', channel: 'thinking', delta: 'Considering how to handle ' });
+      onEvent({ type: 'stream', channel: 'thinking', delta: `${target}...\n` });
 
       const totalDelay = 2000 + Math.floor(Math.random() * 3000);
       const steps = 3;
@@ -39,6 +46,8 @@ export const stubAgentFactory: AgentFactory = async (
       for (let i = 0; i < steps; i++) {
         await new Promise((resolve) => setTimeout(resolve, stepDelay));
         if (lifecycle.isDisposed()) return;
+        onEvent({ type: 'stream', channel: 'assistant', delta: `step ${i + 1}: ` });
+        onEvent({ type: 'stream', channel: 'assistant', delta: 'simulating LLM call...\n' });
         onEvent({
           type: 'log',
           message: `stub step ${i + 1}/${steps}: simulating LLM call...`,

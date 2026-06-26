@@ -420,9 +420,30 @@ function connectSse() {
   if (es) es.close();
   es = new EventSource(withTok('/events'));
   es.onmessage = (ev) => {
-    try { const frame = JSON.parse(ev.data); if (frame && frame.type === 'run') ingestRun(frame.run); } catch {}
+    let frame;
+    try { frame = JSON.parse(ev.data); } catch { return; }
+    if (!frame) return;
+    if (frame.type === 'run') ingestRun(frame.run);
+    else if (frame.type === 'agent-stream') logAgentStream(frame);
   };
   es.onerror = () => { /* EventSource auto-reconnects; nothing to do */ };
+}
+
+/* ---------------- Agent output → browser console ----------------
+   Every line the pi coding agent streams back (its reply text AND its thinking
+   trace) is mirrored here, verbatim and in real time, so you can watch the raw
+   agent output in DevTools. Silence it from the console with
+   `window.HUU_LOG_STREAM = false`. The on-page run log shows the reply text;
+   the thinking trace is console-only (it's verbose). */
+const STREAM_STYLE = {
+  assistant: 'color:#06b6d4;font-weight:600',  // cyan — visible model reply
+  thinking: 'color:#a78bfa',                   // muted violet — reasoning
+};
+console.info('huu: streaming live pi agent output here. Set window.HUU_LOG_STREAM=false to silence.');
+function logAgentStream(f) {
+  if (window.HUU_LOG_STREAM === false) return;
+  const tag = `#${f.agentId}${f.channel === 'thinking' ? ' 🧠' : ''}`;
+  console.log(`%c${tag}%c ${f.text}`, STREAM_STYLE[f.channel] || '', 'color:inherit');
 }
 
 /* ---------------- Ingest run snapshot ---------------- */

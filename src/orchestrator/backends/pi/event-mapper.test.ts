@@ -60,6 +60,45 @@ describe('translatePiEvent', () => {
     ]);
   });
 
+  it('message_update text_delta → stream(assistant)', () => {
+    const { events, emit } = collect();
+    translatePiEvent(
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'text_delta', delta: 'Hello ', contentIndex: 0 },
+      },
+      emit,
+    );
+    expect(events).toEqual([{ type: 'stream', channel: 'assistant', delta: 'Hello ' }]);
+  });
+
+  it('message_update thinking_delta → stream(thinking)', () => {
+    const { events, emit } = collect();
+    translatePiEvent(
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'thinking_delta', delta: 'let me reason', contentIndex: 0 },
+      },
+      emit,
+    );
+    expect(events).toEqual([{ type: 'stream', channel: 'thinking', delta: 'let me reason' }]);
+  });
+
+  it('message_update with a non-text sub-event (start/toolcall/end) emits nothing', () => {
+    const { events, emit } = collect();
+    translatePiEvent({ type: 'message_update', assistantMessageEvent: { type: 'text_start', contentIndex: 0 } }, emit);
+    translatePiEvent({ type: 'message_update', assistantMessageEvent: { type: 'toolcall_delta', delta: '{"a":1}', contentIndex: 0 } }, emit);
+    translatePiEvent({ type: 'message_update', assistantMessageEvent: { type: 'text_end', content: 'x', contentIndex: 0 } }, emit);
+    expect(events).toEqual([]);
+  });
+
+  it('message_update with an empty delta or no assistantMessageEvent emits nothing', () => {
+    const { events, emit } = collect();
+    translatePiEvent({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: '' } }, emit);
+    translatePiEvent({ type: 'message_update' }, emit);
+    expect(events).toEqual([]);
+  });
+
   it('message_end with usage → usage AgentEvent + tokens log', () => {
     const { events, emit } = collect();
     translatePiEvent(

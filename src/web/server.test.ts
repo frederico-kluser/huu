@@ -125,6 +125,67 @@ describe('web server', () => {
     await reader.cancel();
   });
 
+  it('streams live agent output as agent-stream SSE frames AND into the run log', async () => {
+    // Open the firehose BEFORE the run so we catch frames from the first delta.
+    const sse = await fetch(base + '/events');
+    const reader = sse.body!.getReader();
+    const decoder = new TextDecoder();
+    let pending = '';
+    const readFrames = async (): Promise<Record<string, unknown>[]> => {
+      const { value, done } = await reader.read();
+      if (done) return [];
+      pending += decoder.decode(value, { stream: true });
+      const out: Record<string, unknown>[] = [];
+      let sep: number;
+      while ((sep = pending.indexOf('\n\n')) !== -1) {
+        const block = pending.slice(0, sep);
+        pending = pending.slice(sep + 2);
+        for (const line of block.split('\n')) {
+          if (!line.startsWith('data:')) continue;
+          try {
+            out.push(JSON.parse(line.slice(5).trim()));
+          } catch {
+            /* keep-alive comment or partial — ignore */
+          }
+        }
+      }
+      return out;
+    };
+
+    await fetch(base + '/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pipelineName: 'web-test-pipe', backend: 'stub', modelId: 'stub' }),
+    });
+
+    // Read frames until the stub's first assistant line surfaces on the firehose.
+    const deadline = Date.now() + 25_000;
+    let assistant: Record<string, unknown> | undefined;
+    const channels = new Set<string>();
+    while (!assistant && Date.now() < deadline) {
+      const frames = await readFrames();
+      for (const f of frames) {
+        if (f.type !== 'agent-stream') continue;
+        channels.add(String(f.channel));
+        if (f.channel === 'assistant') assistant = f;
+      }
+    }
+    await reader.cancel();
+
+    expect(assistant, 'never received an assistant agent-stream frame').toBeDefined();
+    expect(String(assistant!.text)).toMatch(/simulating LLM call/);
+    expect(typeof assistant!.agentId).toBe('number');
+    // The thinking channel is mirrored to the firehose too (console-only).
+    expect(channels.has('thinking')).toBe(true);
+
+    // Same assistant line must also have advanced the visible run log (request #1):
+    // not just the console firehose (request #2).
+    const logs = manager.getSnapshot().state?.logs ?? [];
+    expect(logs.some((l) => /simulating LLM call/.test(l.message))).toBe(true);
+
+    manager.abort();
+  }, 30_000);
+
   it('drives a full stub run from POST /api/run to done', async () => {
     const res = await fetch(base + '/api/run', {
       method: 'POST',

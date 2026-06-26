@@ -10,6 +10,7 @@ import { extractFileFromArgs, isWriteTool } from '../_shared/write-tools.js';
  *   { type: 'agent_start' }
  *   { type: 'tool_execution_start', toolName, args }
  *   { type: 'tool_execution_end',   toolName, isError? }
+ *   { type: 'message_update',       assistantMessageEvent: { type, delta } }
  *   { type: 'message_end',          message: AssistantMessage }
  *   { type: 'agent_end' }
  *   { type: 'auto_compaction_start', reason? }
@@ -49,6 +50,26 @@ export function translatePiEvent(
         onEvent({ type: 'log', level: 'error', message: `tool error: ${toolName}` });
       } else {
         onEvent({ type: 'log', message: `tool done: ${toolName}` });
+      }
+      break;
+    }
+
+    case 'message_update': {
+      // The live stream: pi fires one `message_update` per provider SSE chunk,
+      // each carrying an `assistantMessageEvent` delta. Surfacing these is what
+      // makes the run log advance token-by-token instead of freezing between
+      // tool calls. We forward only the incremental text/thinking deltas — the
+      // cumulative `partial` message and the structural start/end/toolcall
+      // sub-events are noise for a log view.
+      const sub = (ev as { assistantMessageEvent?: { type?: string; delta?: unknown } })
+        .assistantMessageEvent;
+      if (!sub) break;
+      const delta = typeof sub.delta === 'string' ? sub.delta : '';
+      if (!delta) break;
+      if (sub.type === 'text_delta') {
+        onEvent({ type: 'stream', channel: 'assistant', delta });
+      } else if (sub.type === 'thinking_delta') {
+        onEvent({ type: 'stream', channel: 'thinking', delta });
       }
       break;
     }
