@@ -9,15 +9,24 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Added
 
-- **Web model picker lists every OpenRouter tool-calling + reasoning model.**
-  The web UI's Model field is now a searchable combobox — type to filter the
-  full catalog — instead of a two-item dropdown. Once you validate your
-  OpenRouter key, `GET /api/models` fetches the live catalog and keeps only the
-  models that support BOTH tool calling and reasoning (~170 today), sent via the
-  browser-only `x-huu-key` header; with no key it falls back to the static
-  recommended list. New `filterToolReasoningModels` / `listToolReasoningModels`
-  in `src/lib/openrouter.ts` and `listModelsForBackend` in `src/web/api-data.ts`
-  (`ModelInfo` gains an optional `contextLength`).
+- **Web model picker lists the FULL OpenRouter catalog and accepts any model
+  id.** The web UI's Model field is a searchable combobox — type to filter,
+  instead of a two-item dropdown. Once you validate your OpenRouter key,
+  `GET /api/models` downloads the **entire** live catalog (every model — 339
+  today, up from the ~170 that passed the old tool+reasoning filter), sent via
+  the browser-only `x-huu-key` header; with no key it falls back to the static
+  recommended list. Models are no longer hidden by capability: each row is
+  **badged** (`reasoning`, and `no tools` as a soft warning) so the choice is
+  informed without dropping models like `deepseek/deepseek-chat` or one
+  OpenRouter shipped yesterday. You can also **type any model id** that isn't in
+  the list — the combobox offers a `Use "<id>"` row sent to OpenRouter verbatim,
+  so brand-new or unlisted models (e.g. `deepseek/deepseek-v4-pro`,
+  `deepseek/deepseek-v4-flash`) just work. New `projectAllModels` /
+  `listAllModels` in `src/lib/openrouter.ts` (`OpenRouterModelOption` gains
+  `supportsTools`/`supportsReasoning`) and `listModelsForBackend` in
+  `src/web/api-data.ts` (`ModelInfo` gains `tools` + `contextLength`).
+  `filterToolReasoningModels` / `listToolReasoningModels` remain as a tested
+  predicate for callers that want only the dual-capable subset.
 - **Sequential project queue + run history (web).** The web launch screen now
   builds a **queue of projects**, each with its OWN config (pipeline,
   directory, provider, model, concurrency), and runs them **sequentially** —
@@ -127,6 +136,10 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Fixed
 
+- **Editing a queued project no longer crashes (web).** `editQueueItem` read a
+  `#modelSelect` `<select>` that the combobox migration had removed, throwing on
+  `null.value`; it now restores the saved model id (catalog **or** custom)
+  through the combobox.
 - **The run log now advances in real time instead of only when the run
   stops.** The pi event translator was dropping every `message_update`
   streaming event, so between tool calls — i.e. for most of a generation — the

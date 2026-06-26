@@ -372,9 +372,11 @@ select, input[type='password'], input[type='text'] {
 select:focus, input:focus { border-color: var(--accent); outline: none; }
 .model-hint { font-size: 12px; color: var(--text-3); min-height: 1em; }
 .model-hint .thinking { color: var(--accent-2); font-weight: 600; }
+.model-hint .custom { color: var(--accent); font-weight: 600; }
 
 /* searchable model combobox (replaces the plain <select>) — type to filter the
-   full OpenRouter catalog (tool-calling + reasoning) loaded with your key. */
+   FULL OpenRouter catalog loaded with your key, or type any model id to use it
+   verbatim (the free-text "custom id" row). */
 .combo { position: relative; }
 .model-cap { font-size: 11.5px; color: var(--text-3); min-height: 1em; }
 .model-cap .live { color: var(--accent); font-weight: 600; }
@@ -402,6 +404,12 @@ select:focus, input:focus { border-color: var(--accent); outline: none; }
 .combo__badge { font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase;
   color: var(--accent-2); background: color-mix(in srgb, var(--accent-2) 15%, transparent);
   padding: 1px 6px; border-radius: 6px; }
+/* "no tools" — a soft warning, not a block: huu's agents need tool calling, but
+   the model stays selectable (the user underwrites the choice). */
+.combo__badge--warn { color: #c98a3e; background: color-mix(in srgb, #e8973a 16%, transparent); }
+/* free-text "custom id" row — the typed-any-model escape hatch. */
+.combo__badge--custom { color: var(--accent); background: var(--accent-soft); }
+.combo__opt--custom .combo__opt-name { font-style: italic; }
 .combo__empty { padding: 10px; color: var(--text-3); font-size: 13px; text-align: center; }
 
 /* key area (one row per credential; "change" affordance when already set) */

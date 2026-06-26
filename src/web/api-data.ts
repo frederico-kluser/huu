@@ -22,7 +22,7 @@ import {
 } from '../lib/api-key.js';
 import {
   checkOpenRouterReachable,
-  listToolReasoningModels,
+  listAllModels,
 } from '../lib/openrouter.js';
 import { checkAzureReachable } from '../lib/azure.js';
 import { PROVIDERS, type ProviderInfo } from '../lib/providers.js';
@@ -67,6 +67,12 @@ export interface ModelInfo {
   bestFor?: string[];
   tier?: string;
   thinking: boolean;
+  /**
+   * Whether the model advertises tool calling (live OpenRouter catalog only).
+   * huu's agents require it; surfaced so the picker can warn when it's absent
+   * rather than silently hiding the model. Undefined for the static catalog.
+   */
+  tools?: boolean;
   /** Context window in tokens, when known (live OpenRouter catalog only). */
   contextLength?: number;
 }
@@ -202,11 +208,13 @@ export function listModelsInfo(
 /**
  * Models offered for a backend in the web UI.
  *
- * For OpenRouter (`pi`) WITH a usable key this is the LIVE catalog filtered to
- * models that support BOTH tool calling and reasoning — the capabilities huu's
- * agents need. On any failure (no key, network/timeout, empty result) it falls
- * back to the static recommended catalog, so the picker is never empty. Azure
- * and stub always use the static catalog.
+ * For OpenRouter (`pi`) WITH a usable key this is the FULL LIVE catalog — every
+ * model, annotated with `tools`/`thinking` so the picker can badge capability
+ * instead of hiding models. (It used to hard-filter to tool+reasoning models,
+ * which silently dropped brand-new and non-reasoning models the user wanted.)
+ * On any failure (no key, network/timeout, empty result) it falls back to the
+ * static recommended catalog, so the picker is never empty. Azure and stub
+ * always use the static catalog.
  *
  * `openrouterKey` arrives via the browser-only flow (the `x-huu-key` header the
  * client sends once the user has validated it); used in memory only, never
@@ -220,7 +228,7 @@ export async function listModelsForBackend(
   const key = openrouterKey.trim();
   if (backend === 'pi' && key) {
     try {
-      const live = await listToolReasoningModels(key);
+      const live = await listAllModels(key);
       if (live.length > 0) {
         return {
           source: 'openrouter-live',
@@ -230,8 +238,8 @@ export async function listModelsForBackend(
             inputPrice: m.inputPricePerM,
             outputPrice: m.outputPricePerM,
             contextLength: m.contextLength,
-            // Every model here is reasoning-capable by the filter above.
-            thinking: true,
+            thinking: Boolean(m.supportsReasoning),
+            tools: Boolean(m.supportsTools),
           })),
         };
       }

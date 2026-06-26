@@ -33,18 +33,28 @@ describe('listModelsForBackend', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('returns the LIVE tool+reasoning catalog for pi when a key is provided', async () => {
+  it('returns the FULL live catalog for pi when a key is provided, capability-annotated', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => catalog([
-      { id: 'p/keep', name: 'Keep', context_length: 4, pricing: { prompt: '0.000001', completion: '0.000002' }, supported_parameters: ['tools', 'reasoning'] },
-      { id: 'p/skip', name: 'Skip', context_length: 4, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['reasoning'] },
+      { id: 'p/dual', name: 'Dual', context_length: 4, pricing: { prompt: '0.000001', completion: '0.000002' }, supported_parameters: ['tools', 'reasoning'] },
+      { id: 'p/reasononly', name: 'ReasonOnly', context_length: 4, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['reasoning'] },
+      { id: 'p/toolsonly', name: 'ToolsOnly', context_length: 4, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'] },
     ])));
     const r = await listModelsForBackend(process.cwd(), 'pi', 'sk-or-x');
     expect(r.source).toBe('openrouter-live');
-    expect(r.models.map((m) => m.id)).toEqual(['p/keep']);
-    expect(r.models[0].thinking).toBe(true);
-    expect(r.models[0].label).toBe('Keep');
-    expect(r.models[0].inputPrice).toBeCloseTo(1, 6);
-    expect(r.models[0].contextLength).toBe(4);
+    // No model is hidden anymore — the user can pick (or type) any of them.
+    expect(r.models.map((m) => m.id)).toEqual(['p/dual', 'p/reasononly', 'p/toolsonly']);
+    const byId = Object.fromEntries(r.models.map((m) => [m.id, m]));
+    expect(byId['p/dual'].thinking).toBe(true);
+    expect(byId['p/dual'].tools).toBe(true);
+    expect(byId['p/dual'].label).toBe('Dual');
+    expect(byId['p/dual'].inputPrice).toBeCloseTo(1, 6);
+    expect(byId['p/dual'].contextLength).toBe(4);
+    // reasoning-only: thinking on, tools off (the picker badges "no tools").
+    expect(byId['p/reasononly'].thinking).toBe(true);
+    expect(byId['p/reasononly'].tools).toBe(false);
+    // tools-only (e.g. deepseek-chat): a perfectly valid agent model, no reasoning.
+    expect(byId['p/toolsonly'].thinking).toBe(false);
+    expect(byId['p/toolsonly'].tools).toBe(true);
   });
 
   it('falls back to the recommended catalog when the live fetch fails', async () => {

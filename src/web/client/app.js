@@ -213,6 +213,9 @@ function renderProviderSeg() {
     btn.addEventListener('click', async () => {
       S.provider = p.id;
       S.backend = providerBackend(p.id);
+      // A typed/custom id is provider-specific — re-seed from the new provider's
+      // catalog instead of carrying it across.
+      S.modelId = '';
       renderProviderSeg();
       await refreshModelsAndKeys();
     });
@@ -233,9 +236,11 @@ async function refreshModelsAndKeys() {
     S.models = m.models || [];
     S.modelSource = m.source || 'recommended';
   } catch { S.models = []; S.modelSource = 'recommended'; }
-  // Keep the current pick if it survived the provider/key change; else default.
-  if (!S.models.length) S.modelId = '';
-  else if (!S.models.some((x) => x.id === S.modelId)) S.modelId = S.models[0].id;
+  // Keep the current pick across a provider/key refresh — INCLUDING a custom id
+  // the user typed that isn't in the catalog (that's the point of free-text).
+  // Only seed a default when there's no pick at all. The provider switch handler
+  // clears S.modelId so a typed id never leaks across providers.
+  if (!S.modelId && S.models.length) S.modelId = S.models[0].id;
   syncModelInput();
   updateModelCap();
   if (combo.open) renderModelOptions();
@@ -256,7 +261,13 @@ async function refreshModelsAndKeys() {
 function updateModelHint() {
   const md = S.models.find((x) => x.id === S.modelId);
   const h = $('modelHint');
-  if (!md) { h.innerHTML = ''; return; }
+  if (!md) {
+    // Custom / free-typed id (or no pick yet): no catalog metadata to show.
+    h.innerHTML = S.modelId
+      ? '<span class="custom">custom model id</span> · sent to OpenRouter as-is'
+      : '';
+    return;
+  }
   const price = md.inputPrice != null ? `$${md.inputPrice}/M in · $${md.outputPrice ?? '?'}/M out` : '';
   const head = [md.thinking ? '<span class="thinking">thinking</span>' : '', esc(md.description || '')]
     .filter(Boolean).join(' · ');
@@ -368,8 +379,10 @@ function fmtCtx(n) {
 function syncModelInput() {
   const input = $('modelInput');
   const md = modelById(S.modelId);
-  input.value = md ? md.label : '';
-  input.placeholder = S.models.length ? 'Search models…' : 'default model';
+  // A custom id the user typed isn't in the catalog — show the id verbatim so
+  // they can see exactly what will run, instead of a blank field.
+  input.value = md ? md.label : (S.modelId || '');
+  input.placeholder = S.models.length ? 'Search or type any model id…' : 'Type a model id…';
 }
 
 function updateModelCap() {
@@ -378,25 +391,52 @@ function updateModelCap() {
   const n = S.models.length;
   if (S.provider !== 'openrouter') { cap.textContent = n ? `${n} model${n === 1 ? '' : 's'} available` : ''; return; }
   if (S.modelSource === 'openrouter-live') {
-    cap.innerHTML = `<span class="live">${n} models</span> · tool calling + reasoning · via your OpenRouter key`;
+    cap.innerHTML = `<span class="live">${n} models</span> · full OpenRouter catalog · or type any model id`;
   } else {
-    cap.textContent = 'Showing recommended models — validate your OpenRouter key to load every tool-calling + reasoning model';
+    cap.textContent = 'Showing recommended models — validate your OpenRouter key to load the full catalog, or just type any model id';
   }
+}
+
+/**
+ * A typed value that isn't already an exact catalog id → offer it verbatim so
+ * the user can run ANY OpenRouter model, even one not in the downloaded list
+ * (a brand-new model, or one the catalog filter never had). This is the
+ * free-text escape hatch: pick it and the raw id is sent to OpenRouter as-is.
+ */
+function customCandidate() {
+  const q = combo.query.trim();
+  if (!q) return null;
+  if (S.models.some((m) => m.id === q)) return null; // already a real option
+  return { id: q, label: q, custom: true };
 }
 
 function comboMatches() {
   const q = combo.query.trim().toLowerCase();
-  if (!q) return S.models.slice();
-  return S.models.filter((m) =>
-    m.id.toLowerCase().includes(q) || (m.label || '').toLowerCase().includes(q));
+  const base = !q
+    ? S.models.slice()
+    : S.models.filter((m) =>
+        m.id.toLowerCase().includes(q) || (m.label || '').toLowerCase().includes(q));
+  const custom = customCandidate();
+  return custom ? base.concat([custom]) : base;
 }
 
 function modelOptionHtml(m, i, active, sel) {
+  if (m.custom) {
+    return `<li class="combo__opt combo__opt--custom${active ? ' active' : ''}" role="option" id="opt-${i}" data-id="${esc(m.id)}" aria-selected="false">` +
+      `<span class="combo__opt-name">Use “${esc(m.id)}”</span>` +
+      `<span class="combo__badge combo__badge--custom">custom id</span>` +
+      `<span class="combo__opt-id">sent to OpenRouter as-is</span></li>`;
+  }
   const price = m.inputPrice != null ? `$${m.inputPrice}/M·$${m.outputPrice ?? '?'}/M` : '';
   const meta = [m.tier, fmtCtx(m.contextLength), price].filter(Boolean).join(' · ');
+  const badges =
+    (m.thinking ? '<span class="combo__badge">reasoning</span>' : '') +
+    // huu's agents need tool calling — flag models that lack it so the choice
+    // is informed, without hiding them.
+    (m.tools === false ? '<span class="combo__badge combo__badge--warn">no tools</span>' : '');
   return `<li class="combo__opt${active ? ' active' : ''}${sel ? ' sel' : ''}" role="option" id="opt-${i}" data-id="${esc(m.id)}" aria-selected="${sel ? 'true' : 'false'}">` +
     `<span class="combo__opt-name">${esc(m.label || m.id)}</span>` +
-    (m.thinking ? '<span class="combo__badge">reasoning</span>' : '') +
+    badges +
     (meta ? `<span class="combo__opt-meta">${esc(meta)}</span>` : '') +
     `<span class="combo__opt-id">${esc(m.id)}</span></li>`;
 }
@@ -406,8 +446,14 @@ function renderModelOptions() {
   const matches = comboMatches();
   combo.matches = matches;
   if (combo.active >= matches.length) combo.active = matches.length - 1;
-  if (!S.models.length) { list.innerHTML = '<li class="combo__empty">No models available</li>'; return; }
-  if (!matches.length) { list.innerHTML = '<li class="combo__empty">No matches</li>'; return; }
+  // With the free-text candidate, a non-empty query always yields at least one
+  // row; an empty list means "no catalog and nothing typed yet".
+  if (!matches.length) {
+    list.innerHTML = S.models.length
+      ? '<li class="combo__empty">No matches — type a full model id to use it as-is</li>'
+      : '<li class="combo__empty">Type a model id, e.g. deepseek/deepseek-v4-pro</li>';
+    return;
+  }
   list.innerHTML = matches.map((m, i) => modelOptionHtml(m, i, i === combo.active, m.id === S.modelId)).join('');
   const input = $('modelInput');
   if (combo.active >= 0) input.setAttribute('aria-activedescendant', 'opt-' + combo.active);
@@ -426,7 +472,9 @@ function closeCombo() {
   $('modelList').hidden = true;
 }
 function selectModel(id) {
-  if (id && !modelById(id)) return;
+  // Accept ANY non-empty id — catalog model OR a free-typed custom id. The
+  // server passes it straight to OpenRouter, so the user can run any model.
+  if (!id) return;
   S.modelId = id;
   combo.query = '';
   syncModelInput();
@@ -640,9 +688,10 @@ async function editQueueItem(id) {
   S.provider = it.provider;
   S.backend = providerBackend(it.provider);
   await selectPipeline(pipe);            // renders provider seg + models + keys for S.provider
-  const sel = $('modelSelect');
-  sel.value = it.modelId;
-  S.modelId = sel.value || S.modelId;
+  // Restore the saved model id (catalog OR custom) into the combobox. The old
+  // code read a #modelSelect <select> that no longer exists — it would crash.
+  S.modelId = it.modelId || S.modelId;
+  syncModelInput();
   updateModelHint();
   S.mode = it.mode || 'auto';
   S.manualN = it.concurrency || S.manualN;

@@ -91,6 +91,10 @@ export interface OpenRouterModelOption {
   /** USD per 1M completion tokens. */
   outputPricePerM?: number;
   contextLength?: number;
+  /** Whether the model advertises OpenAI-style tool calling (`tools`). */
+  supportsTools?: boolean;
+  /** Whether the model advertises a reasoning/thinking parameter (`reasoning`). */
+  supportsReasoning?: boolean;
 }
 
 /** OpenRouter quotes prices per token as strings ("0.0000006"); show $/1M. */
@@ -102,29 +106,56 @@ function pricePerMillion(perToken?: string): number | undefined {
   return Math.round(n * 1_000_000 * 1e4) / 1e4;
 }
 
+/** Project a raw OpenRouter model to the UI-facing {@link OpenRouterModelOption}. */
+function toModelOption(m: OpenRouterModel): OpenRouterModelOption {
+  const params = Array.isArray(m.supported_parameters)
+    ? m.supported_parameters
+    : [];
+  return {
+    id: m.id,
+    name: m.name,
+    inputPricePerM: pricePerMillion(m.pricing?.prompt),
+    outputPricePerM: pricePerMillion(m.pricing?.completion),
+    contextLength: m.context_length,
+    supportsTools: params.includes('tools'),
+    supportsReasoning: params.includes('reasoning'),
+  };
+}
+
 /**
  * Keep only the models that support BOTH tool calling (`tools`) and reasoning
- * (`reasoning`) — the two capabilities huu's agents require — and project them
- * to {@link OpenRouterModelOption}, sorted by id. Pure: takes an already
- * fetched capability map so it is trivially testable.
+ * (`reasoning`) and project them to {@link OpenRouterModelOption}, sorted by id.
+ * Pure: takes an already fetched capability map so it is trivially testable.
+ *
+ * NOTE: the picker no longer hard-filters on this — see {@link projectAllModels}.
+ * Kept as a reusable, tested predicate-projection for callers that genuinely
+ * want only the dual-capable subset.
  */
 export function filterToolReasoningModels(
   capabilities: Map<string, OpenRouterModel>,
 ): OpenRouterModelOption[] {
   const out: OpenRouterModelOption[] = [];
   for (const m of capabilities.values()) {
-    const params = Array.isArray(m.supported_parameters)
-      ? m.supported_parameters
-      : [];
-    if (!params.includes('tools') || !params.includes('reasoning')) continue;
-    out.push({
-      id: m.id,
-      name: m.name,
-      inputPricePerM: pricePerMillion(m.pricing?.prompt),
-      outputPricePerM: pricePerMillion(m.pricing?.completion),
-      contextLength: m.context_length,
-    });
+    const o = toModelOption(m);
+    if (!o.supportsTools || !o.supportsReasoning) continue;
+    out.push(o);
   }
+  out.sort((a, b) => a.id.localeCompare(b.id));
+  return out;
+}
+
+/**
+ * Project the ENTIRE OpenRouter catalog to {@link OpenRouterModelOption}, sorted
+ * by id, WITHOUT excluding any model by capability. Each option carries
+ * `supportsTools`/`supportsReasoning` so the picker can badge capability instead
+ * of hiding models: huu's agents need tool calling, but the user underwrites the
+ * method and may legitimately want any id — a brand-new model OpenRouter just
+ * shipped, a cheaper non-reasoning workhorse, or one typed by hand. Pure.
+ */
+export function projectAllModels(
+  capabilities: Map<string, OpenRouterModel>,
+): OpenRouterModelOption[] {
+  const out = Array.from(capabilities.values()).map(toModelOption);
   out.sort((a, b) => a.id.localeCompare(b.id));
   return out;
 }
@@ -138,6 +169,18 @@ export async function listToolReasoningModels(
   apiKey: string,
 ): Promise<OpenRouterModelOption[]> {
   return filterToolReasoningModels(await fetchModelCapabilities(apiKey));
+}
+
+/**
+ * Fetch the FULL OpenRouter catalog for `apiKey` (every model, capability-
+ * annotated). Composes the per-key-cached, 5s-timeout
+ * {@link fetchModelCapabilities} with {@link projectAllModels}. This is what the
+ * web model picker downloads so the user can pick — or type — any model.
+ */
+export async function listAllModels(
+  apiKey: string,
+): Promise<OpenRouterModelOption[]> {
+  return projectAllModels(await fetchModelCapabilities(apiKey));
 }
 
 export async function validateApiKey(apiKey: string): Promise<boolean> {

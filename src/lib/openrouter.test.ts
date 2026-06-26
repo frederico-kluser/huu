@@ -3,6 +3,8 @@ import {
   fetchModelCapabilities,
   filterToolReasoningModels,
   listToolReasoningModels,
+  projectAllModels,
+  listAllModels,
   resetCapabilitiesCache,
   type OpenRouterModel,
 } from './openrouter.js';
@@ -147,5 +149,82 @@ describe('listToolReasoningModels', () => {
     );
     const out = await listToolReasoningModels('k');
     expect(out.map((o) => o.id)).toEqual(['p/keep']);
+  });
+});
+
+describe('projectAllModels', () => {
+  const model = (id: string, params: string[]): OpenRouterModel => ({
+    id,
+    name: id.toUpperCase(),
+    context_length: 1000,
+    pricing: { prompt: '0', completion: '0' },
+    supported_parameters: params,
+  });
+
+  it('keeps EVERY model (no capability filter), sorted by id, with flags', () => {
+    const caps = new Map<string, OpenRouterModel>([
+      ['b', model('b', ['tools'])],
+      ['a', model('a', ['tools', 'reasoning'])],
+      ['c', model('c', ['reasoning'])],
+      ['d', model('d', [])],
+    ]);
+    const out = projectAllModels(caps);
+    expect(out.map((o) => o.id)).toEqual(['a', 'b', 'c', 'd']);
+    const byId = Object.fromEntries(out.map((o) => [o.id, o]));
+    expect(byId.a.supportsTools).toBe(true);
+    expect(byId.a.supportsReasoning).toBe(true);
+    expect(byId.b.supportsTools).toBe(true);
+    expect(byId.b.supportsReasoning).toBe(false);
+    expect(byId.c.supportsTools).toBe(false);
+    expect(byId.c.supportsReasoning).toBe(true);
+    expect(byId.d.supportsTools).toBe(false);
+    expect(byId.d.supportsReasoning).toBe(false);
+  });
+
+  it('treats a missing supported_parameters array as no capabilities (still kept)', () => {
+    const bad = {
+      id: 'z',
+      name: 'z',
+      context_length: 1,
+      pricing: { prompt: '0', completion: '0' },
+    } as OpenRouterModel;
+    const out = projectAllModels(new Map([['z', bad]]));
+    expect(out.map((o) => o.id)).toEqual(['z']);
+    expect(out[0].supportsTools).toBe(false);
+    expect(out[0].supportsReasoning).toBe(false);
+  });
+});
+
+describe('listAllModels', () => {
+  beforeEach(() => resetCapabilitiesCache());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetCapabilitiesCache();
+  });
+
+  it('fetches the catalog and returns ALL models, capability-annotated, sorted', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: [
+              { id: 'p/dual', name: 'Dual', context_length: 2, pricing: { prompt: '0.000001', completion: '0.000002' }, supported_parameters: ['tools', 'reasoning'] },
+              { id: 'p/toolsonly', name: 'ToolsOnly', context_length: 2, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'] },
+              { id: 'p/plain', name: 'Plain', context_length: 2, pricing: { prompt: '0', completion: '0' }, supported_parameters: [] },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    const out = await listAllModels('k');
+    // Nothing dropped — even the tools-only and no-capability models survive.
+    expect(out.map((o) => o.id)).toEqual(['p/dual', 'p/plain', 'p/toolsonly']);
+    const dual = out.find((o) => o.id === 'p/dual')!;
+    expect(dual.supportsTools).toBe(true);
+    expect(dual.supportsReasoning).toBe(true);
+    expect(dual.inputPricePerM).toBeCloseTo(1, 6);
+    const plain = out.find((o) => o.id === 'p/plain')!;
+    expect(plain.supportsTools).toBe(false);
+    expect(plain.supportsReasoning).toBe(false);
   });
 });
