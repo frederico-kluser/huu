@@ -270,13 +270,14 @@ Key invariants:
 
 The `.agents/skills/` directory contains the skill system every task in this repo routes through (source of truth, mirrored into `.claude/skills/` via per-skill symlinks). It is also the canonical reference if you are extending `huu`.
 
-Start at [`project-router`](../.agents/skills/project-router/SKILL.md); the canonical routing index is [`catalog.md`](../.agents/skills/catalog.md) — 16 skills: 1 router · 8 knowledge (architecture, orchestrator, git worktrees, LLM backends, ports, Docker, tests, docs) · 5 task (pipelines, default pipelines, TUI, commit gate, release) · 2 meta (evolution, consolidate).
+Start at [`project-router`](../.agents/skills/project-router/SKILL.md); the canonical routing index is [`catalog.md`](../.agents/skills/catalog.md) — 17 skills: 1 router · 9 knowledge (architecture, orchestrator, git worktrees, LLM backends, ports, Docker, tests, docs, agent-prompts) · 5 task (pipelines, default pipelines, TUI, commit gate, release) · 2 meta (evolution, consolidate).
 
 A human-facing overview of how the system works (routing, LEARNINGS, evolution, consolidation) lives at [`agent-skills.md`](../agent-skills.md).
 
 ## Logs and debugging
 
 - The kanban dashboard streams `LogArea` lines for every agent in real time. Use `F` to scope the log column to a single agent.
+- Each agent card shows a per-action counter label (`stream`/`tool`/`file`/`log`/`usage`/`done`/`error`, tallied from the live `AgentEvent` stream into `AgentStatus.actionCounts`) and leads its telemetry line with the most recent action (`→ <action>`, from `AgentStatus.lastAction`). Both are bumped in `handleAgentEvent` and accumulate like tokens/logs (not reset on a memory-guard requeue).
 - The run summary screen shows totals (cost, tokens, duration), per-agent outcomes, and the full list of merged branches.
 - For deeper post-mortems, open the chronological log under `.huu/`. It records every state transition, prompt, tool call, and merge result.
 - A keyboard "freeze" diagnostic trace lands in `.huu/debug-<ISO>.log` (NDJSON). The CLI sets up this logger before mounting Ink, so even crashes during initial render leave a trail.

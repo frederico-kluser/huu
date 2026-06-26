@@ -74,6 +74,17 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
   so the browser can look up its per-backend session key; the legacy
   disk-saving `POST /api/keys` stays for CLI reuse but the browser no
   longer calls it.
+- **Per-action counters and a last-action marker on the kanban cards.** Each
+  agent card now carries a compact label tallying every action it has taken —
+  e.g. `stream:8 tool:7 file:2 log:34 usage:9 done:1` — counted from the live
+  `AgentEvent` stream (`state_change` splits into `stream`/`tool`; `file`,
+  `log`, `usage`, `done` and `error` map one-to-one). The most recent action
+  leads the card's telemetry line as a colored `→ <action>`, merged with the
+  existing `log:` text. `AgentStatus` gains `actionCounts` + `lastAction`,
+  bumped once per event in `handleAgentEvent` and accumulated like tokens/logs
+  (they survive a memory-guard requeue). Rendered on the Ink TUI (`huu --cli`)
+  kanban (`src/ui/components/RunKanban.tsx`); `action-counter.test.ts` pins the
+  tallying.
 
 ### Changed
 
