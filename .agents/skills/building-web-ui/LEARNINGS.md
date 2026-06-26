@@ -1,0 +1,10 @@
+# Learnings — building-web-ui
+
+Append-only log consumed by meta-skill-evolution and meta-skill-consolidate.
+Entry format: `- [YYYY-MM-DD][source:user|inference][task:<slug>][probation] <fact>`
+States: probation (default) -> promoted (distilled into SKILL.md by meta-skill-consolidate after dual-buffer check) | superseded (kept for history, never deleted).
+Learnings are routed here when THIS skill owns the domain of the fact — regardless of which skill ran the task.
+
+<!-- entries below this line -->
+- [2026-06-25][source:inference][task:run-log-realtime-stream][probation] The single `/events` SSE stream now carries TWO frame shapes distinguished by `frame.type`: `run` (throttled state snapshot, coalesced to ≤1/120 ms, last frame replayed on connect, per-agent logs capped at 200) and `agent-stream` (`{agentId,channel,text}`, raw output firehose — NOT throttled, NOT replayed, one frame per coalesced line, mirrored to `console.log`). The server's `broadcastAgentStream` writes the firehose DIRECTLY to every `sseClient` (bypasses the snapshot throttle) and short-circuits when `sseClients.size === 0`. Wiring: `WebRunManager` constructor gained a 3rd arg `onAgentOutput` that subscribes to `Orchestrator.subscribeAgentOutput`; `app.js` `connectSse().onmessage` branches on `frame.type`. Pattern to reuse: append-only / high-frequency data gets its own un-throttled frame type, never bloats the `run` snapshot.
+- [2026-06-25][source:inference][task:run-log-realtime-stream][probation] `client/app.js` ships ONLY via the build's `cp -R src/web/client/. dist/web/client/` step (package.json `build`), because the server serves `clientDir()` = `./client/` relative to the module (dev→src, prod→dist). So a client edit is live under `npm run dev` (tsx) instantly but needs `npm run build` to reach the Docker/prod image — `tsc`/tests are GREEN either way (the file isn't compiled), so a stale-UI regression is silent. `node --check src/web/client/app.js` is the only syntax gate for the vanilla-JS client.

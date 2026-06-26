@@ -19,6 +19,7 @@
 - [writing-tests](writing-tests/SKILL.md) `knowledge` — vitest colocated, real git in temp dirs, stub factories, regression-tests-as-spec; load before touching any test, and include in any chain that changes runtime code.
 - [writing-project-docs](writing-project-docs/SKILL.md) `knowledge` — pt-BR/EN twin files, docs/ layout, Keep-a-Changelog, identity framing; for any markdown work.
 - [authoring-agent-prompts](authoring-agent-prompts/SKILL.md) `knowledge` — cross-LLM step-prompt techniques (atomic ops, output contract, $file/$hint injection, mechanical forward-default judges, lean pi prompts); for writing/sharpening any step prompt, judge condition or memory recon prompt.
+- [building-web-ui](building-web-ui/SKILL.md) `knowledge` — the browser front-end (src/web/): dependency-free node:http + SSE server, the `/events` stream's two frame types (throttled `run` snapshot vs un-throttled `agent-stream` firehose), WebRunManager single-run lifecycle (409), browser-only keys, the vanilla-JS no-build client + its dist copy step, HUU_WEB_TOKEN gate, sibling-of-ui layering; for any change under src/web/.
 
 ## Task skills (end with `<evolution>`)
 
@@ -35,3 +36,4 @@
 
 - Any code change → following-architecture-conventions + the domain skill → writing-tests → committing-and-validating.
 - Pipeline work: authoring-pipelines for user JSONs; editing-default-pipelines when the change is under src/lib/default-pipelines/.
+- Web UI work (src/web/ — server routes, SSE frames, run-manager, the vanilla-JS client): building-web-ui; pair with working-on-orchestrator when the change spans run state/streaming.

@@ -191,6 +191,11 @@ terminal TUI back.
   flowing TODO → DOING → DONE; click a card for **per-agent tokens, cost,
   branch, files and live logs**. Global log console, concurrency control
   (Auto · Manual · MAX) and a stop button up top.
+- **Truly live log.** The text the agent generates lands in the log **as it
+  streams** — not just at tool boundaries. And **everything pi returns**
+  (reply + reasoning) is mirrored in real time to the **browser console**
+  (DevTools → Console), each line tagged with its agent id; silence it with
+  `window.HUU_LOG_STREAM = false`.
 - **Your key, in the browser.** Paste your `OPENROUTER_API_KEY` in the
   launch form — it's **validated against the provider on the spot** and
   kept only in the browser tab (`sessionStorage`), sent with each run and

@@ -192,6 +192,11 @@ TUI no terminal.
   TODO → DOING → DONE; clique num card pra ver **tokens, custo, branch,
   arquivos e logs ao vivo** por agente. Console de log global, controle
   de concorrência (Auto · Manual · MAX) e botão de parar no topo.
+- **Log ao vivo, de verdade.** O texto que o agente vai gerando entra no
+  log **conforme sai** — não só nas trocas de ferramenta. E **tudo que o
+  pi devolve** (resposta + raciocínio) é espelhado em tempo real no
+  **console do navegador** (DevTools → Console), com o id do agente em cada
+  linha; silencie com `window.HUU_LOG_STREAM = false`.
 - **Sua key, no navegador.** Cole sua `OPENROUTER_API_KEY` no formulário de
   launch — ela é **validada na hora** contra o provider e fica só na aba do
   navegador (`sessionStorage`), enviada a cada run e **nunca escrita em
