@@ -29,6 +29,14 @@ export type Screen =
 export interface FsmState {
   screen: Screen;
   pipeline: Pipeline | null;
+  /**
+   * A multi-run BATCH: 2+ pipelines selected to run CONCURRENTLY under one
+   * shared scheduler. Set only via `saved.selectMany`; cleared whenever a
+   * single pipeline is chosen. When set, the `run` screen renders the
+   * MultiRunDashboard instead of RunDashboard. `pipeline` holds pipelines[0]
+   * as a representative so the shared config flow has something to read.
+   */
+  pipelines: Pipeline[] | null;
   modelId: string;
   backendKind: AgentBackendKind;
   apiKey: string;
@@ -87,6 +95,7 @@ export type FsmEvent =
   | { type: 'export.cancel' }
   // saved-pipelines
   | { type: 'saved.select'; pipeline: Pipeline }
+  | { type: 'saved.selectMany'; pipelines: Pipeline[] }
   | { type: 'saved.cancel' }
   // model-selector
   | {
@@ -152,6 +161,7 @@ export function initialState(opts: InitialStateOpts): FsmState {
         ? { kind: 'pipeline-editor' }
         : { kind: 'welcome' },
     pipeline: opts.initialPipeline ?? null,
+    pipelines: null,
     modelId: '',
     backendKind: opts.initialBackend ?? 'pi',
     apiKey: opts.openrouterResolvedKey,
@@ -182,6 +192,7 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
       return {
         ...state,
         pipeline: event.pipeline,
+        pipelines: null,
         screen: { kind: 'pipeline-editor' },
       };
     case 'welcome.quit':
@@ -214,6 +225,7 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
       return {
         ...state,
         pipeline: event.pipeline,
+        pipelines: null,
         screen: { kind: 'pipeline-editor' },
       };
     case 'assistant.cancel':
@@ -223,7 +235,7 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
     case 'editor.complete': {
       const p = event.pipeline;
       const all = allStepsHaveModel(p);
-      const base: FsmState = { ...state, pipeline: p };
+      const base: FsmState = { ...state, pipeline: p, pipelines: null };
       if (all && event.initialBackendSet) {
         // Caller may intercept to insert an api-key gate; the FSM treats
         // this as the direct destination so the screen branch is decidable
@@ -282,6 +294,7 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
       return {
         ...state,
         pipeline: event.pipeline,
+        pipelines: null,
         screen: { kind: 'pipeline-editor' },
       };
     case 'import.paste':
@@ -299,6 +312,7 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
       return {
         ...state,
         pipeline: event.pipeline,
+        pipelines: null,
         screen: { kind: 'pipeline-editor' },
       };
     case 'importPaste.cancel':
@@ -310,6 +324,7 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
         return {
           ...state,
           pipeline: event.pipeline,
+          pipelines: null,
           screen: { kind: 'pipeline-editor' },
         };
       }
@@ -329,8 +344,20 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
       return {
         ...state,
         pipeline: event.pipeline,
+        pipelines: null,
         pipelineSourceName: event.pipeline.name,
         screen: { kind: 'pipeline-editor' },
+      };
+    case 'saved.selectMany':
+      return {
+        ...state,
+        // Run the batch CONCURRENTLY with ONE shared config. Skip the
+        // single-pipeline editor (can't edit N at once) and go straight to the
+        // shared backend/model selection; pipelines[0] is the representative.
+        pipelines: event.pipelines,
+        pipeline: event.pipelines[0] ?? state.pipeline,
+        pipelineSourceName: `${event.pipelines.length} projects`,
+        screen: { kind: 'backend-selector' },
       };
     case 'saved.cancel':
       return { ...state, screen: { kind: 'welcome' } };
@@ -396,9 +423,16 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
     // ── timeout-prompt ───────────────────────────────────────────────────
     case 'timeout.submit': {
       const ms = event.minutes * 60_000;
-      const newPipeline: Pipeline | null = state.pipeline
-        ? { ...state.pipeline, cardTimeoutMs: ms, singleFileCardTimeoutMs: ms }
-        : state.pipeline;
+      const withTimeout = (p: Pipeline): Pipeline => ({
+        ...p,
+        cardTimeoutMs: ms,
+        singleFileCardTimeoutMs: ms,
+      });
+      const newPipeline: Pipeline | null = state.pipeline ? withTimeout(state.pipeline) : state.pipeline;
+      // Multi-run: the chosen timeout applies to EVERY pipeline in the batch.
+      const newPipelines: Pipeline[] | null = state.pipelines
+        ? state.pipelines.map(withTimeout)
+        : state.pipelines;
       // Pull modelId/apiKey off the timeout-prompt screen when present
       // (mirrors app.tsx line 531: `screen.modelId` / `screen.apiKey`),
       // otherwise fall back to the top-level state copies.
@@ -408,6 +442,7 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
       return {
         ...state,
         pipeline: newPipeline,
+        pipelines: newPipelines,
         screen: { kind: 'run', modelId: mid, apiKey: ak },
       };
     }
@@ -423,6 +458,7 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
       const requiresApiKey = event.requiresApiKey ?? state.requiresApiKey;
       const base: FsmState = {
         ...state,
+        pipelines: null, // runDirect is the single-pipeline skip-model fast path
         ...(event.pipeline !== undefined ? { pipeline: event.pipeline } : {}),
         backendKind,
         requiresApiKey,

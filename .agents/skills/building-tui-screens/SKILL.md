@@ -2,7 +2,7 @@
 name: building-tui-screens
 description: Procedure and conventions for Ink TUI work in huu — screen-fsm states, app.tsx routing, the theme token rules (theme.ai magenta strictly for AI-driven UI), the cardHeight() budget sync, FULL_CLEAR resize handling and useInput ref-stability. Use when adding or altering screens, Ink components, keyboard behavior or colors in src/ui/ and app.tsx.
 metadata:
-  version: 0.1.0
+  version: 0.2.0
   type: task
 ---
 
@@ -32,6 +32,10 @@ New screens/components in `src/ui/`, keyboard/navigation changes in `app.tsx`, k
 - `useInput` handlers are wrapped in `useCallback` with REF-mirrored state (`screenKindRef`, etc.): the metrics tick re-renders App every second, and a handler re-created from stale closures drops keystrokes. Gate handlers with `isActive` per screen.
 - `FULL_CLEAR = '\x1b[3J'` is prepended before re-renders to clear scrollback — without it, shrinking the terminal leaves wrapped-line artifacts. `useTerminalResize` also polls dimensions at 500ms as a fallback.
 
+### Multi-run dashboard (concurrent projects)
+
+`MultiRunDashboard` (`src/ui/components/MultiRunDashboard.tsx`) runs N pipelines CONCURRENTLY as subordinates of ONE `GlobalScheduler` (shared RAM/concurrency budget — see working-on-orchestrator) and renders a project switcher (`Tab` / `1`-`9` / `←→`). It is a SEPARATE component — the single-run `RunDashboard` is untouched — that reuses the presentational `RunKanban` + `LogArea`. Deliberately leaner than RunDashboard: no per-card modal/focus and no per-run `+`/`-`/`A`/`M`, because concurrency is scheduler-owned (showing the per-run `grant` instead). It mirrors RunDashboard's throttled-subscribe (generalized to an array of states) + terminal-sizing patterns; keep them in sync. Launch path: the `saved-pipelines` screen multi-selects with `SPACE` → `saved.selectMany` sets `FsmState.pipelines` (a `Pipeline[]` batch, NOT a new screen kind) → the SHARED backend/model/timeout flow (app.tsx forces `skipModelSelector:false` when `isMulti`) → the `run` screen renders MultiRunDashboard when `pipelines.length >= 2`, else RunDashboard. `FsmState.pipelines` is CLEARED in every single-pipeline transition so a later single run is never misread as multi; `Q` maps to `run.abort`.
+
 ## Procedure
 
 1. Add the screen kind (+ payload) to the `Screen` union and its transitions to `reduce()` in `screen-fsm.ts`.
@@ -46,7 +50,7 @@ New screens/components in `src/ui/`, keyboard/navigation changes in `app.tsx`, k
 - `src/lib/screen-fsm.ts`, `src/app.tsx`, `src/ui/theme.ts`, `src/ui/components/RunKanban.tsx`, `docs/KEYBOARD.md`
 - Related skills: following-architecture-conventions, writing-tests
 
-> Facts verified against source on 2026-06-12.
+> Facts verified against source on 2026-06-12; MultiRunDashboard (concurrent-projects TUI + saved-pipelines multi-select) added + verified 2026-06-26.
 
 ## <evolution>
 

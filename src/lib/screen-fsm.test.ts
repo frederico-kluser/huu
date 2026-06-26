@@ -29,6 +29,7 @@ function baseState(overrides: Partial<FsmState> = {}): FsmState {
   return {
     screen: { kind: 'welcome' } as Screen,
     pipeline: null,
+    pipelines: null,
     modelId: '',
     backendKind: 'pi',
     apiKey: '',
@@ -171,6 +172,45 @@ describe('screen-fsm', () => {
     it('directory.cancel → welcome', () => {
       const s = baseState({ screen: { kind: 'directory-picker' } });
       expect(reduce(s, { type: 'directory.cancel' }).screen).toEqual({ kind: 'welcome' });
+    });
+  });
+
+  describe('multi-run batch (saved.selectMany)', () => {
+    it('selects 2+ pipelines and routes to the shared backend selector', () => {
+      const next = reduce(baseState(), {
+        type: 'saved.selectMany',
+        pipelines: [pipelineWithoutModels, pipelineAllModels],
+      });
+      expect(next.pipelines).toEqual([pipelineWithoutModels, pipelineAllModels]);
+      expect(next.pipeline).toBe(pipelineWithoutModels); // representative
+      expect(next.screen).toEqual({ kind: 'backend-selector' });
+    });
+
+    it('saved.select (single) clears a previously-set batch', () => {
+      const s = baseState({ pipelines: [pipelineWithoutModels, pipelineAllModels] });
+      const next = reduce(s, { type: 'saved.select', pipeline: pipelineAllModels });
+      expect(next.pipelines).toBeNull();
+      expect(next.pipeline).toBe(pipelineAllModels);
+    });
+
+    it('a single-pipeline pick clears a stale batch (no multi leak)', () => {
+      const s = baseState({ pipelines: [pipelineWithoutModels, pipelineAllModels] });
+      const next = reduce(s, { type: 'welcome.selectPipeline', pipeline: pipelineWithoutModels });
+      expect(next.pipelines).toBeNull();
+    });
+
+    it('timeout.submit applies the timeout to every pipeline in the batch', () => {
+      const s = baseState({
+        pipelines: [pipelineWithoutModels, pipelineAllModels],
+        screen: { kind: 'timeout-prompt', modelId: 'm', apiKey: 'k' },
+      });
+      const next = reduce(s, { type: 'timeout.submit', minutes: 5 });
+      expect(next.pipelines).toHaveLength(2);
+      for (const p of next.pipelines ?? []) {
+        expect(p.cardTimeoutMs).toBe(5 * 60_000);
+        expect(p.singleFileCardTimeoutMs).toBe(5 * 60_000);
+      }
+      expect(next.screen).toEqual({ kind: 'run', modelId: 'm', apiKey: 'k' });
     });
   });
 

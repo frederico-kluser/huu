@@ -124,6 +124,20 @@ Portuguese, matching the recon prompts). Below is the complete map.
 - `F` filter logs to a single agent (cycles through agents and back to "all")
 - `Q` abort the run · press `Q` twice to force-exit the dashboard immediately
 
+## Multi-run dashboard (concurrent projects)
+
+Reached from **saved pipelines** (`M` on the welcome screen): check 2+ pipelines
+with `SPACE`, then `ENTER` to run them **concurrently** under one shared
+scheduler (they share ONE backend/model/key, chosen once).
+
+- `Tab` / `1`–`9` / `←→` switch which project's board is shown
+- `Q` abort all remaining projects and return (press `Q` twice to force)
+
+Concurrency is **scheduler-controlled** across all projects — earlier projects
+have priority, later ones backfill the idle slots, and the lowest-priority
+project's newest agent is killed first under memory pressure — so the per-run
+`+` / `-` / `A` / `M` concurrency keys are intentionally absent here.
+
 ## Card details modal
 
 - `↑↓` scroll · `ESC` / `ENTER` close
