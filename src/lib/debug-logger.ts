@@ -92,6 +92,19 @@ export function log(cat: string, ev: string, data?: Record<string, unknown>): vo
   safeWrite(JSON.stringify(payload) + '\n');
 }
 
+/**
+ * Return a {@link log}-shaped function that stamps every event with `runId`.
+ * When multiple orchestrators run concurrently in ONE process (multi-run
+ * scheduling) their lines interleave in the single process-wide debug file;
+ * the `runId` field keeps each run's events greppable. The fd, heartbeat and
+ * counters stay process-level and single — only the per-event payload changes.
+ */
+export function scopedDebugLog(
+  runId: string,
+): (cat: string, ev: string, data?: Record<string, unknown>) => void {
+  return (cat, ev, data) => log(cat, ev, { ...data, runId });
+}
+
 export function bump(name: string): void {
   counters[name] = (counters[name] ?? 0) + 1;
 }

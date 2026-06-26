@@ -1,17 +1,22 @@
 /**
- * Single-run lifecycle wrapper around the {@link Orchestrator} for the web
- * server. Mirrors what `RunDashboard.tsx` does for the TUI and what
- * `headless-run.ts` does for `huu auto`: build the AppConfig, construct one
- * Orchestrator, subscribe for live state, and drive start/abort/concurrency.
+ * Multi-run lifecycle manager for the web server. Holds a `Map<runId, …>` of
+ * concurrent runs that all share ONE {@link GlobalScheduler} (a single RAM /
+ * concurrency budget): earlier runs have priority, later ones backfill the idle
+ * slots of earlier ones, and under memory pressure the scheduler kills the
+ * lowest-priority run's newest agent first. `start()` no longer refuses a
+ * second run — it assigns a stable runId, registers an Orchestrator with the
+ * scheduler, and returns immediately. State is pushed to the server via
+ * `onUpdate` (the server throttles + fans out per run); the firehose is tagged
+ * with the originating runId.
  *
- * The Orchestrator is single-run-per-instance, so this manager creates a
- * fresh one on every `start()` and refuses to start a second while one is
- * live (the server maps that to HTTP 409). State is pushed to the server via
- * the `onUpdate` callback; the server owns throttling + SSE fan-out.
+ * `/simulation` runs are synthetic (no scheduler, no git/LLM) and live in the
+ * same map, so the browser can show several at once through the project
+ * selector.
  */
 
 import { existsSync, statSync } from 'node:fs';
 import { Orchestrator } from '../orchestrator/index.js';
+import { GlobalScheduler } from '../orchestrator/global-scheduler.js';
 import { SimulationEngine } from '../orchestrator/simulation/engine.js';
 import type { SimulationOptions } from '../orchestrator/simulation/engine.js';
 import type { AgentOutputChunk } from '../orchestrator/types.js';
@@ -21,6 +26,7 @@ import {
 } from '../orchestrator/backends/registry.js';
 import { findSpec, resolveApiKey } from '../lib/api-key.js';
 import { backendToProvider } from '../lib/providers.js';
+import { generateRunId } from '../lib/run-id.js';
 import type {
   AppConfig,
   LlmProvider,
@@ -30,6 +36,9 @@ import type {
 import { getPipelineByName } from './api-data.js';
 
 export type RunPhase = 'idle' | 'running' | 'done' | 'error';
+
+/** Hard cap on simultaneously-tracked runs — a guard against a runaway client. */
+const MAX_CONCURRENT_RUNS = 24;
 
 export interface StartRunParams {
   /** Pipeline name to resolve from disk/memory. Ignored when `pipeline` set. */
@@ -86,9 +95,7 @@ const IDLE_SNAPSHOT: RunSnapshot = {
 
 /**
  * The minimal contract the manager drives a run through. Both the real
- * {@link Orchestrator} and the {@link SimulationEngine} satisfy it structurally,
- * so {@link WebRunManager.launch} wires either one through the SAME snapshot /
- * SSE machinery.
+ * {@link Orchestrator} and the {@link SimulationEngine} satisfy it structurally.
  */
 interface RunDriver {
   subscribe(cb: (state: OrchestratorState) => void): () => void;
@@ -96,55 +103,77 @@ interface RunDriver {
   start(): Promise<{ runId: string; manifest: { errorReason?: string } }>;
 }
 
+interface RunEntry {
+  snapshot: RunSnapshot;
+  /** Live control handle while running; nulled on settle. One of these is set. */
+  orch: Orchestrator | null;
+  sim: SimulationEngine | null;
+}
+
 export class WebRunManager {
-  private orch: Orchestrator | null = null;
-  /** Set instead of `orch` while a `/simulation` run is live. */
-  private sim: SimulationEngine | null = null;
-  private unsubscribe: (() => void) | null = null;
-  private unsubscribeOutput: (() => void) | null = null;
-  private snapshot: RunSnapshot = IDLE_SNAPSHOT;
+  /** One shared budget across every concurrent run. Created+started lazily. */
+  private scheduler: GlobalScheduler | null = null;
+  private readonly runs = new Map<string, RunEntry>();
 
   constructor(
     private readonly cwd: string,
-    /** Called on every orchestrator state change (server throttles + fans out). */
+    /** Called on every run's state change (server throttles + fans out per runId). */
     private readonly onUpdate: (snap: RunSnapshot) => void,
     /**
-     * Called for every coalesced line of streamed agent output (the raw
-     * firehose). Optional — CLI/headless callers don't mirror it. The web
-     * server relays each chunk to connected browsers as an `agent-stream`
-     * SSE frame so the developer console shows what the agent is producing.
+     * Called for every coalesced line of streamed agent output, tagged with the
+     * originating runId so the server can route the firehose to the right board.
      */
-    private readonly onAgentOutput?: (chunk: AgentOutputChunk) => void,
+    private readonly onAgentOutput?: (runId: string, chunk: AgentOutputChunk) => void,
   ) {}
 
-  getSnapshot(): RunSnapshot {
-    return this.snapshot;
+  /** Snapshot for a specific run, or (no id) the most-recently-started one. */
+  getSnapshot(runId?: string): RunSnapshot {
+    if (runId) return this.runs.get(runId)?.snapshot ?? IDLE_SNAPSHOT;
+    const entries = [...this.runs.values()];
+    return entries.length ? entries[entries.length - 1]!.snapshot : IDLE_SNAPSHOT;
   }
 
+  /** Every tracked run's snapshot, in start order. */
+  getSnapshots(): RunSnapshot[] {
+    return [...this.runs.values()].map((e) => e.snapshot);
+  }
+
+  /** True while any run is still running. */
   isActive(): boolean {
-    return this.snapshot.phase === 'running';
+    for (const e of this.runs.values()) if (e.snapshot.phase === 'running') return true;
+    return false;
+  }
+
+  private activeCount(): number {
+    let n = 0;
+    for (const e of this.runs.values()) if (e.snapshot.phase === 'running') n++;
+    return n;
+  }
+
+  private ensureScheduler(): GlobalScheduler {
+    if (!this.scheduler) {
+      this.scheduler = new GlobalScheduler();
+      this.scheduler.start();
+    }
+    return this.scheduler;
   }
 
   /**
-   * Resolve config + factory, construct a fresh Orchestrator, and kick the
-   * run. Returns the snapshot (with a transient runId until the orchestrator
-   * assigns one). Throws on user-correctable problems (active run, missing
-   * key/pipeline/endpoint) so the server can return a 4xx with the message.
+   * Resolve config + factory, construct a fresh Orchestrator subordinate to the
+   * shared scheduler, and kick the run. Returns its snapshot (runId already
+   * assigned). Throws on user-correctable problems (missing key/pipeline/
+   * endpoint, or too many concurrent runs) so the server returns a 4xx.
    */
   start(params: StartRunParams): RunSnapshot {
-    if (this.isActive()) {
-      throw new Error('A run is already in progress.');
+    if (this.activeCount() >= MAX_CONCURRENT_RUNS) {
+      throw new Error(`Too many concurrent runs (max ${MAX_CONCURRENT_RUNS}).`);
     }
 
     const pipeline =
       params.pipeline ??
-      (params.pipelineName
-        ? getPipelineByName(this.cwd, params.pipelineName)
-        : null);
+      (params.pipelineName ? getPipelineByName(this.cwd, params.pipelineName) : null);
     if (!pipeline) {
-      throw new Error(
-        `Pipeline not found: ${params.pipelineName ?? '(none provided)'}`,
-      );
+      throw new Error(`Pipeline not found: ${params.pipelineName ?? '(none provided)'}`);
     }
 
     const effectivePipeline = applyTimeout(pipeline, params.timeoutMinutes);
@@ -194,45 +223,40 @@ export class WebRunManager {
       endpoint,
     };
 
+    const runId = generateRunId();
     const mode = params.mode ?? 'auto';
-    const orch = new Orchestrator(
-      config,
-      effectivePipeline,
-      runDir,
-      bundle.agentFactory,
-      {
-        conflictResolverFactory: bundle.conflictResolverFactory,
-        autoScale: mode !== 'manual',
-        initialConcurrency: params.concurrency,
-      },
-    );
-    this.orch = orch;
+    const orch = new Orchestrator(config, effectivePipeline, runDir, bundle.agentFactory, {
+      conflictResolverFactory: bundle.conflictResolverFactory,
+      autoScale: mode !== 'manual',
+      initialConcurrency: params.concurrency,
+      scheduler: this.ensureScheduler(),
+      runId,
+    });
 
     if (mode === 'greedy') orch.enableGreedyMode();
 
     const seed: RunSnapshot = {
       phase: 'running',
-      runId: '',
+      runId,
       pipelineName: effectivePipeline.name,
       backend: params.backend,
       modelId: params.modelId,
       startedAt: Date.now(),
       state: null,
     };
-    return this.launch(orch, seed);
+    return this.launch(runId, orch, seed, { orch });
   }
 
   /**
-   * Start a synthetic `/simulation` run. No backend/key/pipeline resolution,
-   * no git, no LLM — the {@link SimulationEngine} fabricates the kanban. Reuses
-   * the exact same snapshot + SSE plumbing as a real run.
+   * Start a synthetic `/simulation` run. No backend/key/pipeline resolution, no
+   * git, no LLM, no scheduler — the {@link SimulationEngine} fabricates the
+   * kanban. Tracked in the same map so several can show in the selector.
    */
   startSimulation(opts: SimulationOptions): RunSnapshot {
-    if (this.isActive()) {
-      throw new Error('A run is already in progress.');
+    if (this.activeCount() >= MAX_CONCURRENT_RUNS) {
+      throw new Error(`Too many concurrent runs (max ${MAX_CONCURRENT_RUNS}).`);
     }
     const engine = new SimulationEngine(opts);
-    this.sim = engine;
     const seed: RunSnapshot = {
       phase: 'running',
       runId: opts.runId,
@@ -242,97 +266,108 @@ export class WebRunManager {
       startedAt: Date.now(),
       state: null,
     };
-    return this.launch(engine, seed);
+    return this.launch(opts.runId, engine, seed, { sim: engine });
   }
 
   /**
-   * Subscribe a driver (real or simulated) to the snapshot + firehose
-   * channels and kick it off fire-and-forget, flipping phase on settle.
+   * Subscribe a driver to the snapshot + firehose channels and kick it off
+   * fire-and-forget, flipping its phase on settle. Each run owns its own entry
+   * so concurrent runs never clobber each other's snapshot.
    */
-  private launch(driver: RunDriver, seed: RunSnapshot): RunSnapshot {
-    this.snapshot = seed;
+  private launch(
+    runId: string,
+    driver: RunDriver,
+    seed: RunSnapshot,
+    refs: { orch?: Orchestrator; sim?: SimulationEngine },
+  ): RunSnapshot {
+    const entry: RunEntry = { snapshot: seed, orch: refs.orch ?? null, sim: refs.sim ?? null };
+    this.runs.set(runId, entry);
 
-    this.unsubscribe = driver.subscribe((state) => {
-      // Keep the freshest runId the driver assigns.
-      this.snapshot = {
-        ...this.snapshot,
-        runId: state.runId || this.snapshot.runId,
-        state,
-      };
-      this.onUpdate(this.snapshot);
+    const unsubscribe = driver.subscribe((state) => {
+      entry.snapshot = { ...entry.snapshot, runId: state.runId || runId, state };
+      this.onUpdate(entry.snapshot);
     });
 
+    let unsubscribeOutput: (() => void) | null = null;
     if (this.onAgentOutput) {
-      this.unsubscribeOutput = driver.subscribeAgentOutput(this.onAgentOutput);
+      const cb = this.onAgentOutput;
+      unsubscribeOutput = driver.subscribeAgentOutput((chunk) => cb(runId, chunk));
     }
 
     driver
       .start()
       .then((result) => {
-        this.snapshot = {
-          ...this.snapshot,
+        entry.snapshot = {
+          ...entry.snapshot,
           phase: 'done',
-          runId: result.runId || this.snapshot.runId,
+          runId: result.runId || runId,
           finishedAt: Date.now(),
           errorReason: result.manifest.errorReason,
-          state: this.snapshot.state,
+          state: entry.snapshot.state,
         };
       })
       .catch((err: unknown) => {
-        this.snapshot = {
-          ...this.snapshot,
+        entry.snapshot = {
+          ...entry.snapshot,
           phase: 'error',
           finishedAt: Date.now(),
           errorReason: err instanceof Error ? err.message : String(err),
-          state: this.snapshot.state,
+          state: entry.snapshot.state,
         };
       })
       .finally(() => {
-        if (this.unsubscribe) {
-          this.unsubscribe();
-          this.unsubscribe = null;
-        }
-        if (this.unsubscribeOutput) {
-          this.unsubscribeOutput();
-          this.unsubscribeOutput = null;
-        }
-        this.orch = null;
-        this.sim = null;
-        this.onUpdate(this.snapshot);
+        unsubscribe();
+        unsubscribeOutput?.();
+        entry.orch = null;
+        entry.sim = null;
+        this.onUpdate(entry.snapshot);
       });
 
-    this.onUpdate(this.snapshot);
-    return this.snapshot;
+    this.onUpdate(entry.snapshot);
+    return entry.snapshot;
   }
 
-  /** Hard-stop the active run. No-op when idle. */
-  abort(): void {
-    this.orch?.abort();
-    this.sim?.abort();
+  /** Hard-stop one run, or (no id) every run + tear the shared scheduler down. */
+  abort(runId?: string): void {
+    if (runId) {
+      const e = this.runs.get(runId);
+      e?.orch?.abort();
+      e?.sim?.abort();
+      return;
+    }
+    for (const e of this.runs.values()) {
+      e.orch?.abort();
+      e.sim?.abort();
+    }
+    this.scheduler?.stop();
+    this.scheduler = null;
   }
 
-  /** Pause/resume a simulation run. No-op for real runs (or when idle). */
-  setPaused(paused: boolean): void {
-    this.sim?.setPaused(paused);
+  /** Pause/resume a /simulation run (no-op for real runs / unknown id). */
+  setPaused(runId: string, paused: boolean): void {
+    this.runs.get(runId)?.sim?.setPaused(paused);
   }
 
-  /** Pin manual concurrency at `value` (also flips out of auto/greedy). */
-  setConcurrency(value: number): void {
-    this.orch?.setConcurrency(value);
-    this.sim?.setConcurrency(value);
+  /** Pin manual concurrency for one run (also flips it out of auto/greedy). */
+  setConcurrency(runId: string, value: number): void {
+    const e = this.runs.get(runId);
+    e?.orch?.setConcurrency(value);
+    e?.sim?.setConcurrency(value);
   }
 
-  /** Nudge concurrency up/down by one. */
-  adjust(delta: number): void {
-    const driver = this.orch ?? this.sim;
+  /** Nudge one run's concurrency up/down by one. */
+  adjust(runId: string, delta: number): void {
+    const e = this.runs.get(runId);
+    const driver = e?.orch ?? e?.sim;
     if (!driver) return;
     if (delta > 0) driver.increaseConcurrency();
     else if (delta < 0) driver.decreaseConcurrency();
   }
 
-  /** Switch concurrency strategy mid-run. */
-  setMode(mode: 'auto' | 'manual' | 'greedy'): void {
-    const driver = this.orch ?? this.sim;
+  /** Switch one run's concurrency strategy mid-run. */
+  setMode(runId: string, mode: 'auto' | 'manual' | 'greedy'): void {
+    const e = this.runs.get(runId);
+    const driver = e?.orch ?? e?.sim;
     if (!driver) return;
     if (mode === 'auto') driver.enableAutoScale();
     else if (mode === 'manual') driver.disableAutoScale();

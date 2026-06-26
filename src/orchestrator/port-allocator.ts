@@ -14,6 +14,14 @@ export interface PortAllocatorOptions {
   windowSize?: number;
   maxAgents?: number;
   enabled?: boolean;
+  /**
+   * Shared cross-run reservation set. In multi-run scheduling the
+   * GlobalScheduler passes ONE Set to every subordinate run's allocator, so two
+   * runs (each with their own agentId space) can never hand out the same
+   * physical port window. Omit for single-run — the allocator then owns a
+   * private set and behaves exactly as before.
+   */
+  sharedReservedPorts?: Set<number>;
 }
 
 const DEFAULT_BASE_PORT = 55100;
@@ -37,13 +45,19 @@ export class PortAllocator {
   private maxAgents: number;
   private readonly enabled: boolean;
   private readonly reserved = new Map<number, AgentPortBundle>();
-  private readonly reservedPorts = new Set<number>();
+  /**
+   * Set of every port currently claimed. Private per allocator unless a shared
+   * Set is injected (multi-run), in which case it spans all concurrent runs so
+   * windows are never double-handed-out across runs.
+   */
+  private readonly reservedPorts: Set<number>;
 
   constructor(options: PortAllocatorOptions = {}) {
     this.basePort = options.basePort ?? DEFAULT_BASE_PORT;
     this.windowSize = Math.max(SLOTS_PER_BUNDLE, options.windowSize ?? DEFAULT_WINDOW_SIZE);
     this.maxAgents = options.maxAgents ?? DEFAULT_MAX_AGENTS;
     this.enabled = options.enabled ?? true;
+    this.reservedPorts = options.sharedReservedPorts ?? new Set<number>();
   }
 
   isEnabled(): boolean {
@@ -96,8 +110,17 @@ export class PortAllocator {
   }
 
   releaseAll(): void {
+    // Release only THIS allocator's own windows from reservedPorts — the set
+    // may be shared with other concurrent runs, so a blanket clear() would
+    // free their reservations too. (For a private set this is equivalent to
+    // clear(), since the only members are this allocator's bundles.)
+    for (const bundle of this.reserved.values()) {
+      this.reservedPorts.delete(bundle.http);
+      this.reservedPorts.delete(bundle.db);
+      this.reservedPorts.delete(bundle.ws);
+      for (const p of bundle.extras) this.reservedPorts.delete(p);
+    }
     this.reserved.clear();
-    this.reservedPorts.clear();
   }
 
   private async tryReserveWindow(
@@ -107,20 +130,26 @@ export class PortAllocator {
     const slots: number[] = [];
     for (let i = 0; i < SLOTS_PER_BUNDLE; i++) slots.push(base + i);
 
-    // Reject upfront if any slot is in our internal reserved set — avoids a
-    // probe race where two allocate() calls await on adjacent ports.
+    // Claim the whole window SYNCHRONOUSLY (before any await) so a concurrent
+    // allocate() — from this run OR another run sharing this reservedPorts set
+    // (multi-run scheduling) — cannot pick the same window during the async
+    // probe gap. Bind+close probes alone are a TOCTOU; the synchronous claim
+    // is what actually serializes window hand-out within the event loop.
     for (const port of slots) {
       if (this.reservedPorts.has(port)) return null;
     }
+    for (const port of slots) this.reservedPorts.add(port);
 
-    // Probe each slot. Bind+close is cheap; the cost we care about is the
-    // alternative: launching an agent that crashes on EADDRINUSE.
+    // Validate against EXTERNAL processes. Bind+close is cheap; the cost we
+    // care about is the alternative: launching an agent that crashes on
+    // EADDRINUSE. If any slot is taken, drop the optimistic claim and slide.
     for (const port of slots) {
       const free = await probePortFree(port);
-      if (!free) return null;
+      if (!free) {
+        for (const p of slots) this.reservedPorts.delete(p);
+        return null;
+      }
     }
-
-    for (const port of slots) this.reservedPorts.add(port);
 
     const [http, db, ws, ...extras] = slots;
     return {

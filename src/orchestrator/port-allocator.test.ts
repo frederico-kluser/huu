@@ -88,4 +88,28 @@ describe('PortAllocator', () => {
     expect(new PortAllocator().isEnabled()).toBe(true);
     expect(new PortAllocator({ enabled: false }).isEnabled()).toBe(false);
   });
+
+  it('two allocators sharing a reservation set never hand out the same window', async () => {
+    // Simulates two concurrent runs (each with its OWN agentId space) backed by
+    // one GlobalScheduler-owned reservation set, both probing the same base.
+    const shared = new Set<number>();
+    const base = TEST_BASE + 500;
+    const runA = new PortAllocator({ basePort: base, windowSize: 10, maxAgents: 10, sharedReservedPorts: shared });
+    const runB = new PortAllocator({ basePort: base, windowSize: 10, maxAgents: 10, sharedReservedPorts: shared });
+
+    const [ba, bb] = await Promise.all([runA.allocate(1), runB.allocate(1)]);
+
+    // Identical agentId + base, but distinct physical windows.
+    expect(ba.agentId).toBe(1);
+    expect(bb.agentId).toBe(1);
+    const portsA = new Set([ba.http, ba.db, ba.ws, ...ba.extras]);
+    for (const p of [bb.http, bb.db, bb.ws, ...bb.extras]) {
+      expect(portsA.has(p)).toBe(false);
+    }
+
+    // releaseAll on one run frees only its own windows from the shared set.
+    runA.releaseAll();
+    expect(shared.has(bb.http)).toBe(true); // runB's claim survives
+    expect(shared.has(ba.http)).toBe(false); // runA's claim is gone
+  });
 });

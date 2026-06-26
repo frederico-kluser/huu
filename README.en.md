@@ -199,11 +199,15 @@ terminal TUI back.
   flat. Click a card for **per-agent tokens, cost, branch, files and live
   logs**. Global log console, concurrency control (Auto · Manual · MAX) and a
   stop button up top.
-- **Project queue, in sequence.** Select **several projects** — each with its
-  own config (directory, provider, model, concurrency) — and run them **one
-  after another** (sequential, never in parallel). If one fails, the queue
-  keeps going and marks that project failed. Every execution is archived to
-  the browser **history** (IndexedDB) with all cards, per-card costs and the
+- **Project queue, in parallel.** Select **several projects** — each with its
+  own config (directory, provider, model, concurrency) — and run them
+  **concurrently** under one shared RAM/concurrency budget. Earlier projects
+  have priority; later ones **backfill** the idle slots of the earlier ones
+  (e.g. while one is merging) and yield the capacity back when it's needed — and
+  under memory pressure the lowest-priority project's newest agent is killed
+  first. A **project selector** in the header lets you switch between the live
+  boards. If one fails, the rest keep going. Every execution is archived to the
+  browser **history** (IndexedDB) with all cards, per-card costs and the
   per-project total — **exportable as JSON** in one click.
 - **Truly live log.** The text the agent generates lands in the log **as it
   streams** — not just at tool boundaries. And **everything pi returns**
@@ -225,7 +229,7 @@ terminal TUI back.
   only a fallback for when OpenRouter is unreachable.
 
 > **Today the web runs existing pipelines** (list, pick, queue and run in
-> sequence, tune concurrency, stop). The **guided builders** (Pipeline
+> parallel, tune concurrency, stop). The **guided builders** (Pipeline
 > Assistant and the
 > step-by-step editor) still live in the **TUI** — use `huu --cli`.
 > Web-based pipeline authoring is roadmap.

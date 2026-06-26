@@ -9,6 +9,20 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Added
 
+- **Run multiple projects in parallel (web).** Queue several projects and they
+  now run **concurrently** under one shared RAM/concurrency budget instead of
+  one-at-a-time. A new `GlobalScheduler` (`src/orchestrator/global-scheduler.ts`)
+  gives earlier projects priority, lets later ones **backfill** the idle slots of
+  earlier ones (e.g. while a higher-priority project's merge agent runs for
+  minutes), **drains** a lower-priority project when capacity is reclaimed
+  (without wasting work), and under memory pressure (≥95%) kills the
+  **lowest-priority project's newest agent first**. The browser shows a
+  **project selector** in the header when more than one project is running, so
+  you can switch between live boards; each project streams its own state + agent
+  output. The `/simulation` demo can run several at once too. Single-run and the
+  Ink TUI are unchanged (the scheduler is opt-in via `OrchestratorOptions.
+  scheduler`). Also usable headlessly via `src/lib/run-many.ts`; the priority
+  invariant is pinned by `multi-run-priority.test.ts`.
 - **Scrollable run-board columns + animated card moves (web UI).** Kanban
   columns now **scroll** when they fill up instead of squashing the cards
   flat (the cards are flex children that were shrinking to fit before the

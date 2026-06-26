@@ -537,6 +537,50 @@ describe('AutoScaler', () => {
     });
   });
 
+  describe('syncCounts (global-scheduler budget driver)', () => {
+    it('overwrites active + pending counts and bounds targetConcurrency by pending', () => {
+      const scaler = createScaler(makeMetrics({ ramTotalBytes: 16 * 1024 ** 3 }));
+      scaler.start();
+      // 8 GiB available → ~26 additional slots by headroom, but pending caps it.
+      scaler.syncCounts(0, 3);
+      expect(scaler.targetConcurrency()).toBe(3);
+      // active=5, pending=10 → ceiling min(15, 200)=15, capped below headroom.
+      scaler.syncCounts(5, 10);
+      expect(scaler.targetConcurrency()).toBe(15);
+      scaler.stop();
+    });
+
+    it('clamps negative counts to zero', () => {
+      const scaler = createScaler(makeMetrics({ ramTotalBytes: 16 * 1024 ** 3 }));
+      scaler.syncCounts(-4, -7);
+      // pending 0 → ceiling is maxAgents; never below 1.
+      expect(scaler.targetConcurrency()).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('acceptMetrics (dormant per-run display)', () => {
+    it('injects metrics surfaced by getStatus without polling', () => {
+      const scaler = createScaler(makeMetrics({ cpuPercent: 10, ramPercent: 10 }));
+      // Never started → dormant; acceptMetrics still updates the displayed snapshot.
+      scaler.acceptMetrics(makeMetrics({ cpuPercent: 99, ramPercent: 88 }));
+      const status = scaler.getStatus();
+      expect(status.cpuPercent).toBe(99);
+      expect(status.ramPercent).toBe(88);
+      // Dormant scaler never gates: shouldDestroy stays false even at high RAM.
+      expect(scaler.shouldDestroy()).toBe(false);
+    });
+  });
+
+  describe('headroomCapacity (admission signal)', () => {
+    it('returns RAM-based capacity, independent of the demand/pending ceiling', () => {
+      const scaler = createScaler(makeMetrics({ ramTotalBytes: 16 * 1024 ** 3 }));
+      scaler.syncCounts(0, 2); // pending 2 → targetConcurrency caps at 2...
+      expect(scaler.targetConcurrency()).toBe(2);
+      // ...but capacity reflects RAM headroom only: 8 GiB avail → ~26 slots.
+      expect(scaler.headroomCapacity()).toBe(26);
+    });
+  });
+
   describe('getStatus', () => {
     it('reflects current metrics', () => {
       const scaler = createScaler(makeMetrics({ cpuPercent: 75, ramPercent: 60 }));

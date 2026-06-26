@@ -57,11 +57,12 @@ import {
 } from './agent-env.js';
 import { ensureNativeShim, type NativeShim } from './native-shim.js';
 import { AutoScaler } from './auto-scaler.js';
+import type { GlobalScheduler, RunDriverHandle } from './global-scheduler.js';
 import { getSystemMetrics } from '../lib/resource-monitor.js';
 import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname, isAbsolute } from 'node:path';
-import { log as dlog } from '../lib/debug-logger.js';
+import { log, scopedDebugLog } from '../lib/debug-logger.js';
 import { attachProcessLogSink } from '../lib/process-log-bridge.js';
 import { checkOpenRouterReachable } from '../lib/openrouter.js';
 import { AuthError } from '../lib/auth-error.js';
@@ -174,6 +175,21 @@ export interface OrchestratorOptions {
    * active in both modes.
    */
   autoScale?: boolean;
+  /**
+   * When set, this run is SUBORDINATE to a GlobalScheduler (multi-run
+   * scheduling): the scheduler owns the concurrency target (`grantFor`) and the
+   * cross-run memory-guard kill (lowest-priority newest first), and this run's
+   * own AutoScaler stays dormant (display-only). Omit for the normal single-run
+   * path — every code path below then behaves exactly as before.
+   */
+  scheduler?: GlobalScheduler;
+  /**
+   * Externally-assigned run id. When set, start() uses it instead of generating
+   * one — letting a multi-run manager key its Map<runId, …> and return the id
+   * to the browser BEFORE start() resolves (so concurrent runs never collide on
+   * an empty-string key). Omit for the normal self-assigned path.
+   */
+  runId?: string;
 }
 
 /**
@@ -258,6 +274,22 @@ export class Orchestrator {
   private autoScaler: AutoScaler;
   private autoScaleDisabledByUser = false;
   /**
+   * Set when this run is subordinate to a GlobalScheduler (multi-run). Null on
+   * the normal single-run path, where the per-run AutoScaler drives the pool.
+   */
+  private scheduler: GlobalScheduler | null = null;
+  /** Handle for unregistering from the scheduler in the finally block. */
+  private schedulerHandle: RunDriverHandle | null = null;
+  /** Externally-assigned run id (multi-run manager); start() prefers it. */
+  private externalRunId?: string;
+  /**
+   * Debug-log sink. Starts unscoped; rebound to `scopedDebugLog(runId)` in
+   * start() once the runId exists, so concurrent runs' lines stay filterable by
+   * runId in the single process-wide debug file (overlapping agentIds otherwise
+   * make multi-run lines ambiguous).
+   */
+  private dlog: (cat: string, ev: string, data?: Record<string, unknown>) => void = log;
+  /**
    * Agent ids whose in-flight attempt was killed by the memory guard.
    * Consumed (checked + deleted) by spawnAndRun's catch so the old
    * attempt's rejection skips retry accounting. A consumable Set — not a
@@ -316,11 +348,16 @@ export class Orchestrator {
     // Memory-aware concurrency is the default; autoScale: false pins the
     // pool at initialConcurrency but keeps the always-on memory guard.
     const autoMode = options.autoScale !== false;
+    this.scheduler = options.scheduler ?? null;
+    this.externalRunId = options.runId;
     this.portAllocator = new PortAllocator({
       basePort: pipeline.portAllocation?.basePort,
       windowSize: pipeline.portAllocation?.windowSize,
       enabled: pipeline.portAllocation?.enabled ?? true,
       maxAgents: autoMode ? AUTO_SCALE_MAX_INSTANCES : MAX_INSTANCES,
+      // Multi-run: share the scheduler's reservation set so two concurrent runs
+      // never hand out the same physical port window.
+      sharedReservedPorts: this.scheduler?.sharedReservedPorts,
     });
     this.autoScaler = new AutoScaler({
       resourceMonitor: getSystemMetrics,
@@ -465,7 +502,7 @@ export class Orchestrator {
   abort(): void {
     if (this.aborted) return;
     this.aborted = true;
-    dlog('orch', 'abort_requested', {
+    this.dlog('orch', 'abort_requested', {
       activeAgents: this.activeAgents.size,
       pendingTasks: this.pendingTasks.length,
       finalizing: this.finalizingIds.size,
@@ -485,7 +522,7 @@ export class Orchestrator {
         try {
           await agent.dispose();
         } catch (err) {
-          dlog('orch', 'dispose_failed', {
+          this.dlog('orch', 'dispose_failed', {
             agentId,
             err: err instanceof Error ? err.message : String(err),
           });
@@ -574,6 +611,28 @@ export class Orchestrator {
     this.poolWakeup?.();
   }
 
+  // --- GlobalScheduler RunDriver surface (multi-run subordinate mode) ---
+
+  /** Slots this run could use right now: active + spawning + pending. */
+  private getDemand(): number {
+    return this.activeAgents.size + this.spawningIds.size + this.pendingTasks.length;
+  }
+
+  /**
+   * Running TASK agents with their work-start time, for the scheduler's victim
+   * selection (newest = least work lost — mirrors the in-pool guard's
+   * `startedAt ?? createdAt`). Reserved integration/judge agents never enter
+   * `activeAgents`, so they are naturally excluded as kill victims.
+   */
+  private activeAgentAges(): Array<{ agentId: number; startedAt: number }> {
+    const out: Array<{ agentId: number; startedAt: number }> = [];
+    for (const id of this.activeAgents.keys()) {
+      const st = this.agents.get(id);
+      out.push({ agentId: id, startedAt: st?.startedAt ?? st?.createdAt ?? 0 });
+    }
+    return out;
+  }
+
   async start(): Promise<OrchestratorResult> {
     if (this.status !== 'idle') throw new Error('Orchestrator already running');
     this.startedAt = Date.now();
@@ -591,10 +650,10 @@ export class Orchestrator {
     });
 
     try {
-      dlog('orch', 'preflight_start', { cwd: this.cwd });
+      this.dlog('orch', 'preflight_start', { cwd: this.cwd });
       const preflightStartedAt = Date.now();
       this.preflight = await runPreflight(this.cwd);
-      dlog('orch', 'preflight_end', {
+      this.dlog('orch', 'preflight_end', {
         durationMs: Date.now() - preflightStartedAt,
         valid: this.preflight.valid,
         errors: this.preflight.errors,
@@ -608,10 +667,10 @@ export class Orchestrator {
       // failure: Docker bridge MTU (1500) > VPN tunnel MTU (~1420) drops
       // TLS ClientHello packets silently.
       if ((this.config.backend ?? 'pi') === 'pi') {
-        dlog('orch', 'network_probe_start');
+        this.dlog('orch', 'network_probe_start');
         const probeStartedAt = Date.now();
         const reach = await checkOpenRouterReachable(this.config.apiKey);
-        dlog('orch', 'network_probe_end', {
+        this.dlog('orch', 'network_probe_end', {
           durationMs: Date.now() - probeStartedAt,
           kind: reach.kind,
         });
@@ -641,7 +700,8 @@ export class Orchestrator {
           );
         }
       }
-      const runId = generateRunId();
+      const runId = this.externalRunId ?? generateRunId();
+      this.dlog = scopedDebugLog(runId);
       this.runLogger = new RunLogger({
         repoRoot: this.preflight.repoRoot,
         runId,
@@ -674,11 +734,15 @@ export class Orchestrator {
         this.preflight.repoRoot,
         runId,
         this.preflight.baseCommit,
+        // Multi-run: serialize short git plumbing per repo so two runs on the
+        // SAME repo never race on worktree-admin names / `.git` locks. No-op
+        // (uncontended) for single-run and for runs on different repos.
+        this.scheduler !== null,
       );
-      dlog('orch', 'integration_worktree_create_start');
+      this.dlog('orch', 'integration_worktree_create_start');
       const intStartedAt = Date.now();
       const integration = await this.worktreeManager.createIntegrationWorktree();
-      dlog('orch', 'integration_worktree_create_end', {
+      this.dlog('orch', 'integration_worktree_create_end', {
         durationMs: Date.now() - intStartedAt,
         path: integration.worktreePath,
         branch: integration.branchName,
@@ -731,11 +795,23 @@ export class Orchestrator {
       }
       this.emit();
 
-      // Always running: in auto mode it drives the concurrency target, in
-      // manual mode it is the memory guard (kill newest at the destroy
-      // threshold). The port-allocator cap was already set per-mode in the
-      // constructor and is adjusted by enable/disableAutoScale.
-      this.autoScaler.start();
+      // Multi-run: register as a subordinate driver so the GlobalScheduler
+      // grants this run slots and (under RAM pressure) can pick its agents as
+      // kill victims. The per-run AutoScaler then stays DORMANT — the scheduler
+      // owns the single machine read. Single-run: start the per-run AutoScaler
+      // as before (auto = drives the target, manual = the memory guard). The
+      // port-allocator cap was set per-mode in the constructor.
+      if (this.scheduler) {
+        this.schedulerHandle = this.scheduler.register({
+          runId,
+          getDemand: () => this.getDemand(),
+          activeAgentAges: () => this.activeAgentAges(),
+          destroyAgent: (id) => this.destroyAgent(id),
+          acceptMetrics: (m) => this.autoScaler.acceptMetrics(m),
+        });
+      } else {
+        this.autoScaler.start();
+      }
 
       // --- Graph cursor: walk the steps array, honoring `next` overrides
       // and check-step outcomes. CheckSteps spawn the judge agent and pick
@@ -919,7 +995,20 @@ export class Orchestrator {
         this.processLogUnsubscribe = null;
       }
 
+      // Multi-run: leave the scheduler so the freed budget flows to the other
+      // runs. Guarded — start() may have thrown before registration.
+      if (this.schedulerHandle) {
+        this.scheduler?.unregister(this.schedulerHandle);
+        this.schedulerHandle = null;
+      }
+      // Idempotent — safe even when subordinate mode never started it.
       this.autoScaler.stop();
+      // Backstop sweep of this run's port windows. Per-agent release() covers
+      // every normal exit, but the port set is SHARED across runs in multi-run
+      // mode and lives as long as the host process, so any missed window (e.g.
+      // a finalize that timed out past the grace window) would leak permanently
+      // without this. Releases only THIS run's windows (see PortAllocator).
+      this.portAllocator.releaseAll();
 
       // Wait for in-flight finalize+dispose with a bounded timeout. The
       // pool's main loop only awaits these on the happy path; an early
@@ -933,7 +1022,7 @@ export class Orchestrator {
         ...this.disposingPromises,
       ];
       if (inFlight.length > 0) {
-        dlog('orch', 'await_inflight', {
+        this.dlog('orch', 'await_inflight', {
           finalizing: this.finalizingPromises.size,
           disposing: this.disposingPromises.size,
         });
@@ -942,7 +1031,7 @@ export class Orchestrator {
           new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
         ]);
         if (this.finalizingPromises.size + this.disposingPromises.size > 0) {
-          dlog('orch', 'inflight_timeout', {
+          this.dlog('orch', 'inflight_timeout', {
             finalizing: this.finalizingPromises.size,
             disposing: this.disposingPromises.size,
           });
@@ -963,7 +1052,7 @@ export class Orchestrator {
         try {
           await this.worktreeManager.removeIntegrationWorktree();
         } catch (err) {
-          dlog('orch', 'integration_cleanup_failed', {
+          this.dlog('orch', 'integration_cleanup_failed', {
             err: err instanceof Error ? err.message : String(err),
           });
           this.log({
@@ -1003,33 +1092,43 @@ export class Orchestrator {
       !this.aborted &&
       (this.pendingTasks.length > 0 || this.activeAgents.size > 0 || this.spawningIds.size > 0 || this.finalizingIds.size > 0)
     ) {
-      this.autoScaler.notifyTaskQueued(this.pendingTasks.length);
-      // Auto mode drives the concurrency target from memory headroom; greedy
-      // (MAX) mode drives it from the queue depth; manual mode keeps the
-      // user's pinned value. Both scaler modes recompute every tick.
-      const scaleMode = this.autoScaler.getMode();
-      if (scaleMode === 'auto' || scaleMode === 'greedy') {
-        this.instanceCount = this.autoScaler.targetConcurrency();
-      }
-
-      // Memory guard (both modes): at the destroy threshold, kill the
-      // NEWEST agent — the one with the least work done — and requeue its
-      // task to TODO so older agents' progress is never lost.
-      if (this.autoScaler.shouldDestroy() && this.activeAgents.size > 0) {
-        let newestId = -1;
-        let newestTime = 0;
-        for (const [id, _agent] of this.activeAgents) {
-          const status = this.agents.get(id);
-          const since = status?.startedAt ?? status?.createdAt;
-          if (since && since > newestTime) {
-            newestTime = since;
-            newestId = id;
-          }
+      if (this.scheduler) {
+        // SUBORDINATE (multi-run): the GlobalScheduler owns the concurrency
+        // target AND the cross-run, priority-ordered memory-guard kill. Refresh
+        // grants so this run's current demand is reflected, then read our slice.
+        // No in-pool guard here — selectGlobalVictim() runs in the scheduler
+        // tick so the victim is the LOWEST-priority run's newest agent.
+        this.scheduler.recomputeGrants();
+        this.instanceCount = this.scheduler.grantFor(this.manifest!.runId);
+      } else {
+        this.autoScaler.notifyTaskQueued(this.pendingTasks.length);
+        // Auto mode drives the concurrency target from memory headroom; greedy
+        // (MAX) mode drives it from the queue depth; manual mode keeps the
+        // user's pinned value. Both scaler modes recompute every tick.
+        const scaleMode = this.autoScaler.getMode();
+        if (scaleMode === 'auto' || scaleMode === 'greedy') {
+          this.instanceCount = this.autoScaler.targetConcurrency();
         }
-        if (newestId >= 0) {
-          await this.destroyAgent(newestId);
-          this.autoScaler.notifyAgentDestroyed();
-          // Re-evaluation: next poll cycle will check shouldDestroy() again
+
+        // Memory guard (both modes): at the destroy threshold, kill the
+        // NEWEST agent — the one with the least work done — and requeue its
+        // task to TODO so older agents' progress is never lost.
+        if (this.autoScaler.shouldDestroy() && this.activeAgents.size > 0) {
+          let newestId = -1;
+          let newestTime = 0;
+          for (const [id, _agent] of this.activeAgents) {
+            const status = this.agents.get(id);
+            const since = status?.startedAt ?? status?.createdAt;
+            if (since && since > newestTime) {
+              newestTime = since;
+              newestId = id;
+            }
+          }
+          if (newestId >= 0) {
+            await this.destroyAgent(newestId);
+            this.autoScaler.notifyAgentDestroyed();
+            // Re-evaluation: next poll cycle will check shouldDestroy() again
+          }
         }
       }
 
@@ -1037,7 +1136,7 @@ export class Orchestrator {
       const busyCount = this.activeAgents.size + this.spawningIds.size;
       const slotsAvailable = Math.max(0, this.instanceCount - busyCount);
       for (let i = 0; i < slotsAvailable && this.pendingTasks.length > 0; i++) {
-        if (!this.autoScaler.shouldSpawn()) {
+        if (!(this.scheduler ? this.scheduler.shouldSpawn() : this.autoScaler.shouldSpawn())) {
           break;
         }
         const task = this.pendingTasks.shift()!;
@@ -1091,7 +1190,7 @@ export class Orchestrator {
     const totalAttempts = 1 + maxRetries;
     const timeoutMs = computeCardTimeoutMs(task, this.pipeline);
     const git = this.worktreeManager!.getGitClient();
-    dlog('orch', 'spawn_start', {
+    this.dlog('orch', 'spawn_start', {
       agentId: task.agentId,
       files: task.files,
       totalAttempts,
@@ -1119,7 +1218,7 @@ export class Orchestrator {
           this.stageBaseRef,
           attempt,
         );
-        dlog('orch', 'worktree_ready', {
+        this.dlog('orch', 'worktree_ready', {
           agentId: task.agentId,
           attempt,
           durationMs: Date.now() - wtStartedAt,
@@ -1212,7 +1311,7 @@ export class Orchestrator {
           }
 
           const isTimeout = err instanceof TimeoutError;
-          dlog('orch', 'attempt_failed', {
+          this.dlog('orch', 'attempt_failed', {
             agentId: task.agentId,
             attempt,
             totalAttempts,
@@ -1236,7 +1335,7 @@ export class Orchestrator {
             try {
               await withTimeout(agent.abort(), 3_000);
             } catch (abortErr) {
-              dlog('orch', 'abort_failed', {
+              this.dlog('orch', 'abort_failed', {
                 agentId: task.agentId,
                 err: abortErr instanceof Error ? abortErr.message : String(abortErr),
               });
@@ -1310,7 +1409,7 @@ export class Orchestrator {
         this.finalizingPromises.add(finalizePromise);
         finalizePromise
           .catch((err) => {
-            dlog('orch', 'finalize_unhandled', {
+            this.dlog('orch', 'finalize_unhandled', {
               agentId: task.agentId,
               err: err instanceof Error ? err.message : String(err),
               stack: err instanceof Error ? err.stack : undefined,
@@ -1332,7 +1431,7 @@ export class Orchestrator {
         // attempt — clean up partials and decide retry vs final-fail. Keep
         // task in spawningIds across the cleanup awaits so the pool's poll
         // loop doesn't drop us mid-retry. On final-fail we delete it.
-        dlog('orch', 'attempt_setup_failed', {
+        this.dlog('orch', 'attempt_setup_failed', {
           agentId: task.agentId,
           attempt,
           totalAttempts,
@@ -1393,7 +1492,7 @@ export class Orchestrator {
     const git = this.worktreeManager!.getGitClient();
     let noChanges = false;
 
-    dlog('orch', 'finalize_start', {
+    this.dlog('orch', 'finalize_start', {
       agentId,
       worktreePath: status.worktreePath,
       stageIndex: status.stageIndex,
@@ -1403,7 +1502,7 @@ export class Orchestrator {
     try {
       this.updateAgentStatus(agentId, { phase: 'finalizing' });
       noChanges = !(await git.hasChanges(status.worktreePath));
-      dlog('orch', 'finalize_changes_check', { agentId, noChanges });
+      this.dlog('orch', 'finalize_changes_check', { agentId, noChanges });
       if (noChanges) {
         this.updateAgentStatus(agentId, { phase: 'no_changes' });
       } else {
@@ -1412,7 +1511,7 @@ export class Orchestrator {
         await git.stageAll(status.worktreePath);
         const commitMsg = `[${this.pipeline.name}] ${status.stageName} (agent ${agentId})`;
         const commitSha = await git.commitNoVerify(status.worktreePath, commitMsg);
-        dlog('orch', 'finalize_committed', {
+        this.dlog('orch', 'finalize_committed', {
           agentId,
           commitSha,
           fileCount: changed.length,
@@ -1425,7 +1524,7 @@ export class Orchestrator {
 
       this.updateAgentStatus(agentId, { phase: 'cleaning_up' });
       await this.worktreeManager!.removeAgentWorktree(agentId);
-      dlog('orch', 'finalize_done', {
+      this.dlog('orch', 'finalize_done', {
         agentId,
         noChanges,
         commitSha: status.commitSha,
@@ -1443,7 +1542,7 @@ export class Orchestrator {
       // "commit failed because the worktree was already gone" from
       // "git lock contention" — the bare error message often elides
       // which step we were on when it threw.
-      dlog('orch', 'finalize_failed', {
+      this.dlog('orch', 'finalize_failed', {
         agentId,
         worktreePath: status.worktreePath,
         commitSoFar: status.commitSha,
@@ -1954,7 +2053,7 @@ export class Orchestrator {
       return false;
     }
     traceEntry.finishedAt = Date.now();
-    dlog('orch', 'step_advance', {
+    this.dlog('orch', 'step_advance', {
       visitIndex,
       stepName: workStep.name,
       runs,

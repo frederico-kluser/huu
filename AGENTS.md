@@ -66,8 +66,10 @@ paragraph, for the current list.
                 a fully synthetic demo run — SimulationEngine, no git/LLM/key
                 — see the building-web-ui skill)
               ui/components/ (Ink React views — the --cli TUI)
-                ↓ (both front-ends drive ONE Orchestrator)
-              orchestrator/ (worker pool, stage lifecycle, merge)
+                ↓ (TUI drives ONE Orchestrator; the web hosts N concurrent
+                  runs via the GlobalScheduler — see Multi-run scheduling)
+              orchestrator/ (worker pool, stage lifecycle, merge;
+                global-scheduler.ts multiplexes N runs — see Multi-run scheduling)
                 ↓
               orchestrator/backends/ (pluggable agent SDKs:
                 pi/      — @mariozechner/pi-coding-agent (the only user-facing
@@ -82,7 +84,8 @@ paragraph, for the current list.
                 ↓
               lib/ (types, pipeline-io, file-scanner, run-id, status,
                     init-docker, docker-reexec, active-run-sentinel,
-                    api-key, prune, debug-logger, run-logger,
+                    api-key, prune, debug-logger, run-logger, repo-lock,
+                    run-many (headless multi-run driver),
                     screen-fsm, assistant-check-feasibility)
 ```
 
@@ -129,6 +132,39 @@ publishes; accumulates like tokens/logs, NOT reset on requeue). The Ink kanban
 (`RunKanban.tsx`) renders them as a per-action counters label plus a colored
 `→ <action>` marker folded onto the `log:` line (the merge costs no extra
 `cardHeight()` row; the counters label does — keep them in sync).
+
+### Multi-run scheduling (GlobalScheduler)
+
+A `GlobalScheduler` (`src/orchestrator/global-scheduler.ts`) runs MULTIPLE
+pipeline runs in ONE process under a single shared RAM/concurrency budget. It
+is the sole owner of the machine read — one `SystemMetricsSampler`
+(`resource-monitor.ts`, de-globalized so concurrent samplers no longer corrupt
+the CPU delta) plus one budget `AutoScaler`; per-run AutoScalers go DORMANT.
+Each `Orchestrator` becomes a subordinate "run driver" via
+`OrchestratorOptions.scheduler`. **When that option is ABSENT the scheduling
+path is unchanged** — the shared-Set `port-allocator`, the per-repo git lock
+(`WorktreeManager`'s `serializeGitOps`, which keeps two SAME-repo runs from
+racing on `.git` worktree/branch ops; merges are excluded), and the dormant
+per-run AutoScaler all engage only in multi-run.
+
+Distribution is the pure `distributeBudget(demands, B)`: top-down by
+registration order (= priority). Earlier runs are served first, later runs
+backfill the remainder, and a bottlenecked run (mid-merge, demand ≈ 0) cascades
+its slots onward. A lower-priority run whose grant drops below its busy count
+DRAINS (stops spawning) — no wasted work. The memory guard is now CROSS-RUN:
+`selectGlobalVictim()` kills the LOWEST-priority run's newest agent first
+(reusing each run's `destroyAgent`/`killedAgentIds`/requeue), never a
+higher-priority run's agent while a lower one has a live agent — pinned by
+`multi-run-priority.test.ts`. `B` is demand-capped, so the admission signal is
+`headroomCapacity − demand` (`GlobalScheduler.remaining`), NOT `B − grants`.
+`src/lib/run-many.ts` is the headless driver (lazy, monotonic admission:
+admit the top run, pull in the next only on sustained spare capacity or while a
+run is merging). The **web** front-end is wired: `WebRunManager` holds a
+`Map<runId>` of concurrent runs over one scheduler, `/api/run` returns a runId
+(no 409), SSE frames + the agent-stream firehose are per-`runId`, and the
+browser shows a **project selector** when >1 run is active (the queue dispatches
+all items at once). See the building-web-ui skill. The TUI selector is the
+remaining piece.
 
 ## Bundled default pipelines
 

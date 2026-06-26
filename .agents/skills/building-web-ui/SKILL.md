@@ -2,7 +2,7 @@
 name: building-web-ui
 description: Procedure and conventions for huu's BROWSER UI (src/web) — the vanilla-ESM no-build client (index.html/app.js/styles.css), the stateless single-run server over node:http + SSE with its TWO frame types (throttled run snapshot vs the un-throttled agent-stream output firehose mirrored to the browser console), the browser-owns-state rule (keys in sessionStorage, run history in IndexedDB), the provider→backend dispatch gotcha, and how to verify client logic with no browser. Use for any change under src/web/ — client screens, the SSE/run-manager server, api-data, or web run/queue/history behavior.
 metadata:
-  version: 0.2.1
+  version: 0.3.0
   type: task
 ---
 
@@ -29,7 +29,7 @@ Anything under `src/web/`: the browser client (`client/index.html`, `client/app.
 
 ### Server contract & gotchas (each is a real constraint)
 
-- **Single run per server.** `WebRunManager` holds one `Orchestrator`; a second `start()` throws `already in progress` → server returns **HTTP 409**. On settle the run-manager flips phase to `done`/`error` and nulls the orch, so the next `/api/run` is accepted. This is what makes **browser-driven SEQUENTIAL runs** work: watch SSE for a terminal phase, then POST the next run (retry briefly on a transient 409). Verified: two back-to-back `{backend:'stub'}` runs start with distinct runIds.
+- **Multiple runs per server (multi-run scheduling).** `WebRunManager` holds a `Map<runId, …>` of concurrent runs sharing ONE `GlobalScheduler` (a single RAM/concurrency budget — earlier runs have priority, later ones backfill the idle slots, lowest-priority newest agent is killed first under pressure). `start()` assigns a stable runId (via `OrchestratorOptions.runId`) and returns immediately — there is **NO 409**; a `MAX_CONCURRENT_RUNS` cap returns **429**. Each run streams its OWN `{type:'run', run}` snapshot (throttled PER runId), and the `{type:'agent-stream', runId, …}` firehose is now **tagged with its runId**. Actions (`/api/run/abort|concurrency|pause`) and `/api/agent-logs` take a `runId`; **abort with NO runId stops ALL runs and tears down the scheduler**. `/api/bootstrap` returns `runs[]` (was `run`). The client keys `S.runs` by runId, keeps `S.run` as a pointer to the active (selected) run, shows a **project selector** (`#runSelector`, `.run-tab`) when `>1` run is tracked, and the queue **dispatches all items at once** (concurrent, priority = order) instead of waiting for each to settle. `/simulation` runs are synthetic (no scheduler) but share the same map, so several can run + show in the selector.
 - **Provider derives the backend; `lockedBackend` is ignored by `startRun`.** `server.startRun` does `provider ? providerToBackend(provider) : parseBackendKind(body.backend)` (openrouter→pi, azure→azure). So `--stub` does NOT force stub for browser-initiated runs. To drive a stub run, POST `{backend:'stub'}` with **NO `provider`** (stub `requiresApiKey:false`).
 - `/api/run` already accepts per-run `provider, modelId, mode, concurrency, apiKey, endpoint, runDirectory, timeoutMinutes` — **heterogeneous sequential runs need ZERO server change**.
 - **Cards & cost.** `OrchestratorState` cards = `agents[]` (only these carry per-card `cost` + tokens), `stageIntegrations[]` (merge), `checkRuns[]` (judge). `state.totalCost` is summed LIVE in `getState()` (and in the headless `start()` result) as Σ per-agent `cost` via the `currentTotalCost()` helper, so the header tracks spend in real time. Merge/judge LLM cost is NOT metered (those reserved-id agents aren't in `this.agents`), so it is NOT in `totalCost` yet. The terminal SSE frame carries the full final `state` (`trimState` only caps `agent.logs` to 200 lines), so the browser can archive every card + cost on settle.
@@ -57,7 +57,7 @@ Apple "Liquid Glass" system: CSS-var tokens (`--accent` indigo, `--accent-2` pur
 - `src/orchestrator/simulation/engine.ts` + `corpus.ts` (the `/simulation` `SimulationEngine`), `engine.test.ts` + `src/web/run-manager.test.ts` (its specs).
 - Related: `following-architecture-conventions`, `working-on-orchestrator`, `integrating-llm-backends`, `running-in-docker`, `building-tui-screens` (the Ink counterpart).
 
-> Facts verified against source on 2026-06-25; `/simulation` synthetic demo surface added + verified 2026-06-26.
+> Facts verified against source on 2026-06-25; `/simulation` synthetic demo surface added + verified 2026-06-26; multi-run scheduling (Map of concurrent runs, one GlobalScheduler, per-run SSE, runId-scoped actions, project selector) added + verified 2026-06-26.
 
 ## <evolution>
 

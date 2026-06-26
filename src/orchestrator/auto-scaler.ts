@@ -190,6 +190,26 @@ export class AutoScaler {
     return Math.max(1, Math.min(this.activeAgentCount + additional, ceiling));
   }
 
+  /**
+   * Memory-headroom capacity WITHOUT the demand ceiling: active agents plus how
+   * many more fit in the claimable RAM, capped only by maxAgents (never by
+   * pending work). `targetConcurrency()` is this clamped down to actual demand;
+   * the GlobalScheduler compares THIS to total demand to learn whether the
+   * machine could absorb another admitted run (its admission signal).
+   */
+  headroomCapacity(): number {
+    const { maxAgents } = this.config;
+    if (this.mode === 'greedy') return maxAgents;
+    const { ramTotalBytes, ramAvailableBytes } = this.currentMetrics;
+    const margin = Math.max(
+      ramTotalBytes * (this.config.safetyMarginPercent / 100),
+      MIN_SAFETY_MARGIN_BYTES,
+    );
+    const headroom = Math.max(0, ramAvailableBytes - margin);
+    const additional = Math.floor(headroom / this.observedAgentBytes);
+    return Math.max(1, Math.min(this.activeAgentCount + additional, maxAgents));
+  }
+
   /** Observed per-agent memory footprint in MiB (EMA, clamped). */
   observedAgentMemoryMb(): number {
     return Math.round(this.observedAgentBytes / MIB);
@@ -222,6 +242,41 @@ export class AutoScaler {
 
   notifyTaskQueued(count: number): void {
     this.pendingTaskCount = count;
+  }
+
+  /**
+   * Overwrite the active/pending counts directly. Used by the GlobalScheduler,
+   * which drives ONE budget AutoScaler from the SUM of every run's counts each
+   * tick — `targetConcurrency()` then returns the GLOBAL slot budget and
+   * `shouldDestroy()` reflects global pressure. Single-run orchestrators keep
+   * using notifyAgentSpawned/Completed + notifyTaskQueued and never call this.
+   */
+  syncCounts(activeTotal: number, pendingTotal: number): void {
+    this.activeAgentCount = Math.max(0, Math.floor(activeTotal));
+    this.pendingTaskCount = Math.max(0, Math.floor(pendingTotal));
+  }
+
+  /**
+   * Inject externally-sampled metrics instead of polling this scaler's own
+   * resourceMonitor. In multi-run mode the GlobalScheduler owns the single
+   * SystemMetricsSampler and forwards its reading to each subordinate run's
+   * DORMANT scaler, so per-run AutoScaleStatus (the RAM%/CPU% the UI shows)
+   * stays live without every scaler independently polling the machine — which
+   * would corrupt the shared CPU delta. Display-only: a dormant scaler is
+   * never `start()`ed, so this never drives a spawn/kill decision.
+   */
+  acceptMetrics(metrics: SystemMetrics): void {
+    this.currentMetrics = metrics;
+  }
+
+  /**
+   * The latest metrics this scaler is working from. The GlobalScheduler reads
+   * its budget scaler's metrics once per tick and pushes them into each
+   * subordinate run's dormant scaler via {@link acceptMetrics}, so per-run
+   * RAM%/CPU% displays stay live without every scaler polling the machine.
+   */
+  metrics(): SystemMetrics {
+    return this.currentMetrics;
   }
 
   getStatus(): AutoScaleStatus {
