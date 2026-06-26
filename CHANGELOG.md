@@ -194,6 +194,16 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Fixed
 
+- **Finished queue projects move to History instead of lingering in the queue
+  (web).** When a project queue finished, each settled run was archived to
+  History (IndexedDB) but its item stayed in the queue — and the persisted
+  queue drops run status, so returning home (or reloading) restored the
+  finished projects as *pending* and the next "Run queue" re-ran the same
+  pipelines indefinitely. Settled projects (done/error) are now pruned from the
+  queue when it completes (`finishQueue`) or is stopped (`stopFinalize`), so a
+  clean finish empties the queue and a stop keeps only what never ran; the
+  topbar History panel remains the record of finished runs. The prune decision
+  is a pure, unit-tested `src/web/client/queue-util.js`.
 - **Editing a queued project no longer crashes (web).** `editQueueItem` read a
   `#modelSelect` `<select>` that the combobox migration had removed, throwing on
   `null.value`; it now restores the saved model id (catalog **or** custom)

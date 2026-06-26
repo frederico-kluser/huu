@@ -287,9 +287,11 @@ describe('web server', () => {
 
     // The run lives in the server process, not the browser: disconnect ≠ abort.
     expect(manager.isActive()).toBe(true);
-    // A freshly reopened page re-syncs to the still-running run.
+    // A freshly reopened page re-syncs to the still-running run. Bootstrap
+    // reports every tracked run under `runs[]` (multi-run); the stub run we
+    // started must still be in there as 'running'.
     const boot = await (await fetch(base + '/api/bootstrap')).json();
-    expect(boot.run.phase).toBe('running');
+    expect(boot.runs.some((r: { phase: string }) => r.phase === 'running')).toBe(true);
 
     manager.abort();
   });
