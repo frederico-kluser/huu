@@ -20,7 +20,10 @@ import {
   findMissingKeysForProvider,
   type ApiKeySpec,
 } from '../lib/api-key.js';
-import { checkOpenRouterReachable } from '../lib/openrouter.js';
+import {
+  checkOpenRouterReachable,
+  listToolReasoningModels,
+} from '../lib/openrouter.js';
 import { checkAzureReachable } from '../lib/azure.js';
 import { PROVIDERS, type ProviderInfo } from '../lib/providers.js';
 import { loadRecommendedModels } from '../models/catalog.js';
@@ -64,6 +67,8 @@ export interface ModelInfo {
   bestFor?: string[];
   tier?: string;
   thinking: boolean;
+  /** Context window in tokens, when known (live OpenRouter catalog only). */
+  contextLength?: number;
 }
 
 export interface KeySpecInfo {
@@ -192,6 +197,49 @@ export function listModelsInfo(
     tier: m.tier,
     thinking: supportsThinking(m.id),
   }));
+}
+
+/**
+ * Models offered for a backend in the web UI.
+ *
+ * For OpenRouter (`pi`) WITH a usable key this is the LIVE catalog filtered to
+ * models that support BOTH tool calling and reasoning — the capabilities huu's
+ * agents need. On any failure (no key, network/timeout, empty result) it falls
+ * back to the static recommended catalog, so the picker is never empty. Azure
+ * and stub always use the static catalog.
+ *
+ * `openrouterKey` arrives via the browser-only flow (the `x-huu-key` header the
+ * client sends once the user has validated it); used in memory only, never
+ * logged or persisted here.
+ */
+export async function listModelsForBackend(
+  cwd: string,
+  backend: AgentBackendKind,
+  openrouterKey: string,
+): Promise<{ models: ModelInfo[]; source: 'openrouter-live' | 'recommended' }> {
+  const key = openrouterKey.trim();
+  if (backend === 'pi' && key) {
+    try {
+      const live = await listToolReasoningModels(key);
+      if (live.length > 0) {
+        return {
+          source: 'openrouter-live',
+          models: live.map((m) => ({
+            id: m.id,
+            label: m.name,
+            inputPrice: m.inputPricePerM,
+            outputPrice: m.outputPricePerM,
+            contextLength: m.contextLength,
+            // Every model here is reasoning-capable by the filter above.
+            thinking: true,
+          })),
+        };
+      }
+    } catch {
+      // network/timeout/HTTP error → fall back to the static catalog below
+    }
+  }
+  return { models: listModelsInfo(cwd, backend), source: 'recommended' };
 }
 
 function specToInfo(spec: ApiKeySpec): KeySpecInfo {

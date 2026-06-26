@@ -109,10 +109,14 @@
               </div>
 
               <div class="field">
-                <label for="modelSelect">Model</label>
-                <div class="select-wrap">
-                  <select id="modelSelect"></select>
+                <label for="modelInput">Model</label>
+                <div class="combo" id="modelCombo">
+                  <input id="modelInput" class="combo__input" type="text" role="combobox"
+                         aria-expanded="false" aria-controls="modelList" aria-autocomplete="list"
+                         autocomplete="off" spellcheck="false" placeholder="Loading models…" />
+                  <ul class="combo__list" id="modelList" role="listbox" hidden></ul>
                 </div>
+                <div class="model-cap" id="modelCap"></div>
                 <div class="model-hint" id="modelHint"></div>
               </div>
 

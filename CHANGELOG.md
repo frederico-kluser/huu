@@ -9,6 +9,15 @@ SemVer 0.x.x convention: breaking changes go in minor-version bumps.
 
 ### Added
 
+- **Web model picker lists every OpenRouter tool-calling + reasoning model.**
+  The web UI's Model field is now a searchable combobox — type to filter the
+  full catalog — instead of a two-item dropdown. Once you validate your
+  OpenRouter key, `GET /api/models` fetches the live catalog and keeps only the
+  models that support BOTH tool calling and reasoning (~170 today), sent via the
+  browser-only `x-huu-key` header; with no key it falls back to the static
+  recommended list. New `filterToolReasoningModels` / `listToolReasoningModels`
+  in `src/lib/openrouter.ts` and `listModelsForBackend` in `src/web/api-data.ts`
+  (`ModelInfo` gains an optional `contextLength`).
 - **Sequential project queue + run history (web).** The web launch screen now
   builds a **queue of projects**, each with its OWN config (pipeline,
   directory, provider, model, concurrency), and runs them **sequentially** —

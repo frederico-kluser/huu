@@ -2,7 +2,7 @@
 name: integrating-llm-backends
 description: Maps huu's agent-backend system — the registry kind→factory dispatch (pi, copilot, azure, stub), the BackendBundle contract, the 5-step API-key resolution chain, thinking-model detection and model catalogs. Use when changing LLM clients, adding or debugging a backend, fixing auth/key resolution, or touching model selection.
 metadata:
-  version: 0.1.0
+  version: 0.2.0
   type: knowledge
 ---
 
@@ -47,6 +47,7 @@ Per-backend specs live in `src/lib/api-key-registry.ts` (envVar / envFileVar / s
 
 - Thinking-capable detection is a modelId-prefix heuristic (anthropic/claude*, deepseek/deepseek-r1*, openai/o1*, google/gemini-2.5*, z-ai/glm-z1*) — extend the list when a new reasoning family appears, don't special-case call sites.
 - `recommended-models.json` (repo root) is the default catalog shown in the selector; recents persist to `~/.huu/recents.json`.
+- **Web picker — live OpenRouter catalog.** `GET /api/models` → `listModelsForBackend` (`web/api-data.ts`) returns, for `pi` WITH a key, the live catalog filtered to `supported_parameters ⊇ {tools, reasoning}` (`filterToolReasoningModels` / `listToolReasoningModels` in `lib/openrouter.ts`), else the static recommended list. The browser sends its session key via the `x-huu-key` header; gate the live fetch on a non-empty key so the endpoint stays hermetic in tests. The web picker is vanilla JS (`web/client/app.js`), NOT the Ink `ModelSelectorOverlay` / `model-selector-ink` table — confirm web vs TUI before changing "the model selector".
 - The stage-integration/conflict agent uses the SAME model as the run — there is no per-step model override for it.
 
 ### Adding a backend — checklist

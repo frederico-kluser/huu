@@ -315,7 +315,13 @@ on the first run.
 of the model picker. Each entry can carry optional metadata:
 `description`, `bestFor` (use-case tags), `tier`
 (`flagship` / `workhorse` / `fast`), and `provider`
-(`openrouter` or `copilot`).
+(`openrouter` or `azure`).
+
+In the **web UI**, once your OpenRouter key is validated the Model field
+loads the **live OpenRouter catalog** filtered to models that support
+**both tool calling and reasoning** (`GET /api/models` →
+`listToolReasoningModels` in `src/lib/openrouter.ts`); the curated
+short-list above is the no-key / offline fallback.
 
 When `ARTIFICIAL_ANALYSIS_API_KEY` is set, the quick picker renders a
 fixed-width table with live metrics from Artificial Analysis —

@@ -202,6 +202,12 @@ TUI no terminal.
   launch — ela é **validada na hora** contra o provider e fica só na aba do
   navegador (`sessionStorage`), enviada a cada run e **nunca escrita em
   disco**. Uma `OPENROUTER_API_KEY` solta no shell não consegue sombrear.
+- **Seletor de modelo com busca — todo modelo com tool calling + reasoning.**
+  Depois de validar sua key do OpenRouter, o campo **Model** vira um combobox
+  com busca (digite pra filtrar) sobre o **catálogo ao vivo do OpenRouter**,
+  restrito aos modelos que suportam **tool calling e reasoning** (o que os
+  agentes do huu precisam) — sem mais dropdown de dois itens. Sem key, cai
+  numa lista curta recomendada.
 
 > **Hoje a web roda pipelines existentes** (listar, escolher, enfileirar e
 > executar em sequência, ajustar concorrência, parar). Os **construtores
