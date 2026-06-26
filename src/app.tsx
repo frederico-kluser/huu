@@ -10,6 +10,7 @@ import { PipelineImportList } from './ui/components/PipelineImportList.js';
 import { PipelineJsonPaste } from './ui/components/PipelineJsonPaste.js';
 import { TimeoutPrompt } from './ui/components/TimeoutPrompt.js';
 import { RunDashboard } from './ui/components/RunDashboard.js';
+import { MultiRunDashboard } from './ui/components/MultiRunDashboard.js';
 import { ApiKeyPrompt } from './ui/components/ApiKeyPrompt.js';
 import { BackendSelector } from './ui/components/BackendSelector.js';
 import { DirectoryPicker } from './ui/components/DirectoryPicker.js';
@@ -120,7 +121,9 @@ export function App({
   const [selectedPipelineIndex, setSelectedPipelineIndex] = useState<number>(0);
   const [savedPipelines, setSavedPipelines] = useState<PipelineEntry[]>([]);
 
-  const { screen, pipeline, modelId, backendKind, apiKey, pipelineSourceName } = fsm;
+  const { screen, pipeline, pipelines, modelId, backendKind, apiKey, pipelineSourceName } = fsm;
+  // A concurrent multi-run batch (2+ pipelines, shared config).
+  const isMulti = (pipelines?.length ?? 0) >= 2;
   // The directory the run targets. Defaults to the process cwd (which the
   // `--dir=` flag may already have moved). The DirectoryPicker screen lets
   // the user navigate the filesystem and choose a different folder at runtime.
@@ -540,7 +543,8 @@ export function App({
           setActiveResolverFactory(() => bundle.conflictResolverFactory);
           setActiveRequiresApiKey(bundle.requiresApiKey);
           // Skip model selector when every step already has its own model.
-          if (allStepsHaveModel(pipeline)) {
+          // Never skip for a multi-run batch — it picks ONE shared model.
+          if (!isMulti && allStepsHaveModel(pipeline)) {
             const missing = kind === 'stub' ? [] : findMissingKeysForBackend(kind);
             const spec = kind === 'azure' ? azureApiKeySpec : openrouterSpec;
             const resolved = spec ? resolveApiKey(spec) : apiKey;
@@ -609,6 +613,7 @@ export function App({
       <SavedPipelinesManager
         entries={savedPipelines}
         onSelect={(loaded) => dispatch({ type: 'saved.select', pipeline: loaded })}
+        onSelectMany={(picked) => dispatch({ type: 'saved.selectMany', pipelines: picked })}
         onDelete={(name) => {
           deletePipelineFromMemory(name);
           setSavedPipelines((prev) => prev.filter((e) => e.pipeline.name !== name));
@@ -694,35 +699,53 @@ export function App({
         onCancel={() => dispatch({ type: 'timeout.cancel' })}
       />
     );
-  } else if (screen.kind === 'run' && pipeline) {
-    body = (
-      <RunDashboard
-        config={{
-          apiKey: screen.apiKey || 'stub',
-          modelId: screen.modelId,
-          backend: backendKind,
-          provider: backendToProvider(backendKind),
-          // For Azure backend, resolve the endpoint from the registry.
-          // process.env was updated by the ApiKeyPrompt submit handler,
-          // so resolveApiKey picks it up without additional plumbing.
-          endpoint:
-            backendKind === 'azure' && azureEndpointSpec
-              ? resolveApiKey(azureEndpointSpec) || undefined
-              : undefined,
-        }}
-        pipeline={pipeline}
-        cwd={repoRoot}
-        agentFactory={factory}
-        conflictResolverFactory={resolverFactory}
-        autoScale={autoScale}
-        initialConcurrency={concurrency}
-        onComplete={(result) => dispatch({ type: 'run.complete', result })}
-        onAbort={() => dispatch({ type: 'run.abort' })}
-        onAuthError={(specName) =>
-          dispatch({ type: 'run.authError', backendKind, specName })
-        }
-      />
-    );
+  } else if (screen.kind === 'run' && (isMulti ? pipelines : pipeline)) {
+    const runConfig = {
+      apiKey: screen.apiKey || 'stub',
+      modelId: screen.modelId,
+      backend: backendKind,
+      provider: backendToProvider(backendKind),
+      // For Azure backend, resolve the endpoint from the registry.
+      // process.env was updated by the ApiKeyPrompt submit handler,
+      // so resolveApiKey picks it up without additional plumbing.
+      endpoint:
+        backendKind === 'azure' && azureEndpointSpec
+          ? resolveApiKey(azureEndpointSpec) || undefined
+          : undefined,
+    };
+    body =
+      isMulti && pipelines ? (
+        // 2+ pipelines selected → run them concurrently under one scheduler,
+        // with a project switcher. Q returns (mirrors run.abort).
+        <MultiRunDashboard
+          pipelines={pipelines}
+          config={runConfig}
+          cwd={repoRoot}
+          agentFactory={factory}
+          conflictResolverFactory={resolverFactory}
+          autoScale={autoScale}
+          initialConcurrency={concurrency}
+          onExit={() => dispatch({ type: 'run.abort' })}
+          onAuthError={(specName) =>
+            dispatch({ type: 'run.authError', backendKind, specName })
+          }
+        />
+      ) : (
+        <RunDashboard
+          config={runConfig}
+          pipeline={pipeline!}
+          cwd={repoRoot}
+          agentFactory={factory}
+          conflictResolverFactory={resolverFactory}
+          autoScale={autoScale}
+          initialConcurrency={concurrency}
+          onComplete={(result) => dispatch({ type: 'run.complete', result })}
+          onAbort={() => dispatch({ type: 'run.abort' })}
+          onAuthError={(specName) =>
+            dispatch({ type: 'run.authError', backendKind, specName })
+          }
+        />
+      );
   } else if (screen.kind === 'summary') {
     const r = screen.result;
     const seconds = Math.floor(r.duration / 1000);

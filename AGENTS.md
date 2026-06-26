@@ -66,8 +66,8 @@ paragraph, for the current list.
                 a fully synthetic demo run — SimulationEngine, no git/LLM/key
                 — see the building-web-ui skill)
               ui/components/ (Ink React views — the --cli TUI)
-                ↓ (TUI drives ONE Orchestrator; the web hosts N concurrent
-                  runs via the GlobalScheduler — see Multi-run scheduling)
+                ↓ (both front-ends can host N concurrent runs via the
+                  GlobalScheduler — see Multi-run scheduling)
               orchestrator/ (worker pool, stage lifecycle, merge;
                 global-scheduler.ts multiplexes N runs — see Multi-run scheduling)
                 ↓
@@ -163,8 +163,10 @@ run is merging). The **web** front-end is wired: `WebRunManager` holds a
 `Map<runId>` of concurrent runs over one scheduler, `/api/run` returns a runId
 (no 409), SSE frames + the agent-stream firehose are per-`runId`, and the
 browser shows a **project selector** when >1 run is active (the queue dispatches
-all items at once). See the building-web-ui skill. The TUI selector is the
-remaining piece.
+all items at once). See the building-web-ui skill. The **Ink TUI** has the same
+capability via `MultiRunDashboard` (`src/ui/components/MultiRunDashboard.tsx`):
+multi-select 2+ saved pipelines (SPACE) → run them concurrently with a
+`Tab`/`1-9` project switcher — see the building-tui-screens skill.
 
 ## Bundled default pipelines
 
