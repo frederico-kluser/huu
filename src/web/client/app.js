@@ -56,7 +56,9 @@ const S = {
   mode: 'auto',
   manualN: 10,
   keyStatus: { ok: true, missing: [] },
-  run: { phase: 'idle' },
+  run: { phase: 'idle' },     // the ACTIVE (viewed) run — a pointer into `runs`
+  runs: new Map(),            // runId -> snapshot (every concurrent run)
+  activeRunId: null,          // which run the board/log/metrics show
   openCardKey: null,
   // --- /simulation mode (synthetic demo run; no branches, no key) ---
   sim: false,
@@ -67,15 +69,16 @@ const S = {
   simPaused: false,
   lastSim: null,
   logOpen: false,
-  /* Sequential project queue. Each item carries its OWN config; items run one
-     after another (never concurrently). Finished runs are archived to
-     IndexedDB (see db.js). The queue config (no keys) is mirrored to
-     localStorage so a half-built queue survives a reload. */
+  /* Project queue. Each item carries its OWN config. On start ALL items are
+     dispatched at once and run CONCURRENTLY under one server-side scheduler
+     (priority = dispatch order; later items backfill earlier ones). Finished
+     runs are archived to IndexedDB (see db.js). The queue config (no keys) is
+     mirrored to localStorage so a half-built queue survives a reload. */
   queue: {
-    items: [],          // [{ id, pipelineName, provider, backend, modelId, modelLabel, providerLabel, mode, concurrency, runDirectory, status }]
+    items: [],          // [{ id, pipelineName, provider, backend, modelId, modelLabel, providerLabel, mode, concurrency, runDirectory, status, runId }]
     running: false,
-    index: -1,          // index of the in-flight item
-    current: null,      // { id, item, runId, archived, retries } for the active dispatch
+    live: null,         // Map<runId, item> — runs still in flight
+    settled: 0,         // how many items have reached a terminal state
     processed: null,    // Set<runId> already archived (guards SSE replay)
     stopping: false,    // a Stop-queue is in progress
     editingId: null,    // item being edited back in the form
@@ -145,7 +148,7 @@ async function boot() {
   S.backend = providerBackend(S.provider);
   renderGallery();
   if (b.initialPipeline) selectPipelineByName(b.initialPipeline);
-  ingestRun(b.run);
+  for (const r of b.runs || []) ingestRun(r);
   connectSse();
   // Restore a half-built queue (config only — keys are never persisted) and
   // reflect the saved-history count on the topbar.
@@ -736,36 +739,28 @@ $('queueRun').addEventListener('click', startQueue);
 function startQueue() {
   const q = S.queue;
   if (q.running || !q.items.length) return;
-  for (const it of q.items) it.status = 'pending';
+  for (const it of q.items) { it.status = 'pending'; it.runId = null; }
   q.running = true;
-  q.index = -1;
-  q.current = null;
+  q.live = new Map();
+  q.settled = 0;
   q.processed = new Set();
   q.stopping = false;
   q.id = uid();
   persistQueue();
   renderQueue();
-  advanceQueue();             // → dispatch item 0
-}
-
-function advanceQueue() {
-  const q = S.queue;
-  q.current = null;
-  if (!q.running) return;
-  const next = q.index + 1;
-  if (next < q.items.length) dispatchQueueItem(next);
-  else finishQueue();
+  updateQueueChrome();
+  // Dispatch ALL items at once — the server runs them concurrently under one
+  // shared scheduler (priority = dispatch order; later items backfill earlier
+  // ones). The project selector lets you switch between the live boards.
+  q.items.forEach((_it, i) => dispatchQueueItem(i));
 }
 
 function dispatchQueueItem(i) {
   const q = S.queue;
   const item = q.items[i];
-  if (!item) { finishQueue(); return; }
-  q.index = i;
+  if (!item) return;
   item.status = 'running';
-  q.current = { id: item.id, item, runId: null, archived: false, retries: 0 };
   renderQueue();
-  updateQueueChrome();
   postRun(i);
 }
 
@@ -776,7 +771,7 @@ async function postRun(i) {
   const apiKey = sessionKey(backendSpecName(item.backend));
   const endpoint = sessionKey('azureEndpoint');
   try {
-    await api('/api/run', {
+    const r = await api('/api/run', {
       method: 'POST',
       body: JSON.stringify({
         pipelineName: item.pipelineName,
@@ -789,21 +784,19 @@ async function postRun(i) {
         runDirectory: item.runDirectory || undefined,
       }),
     });
+    const runId = r && r.run && r.run.runId;
+    if (runId) { item.runId = runId; q.live.set(runId, item); }
     showView('run');
+    renderQueue();
   } catch (err) {
-    // The previous run may still be settling server-side (HTTP 409) — retry.
-    if (q.current && q.current.id === item.id && /in progress/i.test(err.message) && q.current.retries < 30) {
-      q.current.retries++;
-      setTimeout(() => { if (q.running && q.current && q.current.id === item.id) postRun(i); }, 350);
-      return;
-    }
-    // Couldn't start at all (missing key, bad dir, …). Record the failure and
-    // keep going — the queue completes even with isolated failures.
+    // Couldn't start (missing key, bad dir, too many concurrent runs, …).
+    // Record the failure and count it settled — the queue still completes.
     item.status = 'error';
     await archiveSynthetic(item, err.message);
+    q.settled++;
     renderQueue();
     refreshHistoryBadge();
-    advanceQueue();
+    maybeFinishQueue();
   }
 }
 
@@ -814,25 +807,23 @@ async function postRun(i) {
  */
 function onRunFrame(run) {
   const q = S.queue;
-  if (!q.running || !q.current) return;
-  if (run.runId && q.processed.has(run.runId)) return;     // already archived
-  const cur = q.current;
-  if (!cur.runId && run.runId) cur.runId = run.runId;        // latch our run's id
-  if (cur.archived) return;
+  if (!q.running || !run.runId) return;
+  if (q.processed.has(run.runId)) return;            // already archived
+  const item = q.live && q.live.get(run.runId);
+  if (!item) return;                                  // not one of THIS queue's runs
   if (run.phase !== 'done' && run.phase !== 'error') return;
-  if (cur.runId && run.runId && run.runId !== cur.runId) return;  // not ours
-  cur.archived = true;
-  if (run.runId) q.processed.add(run.runId);
-  cur.item.status = run.phase === 'done' ? 'done' : 'error';
-  archiveRun(run, cur.item);
+  q.processed.add(run.runId);
+  q.live.delete(run.runId);
+  item.status = run.phase === 'done' ? 'done' : 'error';
+  archiveRun(run, item);
+  q.settled++;
   renderQueue();
   refreshHistoryBadge();
-  if (q.stopping) { stopFinalize(); return; }
-  advanceQueue();
+  maybeFinishQueue();
 }
 
 function queueCtx(item) {
-  return { ...item, queue: { id: S.queue.id, index: S.queue.index, size: S.queue.items.length } };
+  return { ...item, queue: { id: S.queue.id, index: S.queue.items.indexOf(item), size: S.queue.items.length } };
 }
 async function archiveRun(run, item) {
   try { await saveRun(buildRunRecord({ run, item: queueCtx(item), archivedAt: Date.now() })); }
@@ -843,10 +834,16 @@ async function archiveSynthetic(item, reason) {
   catch (e) { console.warn('huu: failed to archive synthetic run', e); }
 }
 
+function maybeFinishQueue() {
+  const q = S.queue;
+  if (q.stopping) { if (!q.live || q.live.size === 0) stopFinalize(); return; }
+  if (q.settled >= q.items.length) finishQueue();
+}
+
 function finishQueue() {
   const q = S.queue;
   q.running = false;
-  q.current = null;
+  q.live = null;
   persistQueue();
   renderQueue();
   updateQueueChrome();
@@ -860,14 +857,15 @@ $('stopQueueBtn').addEventListener('click', () => {
   if (!q.running) return;
   q.stopping = true;
   toast('Stopping queue…');
+  // No runId → the server aborts ALL runs and tears down the shared scheduler.
   api('/api/run/abort', { method: 'POST' }).catch(() => {});
-  if (!q.current) stopFinalize();   // nothing live → finalize immediately
+  if (!q.live || q.live.size === 0) stopFinalize();   // nothing live → finalize now
 });
 function stopFinalize() {
   const q = S.queue;
   q.running = false;
   q.stopping = false;
-  q.current = null;
+  q.live = null;
   persistQueue();
   renderQueue();
   updateQueueChrome();
@@ -877,7 +875,8 @@ function stopFinalize() {
 /* ---------------- Run-view chrome for the queue ---------------- */
 function updateQueueChrome() {
   const q = S.queue;
-  const active = S.run.phase === 'running';
+  let active = false;
+  for (const r of S.runs.values()) if (r.phase === 'running') { active = true; break; }
   const inQueue = q.running;
   // During a queue run the per-run abort is replaced by a queue-wide stop.
   $('abortBtn').hidden = !active || inQueue;
@@ -890,10 +889,9 @@ function renderQueueProgress() {
   const el = $('queueProgress');
   if (!q.running) { el.hidden = true; return; }
   el.hidden = false;
-  const pos = q.index + 1;
-  const name = q.items[q.index] ? q.items[q.index].pipelineName : '';
+  const done = q.items.filter((it) => it.status === 'done' || it.status === 'error').length;
   const dots = q.items.map((it) => `<span class="qp-dot ${it.status || 'pending'}"></span>`).join('');
-  el.innerHTML = `<span>Project ${pos}/${q.items.length} · ${esc(name)}</span><span class="qp-bar">${dots}</span>`;
+  el.innerHTML = `<span>${done}/${q.items.length} done · running concurrently</span><span class="qp-bar">${dots}</span>`;
 }
 
 /* ====================================================================
@@ -1085,8 +1083,8 @@ function bootSimulation(b) {
   setPauseLabel();
   renderSimModels();
   fetchSimSuggestions();
-  ingestRun(b.run);
-  if (!b.run || b.run.phase === 'idle') showView('sim');
+  for (const r of b.runs || []) ingestRun(r);
+  if (!(b.runs || []).length) showView('sim');
   connectSse();
 }
 
@@ -1144,7 +1142,7 @@ function regenerate() { showView('run'); startSimulation(); }
 
 async function togglePause() {
   S.simPaused = !S.simPaused; setPauseLabel();
-  try { await api('/api/run/pause', { method: 'POST', body: JSON.stringify({ paused: S.simPaused }) }); }
+  try { await api('/api/run/pause', { method: 'POST', body: JSON.stringify({ paused: S.simPaused, runId: S.activeRunId }) }); }
   catch (e) { toast(e.message, true); }
 }
 
@@ -1199,7 +1197,10 @@ const STREAM_STYLE = {
 console.info('huu: streaming live pi agent output here. Set window.HUU_LOG_STREAM=false to silence.');
 function logAgentStream(f) {
   if (window.HUU_LOG_STREAM === false) return;
-  const tag = `#${f.agentId}${f.channel === 'thinking' ? ' 🧠' : ''}`;
+  // Tag the runId only when more than one run is live, so single-run output
+  // stays clean but concurrent runs are disambiguable in the console.
+  const rid = f.runId && S.runs.size > 1 ? `${String(f.runId).slice(0, 4)}/` : '';
+  const tag = `${rid}#${f.agentId}${f.channel === 'thinking' ? ' 🧠' : ''}`;
   console.log(`%c${tag}%c ${f.text}`, STREAM_STYLE[f.channel] || '', 'color:inherit');
 }
 
@@ -1207,12 +1208,33 @@ function logAgentStream(f) {
 let lastStartedAt = 0;
 function ingestRun(run) {
   if (!run) return;
+  if (run.runId) {
+    S.runs.set(run.runId, run);
+    // Adopt an active run when none is chosen or the chosen one vanished.
+    if (!S.activeRunId || !S.runs.has(S.activeRunId)) S.activeRunId = run.runId;
+  }
+  // Queue bookkeeping runs for EVERY run's frame (archive settled + finish the
+  // queue when all are done), not just the one being viewed. Sims self-drive.
+  if (!S.sim && run.runId) onRunFrame(run);
+  renderRunSelector();
+  renderActiveRun();
+}
+
+/**
+ * Render the board / metrics / log / chrome for the ACTIVE (selected) run.
+ * `S.run` is kept as a pointer to it so every other reader (metrics tick,
+ * concurrency control, drawer) keeps working unchanged.
+ */
+function renderActiveRun() {
+  const run = (S.activeRunId && S.runs.get(S.activeRunId)) || { phase: 'idle' };
   S.run = run;
   const active = run.phase === 'running';
   const hasRun = run.phase !== 'idle';
 
   $('runStatusGroup').hidden = !hasRun;
   $('concControl').hidden = !active;
+  // The per-run abort targets the VIEWED run; hidden during a queue (which uses
+  // a queue-wide stop) and handled by updateQueueChrome.
   $('abortBtn').hidden = !active;
 
   // Auto-switch to the run view while a run is live or just finished.
@@ -1250,13 +1272,31 @@ function ingestRun(run) {
   } else { $('runSummary').textContent = ''; }
 
   // /simulation drives its own chrome (pause / run-again); the launch flow
-  // drives the sequential queue (archive + advance + stop-queue strip).
-  if (S.sim) {
-    updateSimChrome(run);
-  } else {
-    onRunFrame(run);
-    updateQueueChrome();
-  }
+  // drives the concurrent queue (archive + stop-queue strip).
+  if (S.sim) updateSimChrome(run);
+  else updateQueueChrome();
+}
+
+/**
+ * The project selector — one tab per concurrent run, shown only when MORE THAN
+ * ONE run is tracked. Clicking a tab switches the viewed run.
+ */
+function renderRunSelector() {
+  const el = $('runSelector');
+  if (!el) return;
+  const runs = [...S.runs.values()].filter((r) => r.runId);
+  if (runs.length <= 1) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  el.innerHTML = runs
+    .map((r) => {
+      const sel = r.runId === S.activeRunId ? ' run-tab--active' : '';
+      const name = esc(r.pipelineName || r.runId);
+      return (
+        `<button class="run-tab${sel}" data-runid="${esc(r.runId)}" data-phase="${esc(r.phase)}" ` +
+        `title="${name} · ${esc(r.phase)}"><span class="run-tab__dot"></span>${name}</button>`
+      );
+    })
+    .join('');
 }
 
 function setStatus(phase) {
@@ -1283,15 +1323,28 @@ function updateConc(st) {
 $('concMode').addEventListener('click', async () => {
   const cur = S.run.state && S.run.state.autoScale ? S.run.state.autoScale.mode : 'manual';
   const next = cur === 'auto' ? 'manual' : cur === 'manual' ? 'greedy' : 'auto';
-  try { await api('/api/run/concurrency', { method: 'POST', body: JSON.stringify({ mode: next }) }); } catch (e) { toast(e.message, true); }
+  try { await api('/api/run/concurrency', { method: 'POST', body: JSON.stringify({ mode: next, runId: S.activeRunId }) }); } catch (e) { toast(e.message, true); }
 });
 $('concUp').addEventListener('click', () => adjustConc(1));
 $('concDown').addEventListener('click', () => adjustConc(-1));
-async function adjustConc(d) { try { await api('/api/run/concurrency', { method: 'POST', body: JSON.stringify({ delta: d }) }); } catch (e) { toast(e.message, true); } }
+async function adjustConc(d) { try { await api('/api/run/concurrency', { method: 'POST', body: JSON.stringify({ delta: d, runId: S.activeRunId }) }); } catch (e) { toast(e.message, true); } }
 
 $('abortBtn').addEventListener('click', async () => {
-  try { await api('/api/run/abort', { method: 'POST' }); toast('Stopping run…'); } catch (e) { toast(e.message, true); }
+  // Aborts only the VIEWED run (the queue-wide stop is a separate button).
+  try { await api('/api/run/abort', { method: 'POST', body: JSON.stringify({ runId: S.activeRunId }) }); toast('Stopping run…'); } catch (e) { toast(e.message, true); }
 });
+
+// Project selector: click a tab to switch which run's board is shown.
+(() => {
+  const rsel = $('runSelector');
+  if (rsel) rsel.addEventListener('click', (e) => {
+    const btn = e.target.closest('.run-tab');
+    if (!btn) return;
+    S.activeRunId = btn.dataset.runid;
+    renderRunSelector();
+    renderActiveRun();
+  });
+})();
 
 /* ---------------- Board reconciler ---------------- */
 const ACTIVE_PHASES = new Set(['worktree_creating','worktree_ready','session_starting','streaming','tool_running','finalizing','validating','committing','pushing','cleaning_up']);

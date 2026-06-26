@@ -192,12 +192,17 @@ TUI no terminal.
   TODO → DOING → DONE; clique num card pra ver **tokens, custo, branch,
   arquivos e logs ao vivo** por agente. Console de log global, controle
   de concorrência (Auto · Manual · MAX) e botão de parar no topo.
-- **Fila de projetos, em sequência.** Selecione **vários projetos** — cada
-  um com sua própria config (diretório, provider, modelo, concorrência) — e
-  rode-os **um após o outro** (sequencial, nunca em paralelo). Se um falha, a
-  fila segue e marca o projeto como falho. Cada execução é arquivada no
-  **histórico** do navegador (IndexedDB) com todos os cards, os custos por
-  card e o total por projeto — **exportável em JSON** com um clique.
+- **Fila de projetos, em paralelo.** Selecione **vários projetos** — cada um
+  com sua própria config (diretório, provider, modelo, concorrência) — e
+  rode-os **simultaneamente** sob um único orçamento de RAM/concorrência. Os
+  projetos anteriores têm prioridade; os posteriores fazem **backfill** das
+  vagas ociosas dos anteriores (ex.: enquanto um está em merge) e devolvem a
+  capacidade quando ela é necessária — e sob pressão de memória mata-se primeiro
+  o agente mais novo do projeto de menor prioridade. Um **seletor de projetos**
+  no topo permite alternar entre os boards ao vivo. Se um falha, os outros
+  seguem. Cada execução é arquivada no **histórico** do navegador (IndexedDB)
+  com todos os cards, os custos por card e o total por projeto — **exportável
+  em JSON** com um clique.
 - **Log ao vivo, de verdade.** O texto que o agente vai gerando entra no
   log **conforme sai** — não só nas trocas de ferramenta. E **tudo que o
   pi devolve** (resposta + raciocínio) é espelhado em tempo real no
@@ -218,7 +223,7 @@ TUI no terminal.
   OpenRouter está inacessível.
 
 > **Hoje a web roda pipelines existentes** (listar, escolher, enfileirar e
-> executar em sequência, ajustar concorrência, parar). Os **construtores
+> executar em paralelo, ajustar concorrência, parar). Os **construtores
 > guiados** (Pipeline
 > Assistant e o editor passo a passo) ainda vivem na **TUI** — use
 > `huu --cli`. Autoria de pipeline pela web é roadmap.

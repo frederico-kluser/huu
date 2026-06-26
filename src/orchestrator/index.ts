@@ -182,6 +182,13 @@ export interface OrchestratorOptions {
    * path — every code path below then behaves exactly as before.
    */
   scheduler?: GlobalScheduler;
+  /**
+   * Externally-assigned run id. When set, start() uses it instead of generating
+   * one — letting a multi-run manager key its Map<runId, …> and return the id
+   * to the browser BEFORE start() resolves (so concurrent runs never collide on
+   * an empty-string key). Omit for the normal self-assigned path.
+   */
+  runId?: string;
 }
 
 /**
@@ -272,6 +279,8 @@ export class Orchestrator {
   private scheduler: GlobalScheduler | null = null;
   /** Handle for unregistering from the scheduler in the finally block. */
   private schedulerHandle: RunDriverHandle | null = null;
+  /** Externally-assigned run id (multi-run manager); start() prefers it. */
+  private externalRunId?: string;
   /**
    * Debug-log sink. Starts unscoped; rebound to `scopedDebugLog(runId)` in
    * start() once the runId exists, so concurrent runs' lines stay filterable by
@@ -339,6 +348,7 @@ export class Orchestrator {
     // pool at initialConcurrency but keeps the always-on memory guard.
     const autoMode = options.autoScale !== false;
     this.scheduler = options.scheduler ?? null;
+    this.externalRunId = options.runId;
     this.portAllocator = new PortAllocator({
       basePort: pipeline.portAllocation?.basePort,
       windowSize: pipeline.portAllocation?.windowSize,
@@ -674,7 +684,7 @@ export class Orchestrator {
           );
         }
       }
-      const runId = generateRunId();
+      const runId = this.externalRunId ?? generateRunId();
       this.dlog = scopedDebugLog(runId);
       this.runLogger = new RunLogger({
         repoRoot: this.preflight.repoRoot,

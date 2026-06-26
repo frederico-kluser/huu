@@ -93,12 +93,13 @@ export function createWebServer(opts: WebServerOptions): {
   const root = clientDir();
   const sseClients = new Set<SseClient>();
 
-  // Throttled broadcast state — mirrors headless-run's NDJSON throttle so a
-  // busy run doesn't flood every connected browser hundreds of times/sec.
-  let pending: RunSnapshot | null = null;
+  // Throttled PER-RUN broadcast — coalesce a busy run's emits to ≤1 frame per
+  // run per interval. Concurrent runs each get their own frame keyed by runId;
+  // one flush drains every run that changed since the last tick.
+  let pending = new Map<string, RunSnapshot>();
   let lastBroadcast = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let lastFrame = '';
+  let simSeq = 0;
 
   const buildFrame = (snap: RunSnapshot): string =>
     JSON.stringify({ type: 'run', run: serializeSnapshot(snap) });
@@ -108,29 +109,30 @@ export function createWebServer(opts: WebServerOptions): {
       clearTimeout(timer);
       timer = null;
     }
-    if (!pending) return;
+    if (pending.size === 0) return;
     lastBroadcast = Date.now();
-    lastFrame = buildFrame(pending);
-    pending = null;
-    for (const client of sseClients) {
-      writeSse(client.res, 'message', lastFrame);
+    const drained = pending;
+    pending = new Map();
+    for (const snap of drained.values()) {
+      const frame = buildFrame(snap);
+      for (const client of sseClients) writeSse(client.res, 'message', frame);
     }
   };
 
   const scheduleBroadcast = (snap: RunSnapshot): void => {
-    pending = snap;
+    pending.set(snap.runId, snap);
     const since = Date.now() - lastBroadcast;
     if (since >= BROADCAST_INTERVAL_MS) flush();
     else if (!timer) timer = setTimeout(flush, BROADCAST_INTERVAL_MS - since);
   };
 
   // Raw agent-output firehose: relay each coalesced line straight to every
-  // connected browser as its own SSE frame. Deliberately NOT throttled or
-  // batched into the run snapshot — it's append-only and low-frequency (one
-  // frame per line, not per token), and the browser mirrors it to the console.
-  const broadcastAgentStream = (chunk: AgentOutputChunk): void => {
+  // connected browser as its own SSE frame, TAGGED with the originating runId
+  // so the client routes it to the right board. NOT throttled (append-only, one
+  // frame per line, not per token); the browser also mirrors it to the console.
+  const broadcastAgentStream = (runId: string, chunk: AgentOutputChunk): void => {
     if (sseClients.size === 0) return;
-    const frame = JSON.stringify({ type: 'agent-stream', ...chunk });
+    const frame = JSON.stringify({ type: 'agent-stream', runId, ...chunk });
     for (const client of sseClients) writeSse(client.res, 'message', frame);
   };
 
@@ -265,7 +267,8 @@ export function createWebServer(opts: WebServerOptions): {
     }
     if (method === 'GET' && path === '/api/agent-logs') {
       const id = Number(url.searchParams.get('id'));
-      const snap = manager.getSnapshot();
+      const runId = url.searchParams.get('runId') ?? undefined;
+      const snap = manager.getSnapshot(runId);
       const agent = snap.state?.agents.find((a) => a.agentId === id);
       return sendJson(res, 200, { logs: agent?.logs ?? [] });
     }
@@ -273,27 +276,30 @@ export function createWebServer(opts: WebServerOptions): {
       return startRun(req, res);
     }
     if (method === 'POST' && path === '/api/run/abort') {
-      manager.abort();
+      const body = await readJsonBody(req);
+      // A `runId` aborts that one run; absent aborts ALL (+ scheduler teardown).
+      manager.abort(body.runId ? String(body.runId) : undefined);
       return sendJson(res, 200, { ok: true });
     }
     if (method === 'POST' && path === '/api/run/pause') {
       // Pause/resume a /simulation run (no-op for real runs).
       const body = await readJsonBody(req);
       const paused = body.paused === true || body.paused === 'true';
-      manager.setPaused(paused);
+      manager.setPaused(String(body.runId ?? ''), paused);
       return sendJson(res, 200, { ok: true, paused });
     }
     if (method === 'POST' && path === '/api/run/concurrency') {
       const body = await readJsonBody(req);
+      const runId = String(body.runId ?? '');
       if (typeof body.mode === 'string') {
-        manager.setMode(body.mode as 'auto' | 'manual' | 'greedy');
+        manager.setMode(runId, body.mode as 'auto' | 'manual' | 'greedy');
       } else if (typeof body.value === 'number') {
-        manager.setConcurrency(body.value);
+        manager.setConcurrency(runId, body.value);
       } else if (typeof body.delta === 'number') {
-        manager.adjust(body.delta);
+        manager.adjust(runId, body.delta);
       }
       return sendJson(res, 200, {
-        concurrency: manager.getSnapshot().state?.concurrency ?? null,
+        concurrency: manager.getSnapshot(runId).state?.concurrency ?? null,
       });
     }
     if (method === 'GET' && path === '/events') {
@@ -317,7 +323,7 @@ export function createWebServer(opts: WebServerOptions): {
             ? [String(body.modelId)]
             : [];
         const snap = manager.startSimulation({
-          runId: `sim-${Date.now().toString(36)}`,
+          runId: `sim-${Date.now().toString(36)}-${simSeq++}`,
           modelIds,
           fileCount: clampInt(body.fileCount, 12, 1, 200),
           concurrency: clampInt(body.concurrency, 6, 1, 64),
@@ -327,8 +333,7 @@ export function createWebServer(opts: WebServerOptions): {
         return sendJson(res, 200, { ok: true, run: serializeSnapshot(snap) });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        const status = /already in progress/.test(message) ? 409 : 400;
-        return sendJson(res, status, { error: message });
+        return sendJson(res, /too many/i.test(message) ? 429 : 400, { error: message });
       }
     }
     // Provider (openrouter|azure) is the user-facing choice; it maps to the
@@ -369,9 +374,9 @@ export function createWebServer(opts: WebServerOptions): {
       sendJson(res, 200, { ok: true, run: serializeSnapshot(snap) });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      // 409 when a run is already active; 400 for bad config.
-      const status = /already in progress/.test(message) ? 409 : 400;
-      sendJson(res, status, { error: message });
+      // 429 when too many concurrent runs; 400 for bad config. (No 409 — the
+      // multi-run manager accepts concurrent runs.)
+      sendJson(res, /too many/i.test(message) ? 429 : 400, { error: message });
     }
   }
 
@@ -386,9 +391,11 @@ export function createWebServer(opts: WebServerOptions): {
     const client: SseClient = { res };
     sseClients.add(client);
 
-    // Replay the latest frame (or current snapshot) so a refresh re-syncs.
-    const frame = lastFrame || buildFrame(manager.getSnapshot());
-    writeSse(res, 'message', frame);
+    // Replay every tracked run's latest snapshot so a refresh / new tab
+    // re-syncs all boards (the client keys by runId).
+    const snaps = manager.getSnapshots();
+    if (snaps.length === 0) writeSse(res, 'message', buildFrame(manager.getSnapshot()));
+    else for (const snap of snaps) writeSse(res, 'message', buildFrame(snap));
 
     // Keep-alive comment ping so proxies don't drop the idle connection.
     const ping = setInterval(() => {
@@ -420,7 +427,7 @@ export function createWebServer(opts: WebServerOptions): {
       providers: listProvidersInfo(),
       pipelines: listPipelinesInfo(opts.cwd),
       initialPipeline: opts.initialPipeline?.name ?? null,
-      run: serializeSnapshot(manager.getSnapshot()),
+      runs: manager.getSnapshots().map(serializeSnapshot),
     };
   }
 

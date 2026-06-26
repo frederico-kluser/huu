@@ -66,7 +66,8 @@ paragraph, for the current list.
                 a fully synthetic demo run — SimulationEngine, no git/LLM/key
                 — see the building-web-ui skill)
               ui/components/ (Ink React views — the --cli TUI)
-                ↓ (both front-ends drive ONE Orchestrator)
+                ↓ (TUI drives ONE Orchestrator; the web hosts N concurrent
+                  runs via the GlobalScheduler — see Multi-run scheduling)
               orchestrator/ (worker pool, stage lifecycle, merge;
                 global-scheduler.ts multiplexes N runs — see Multi-run scheduling)
                 ↓
@@ -132,7 +133,7 @@ publishes; accumulates like tokens/logs, NOT reset on requeue). The Ink kanban
 `→ <action>` marker folded onto the `log:` line (the merge costs no extra
 `cardHeight()` row; the counters label does — keep them in sync).
 
-### Multi-run scheduling (GlobalScheduler — engine, headless for now)
+### Multi-run scheduling (GlobalScheduler)
 
 A `GlobalScheduler` (`src/orchestrator/global-scheduler.ts`) runs MULTIPLE
 pipeline runs in ONE process under a single shared RAM/concurrency budget. It
@@ -158,8 +159,12 @@ higher-priority run's agent while a lower one has a live agent — pinned by
 `headroomCapacity − demand` (`GlobalScheduler.remaining`), NOT `B − grants`.
 `src/lib/run-many.ts` is the headless driver (lazy, monotonic admission:
 admit the top run, pull in the next only on sustained spare capacity or while a
-run is merging). The browser project selector (shown when >1 run is active) is
-NOT wired yet — see the building-web-ui skill.
+run is merging). The **web** front-end is wired: `WebRunManager` holds a
+`Map<runId>` of concurrent runs over one scheduler, `/api/run` returns a runId
+(no 409), SSE frames + the agent-stream firehose are per-`runId`, and the
+browser shows a **project selector** when >1 run is active (the queue dispatches
+all items at once). See the building-web-ui skill. The TUI selector is the
+remaining piece.
 
 ## Bundled default pipelines
 

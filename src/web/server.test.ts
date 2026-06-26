@@ -97,7 +97,8 @@ describe('web server', () => {
     expect(json.backends.some((b: { id: string }) => b.id === 'pi')).toBe(true);
     expect(json.backends.some((b: { id: string }) => b.id === 'stub')).toBe(true);
     expect(json.initialPipeline).toBe('web-test-pipe');
-    expect(json.run.phase).toBe('idle');
+    // Multi-run bootstrap returns a runs[] array (empty before any run starts).
+    expect(json.runs).toEqual([]);
   });
 
   it('lists the full public catalog for a backend and 400s on an unknown one', async () => {
@@ -244,23 +245,27 @@ describe('web server', () => {
     expect(snap.state).not.toBeNull();
   }, 30_000);
 
-  it('rejects a second run while one is active (409)', async () => {
-    // Kick a run, then immediately try again before it settles.
-    await fetch(base + '/api/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pipelineName: 'web-test-pipe', backend: 'stub', modelId: 'stub' }),
-    });
-    if (manager.isActive()) {
-      const second = await fetch(base + '/api/run', {
+  it('accepts concurrent runs (no 409) and tracks each by a distinct runId', async () => {
+    const post = (): Promise<Response> =>
+      fetch(base + '/api/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pipelineName: 'web-test-pipe', backend: 'stub', modelId: 'stub' }),
       });
-      expect(second.status).toBe(409);
-    }
+    const [r1, r2] = await Promise.all([post(), post()]);
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(200);
+    const j1 = await r1.json();
+    const j2 = await r2.json();
+    expect(j1.run.runId).toBeTruthy();
+    expect(j2.run.runId).toBeTruthy();
+    expect(j1.run.runId).not.toBe(j2.run.runId);
+    // Both runs are tracked by the manager (same repo → repo-lock serializes git).
+    const ids = manager.getSnapshots().map((s) => s.runId);
+    expect(ids).toContain(j1.run.runId);
+    expect(ids).toContain(j2.run.runId);
     manager.abort();
-  });
+  }, 30_000);
 
   it('404s unknown API routes and missing assets', async () => {
     expect((await fetch(base + '/api/nope')).status).toBe(404);
