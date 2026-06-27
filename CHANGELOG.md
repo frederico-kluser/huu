@@ -352,6 +352,12 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
   front-end. The orchestrator, FSM (`src/lib/screen-fsm.ts`), and all
   back-end layers are unchanged.
 
+### Fixed
+
+- Source-run scripts (`npm run dev` / `npm start`) now bypass the Docker
+  re-exec gate, so contributors run the TUI natively from source instead of
+  the wrapper trying to containerize the dev process.
+
 ## [1.4.0] - 2026-06-12
 
 ### Added
@@ -418,6 +424,7 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 - `scripts/smoke-dashboard.tsx` was broken since the backend registry refactor (imported the long-gone `orchestrator/stub-agent.js` and didn't pass `backend: 'stub'`, so the OpenRouter key probe 401-ed the run).
 - `portAllocation` was silently stripped from pipelines on import/export round-trips (missing from the Zod schema).
 - `huu Security Audit` step 5 told the agent to add a README badge while its own HARD RULES forbid it; `huu Quality Audit` step 1 allowed `package.json` devDeps additions against its own report-only rule; quality/performance step-5 names still said "+ badge". All report-only contracts are now consistent.
+- Stray `console.*` output and Node deprecation warnings raised mid-run are now routed into the `LogArea` instead of printing above the kanban and corrupting the Ink layout.
 
 ## [1.2.0] - 2026-05-21
 
@@ -476,6 +483,7 @@ End-to-end smoke against `/home/ondokai/Projects/integracao-vael` with `huu Test
 - Bundled-pipelines section in `README.md` and `docs/pipeline-json-guide.md` describing the strict report-only contract and the fan-out cap.
 - Per-file step prompts in all 5 audit pipelines now carry an explicit SCOPE NOTE + SKIP RULE (skip `node_modules/`, `dist/`, `build/`, `vendor/`, `*.generated.*`, `*.d.ts`, lock/snapshot files, etc.) so users don't blow through `Pipeline.maxNodeExecutions` on generated trees.
 - `PARALLEL_RULE_SHORT` exported from `src/lib/assistant-prompts.ts` and reused by the test, replacing a brittle inline regex.
+- **Welcome-screen UI** — the `huu` wordmark now renders as 3D ASCII art, and the FAQ screen is reachable from the welcome menu via `?`.
 
 ### Changed
 
