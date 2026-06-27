@@ -431,6 +431,8 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 End-to-end smoke against `/home/ondokai/Projects/integracao-vael` with `huu Test Suite` pipeline + config injecting one file into step 3: real `minimax/minimax-m2.7` agent ran inside the auto-MTU docker network, committed `huu-tests.md` to the integration branch — deterministic success marker (per step 1's prompt: "always writes huu-tests.md at repo root").
 
+## [1.1.0] - 2026-05-21
+
 ### Added
 
 - **Auto MTU-aware docker network** — the headline fix of this release. At wrapper start, `detectDefaultRouteMtu()` reads the MTU of the host's default-route interface (Linux only, parsing `ip route get 1.1.1.1` + `/sys/class/net/<iface>/mtu`); when it's below 1500 — typical of VPN tunnels (WireGuard 1420, Tailscale 1280, OpenVPN ~1500-overhead) — `ensureHuuDockerNetwork(mtu)` idempotently creates a docker bridge `huu-net-mtu<N>` with the matching MTU and pins the container to it via `--network=<name>`. No env var, no `/etc/docker/daemon.json` edit, no `--network=host` (which would break the port-isolation netns). Works whether the user is on a VPN or not — falls back cleanly to the default bridge when the route MTU is 1500 or detection isn't possible (macOS / Windows / Docker-Desktop VMs). The pre-1.1.0 behavior reproduced exactly the symptom in run `dtv2feyz`: 43 agents, all `tokens +0in +0out`, "Request timed out" on every retry — because the docker0 bridge (1500) was larger than a 1280-MTU VPN tunnel and silently dropped every TLS ClientHello. Post-fix on the same machine: pi agent against `minimax/minimax-m2.7` returns `+1786in +17out tokens` in 2.6 s.
@@ -698,10 +700,10 @@ Initial public release. Available on npm as `huu-pipe`
 [2.1.0]: https://github.com/frederico-kluser/huu/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/frederico-kluser/huu/compare/v1.4.0...v2.0.0
 [1.4.0]: https://github.com/frederico-kluser/huu/compare/v1.3.0...v1.4.0
-[1.3.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.3.0
-[1.2.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.2.0
-[1.1.0]: https://github.com/frederico-kluser/huu/releases/tag/v1.1.0
-[1.0.2]: https://github.com/frederico-kluser/huu/releases/tag/v1.0.2
+[1.3.0]: https://github.com/frederico-kluser/huu/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/frederico-kluser/huu/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/frederico-kluser/huu/compare/v1.0.2...v1.1.0
+[1.0.2]: https://github.com/frederico-kluser/huu/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/frederico-kluser/huu/releases/tag/v1.0.1
 [0.3.1]: https://github.com/frederico-kluser/huu/releases/tag/v0.3.1
 [0.3.0]: https://github.com/frederico-kluser/huu/releases/tag/v0.3.0
