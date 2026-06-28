@@ -75,6 +75,9 @@ export interface RunSnapshot {
   phase: RunPhase;
   runId: string;
   pipelineName: string;
+  /** Absolute directory the run targets — the "project" the run operates on.
+      Surfaced so concurrent runs are disambiguable by project, not just pipeline. */
+  runDirectory: string;
   backend: AgentBackendKind;
   modelId: string;
   startedAt: number;
@@ -87,6 +90,7 @@ const IDLE_SNAPSHOT: RunSnapshot = {
   phase: 'idle',
   runId: '',
   pipelineName: '',
+  runDirectory: '',
   backend: 'pi',
   modelId: '',
   startedAt: 0,
@@ -239,6 +243,7 @@ export class WebRunManager {
       phase: 'running',
       runId,
       pipelineName: effectivePipeline.name,
+      runDirectory: runDir,
       backend: params.backend,
       modelId: params.modelId,
       startedAt: Date.now(),
@@ -261,6 +266,7 @@ export class WebRunManager {
       phase: 'running',
       runId: opts.runId,
       pipelineName: engine.pipelineName,
+      runDirectory: this.cwd,
       backend: 'stub',
       modelId: opts.modelIds[0] || 'simulation',
       startedAt: Date.now(),

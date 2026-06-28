@@ -1042,6 +1042,13 @@ function shortDir(p) {
   return parts.length <= 3 ? p : '…/' + parts.slice(-2).join('/');
 }
 
+/** Last path segment of a directory — the "project" label for the run selector. */
+function projectName(p) {
+  if (!p) return '';
+  const parts = String(p).replace(/\/+$/, '').split('/');
+  return parts[parts.length - 1] || String(p);
+}
+
 /* ---------------- Folder picker (run directory) ---------------- */
 const folderState = { path: '' };
 $('dirBrowse').addEventListener('click', () => openFolder(S.runDir || S.cwd));
@@ -1309,8 +1316,11 @@ function renderActiveRun() {
 }
 
 /**
- * The project selector — one tab per concurrent run, shown only when MORE THAN
- * ONE run is tracked. Clicking a tab switches the viewed run.
+ * The project selector — a dropdown listing every concurrent run as
+ * "project · pipeline", shown only when MORE THAN ONE run is tracked. Picking an
+ * option switches the viewed run. A leading status dot reflects the active run's
+ * phase; finished/failed runs carry a ✓/✕ marker in their option so the open
+ * list stays glanceable.
  */
 function renderRunSelector() {
   const el = $('runSelector');
@@ -1318,16 +1328,20 @@ function renderRunSelector() {
   const runs = [...S.runs.values()].filter((r) => r.runId);
   if (runs.length <= 1) { el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
-  el.innerHTML = runs
+  const activePhase = (S.activeRunId && S.runs.get(S.activeRunId)) ? S.runs.get(S.activeRunId).phase : 'idle';
+  const options = runs
     .map((r) => {
-      const sel = r.runId === S.activeRunId ? ' run-tab--active' : '';
-      const name = esc(r.pipelineName || r.runId);
-      return (
-        `<button class="run-tab${sel}" data-runid="${esc(r.runId)}" data-phase="${esc(r.phase)}" ` +
-        `title="${name} · ${esc(r.phase)}"><span class="run-tab__dot"></span>${name}</button>`
-      );
+      const proj = projectName(r.runDirectory);
+      const pipe = r.pipelineName || r.runId;
+      const label = proj ? `${proj} · ${pipe}` : pipe;
+      const mark = r.phase === 'done' ? ' ✓' : r.phase === 'error' ? ' ✕' : '';
+      const sel = r.runId === S.activeRunId ? ' selected' : '';
+      return `<option value="${esc(r.runId)}"${sel}>${esc(label + mark)}</option>`;
     })
     .join('');
+  el.innerHTML =
+    `<span class="run-select__dot" data-phase="${esc(activePhase)}"></span>` +
+    `<select class="run-select" id="runSelect" aria-label="Switch between running projects">${options}</select>`;
 }
 
 function setStatus(phase) {
@@ -1365,13 +1379,14 @@ $('abortBtn').addEventListener('click', async () => {
   try { await api('/api/run/abort', { method: 'POST', body: JSON.stringify({ runId: S.activeRunId }) }); toast('Stopping run…'); } catch (e) { toast(e.message, true); }
 });
 
-// Project selector: click a tab to switch which run's board is shown.
+// Project selector: pick an option to switch which run's board is shown. The
+// <select> is rebuilt on every render, so delegate the (bubbling) change event
+// from the stable container.
 (() => {
   const rsel = $('runSelector');
-  if (rsel) rsel.addEventListener('click', (e) => {
-    const btn = e.target.closest('.run-tab');
-    if (!btn) return;
-    S.activeRunId = btn.dataset.runid;
+  if (rsel) rsel.addEventListener('change', (e) => {
+    if (!e.target || e.target.id !== 'runSelect') return;
+    S.activeRunId = e.target.value;
     renderRunSelector();
     renderActiveRun();
   });

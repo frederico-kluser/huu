@@ -205,8 +205,9 @@ terminal TUI back.
   have priority; later ones **backfill** the idle slots of the earlier ones
   (e.g. while one is merging) and yield the capacity back when it's needed — and
   under memory pressure the lowest-priority project's newest agent is killed
-  first. A **project selector** in the header lets you switch between the live
-  boards. If one fails, the rest keep going. Every execution is archived to the
+  first. A **project selector** in the header (a dropdown showing
+  **project · pipeline**) lets you switch between the live boards. If one fails,
+  the rest keep going. Every execution is archived to the
   browser **history** (IndexedDB) with all cards, per-card costs and the
   per-project total — **exportable as JSON** in one click.
 - **Truly live log.** The text the agent generates lands in the log **as it

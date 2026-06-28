@@ -35,6 +35,8 @@ describe('WebRunManager — simulation', () => {
     });
     expect(first.phase).toBe('running');
     expect(first.pipelineName).toBeTruthy();
+    // Sims report the server cwd as their project so the selector can label them.
+    expect(first.runDirectory).toBe(process.cwd());
     expect(mgr.isActive()).toBe(true);
 
     const done = await waitFor(() => mgr.getSnapshot('sim-x').phase === 'done', 5000);
