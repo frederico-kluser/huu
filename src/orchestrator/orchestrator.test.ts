@@ -174,16 +174,20 @@ describe('multi-stage pipeline', () => {
     };
 
     const capturedModelIds: string[] = [];
-    const resolverFactory: AgentFactory = async (task, config, _hint, _cwd, onEvent) => ({
-      agentId: task.agentId,
-      task,
-      async prompt(_message: string): Promise<void> {
-        capturedModelIds.push(config.modelId);
-        onEvent({ type: 'log', message: 'resolving conflicts' });
-      },
-      async abort(): Promise<void> {},
-      async dispose(): Promise<void> {},
-    });
+    const capturedMaxThinking: (boolean | undefined)[] = [];
+    const resolverFactory: AgentFactory = async (task, config, _hint, _cwd, onEvent, runtimeContext) => {
+      capturedMaxThinking.push(runtimeContext?.maxThinking);
+      return {
+        agentId: task.agentId,
+        task,
+        async prompt(_message: string): Promise<void> {
+          capturedModelIds.push(config.modelId);
+          onEvent({ type: 'log', message: 'resolving conflicts' });
+        },
+        async abort(): Promise<void> {},
+        async dispose(): Promise<void> {},
+      };
+    };
 
     const orch = new Orchestrator(
       { apiKey: 'stub', modelId: 'stub-model', backend: 'stub' },
@@ -199,6 +203,9 @@ describe('multi-stage pipeline', () => {
 
     expect(result.manifest.status).toBe('done');
     expect(capturedModelIds).toEqual(['resolver-model']);
+    // The conflict-resolver agent is always spawned with maxThinking so it runs
+    // at the model's top reasoning level (see pi/azure factory pickThinkingLevel).
+    expect(capturedMaxThinking).toEqual([true]);
     const integrations = result.manifest.stageIntegrations!;
     expect(integrations).toHaveLength(1);
     expect(integrations[0]!.phase).toBe('done');

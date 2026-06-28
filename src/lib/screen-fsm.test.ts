@@ -31,6 +31,7 @@ function baseState(overrides: Partial<FsmState> = {}): FsmState {
     pipeline: null,
     pipelines: null,
     modelId: '',
+    conflictResolverModelId: '',
     backendKind: 'pi',
     apiKey: '',
     requiresApiKey: true,
@@ -210,7 +211,12 @@ describe('screen-fsm', () => {
         expect(p.cardTimeoutMs).toBe(5 * 60_000);
         expect(p.singleFileCardTimeoutMs).toBe(5 * 60_000);
       }
-      expect(next.screen).toEqual({ kind: 'run', modelId: 'm', apiKey: 'k' });
+      expect(next.screen).toEqual({
+        kind: 'resolver-model-selector',
+        backendKind: 'pi',
+        modelId: 'm',
+        apiKey: 'k',
+      });
     });
   });
 
@@ -558,7 +564,7 @@ describe('screen-fsm', () => {
   });
 
   describe('timeout transitions', () => {
-    it('timeout.submit mutates pipeline timeouts and goes to run', () => {
+    it('timeout.submit mutates pipeline timeouts and goes to the resolver-model-selector', () => {
       const next = reduce(
         baseState({
           screen: { kind: 'timeout-prompt', modelId: 'm1', apiKey: 'AK' },
@@ -570,9 +576,14 @@ describe('screen-fsm', () => {
       expect(next.pipeline?.singleFileCardTimeoutMs).toBe(7 * 60_000);
       // Original pipeline must remain untouched (purity).
       expect(pipelineWithoutModels.cardTimeoutMs).toBeUndefined();
-      expect(next.screen).toEqual({ kind: 'run', modelId: 'm1', apiKey: 'AK' });
+      expect(next.screen).toEqual({
+        kind: 'resolver-model-selector',
+        backendKind: 'pi',
+        modelId: 'm1',
+        apiKey: 'AK',
+      });
     });
-    it('timeout.submit with no pipeline still navigates to run', () => {
+    it('timeout.submit with no pipeline still navigates to the resolver-model-selector', () => {
       const next = reduce(
         baseState({
           screen: { kind: 'timeout-prompt', modelId: 'm1', apiKey: 'AK' },
@@ -580,7 +591,12 @@ describe('screen-fsm', () => {
         { type: 'timeout.submit', minutes: 3 },
       );
       expect(next.pipeline).toBeNull();
-      expect(next.screen).toEqual({ kind: 'run', modelId: 'm1', apiKey: 'AK' });
+      expect(next.screen).toEqual({
+        kind: 'resolver-model-selector',
+        backendKind: 'pi',
+        modelId: 'm1',
+        apiKey: 'AK',
+      });
     });
     it('timeout.cancel → model-selector', () => {
       const next = reduce(
@@ -590,6 +606,48 @@ describe('screen-fsm', () => {
         { type: 'timeout.cancel' },
       );
       expect(next.screen).toEqual({ kind: 'model-selector', backendKind: 'pi' });
+    });
+  });
+
+  describe('resolver-model-selector transitions', () => {
+    it('select pins integrationModelId on the pipeline and goes to run', () => {
+      const next = reduce(
+        baseState({
+          screen: { kind: 'resolver-model-selector', backendKind: 'pi', modelId: 'm1', apiKey: 'AK' },
+          pipeline: pipelineWithoutModels,
+        }),
+        { type: 'resolverModelSelector.select', modelId: 'deepseek/deepseek-v4-pro' },
+      );
+      expect(next.conflictResolverModelId).toBe('deepseek/deepseek-v4-pro');
+      expect(next.pipeline?.integrationModelId).toBe('deepseek/deepseek-v4-pro');
+      // Original pipeline stays untouched (purity).
+      expect(pipelineWithoutModels.integrationModelId).toBeUndefined();
+      expect(next.screen).toEqual({ kind: 'run', modelId: 'm1', apiKey: 'AK' });
+    });
+    it('select applies integrationModelId to every pipeline in a batch', () => {
+      const next = reduce(
+        baseState({
+          screen: { kind: 'resolver-model-selector', backendKind: 'pi', modelId: 'm1', apiKey: 'AK' },
+          pipelines: [pipelineWithoutModels, pipelineAllModels],
+        }),
+        { type: 'resolverModelSelector.select', modelId: 'resolver-x' },
+      );
+      expect(next.pipelines).toHaveLength(2);
+      for (const p of next.pipelines ?? []) {
+        expect(p.integrationModelId).toBe('resolver-x');
+      }
+    });
+    it('skip goes to run without touching the pipeline (resolver inherits run model)', () => {
+      const next = reduce(
+        baseState({
+          screen: { kind: 'resolver-model-selector', backendKind: 'pi', modelId: 'm1', apiKey: 'AK' },
+          pipeline: pipelineWithoutModels,
+        }),
+        { type: 'resolverModelSelector.skip' },
+      );
+      expect(next.conflictResolverModelId).toBe('');
+      expect(next.pipeline?.integrationModelId).toBeUndefined();
+      expect(next.screen).toEqual({ kind: 'run', modelId: 'm1', apiKey: 'AK' });
     });
   });
 

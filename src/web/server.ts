@@ -353,6 +353,11 @@ export function createWebServer(opts: WebServerOptions): {
       backend,
       provider: provider ?? backendToProvider(backend),
       modelId: String(body.modelId ?? ''),
+      // Optional override for the merge/integration conflict-resolver agent.
+      // Empty → the resolver inherits the run model (Pipeline.integrationModelId).
+      conflictResolverModelId: body.conflictResolverModelId
+        ? String(body.conflictResolverModelId)
+        : undefined,
       // Browser-only key: the client sends the in-memory key it validated
       // earlier. Used for this run only; never persisted. Absent → the
       // run manager falls back to the env/mount/disk resolver (CLI path).

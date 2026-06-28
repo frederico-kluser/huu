@@ -50,6 +50,13 @@ export interface StartRunParams {
   provider?: LlmProvider;
   modelId: string;
   /**
+   * Optional model for the merge/integration conflict-resolver agent. When
+   * non-empty it is applied as `Pipeline.integrationModelId`; empty/absent
+   * lets the resolver inherit the run model. The resolver always runs at the
+   * model's maximum thinking level (see the pi/azure backend factories).
+   */
+  conflictResolverModelId?: string;
+  /**
    * Per-run API key supplied by the browser (validated client-side, kept in
    * session memory, sent with the request). Takes precedence over the
    * env/mount/disk resolver and is NEVER persisted. Absent for CLI/headless
@@ -176,7 +183,10 @@ export class WebRunManager {
       throw new Error(`Pipeline not found: ${params.pipelineName ?? '(none provided)'}`);
     }
 
-    const effectivePipeline = applyTimeout(pipeline, params.timeoutMinutes);
+    const effectivePipeline = applyResolverModel(
+      applyTimeout(pipeline, params.timeoutMinutes),
+      params.conflictResolverModelId,
+    );
 
     // Resolve the run directory: an explicit pick from the folder picker, or
     // the server's cwd. Validate up front so a typo fails as a 4xx instead of
@@ -384,4 +394,16 @@ function applyTimeout(pipeline: Pipeline, minutes?: number): Pipeline {
   if (!minutes || minutes <= 0) return pipeline;
   const ms = Math.floor(minutes * 60_000);
   return { ...pipeline, cardTimeoutMs: ms, singleFileCardTimeoutMs: ms };
+}
+
+/**
+ * Pin the merge/integration conflict-resolver model. An empty/whitespace value
+ * leaves the pipeline untouched so the resolver inherits the run model
+ * (`Pipeline.integrationModelId ?? config.modelId`). The orchestrator already
+ * reads `integrationModelId`, so this is the entire wiring needed.
+ */
+export function applyResolverModel(pipeline: Pipeline, modelId?: string): Pipeline {
+  const trimmed = modelId?.trim();
+  if (!trimmed) return pipeline;
+  return { ...pipeline, integrationModelId: trimmed };
 }

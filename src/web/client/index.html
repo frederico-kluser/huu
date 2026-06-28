@@ -124,6 +124,17 @@
                 <div class="model-hint" id="modelHint"></div>
               </div>
 
+              <div class="field">
+                <label for="resolverModelInput">Conflict resolver model</label>
+                <div class="combo" id="resolverModelCombo">
+                  <input id="resolverModelInput" class="combo__input" type="text" role="combobox"
+                         aria-expanded="false" aria-controls="resolverModelList" aria-autocomplete="list"
+                         autocomplete="off" spellcheck="false" placeholder="Same as run model" />
+                  <ul class="combo__list" id="resolverModelList" role="listbox" hidden></ul>
+                </div>
+                <div class="model-hint" id="resolverModelHint">Used only to resolve merge conflicts during integration · runs at max thinking · empty = same as run model</div>
+              </div>
+
               <!-- Key area: JS renders one row per credential the provider needs,
                    and a "change" affordance even when a key is already set. Keys
                    are validated against the provider, then kept only in this

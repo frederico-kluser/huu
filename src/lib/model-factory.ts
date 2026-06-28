@@ -23,6 +23,9 @@ export function supportsThinking(modelId: string): boolean {
     'anthropic/claude',
     'deepseek/deepseek-r1',
     'deepseek/deepseek-v3',
+    // v4 flash/pro both ship with reasoning (see recommended-models.json); the
+    // conflict-resolver relies on this to run them at max thinking.
+    'deepseek/deepseek-v4',
     'openai/o1',
     'openai/o3',
     'openai/o4',

@@ -19,6 +19,8 @@ describe('supportsThinking', () => {
       'anthropic/claude-sonnet-4-6',
       'deepseek/deepseek-r1',
       'deepseek/deepseek-v3.1-thinking',
+      'deepseek/deepseek-v4-flash',
+      'deepseek/deepseek-v4-pro',
       'openai/o1-preview',
       'openai/o3-mini',
       'openai/o4-mini',

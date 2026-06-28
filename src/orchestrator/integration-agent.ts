@@ -104,6 +104,9 @@ export async function runStageIntegrationWithResolver(
       ),
       ctx.integrationWorktreePath,
       eventForwarder,
+      // Conflict resolution is a hard reasoning task — always run the resolver
+      // at the maximum thinking level its model supports.
+      { maxThinking: true },
     );
 
     const message =

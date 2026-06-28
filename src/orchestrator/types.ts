@@ -105,6 +105,14 @@ export interface AgentRuntimeContext {
    * ports in the customer code will be silently remapped or will collide.
    */
   shimAvailable?: boolean;
+  /**
+   * Request the maximum thinking/reasoning level the chosen model supports.
+   * Set by the orchestrator ONLY for the integration (conflict-resolver)
+   * agent — resolving merge conflicts is a hard cross-file reasoning task,
+   * so the resolver always runs at max thinking regardless of the per-run
+   * model. Ignored by models without reasoning support and by the stub.
+   */
+  maxThinking?: boolean;
 }
 
 export type AgentFactory = (

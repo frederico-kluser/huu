@@ -699,6 +699,22 @@ export function App({
         onCancel={() => dispatch({ type: 'timeout.cancel' })}
       />
     );
+  } else if (screen.kind === 'resolver-model-selector') {
+    body = (
+      <Box flexDirection="column" width="100%">
+        <Box paddingX={1} flexDirection="column">
+          <Text bold color={theme.ai}>Conflict resolver model (optional)</Text>
+          <Text dimColor>
+            Pick a (stronger) model to resolve merge conflicts during integration — it runs at max thinking. Press Esc to use the run model.
+          </Text>
+        </Box>
+        <ModelSelectorOverlay
+          backend={screen.backendKind}
+          onSelect={(id) => dispatch({ type: 'resolverModelSelector.select', modelId: id })}
+          onCancel={() => dispatch({ type: 'resolverModelSelector.skip' })}
+        />
+      </Box>
+    );
   } else if (screen.kind === 'run' && (isMulti ? pipelines : pipeline)) {
     const runConfig = {
       apiKey: screen.apiKey || 'stub',
