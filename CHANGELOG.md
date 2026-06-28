@@ -8,6 +8,19 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Run-board card titles now show the real file name instead of `$file`.** A
+  per-file/memory step named like `"Write tests for $file"` rendered the raw
+  `$file` token on its kanban card in both front-ends. The token is now resolved
+  for display to the worked file's basename (`"Write tests for Button.tsx"`) on
+  agent cards (live board, drawer, run history) in the web UI and the Ink TUI
+  (`RunKanban` + the agent detail modal); stage-level merge cards that span every
+  per-file branch collapse the token to the plural `"files"`. Display-only — the
+  agent PROMPT still receives the exact relative path. New shared helper
+  `substituteFileInTitle` (`src/lib/title-format.ts`, mirrored verbatim in
+  `src/web/client/title-util.js` for the no-build browser client).
+
 ## [3.0.0] - 2026-06-26
 
 ### Added

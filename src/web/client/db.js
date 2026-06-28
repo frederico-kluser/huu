@@ -11,6 +11,8 @@
    and they do so lazily inside the function bodies — importing this module in a
    non-browser context is safe as long as you call only the pure helpers. */
 
+import { substituteFileInTitle } from './title-util.js';
+
 const DB_NAME = 'huu';
 const DB_VERSION = 1;
 const STORE = 'runs';
@@ -134,12 +136,14 @@ export function buildHistoryCards(state) {
   const st = state || {};
   const cards = [];
   for (const a of st.agents || []) {
+    const file = a.currentFile || (a.filesModified && a.filesModified[0]) || '';
     cards.push({
       kind: 'agent',
       id: a.agentId,
-      title: a.stageName || ('Task ' + a.agentId),
+      // Resolve the `$file` fan-out token to the worked file's name for display.
+      title: substituteFileInTitle(a.stageName || ('Task ' + a.agentId), file),
       phase: a.phase || a.state || '',
-      file: a.currentFile || (a.filesModified && a.filesModified[0]) || '',
+      file,
       tokensIn: num(a.tokensIn),
       tokensOut: num(a.tokensOut),
       cacheReadTokens: num(a.cacheReadTokens),
@@ -157,7 +161,7 @@ export function buildHistoryCards(state) {
     cards.push({
       kind: 'merge',
       id: 'm' + m.visitIndex,
-      title: 'Merge · ' + (m.stageName || ''),
+      title: 'Merge · ' + substituteFileInTitle(m.stageName || '', null),
       phase: m.phase || '',
       runs: num(m.runs) || 1,
       cost: null, // not metered per-card; counted in totalCost
@@ -172,7 +176,7 @@ export function buildHistoryCards(state) {
     cards.push({
       kind: 'judge',
       id: 'j' + j.visitIndex,
-      title: 'Judge · ' + (j.stepName || ''),
+      title: 'Judge · ' + substituteFileInTitle(j.stepName || '', null),
       phase: j.phase || '',
       runs: num(j.runs) || 1,
       cost: null, // not metered per-card; counted in totalCost
