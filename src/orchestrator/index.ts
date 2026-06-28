@@ -1981,6 +1981,7 @@ export class Orchestrator {
       repoRoot: this.preflight!.repoRoot,
       integrationWorktreePath: integration.worktreePath,
       integrationBranch: integration.branchName,
+      baseCommit: this.preflight!.baseCommit,
       runId,
       config: this.config,
       factory: this.conflictResolverFactory ?? this.agentFactory,
@@ -2234,6 +2235,11 @@ export class Orchestrator {
       // so a hint containing the literal `$file` can't be re-expanded.
       prompt = prompt.replaceAll('$hint', task.hint ?? '').replaceAll('$file', task.files[0]!);
     }
+    // `$baseCommit` = repo HEAD at run start (preflight). Lets a step diff the
+    // run against its origin (`git diff --name-only $baseCommit..HEAD`) or
+    // restore a frozen file (`git checkout $baseCommit -- <path>`) — e.g. the
+    // Test Suite cleanup step restoring any production source an agent drifted.
+    prompt = prompt.replaceAll('$baseCommit', this.preflight?.baseCommit ?? '');
     if (step.produces) {
       // The producer promised a memory file: append the deterministic
       // contract (exact path/format/cap) so the pipeline author never
