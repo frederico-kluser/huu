@@ -8,6 +8,15 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+### Changed
+
+- **Web project selector is now a dropdown labelled by project + pipeline.** When
+  more than one run is live, the header selector switched from side-by-side tabs
+  to a single `<select>` showing **`project · pipeline`** per run (a leading dot
+  reflects the active run's phase; finished/failed runs carry a ✓/✕ marker). The
+  run snapshot now carries its `runDirectory` so each run can be labelled by the
+  project it operates on, not just the pipeline name.
+
 ### Fixed
 
 - **Run-board card titles now show the real file name instead of `$file`.** A
@@ -20,7 +29,6 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
   agent PROMPT still receives the exact relative path. New shared helper
   `substituteFileInTitle` (`src/lib/title-format.ts`, mirrored verbatim in
   `src/web/client/title-util.js` for the no-build browser client).
-
 ## [3.0.0] - 2026-06-26
 
 ### Added

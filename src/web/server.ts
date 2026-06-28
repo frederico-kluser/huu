@@ -454,6 +454,7 @@ function serializeSnapshot(snap: RunSnapshot): Record<string, unknown> {
     phase: snap.phase,
     runId: snap.runId,
     pipelineName: snap.pipelineName,
+    runDirectory: snap.runDirectory,
     backend: snap.backend,
     modelId: snap.modelId,
     startedAt: snap.startedAt,

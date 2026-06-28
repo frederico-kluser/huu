@@ -243,6 +243,9 @@ describe('web server', () => {
     const snap = manager.getSnapshot();
     expect(phase, snap.errorReason ?? 'no error reason').toBe('done');
     expect(snap.state).not.toBeNull();
+    // The snapshot carries the project directory it ran in (defaults to cwd),
+    // so the client can label the run selector by project, not just pipeline.
+    expect(snap.runDirectory).toBe(repo);
   }, 30_000);
 
   it('accepts conflictResolverModelId on POST /api/run and starts the run', async () => {
@@ -278,6 +281,9 @@ describe('web server', () => {
     expect(j1.run.runId).toBeTruthy();
     expect(j2.run.runId).toBeTruthy();
     expect(j1.run.runId).not.toBe(j2.run.runId);
+    // The serialized snapshot exposes the run directory for the project selector.
+    expect(j1.run.runDirectory).toBe(repo);
+    expect(j2.run.runDirectory).toBe(repo);
     // Both runs are tracked by the manager (same repo → repo-lock serializes git).
     const ids = manager.getSnapshots().map((s) => s.runId);
     expect(ids).toContain(j1.run.runId);

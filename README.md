@@ -207,7 +207,8 @@ TUI no terminal.
   vagas ociosas dos anteriores (ex.: enquanto um está em merge) e devolvem a
   capacidade quando ela é necessária — e sob pressão de memória mata-se primeiro
   o agente mais novo do projeto de menor prioridade. Um **seletor de projetos**
-  no topo permite alternar entre os boards ao vivo. Se um falha, os outros
+  no topo (um dropdown que mostra **projeto · pipeline**) permite alternar entre
+  os boards ao vivo. Se um falha, os outros
   seguem. Cada execução é arquivada no **histórico** do navegador (IndexedDB)
   com todos os cards, os custos por card e o total por projeto — **exportável
   em JSON** com um clique.
