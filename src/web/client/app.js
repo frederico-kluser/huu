@@ -62,6 +62,9 @@ const S = {
   cwd: '',
   models: [],
   modelId: '',
+  // Optional override for the merge/integration conflict-resolver agent. Empty
+  // = inherit the run model. Maps to Pipeline.integrationModelId server-side.
+  conflictResolverModelId: '',
   modelSource: 'recommended', // 'openrouter-live' once loaded with a key
   mode: 'auto',
   manualN: 10,
@@ -239,6 +242,7 @@ function renderProviderSeg() {
       // A typed/custom id is provider-specific — re-seed from the new provider's
       // catalog instead of carrying it across.
       S.modelId = '';
+      S.conflictResolverModelId = '';
       renderProviderSeg();
       await refreshModelsAndKeys();
     });
@@ -270,10 +274,8 @@ async function refreshModelsAndKeys() {
     const preferred = S.models.find((m) => m.id === DEFAULT_MODEL_ID);
     S.modelId = preferred ? preferred.id : S.models[0].id;
   }
-  syncModelInput();
-  updateModelCap();
-  if (combo.open) renderModelOptions();
-  updateModelHint();
+  mainCombo.refresh();
+  resolverCombo.refresh();
   // Keys (by provider). A spec we already hold a validated key for in THIS
   // browser session is satisfied even though the server — which never saw it —
   // still reports it missing.
@@ -285,23 +287,6 @@ async function refreshModelsAndKeys() {
   }
   renderKeyArea();
   updateRunBtn();
-}
-
-function updateModelHint() {
-  const md = S.models.find((x) => x.id === S.modelId);
-  const h = $('modelHint');
-  if (!md) {
-    // Custom / free-typed id (or no pick yet): no catalog metadata to show.
-    h.innerHTML = S.modelId
-      ? '<span class="custom">custom model id</span> · sent to OpenRouter as-is'
-      : '';
-    return;
-  }
-  const price = md.inputPrice != null ? `$${md.inputPrice}/M in · $${md.outputPrice ?? '?'}/M out` : '';
-  const head = [md.thinking ? '<span class="thinking">thinking</span>' : '', esc(md.description || '')]
-    .filter(Boolean).join(' · ');
-  const tail = [price, fmtCtx(md.contextLength)].filter(Boolean).join(' · ');
-  h.innerHTML = [head, tail].filter(Boolean).join('<br>');
 }
 
 /* Render one row per credential the selected provider needs. Each value can be
@@ -394,8 +379,6 @@ $('keyArea').addEventListener('click', async (e) => {
    is the FULL live catalog — every model, no capability filter — downloaded
    from the public /models endpoint with or without a key (see
    refreshModelsAndKeys). Type any id to use one that isn't listed. */
-const combo = { open: false, active: -1, matches: [], query: '' };
-
 function modelById(id) { return S.models.find((m) => m.id === id) || null; }
 
 function fmtCtx(n) {
@@ -405,52 +388,36 @@ function fmtCtx(n) {
   return n + ' ctx';
 }
 
-/** Reflect the current selection as the input's display value. */
-function syncModelInput() {
-  const input = $('modelInput');
-  const md = modelById(S.modelId);
-  // A custom id the user typed isn't in the catalog — show the id verbatim so
-  // they can see exactly what will run, instead of a blank field.
-  input.value = md ? md.label : (S.modelId || '');
-  input.placeholder = S.models.length ? 'Search or type any model id…' : 'Type a model id…';
-}
-
-function updateModelCap() {
-  const cap = $('modelCap');
-  if (!cap) return;
-  const n = S.models.length;
-  if (S.provider !== 'openrouter') { cap.textContent = n ? `${n} model${n === 1 ? '' : 's'} available` : ''; return; }
-  if (S.modelSource === 'openrouter-live') {
-    cap.innerHTML = `<span class="live">${n} models</span> · full OpenRouter catalog · or type any model id`;
-  } else {
-    cap.textContent = "Couldn't reach OpenRouter — showing recommended models; type any model id to use it anyway";
-  }
-}
-
 /**
  * A typed value that isn't already an exact catalog id → offer it verbatim so
  * the user can run ANY OpenRouter model, even one not in the downloaded list
  * (a brand-new model, or one the catalog filter never had). This is the
  * free-text escape hatch: pick it and the raw id is sent to OpenRouter as-is.
  */
-function customCandidate() {
-  const q = combo.query.trim();
+function customCandidate(query) {
+  const q = query.trim();
   if (!q) return null;
   if (S.models.some((m) => m.id === q)) return null; // already a real option
   return { id: q, label: q, custom: true };
 }
 
-function comboMatches() {
-  const q = combo.query.trim().toLowerCase();
+function comboMatches(query) {
+  const q = query.trim().toLowerCase();
   const base = !q
     ? S.models.slice()
     : S.models.filter((m) =>
         m.id.toLowerCase().includes(q) || (m.label || '').toLowerCase().includes(q));
-  const custom = customCandidate();
+  const custom = customCandidate(query);
   return custom ? base.concat([custom]) : base;
 }
 
 function modelOptionHtml(m, i, active, sel) {
+  if (m.inherit) {
+    // Resolver combo only: the "clear back to the run model" row.
+    return `<li class="combo__opt combo__opt--custom${active ? ' active' : ''}${sel ? ' sel' : ''}" role="option" id="opt-${i}" data-id="${esc(m.id)}" aria-selected="${sel ? 'true' : 'false'}">` +
+      `<span class="combo__opt-name">Same as run model</span>` +
+      `<span class="combo__opt-id">inherit the run model for conflict resolution</span></li>`;
+  }
   if (m.custom) {
     return `<li class="combo__opt combo__opt--custom${active ? ' active' : ''}" role="option" id="opt-${i}" data-id="${esc(m.id)}" aria-selected="false">` +
       `<span class="combo__opt-name">Use “${esc(m.id)}”</span>` +
@@ -471,91 +438,186 @@ function modelOptionHtml(m, i, active, sel) {
     `<span class="combo__opt-id">${esc(m.id)}</span></li>`;
 }
 
-function renderModelOptions() {
-  const list = $('modelList');
-  const matches = comboMatches();
-  combo.matches = matches;
-  if (combo.active >= matches.length) combo.active = matches.length - 1;
-  // With the free-text candidate, a non-empty query always yields at least one
-  // row; an empty list means "no catalog and nothing typed yet".
-  if (!matches.length) {
-    list.innerHTML = S.models.length
-      ? '<li class="combo__empty">No matches — type a full model id to use it as-is</li>'
-      : '<li class="combo__empty">Type a model id, e.g. deepseek/deepseek-v4-flash</li>';
-    return;
-  }
-  list.innerHTML = matches.map((m, i) => modelOptionHtml(m, i, i === combo.active, m.id === S.modelId)).join('');
-  const input = $('modelInput');
-  if (combo.active >= 0) input.setAttribute('aria-activedescendant', 'opt-' + combo.active);
-  else input.removeAttribute('aria-activedescendant');
-  const act = list.querySelector('.combo__opt.active');
-  if (act) act.scrollIntoView({ block: 'nearest' });
-}
+/**
+ * Build a searchable model combobox bound to a value getter/setter and DOM
+ * element ids. Two instances exist: `mainCombo` drives the run model
+ * (S.modelId); `resolverCombo` drives the OPTIONAL conflict-resolver model
+ * (S.conflictResolverModelId; empty = inherit the run model). Both share the
+ * single S.models catalog loaded by refreshModelsAndKeys.
+ */
+function makeModelCombo(opts) {
+  const state = { open: false, active: -1, matches: [], query: '' };
+  const INHERIT = '__INHERIT__';
+  const inputEl = () => $(opts.inputId);
+  const listEl = () => $(opts.listId);
+  const get = opts.get;
+  const set = opts.set;
 
-function openCombo() {
-  if (!combo.open) { combo.open = true; $('modelInput').setAttribute('aria-expanded', 'true'); $('modelList').hidden = false; }
-  renderModelOptions();
-}
-function closeCombo() {
-  combo.open = false; combo.active = -1;
-  $('modelInput').setAttribute('aria-expanded', 'false');
-  $('modelList').hidden = true;
-}
-function selectModel(id) {
-  // Accept ANY non-empty id — catalog model OR a free-typed custom id. The
-  // server passes it straight to OpenRouter, so the user can run any model.
-  if (!id) return;
-  S.modelId = id;
-  combo.query = '';
-  syncModelInput();
-  closeCombo();
-  updateModelHint();
-}
-
-(function setupModelCombo() {
-  const input = $('modelInput');
-  const list = $('modelList');
-  if (!input || !list) return;
-  input.addEventListener('focus', () => {
-    // Clear to an empty filter so the user sees the COMPLETE list and can type
-    // to narrow it; the current pick is restored on blur/Escape if untouched.
-    combo.query = '';
-    input.value = '';
-    const all = comboMatches();
-    combo.active = Math.max(0, all.findIndex((m) => m.id === S.modelId));
-    openCombo();
-  });
-  input.addEventListener('input', () => { combo.query = input.value; combo.active = -1; openCombo(); });
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (!combo.open) { openCombo(); return; }
-      combo.active = Math.min(combo.active + 1, combo.matches.length - 1);
-      renderModelOptions();
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      combo.active = Math.max(combo.active - 1, 0);
-      renderModelOptions();
-    } else if (e.key === 'Enter') {
-      e.preventDefault(); // never submit the run form from the model field
-      if (combo.open && combo.matches.length) {
-        const pick = combo.active >= 0 ? combo.matches[combo.active] : combo.matches[0];
-        if (pick) selectModel(pick.id);
-      } else openCombo();
-    } else if (e.key === 'Escape') {
-      if (combo.open) { e.preventDefault(); combo.query = ''; syncModelInput(); closeCombo(); }
+  function matchesFor() {
+    const base = comboMatches(state.query);
+    // The resolver combo offers an explicit "inherit the run model" row at the
+    // top when the field is empty/unfiltered, so a prior pick can be cleared.
+    if (opts.allowEmpty && !state.query.trim()) {
+      return [{ id: INHERIT, label: 'Same as run model', inherit: true }].concat(base);
     }
-  });
-  // Delay so a click on an option (mousedown below) wins over the blur-close.
-  input.addEventListener('blur', () => { setTimeout(() => { combo.query = ''; syncModelInput(); closeCombo(); }, 150); });
-  // mousedown (not click) fires before the input blur, so the selection sticks.
-  list.addEventListener('mousedown', (e) => {
-    const li = e.target.closest ? e.target.closest('.combo__opt') : null;
-    if (!li || !li.dataset.id) return;
-    e.preventDefault();
-    selectModel(li.dataset.id);
-  });
-})();
+    return base;
+  }
+
+  const isSelected = (m) => (m.inherit ? !get() : m.id === get());
+
+  /** Reflect the current selection as the input's display value. */
+  function syncInput() {
+    const input = inputEl();
+    if (!input) return;
+    const md = modelById(get());
+    // A custom id the user typed isn't in the catalog — show the id verbatim so
+    // they can see exactly what will run, instead of a blank field.
+    input.value = md ? md.label : (get() || '');
+    input.placeholder = opts.placeholder
+      || (S.models.length ? 'Search or type any model id…' : 'Type a model id…');
+  }
+
+  function updateHint() {
+    if (!opts.hintId) return;
+    const h = $(opts.hintId);
+    if (!h) return;
+    const md = modelById(get());
+    if (!md) {
+      // Custom / free-typed id (or no pick yet): no catalog metadata to show.
+      h.innerHTML = get()
+        ? '<span class="custom">custom model id</span> · sent to OpenRouter as-is'
+        : (opts.emptyHint || '');
+      return;
+    }
+    const price = md.inputPrice != null ? `$${md.inputPrice}/M in · $${md.outputPrice ?? '?'}/M out` : '';
+    const head = [md.thinking ? '<span class="thinking">thinking</span>' : '', esc(md.description || '')]
+      .filter(Boolean).join(' · ');
+    const tail = [price, fmtCtx(md.contextLength)].filter(Boolean).join(' · ');
+    h.innerHTML = [head, tail].filter(Boolean).join('<br>');
+  }
+
+  function updateCap() {
+    if (!opts.capId) return;
+    const cap = $(opts.capId);
+    if (!cap) return;
+    const n = S.models.length;
+    if (S.provider !== 'openrouter') { cap.textContent = n ? `${n} model${n === 1 ? '' : 's'} available` : ''; return; }
+    if (S.modelSource === 'openrouter-live') {
+      cap.innerHTML = `<span class="live">${n} models</span> · full OpenRouter catalog · or type any model id`;
+    } else {
+      cap.textContent = "Couldn't reach OpenRouter — showing recommended models; type any model id to use it anyway";
+    }
+  }
+
+  function render() {
+    const list = listEl();
+    if (!list) return;
+    const matches = matchesFor();
+    state.matches = matches;
+    if (state.active >= matches.length) state.active = matches.length - 1;
+    // With the free-text candidate, a non-empty query always yields at least one
+    // row; an empty list means "no catalog and nothing typed yet".
+    if (!matches.length) {
+      list.innerHTML = S.models.length
+        ? '<li class="combo__empty">No matches — type a full model id to use it as-is</li>'
+        : '<li class="combo__empty">Type a model id, e.g. deepseek/deepseek-v4-flash</li>';
+      return;
+    }
+    list.innerHTML = matches.map((m, i) => modelOptionHtml(m, i, i === state.active, isSelected(m))).join('');
+    const input = inputEl();
+    if (state.active >= 0) input.setAttribute('aria-activedescendant', 'opt-' + state.active);
+    else input.removeAttribute('aria-activedescendant');
+    const act = list.querySelector('.combo__opt.active');
+    if (act) act.scrollIntoView({ block: 'nearest' });
+  }
+
+  function open() {
+    if (!state.open) { state.open = true; inputEl().setAttribute('aria-expanded', 'true'); listEl().hidden = false; }
+    render();
+  }
+  function close() {
+    state.open = false; state.active = -1;
+    inputEl().setAttribute('aria-expanded', 'false');
+    listEl().hidden = true;
+  }
+  function select(id) {
+    // Accept ANY non-empty id — catalog model OR a free-typed custom id — plus
+    // the inherit sentinel (resolver only), which clears back to the run model.
+    if (id === INHERIT) id = '';
+    else if (!id) return;
+    set(id);
+    state.query = '';
+    syncInput();
+    close();
+    updateHint();
+  }
+
+  function refresh() {
+    syncInput();
+    updateCap();
+    if (state.open) render();
+    updateHint();
+  }
+
+  const input = inputEl();
+  const list = listEl();
+  if (input && list) {
+    input.addEventListener('focus', () => {
+      // Clear to an empty filter so the user sees the COMPLETE list and can type
+      // to narrow it; the current pick is restored on blur/Escape if untouched.
+      state.query = '';
+      input.value = '';
+      const all = matchesFor();
+      state.active = Math.max(0, all.findIndex((m) => isSelected(m)));
+      open();
+    });
+    input.addEventListener('input', () => { state.query = input.value; state.active = -1; open(); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (!state.open) { open(); return; }
+        state.active = Math.min(state.active + 1, state.matches.length - 1);
+        render();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        state.active = Math.max(state.active - 1, 0);
+        render();
+      } else if (e.key === 'Enter') {
+        e.preventDefault(); // never submit the run form from the model field
+        if (state.open && state.matches.length) {
+          const pick = state.active >= 0 ? state.matches[state.active] : state.matches[0];
+          if (pick) select(pick.id);
+        } else open();
+      } else if (e.key === 'Escape') {
+        if (state.open) { e.preventDefault(); state.query = ''; syncInput(); close(); }
+      }
+    });
+    // Delay so a click on an option (mousedown below) wins over the blur-close.
+    input.addEventListener('blur', () => { setTimeout(() => { state.query = ''; syncInput(); close(); }, 150); });
+    // mousedown (not click) fires before the input blur, so the selection sticks.
+    list.addEventListener('mousedown', (e) => {
+      const li = e.target.closest ? e.target.closest('.combo__opt') : null;
+      if (!li || !li.dataset.id) return;
+      e.preventDefault();
+      select(li.dataset.id);
+    });
+  }
+
+  return { refresh, syncInput, updateHint, open, close, select };
+}
+
+const mainCombo = makeModelCombo({
+  inputId: 'modelInput', listId: 'modelList', hintId: 'modelHint', capId: 'modelCap',
+  get: () => S.modelId, set: (v) => { S.modelId = v; },
+});
+
+const resolverCombo = makeModelCombo({
+  inputId: 'resolverModelInput', listId: 'resolverModelList', hintId: 'resolverModelHint',
+  get: () => S.conflictResolverModelId, set: (v) => { S.conflictResolverModelId = v; },
+  allowEmpty: true,
+  placeholder: 'Same as run model',
+  emptyHint: 'Used only to resolve merge conflicts during integration · runs at max thinking · empty = same as run model',
+});
 
 /* ---------------- Launch: concurrency mode ---------------- */
 function renderModeSeg() {
@@ -598,6 +660,9 @@ function captureFormConfig() {
     backend: S.backend,
     modelId: S.modelId,
     modelLabel: md ? md.label : (S.modelId || 'default model'),
+    // Optional conflict-resolver model (empty = inherit modelId). Maps to
+    // Pipeline.integrationModelId server-side.
+    conflictResolverModelId: S.conflictResolverModelId,
     providerLabel: prov ? prov.label : S.provider,
     mode: S.mode,
     concurrency: S.mode === 'manual' ? S.manualN : undefined,
@@ -721,8 +786,9 @@ async function editQueueItem(id) {
   // Restore the saved model id (catalog OR custom) into the combobox. The old
   // code read a #modelSelect <select> that no longer exists — it would crash.
   S.modelId = it.modelId || S.modelId;
-  syncModelInput();
-  updateModelHint();
+  S.conflictResolverModelId = it.conflictResolverModelId || '';
+  mainCombo.refresh();
+  resolverCombo.refresh();
   S.mode = it.mode || 'auto';
   S.manualN = it.concurrency || S.manualN;
   renderModeSeg();
@@ -792,6 +858,7 @@ async function postRun(i) {
         pipelineName: item.pipelineName,
         provider: item.provider,
         modelId: item.modelId,
+        conflictResolverModelId: item.conflictResolverModelId || undefined,
         mode: item.mode,
         concurrency: item.mode === 'manual' ? item.concurrency : undefined,
         apiKey: apiKey || undefined,

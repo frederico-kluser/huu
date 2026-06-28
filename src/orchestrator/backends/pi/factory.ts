@@ -4,7 +4,7 @@ import {
   AuthStorage,
   ModelRegistry,
 } from '@mariozechner/pi-coding-agent';
-import { getModel } from '@mariozechner/pi-ai';
+import { getModel, clampThinkingLevel, type ModelThinkingLevel } from '@mariozechner/pi-ai';
 import type { AgentEvent, AgentFactory, SpawnedAgent } from '../../types.js';
 import { supportsThinking } from '../../../lib/model-factory.js';
 import {
@@ -45,6 +45,36 @@ async function resolveThinkingLevel(
   }
 }
 
+/** Ascending strength order of the Pi SDK thinking levels. */
+const THINKING_LEVEL_ORDER: ModelThinkingLevel[] = [
+  'off',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+];
+
+/**
+ * Pick the effective thinking level for an agent. `base` is what we'd use
+ * normally (from `resolveThinkingLevel`). When `maxThinking` is requested
+ * (the conflict-resolver agent) and the model actually reasons, bump up to
+ * the model's true maximum (`modelMax`, from `clampThinkingLevel(model,
+ * 'xhigh')`) — but NEVER below `base`, so a model that only supports a low
+ * level can't accidentally downgrade the resolver, and a non-thinking model
+ * (`base === 'off'`) stays off. Pure + networkless, so it is unit-tested.
+ */
+export function pickThinkingLevel(
+  base: ModelThinkingLevel,
+  maxThinking: boolean,
+  modelMax: ModelThinkingLevel,
+): ModelThinkingLevel {
+  if (!maxThinking || base === 'off') return base;
+  return THINKING_LEVEL_ORDER.indexOf(modelMax) > THINKING_LEVEL_ORDER.indexOf(base)
+    ? modelMax
+    : base;
+}
+
 export const piAgentFactory: AgentFactory = async (
   task,
   config,
@@ -72,7 +102,14 @@ export const piAgentFactory: AgentFactory = async (
   const modelRegistry = ModelRegistry.create(authStorage);
   modelRegistry.registerProvider('openrouter', { headers: OPENROUTER_HEADERS });
 
-  const thinkingLevel = await resolveThinkingLevel(modelId, apiKey, onEvent);
+  const baseThinking = await resolveThinkingLevel(modelId, apiKey, onEvent);
+  // The conflict-resolver (integration) agent runs at the model's max thinking
+  // level; regular agents keep the base level.
+  const thinkingLevel = pickThinkingLevel(
+    baseThinking,
+    runtimeContext?.maxThinking ?? false,
+    clampThinkingLevel(model, 'xhigh'),
+  );
 
   const { session } = await createAgentSession({
     model,

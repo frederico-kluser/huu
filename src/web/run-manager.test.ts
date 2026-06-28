@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { WebRunManager, type RunSnapshot } from './run-manager.js';
+import { WebRunManager, applyResolverModel, type RunSnapshot } from './run-manager.js';
+import type { Pipeline } from '../lib/types.js';
 
 function waitFor(pred: () => boolean, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -15,6 +16,27 @@ function waitFor(pred: () => boolean, timeoutMs: number): Promise<boolean> {
     }, 5);
   });
 }
+
+describe('applyResolverModel', () => {
+  const base: Pipeline = { name: 'p', steps: [{ name: 's', prompt: 'x', files: [] }] };
+
+  it('pins integrationModelId from a non-empty conflict-resolver model', () => {
+    const out = applyResolverModel(base, 'deepseek/deepseek-v4-pro');
+    expect(out.integrationModelId).toBe('deepseek/deepseek-v4-pro');
+    expect(out).not.toBe(base); // new object, original untouched
+    expect(base.integrationModelId).toBeUndefined();
+  });
+
+  it('leaves the pipeline untouched (resolver inherits run model) when empty', () => {
+    expect(applyResolverModel(base, undefined)).toBe(base);
+    expect(applyResolverModel(base, '')).toBe(base);
+    expect(applyResolverModel(base, '   ')).toBe(base);
+  });
+
+  it('trims the supplied model id', () => {
+    expect(applyResolverModel(base, '  resolver-x  ').integrationModelId).toBe('resolver-x');
+  });
+});
 
 describe('WebRunManager — simulation', () => {
   it('drives a synthetic run to done over the same snapshot channel as a real run', async () => {

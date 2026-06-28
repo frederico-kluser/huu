@@ -245,6 +245,24 @@ describe('web server', () => {
     expect(snap.state).not.toBeNull();
   }, 30_000);
 
+  it('accepts conflictResolverModelId on POST /api/run and starts the run', async () => {
+    const res = await fetch(base + '/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pipelineName: 'web-test-pipe',
+        backend: 'stub',
+        modelId: 'stub',
+        conflictResolverModelId: 'deepseek/deepseek-v4-pro',
+      }),
+    });
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(j.run.runId).toBeTruthy();
+    manager.abort();
+  }, 30_000);
+
   it('accepts concurrent runs (no 409) and tracks each by a distinct runId', async () => {
     const post = (): Promise<Response> =>
       fetch(base + '/api/run', {
