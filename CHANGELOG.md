@@ -16,6 +16,31 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
   reflects the active run's phase; finished/failed runs carry a ✓/✕ marker). The
   run snapshot now carries its `runDirectory` so each run can be labelled by the
   project it operates on, not just the pipeline name.
+- **`huu Test Suite` is now code-frozen — it writes tests and NEVER edits your
+  source.** The flagship pipeline's step prompts and judge were rewritten so the
+  production tree is read-only. The old escape hatch ("if a real bug is exposed,
+  fix `$file`") is gone: when a generated test reveals apparently-buggy behavior
+  the agent now **characterizes** it (pins the *actual* current behavior so the
+  suite stays green and truthful — Feathers, *Working Effectively with Legacy
+  Code*), records a fixed-shape `suspected-bug` finding, and — on runners with a
+  real expected-failure idiom (vitest `test.fails`, pytest strict `xfail`, RSpec
+  `pending`) — leaves a strict marker that flips red the day the bug is fixed.
+  Stacks without a native xfail (Go, Rust, JUnit 5) use characterization only —
+  `t.Skip`/`#[ignore]`/`@Disabled` are explicitly banned as bug trackers because
+  they assert nothing. Cleanup now prefers converting a bug-catching test to a
+  marker over deleting it (deletion is the last resort for structurally-broken
+  tests). Prompts also gained banned-token determinism rules and a per-test
+  mutation-strength self-check. Grounded in a fresh research pass over
+  characterization/golden-master testing, the documented LLM test-gen
+  "cheat-to-green" failure mode, mutation testing, and the cross-language
+  expected-failure mechanics.
+- The Test Suite judge (`5. Suite green and code untouched?`) now enforces the
+  freeze mechanically: it diffs the whole run against its base commit
+  (`git diff --name-only $baseCommit..HEAD`) and reworks if any non-test,
+  non-artifact source path changed, plus anti-cheat clauses that reject
+  assertion-free / weak-only / self-mocked "green by emptiness" tests and orphan
+  suspected-bug findings. These clauses are hard — never waved by the
+  `$runs >= 2` lean-approve shortcut.
 
 ### Fixed
 
@@ -29,6 +54,25 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
   agent PROMPT still receives the exact relative path. New shared helper
   `substituteFileInTitle` (`src/lib/title-format.ts`, mirrored verbatim in
   `src/web/client/title-util.js` for the no-build browser client).
+
+### Added
+
+- **`huu-tests-findings.md`** — a new Test Suite deliverable: the finalize step
+  rolls every `suspected-bug` FAQ finding into a human-readable table of bugs the
+  run surfaced but (by the freeze) did not fix, deduped by a stable `sb-<id>`
+  join key and cross-checked against the tests that pin them.
+- **`$baseCommit` work-step prompt token** and a **base-commit Git Context line
+  for judges** (`src/orchestrator/index.ts`, `src/orchestrator/check-evaluator.ts`).
+  Since stage merges are already committed by the time a step or judge runs, a
+  bare `git status` is clean; exposing the run's base commit lets a step diff
+  what the run actually changed (`git diff --name-only $baseCommit..HEAD`) or
+  restore a frozen file (`git checkout $baseCommit -- <path>`). The Test Suite
+  cleanup step uses it to actively restore any source an agent drifted.
+
+> Note (materialization trap): `pipeline-bootstrap.ts` never overwrites an
+> existing `pipelines/huu-test-suite.pipeline.json`. Users who already ran huu
+> keep their old copy — delete that file to re-materialize the code-frozen
+> version (the committed copy in this repo has been regenerated).
 ## [3.0.0] - 2026-06-26
 
 ### Added

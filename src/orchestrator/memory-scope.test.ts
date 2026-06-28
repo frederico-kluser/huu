@@ -183,6 +183,53 @@ describe('memory scope (filesFrom fan-out)', () => {
   );
 
   it(
+    'substitutes $baseCommit with the run base commit so a step can diff/restore against the origin',
+    async () => {
+      const baseSha = execSync('git rev-parse HEAD', { cwd: scratch, encoding: 'utf8' }).trim();
+      const captured: string[] = [];
+      const factory: AgentFactory = async (task, _config, _hint, cwd, onEvent) => ({
+        agentId: task.agentId,
+        task,
+        async prompt(text?: string): Promise<void> {
+          captured.push(text ?? '');
+          writeFileSync(join(cwd, `did-${task.agentId}.txt`), 'ok\n', 'utf8');
+          onEvent({ type: 'file_write', file: `did-${task.agentId}.txt` });
+          onEvent({ type: 'done' });
+        },
+        async abort(): Promise<void> {},
+        async dispose(): Promise<void> {},
+      });
+      const pipeline: Pipeline = {
+        name: 'base-commit-token',
+        steps: [
+          {
+            type: 'work',
+            name: 'restore frozen tree',
+            prompt: 'git diff --name-only $baseCommit..HEAD ; then restore with git checkout $baseCommit -- <path>',
+            files: [],
+            scope: 'project',
+          },
+        ],
+      };
+      const orch = new Orchestrator(
+        { apiKey: 'stub', modelId: 'stub-model', backend: 'stub' },
+        pipeline,
+        scratch,
+        factory,
+        { initialConcurrency: 1, autoScale: false },
+      );
+
+      const result = await orch.start();
+
+      expect(result.manifest.status).toBe('done');
+      expect(captured[0]).toContain(`git diff --name-only ${baseSha}..HEAD`);
+      expect(captured[0]).toContain(`git checkout ${baseSha} -- <path>`);
+      expect(captured[0]).not.toContain('$baseCommit');
+    },
+    60_000,
+  );
+
+  it(
     'corrupt memory file fails the run loudly',
     async () => {
       const { factory, consumerTasks } = makeMemoryFlowFactory({ producerWrites: 'corrupt' });

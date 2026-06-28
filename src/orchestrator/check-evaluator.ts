@@ -12,6 +12,14 @@ export interface CheckEvaluationContext {
   repoRoot: string;
   integrationWorktreePath: string;
   integrationBranch: string;
+  /**
+   * Commit the run started from (repo HEAD at preflight). Surfaced to the
+   * judge so a condition can diff `git diff --name-only <baseCommit>..HEAD`
+   * to see exactly what THIS run changed — the stage merges are already
+   * committed by the time the judge runs, so a bare `git status` is clean.
+   * Optional (older callers / test fixtures may omit it).
+   */
+  baseCommit?: string;
   runId: string;
   config: AppConfig;
   factory: AgentFactory;
@@ -51,7 +59,17 @@ export interface CheckEvaluationResult {
 export async function evaluateCheckStep(
   ctx: CheckEvaluationContext,
 ): Promise<CheckEvaluationResult> {
-  const resolvedCondition = substituteRuns(ctx.step.condition, ctx.runs);
+  // Substitute `$runs` (visit counter) AND `$baseCommit` (run base) so a
+  // condition can inline a real diff base — e.g. `git diff --name-only
+  // $baseCommit..HEAD`. Without this the literal `$baseCommit` reaches the
+  // judge's shell as an UNSET variable and expands to nothing, turning the
+  // diff into `..HEAD` (= `HEAD..HEAD`, empty) which would pass a freeze
+  // guard vacuously. baseCommit is always set once a run reaches a check
+  // (preflight aborts the run if HEAD can't be resolved).
+  const resolvedCondition = substituteRuns(ctx.step.condition, ctx.runs).replaceAll(
+    '$baseCommit',
+    ctx.baseCommit ?? '',
+  );
   const fallback = ctx.step.outcomes.find((o) => o.default) ?? ctx.step.outcomes[0]!;
 
   const fakeTask = {
@@ -78,7 +96,12 @@ export async function evaluateCheckStep(
     ? { ...ctx.config, modelId: ctx.step.modelId }
     : ctx.config;
 
-  const systemPrompt = buildCheckSystemPrompt(ctx.step, ctx.integrationBranch, ctx.integrationWorktreePath);
+  const systemPrompt = buildCheckSystemPrompt(
+    ctx.step,
+    ctx.integrationBranch,
+    ctx.integrationWorktreePath,
+    ctx.baseCommit,
+  );
   const userPrompt = buildCheckUserPrompt(ctx.step, resolvedCondition, ctx.runs);
 
   let agent: Awaited<ReturnType<AgentFactory>> | null = null;
@@ -136,7 +159,15 @@ export async function evaluateCheckStep(
   };
 }
 
-function buildCheckSystemPrompt(step: CheckStep, branch: string, worktree: string): string {
+function buildCheckSystemPrompt(
+  step: CheckStep,
+  branch: string,
+  worktree: string,
+  baseCommit?: string,
+): string {
+  const baseLine = baseCommit
+    ? `\n- Run base commit (repo HEAD before this run): \`${baseCommit}\`. The stage merges are already committed, so a bare \`git status\` is clean — to see exactly what THIS run changed, diff against the base: \`git diff --name-only ${baseCommit}..HEAD\` (or \`git diff --stat ${baseCommit}..HEAD\`).`
+    : '';
   return `# Judge Agent — ${step.name}
 
 ## Your Role
@@ -148,7 +179,7 @@ git logs, anything) to gather the evidence you need.
 
 ## Git Context
 - Integration branch: \`${branch}\`
-- Worktree: \`${worktree}\`
+- Worktree: \`${worktree}\`${baseLine}
 - DO NOT modify code, commit, or push. The orchestrator handles git operations.
 - DO NOT run \`git push\` under any circumstances.
 

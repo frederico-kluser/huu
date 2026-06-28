@@ -178,7 +178,7 @@ default pipelines into `pipelines/` on first run. Each one is idempotent
 
 | Pipeline | What it does | Methodology |
 |---|---|---|
-| `huu Test Suite` (`_default`) | Stack detection → test runner setup → **autonomous recon** picks the most test-worthy files (memory-scope, NO manual picking) → parallel per-file unit tests → cleanup + coverage badge, gated by a CheckStep loop that reworks until the suite is green. Prompts bake in mutation-surviving assertion rules and an anti-flaky determinism ruleset. | Google Testing Blog (behavior, not implementation) + [Fowler non-determinism](https://martinfowler.com/articles/nonDeterminism.html) + [Stryker](https://stryker-mutator.io/) follow-up |
+| `huu Test Suite` (`_default`) | Stack detection → test runner setup → **autonomous recon** picks the most test-worthy files (memory-scope, NO manual picking) → parallel per-file unit tests → cleanup + coverage badge, gated by a CheckStep loop that reworks until the suite is green. **CODE-FROZEN**: it only writes tests + its own artifacts and NEVER edits your source — a bug a test exposes is *characterized* (current behavior pinned) and reported in `huu-tests-findings.md`, never fixed. Prompts bake in mutation-surviving assertion rules and an anti-flaky determinism ruleset; the judge diffs `$baseCommit..HEAD` to enforce the freeze and reject cheap-green (assertion-free) tests. | Google Testing Blog (behavior, not implementation) + [Fowler non-determinism](https://martinfowler.com/articles/nonDeterminism.html) + Feathers characterization testing + [Stryker](https://stryker-mutator.io/) follow-up |
 | `huu Knowledge System` | Builds the full knowledge-skills system on a shared `.huu/knowledge/` blackboard — fully autonomous via `scope: "memory"` (no user file-picking): recon writes the study list (with per-file hints) → memory fan-out deep study (findings) → ONE synthesis step (topics + routing ground truth, written before any skill exists) → per-topic dossiers → skills materialized one-parallel-agent-per-dossier (memory fan-out, judge-looped) → meta-skills + LEARNINGS + routing surface (router-aware: extends an existing router/`catalog.md`, else creates `project-knowledge`) → blind routing eval gated by a description-sharpening rework loop. Engineered for small models: one cognitive op per step, mechanical judges, stub-safe forward defaults. Setup pipeline — mutates the repo. | [Agent Skills spec](https://agentskills.io/specification) + CoALA memory taxonomy + Voyager self-verification |
 | `huu Docs Audit` | Inventories every doc, classifies via the Diátaxis compass, scores the README (standard-readme grounded), flags stale references, measures inline API-doc coverage. Report-only + judge gate. | [Diátaxis](https://diataxis.fr/) + [standard-readme](https://github.com/RichardLitt/standard-readme) |
 | `huu Quality Audit` | Sonar-style report: cyclomatic + cognitive complexity, size metrics, churn×complexity hotspots (git-log mining), duplication, dead code, hotspot-weighted composite score. Report-only + judge gate. | [SonarSource cognitive complexity](https://www.sonarsource.com/docs/CognitiveComplexity.pdf) + [Tornhill hotspots](https://docs.enterprise.codescene.io/versions/4.0.16/guides/technical/hotspots.html) |
@@ -230,10 +230,17 @@ depcheck, vulture, …) is invoked ephemerally via `npx --yes`,
 to your project's manifests.
 
 Two pipelines mutate production state by design (setup pipelines, not
-audits): `huu Test Suite` (writes `huu-tests.md` to repo root + inserts
-a tests-coverage badge in `README.md`; its recon hands off a transient
-`huu-tests-targets.json` at the root that the finalize step deletes) and
-`huu Knowledge System`
+audits): `huu Test Suite` (writes test files + `huu-tests.md` +
+`huu-tests-faq.json` + `huu-tests-findings.md` to the repo root, inserts
+a tests-coverage badge in `README.md`, and adds only test/dev-deps + a
+test script to the runner manifest; its recon hands off a transient
+`huu-tests-targets.json` at the root that the finalize step deletes). It
+is **code-frozen** — it never edits application/library source: the
+cleanup step restores any drifted file to `$baseCommit` and the judge
+rejects the run if `git diff --name-only $baseCommit..HEAD` shows a
+non-test source path. Suspected bugs are pinned by characterization
+tests and surfaced in `huu-tests-findings.md`, not fixed. The other
+setup pipeline is `huu Knowledge System`
 (writes `.agents/skills/**` + `.huu/knowledge/**`, same single
 `.gitignore` adjustment rule with `!.huu/knowledge/`).
 
