@@ -7,6 +7,7 @@ import {
 } from './db.js';
 import { createBoardOrder } from './board-order.js';
 import { settleQueue } from './queue-util.js';
+import { substituteFileInTitle } from './title-util.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1512,10 +1513,13 @@ function agentCard(a) {
   else if (a.phase === 'done') { lane = 'done'; cls = 'done'; }
   else if (a.phase === 'no_changes') { lane = 'done'; cls = 'done'; plabel = 'no changes'; }
   else if (a.phase === 'error') { lane = 'done'; cls = 'err'; }
+  const file = (a.currentFile || (a.files && a.files[0]) || '');
   return {
     key: 'a' + a.agentId, kind: 'agent', lane, cls, plabel,
-    title: a.stageName || `Task ${a.agentId}`,
-    file: (a.currentFile || (a.files && a.files[0]) || ''),
+    // Resolve the `$file` fan-out token so the user never sees a literal
+    // "$file" in the title (per-file/memory steps); full path stays in `file`.
+    title: substituteFileInTitle(a.stageName || `Task ${a.agentId}`, file),
+    file,
     idText: '#' + a.agentId,
     streaming: a.phase === 'streaming' || a.phase === 'tool_running',
     foot: footBits([
@@ -1533,7 +1537,7 @@ function mergeCard(m) {
   else if (m.phase === 'pending') { lane = 'todo'; cls = 'idle'; }
   return {
     key: 'm' + m.visitIndex, kind: 'merge', lane, cls, plabel: humanize(m.phase),
-    title: 'Merge · ' + (m.stageName || ''),
+    title: 'Merge · ' + substituteFileInTitle(m.stageName || '', null),
     file: (m.branchesMerged && m.branchesMerged.length ? `${m.branchesMerged.length} merged` : ''),
     idText: m.runs > 1 ? `×${m.runs}` : '',
     streaming: m.phase === 'merging' || m.phase === 'conflict_resolving',
@@ -1547,7 +1551,7 @@ function judgeCard(j) {
   else if (j.phase === 'error') { lane = 'done'; cls = 'err'; }
   return {
     key: 'j' + j.visitIndex, kind: 'judge', lane, cls, plabel: humanize(j.phase),
-    title: 'Judge · ' + (j.stepName || ''),
+    title: 'Judge · ' + substituteFileInTitle(j.stepName || '', null),
     file: j.outcomeLabel ? `→ ${j.outcomeLabel}` : esc(j.condition || '').slice(0, 60),
     idText: j.runs ? `run ${j.runs}` : '',
     streaming: j.phase === 'judging',
@@ -1694,7 +1698,7 @@ function drawerMeta(c) {
   const r = c.raw;
   if (c.kind === 'agent') {
     return [
-      kv('Phase', humanize(r.phase)), kv('Stage', r.stageName),
+      kv('Phase', humanize(r.phase)), kv('Stage', substituteFileInTitle(r.stageName, r.currentFile)),
       kv('Tokens in', fmtNum(r.tokensIn || 0)), kv('Tokens out', fmtNum(r.tokensOut || 0)),
       kv('Cost', r.cost != null ? '$' + r.cost.toFixed(4) : ''), kv('Requeues', r.requeues || 0),
       kv('Branch', r.branchName, { mono: true, wide: true }),
