@@ -500,6 +500,16 @@ select:focus, input:focus { border-color: var(--accent); outline: none; }
 .manual-row output { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 2ch; }
 input[type='range'] { flex: 1; accent-color: var(--accent); }
 
+/* "Max time per agent" launch field — the generic input rule above only styles
+   text/password inputs, so the number input gets its own box (focus accent is
+   shared via the `input:focus` rule). */
+.timeout-row { display: flex; align-items: center; gap: 10px; }
+.timeout-input { width: 120px; font: inherit; font-size: 14px; color: var(--text); min-height: var(--tap);
+  background: var(--elev); border: 1px solid var(--separator); border-radius: 11px;
+  padding: 11px 13px; text-align: right; appearance: none; -webkit-appearance: none; -moz-appearance: textfield; }
+.timeout-input::-webkit-outer-spin-button, .timeout-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.timeout-unit { font-size: 13px; font-weight: 600; color: var(--text-2); }
+
 .run-error { color: var(--red); font-size: 13px; font-weight: 500;
   background: color-mix(in srgb, var(--red) 12%, transparent); padding: 9px 12px; border-radius: 10px; }
 
@@ -858,6 +868,10 @@ input[type='range'] { flex: 1; accent-color: var(--accent); }
 .history-modal { position: fixed; z-index: 51; top: 50%; left: 50%; transform: translate(-50%, -50%);
   width: min(720px, 95vw); max-height: min(82vh, 760px); display: flex; flex-direction: column;
   border-radius: var(--radius); padding: 16px; animation: popin .22s cubic-bezier(.2,.7,.3,1); }
+.settings-modal { position: fixed; z-index: 51; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(460px, 95vw); display: flex; flex-direction: column;
+  border-radius: var(--radius); padding: 16px; animation: popin .22s cubic-bezier(.2,.7,.3,1); }
+.settings-body { display: flex; flex-direction: column; gap: 16px; }
 .history-sub { display: flex; align-items: center; gap: 12px; margin: 2px 0 12px; }
 .history-actions { display: flex; gap: 8px; margin-left: auto; }
 .history-list { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 8px; min-height: 140px; }

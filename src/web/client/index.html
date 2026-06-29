@@ -63,6 +63,9 @@
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l4 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span class="badge" id="historyBadge" hidden>0</span>
         </button>
+        <button class="iconbtn" id="settingsBtn" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 13a7.7 7.7 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 2h-4l-.4 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.7 7.7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1L11 22h4l.4-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        </button>
         <button class="iconbtn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">
           <svg viewBox="0 0 24 24" class="i-theme" width="18" height="18" aria-hidden="true"><use href="#ic-auto"></use></svg>
         </button>
@@ -162,6 +165,16 @@
                   <input type="range" id="concRange" min="1" max="32" value="10" />
                   <output id="concOut">10</output>
                 </div>
+              </div>
+
+              <div class="field">
+                <label for="timeoutInput">Max time per agent</label>
+                <div class="timeout-row">
+                  <input type="number" id="timeoutInput" class="timeout-input" min="1" step="1"
+                         inputmode="numeric" placeholder="default" aria-describedby="timeoutHint" />
+                  <span class="timeout-unit">min</span>
+                </div>
+                <div class="config-hint muted" id="timeoutHint">Time limit for each agent, applied to the whole pipeline. Empty = the global default from Settings (⚙), or the pipeline default if that's unset too.</div>
               </div>
 
               <button type="submit" class="btn btn--primary btn--lg" id="addBtn">
@@ -355,6 +368,27 @@
         </div>
       </div>
       <div class="history-list" id="historyList"></div>
+    </div>
+
+    <div class="modal-scrim" id="settingsScrim" hidden></div>
+    <div class="settings-modal glass" id="settingsModal" hidden role="dialog" aria-label="Web UI settings">
+      <div class="folder-modal__head">
+        <div class="folder-modal__title">Settings</div>
+        <button class="iconbtn" id="settingsClose" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="settings-body">
+        <div class="field">
+          <label for="globalTimeoutInput">Max time per agent</label>
+          <div class="timeout-row">
+            <input type="number" id="globalTimeoutInput" class="timeout-input" min="1" step="1"
+                   inputmode="numeric" placeholder="default" aria-describedby="globalTimeoutHint" />
+            <span class="timeout-unit">min</span>
+          </div>
+          <div class="config-hint muted" id="globalTimeoutHint">Default for every run started from this browser, applied to the whole pipeline. Empty = the pipeline's default (10 min · 5 min for single-file tasks). A per-project value overrides this. Web UI only — the CLI keeps its own rules.</div>
+        </div>
+      </div>
     </div>
 
     <!-- Toast -->
