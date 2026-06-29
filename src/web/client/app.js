@@ -1407,7 +1407,12 @@ function renderActiveRun() {
   $('abortBtn').hidden = !active;
   $('backToLaunch').hidden = active || !hasRun;
 
-  setStatus(run.phase);
+  // Held open for retries: the run is still 'running' (phase) but its inner
+  // status is 'awaiting_retry'. Offer an explicit Finish to leave the hold.
+  const awaitingRetry = !!(run.state && run.state.status === 'awaiting_retry');
+  $('finishBtn').hidden = !(awaitingRetry && !S.sim);
+
+  setStatus(run.phase, run.state && run.state.status);
   const st = run.state;
   // Gooey morph loader while the orchestrator spins up — shown while the run
   // is live but no cards have landed yet (preflight / worktree creation).
@@ -1603,7 +1608,14 @@ function renderRunSelector() {
   if (runSel.open) renderRunSelMenu(); // live rows update; open state preserved
 }
 
-function setStatus(phase) {
+function setStatus(phase, innerStatus) {
+  // While the run is held open for retries the snapshot phase is still
+  // 'running'; surface the inner `awaiting_retry` as a distinct "review" pill.
+  if (innerStatus === 'awaiting_retry') {
+    $('statusText').textContent = 'review';
+    $('statusPill').dataset.s = 'awaiting';
+    return;
+  }
   const label = { idle: 'idle', running: 'running', done: 'done', error: 'error' }[phase] || phase;
   $('statusText').textContent = label;
   $('statusPill').dataset.s = phase;
@@ -1781,7 +1793,13 @@ function agentCard(a) {
   if (a.phase === 'pending') { lane = 'todo'; cls = 'idle'; plabel = a.requeues ? 'requeued' : 'queued'; }
   else if (a.phase === 'done') { lane = 'done'; cls = 'done'; }
   else if (a.phase === 'no_changes') { lane = 'done'; cls = 'done'; plabel = 'no changes'; }
-  else if (a.phase === 'error') { lane = 'done'; cls = 'err'; }
+  else if (a.phase === 'error') {
+    // Signal a TIMEOUT distinctly from a generic failure (amber vs red) so the
+    // user knows a longer-timeout retry is the right move.
+    lane = 'done';
+    if (a.errorKind === 'timeout') { cls = 'tmo'; plabel = 'timeout'; }
+    else { cls = 'err'; plabel = 'failed'; }
+  }
   const file = (a.currentFile || (a.files && a.files[0]) || '');
   return {
     key: 'a' + a.agentId, kind: 'agent', lane, cls, plabel,
@@ -1795,6 +1813,7 @@ function agentCard(a) {
       a.tokensOut ? `${fmtNum(a.tokensIn + a.tokensOut)} tok` : '',
       a.cost ? `$${a.cost.toFixed(3)}` : '',
       a.requeues ? `↻${a.requeues}` : '',
+      a.manualRetries ? `retry ${a.manualRetries}` : '',
     ], a.requeues),
     raw: a,
   };
@@ -1931,6 +1950,7 @@ function refreshDrawer(st) {
   if (!c || !c.raw) return;
   $('drawerTitle').textContent = c.title;
   $('drawerMeta').innerHTML = drawerMeta(c);
+  renderDrawerRetry(c, st);
   if (S.openCardKey[0] === 'a') {
     // live tail from streamed state (full set fetched on open)
     const logs = c.raw.logs;
@@ -1994,6 +2014,61 @@ function drawerMeta(c) {
     r.error ? kv('Error', r.error, { wide: true, err: true }) : '',
   ].join('');
 }
+
+/* Retry controls inside the drawer — shown only for an agent card in `error`
+   while the run is held open in `awaiting_retry`. A timed-out card additionally
+   offers a new time limit; any other error just re-runs. */
+function renderDrawerRetry(c, st) {
+  const el = $('drawerRetry');
+  if (!el) return;
+  const r = c && c.raw;
+  const inError = c && c.kind === 'agent' && r && r.phase === 'error';
+  const awaiting = !!(st && st.status === 'awaiting_retry');
+  if (!inError || !awaiting) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  const isTimeout = r.errorKind === 'timeout';
+  el.innerHTML =
+    `<div class="retry-head ${isTimeout ? 'is-timeout' : 'is-failed'}">` +
+      (isTimeout
+        ? 'Timed out — re-run with a new time limit, or as-is.'
+        : 'Failed — re-run this task.') +
+    `</div>` +
+    (isTimeout
+      ? `<label class="retry-tmo">New timeout (min)` +
+        `<input id="retryMinutes" class="retry-tmo__input" type="number" min="1" step="1" value="15"></label>`
+      : '') +
+    `<button class="btn btn--primary retry-go" data-agent="${r.agentId}">` +
+      (isTimeout ? 'Retry with new timeout' : 'Retry task') +
+    `</button>`;
+}
+
+$('drawerRetry').addEventListener('click', async (e) => {
+  const btn = e.target.closest && e.target.closest('.retry-go');
+  if (!btn) return;
+  const agentId = +btn.dataset.agent;
+  const minEl = $('retryMinutes');
+  const timeoutMinutes = minEl ? Math.max(1, parseInt(minEl.value, 10) || 0) : undefined;
+  btn.disabled = true;
+  try {
+    await api('/api/run/retry', {
+      method: 'POST',
+      body: JSON.stringify({ runId: S.activeRunId, agentId, timeoutMinutes }),
+    });
+    toast('Retrying task #' + agentId + '…');
+  } catch (err) {
+    toast(err.message, true);
+    btn.disabled = false;
+  }
+});
+
+$('finishBtn').addEventListener('click', async () => {
+  try {
+    await api('/api/run/finish', { method: 'POST', body: JSON.stringify({ runId: S.activeRunId }) });
+    toast('Finishing run…');
+  } catch (e) {
+    toast(e.message, true);
+  }
+});
 
 /* ---------------- Global run log (live activity console) ---------------- */
 const LOG_TAIL = 600; // cap rendered lines so a long multi-run stream stays light

@@ -248,6 +248,36 @@ describe('web server', () => {
     expect(snap.runDirectory).toBe(repo);
   }, 30_000);
 
+  it('validates POST /api/run/retry and no-ops an unknown run', async () => {
+    // Missing/invalid agentId is a 400.
+    const bad = await fetch(base + '/api/run/retry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId: 'nope' }),
+    });
+    expect(bad.status).toBe(400);
+
+    // Well-formed payload for an unknown run id is accepted as a silent no-op
+    // (the run may have already finalized) — never a 500.
+    const ok = await fetch(base + '/api/run/retry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId: 'nope', agentId: 1, timeoutMinutes: 7 }),
+    });
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).ok).toBe(true);
+  });
+
+  it('accepts POST /api/run/finish for any run id', async () => {
+    const res = await fetch(base + '/api/run/finish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId: 'nope' }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+  });
+
   it('accepts conflictResolverModelId on POST /api/run and starts the run', async () => {
     const res = await fetch(base + '/api/run', {
       method: 'POST',

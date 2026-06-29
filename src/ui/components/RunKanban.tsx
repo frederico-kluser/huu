@@ -230,14 +230,16 @@ function buildCard(
   const log = lastLog ?? agent.logs[agent.logs.length - 1];
 
   const retryBadge = agent.attempt && agent.attempt > 1 ? ' (retry)' : '';
-  // Memory-guard requeues go in the TITLE, not a new line — cardHeight()
-  // budgets packCards by rendered rows and must stay in sync.
+  // Memory-guard requeues and USER retries go in the TITLE, not a new line —
+  // cardHeight() budgets packCards by rendered rows and must stay in sync.
   const requeueBadge = agent.requeues && agent.requeues > 0 ? ` ↻${agent.requeues}` : '';
+  const manualRetryBadge =
+    agent.manualRetries && agent.manualRetries > 0 ? ` ⟳${agent.manualRetries}` : '';
   return {
     key: String(agent.agentId),
     title: `#${agent.agentId} ${truncate(displayStage, 24)}${
       isOverride ? ' (step)' : ''
-    }${retryBadge}${requeueBadge}`,
+    }${retryBadge}${requeueBadge}${manualRetryBadge}`,
     subtitle,
     status,
     branchShort,

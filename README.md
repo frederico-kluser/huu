@@ -200,6 +200,16 @@ TUI no terminal.
   cards. Clique num card pra ver **tokens, custo, branch, arquivos e logs ao
   vivo** por agente. Console de log global, controle de concorrência
   (Auto · Manual · MAX) e botão de parar no topo.
+- **Erro sinalizado e re-execução por card.** Um card que **estourou o tempo
+  limite** aparece em **âmbar** (`timeout`), distinto do **vermelho** de
+  qualquer outra falha (`failed`). Quando uma execução termina com cards em
+  erro, o huu **não pula direto pro resumo**: ele pausa em modo **review**
+  (mantendo o worktree de integração vivo) pra você recuperar as falhas uma a
+  uma. Clique no card vermelho/âmbar e use **Retry** — um timeout ainda oferece
+  um **novo tempo limite** maior; qualquer outro erro só re-executa. O card roda
+  de novo sobre o HEAD atual da integração e, se passar, é mesclado — sem
+  re-rodar o pipeline inteiro. O botão **Finish** encerra o review. (No TUI de
+  execução única: `R` re-tenta o card em foco, `D` finaliza.)
 - **Fila de projetos, em paralelo.** Selecione **vários projetos** — cada um
   com sua própria config (diretório, provider, modelo, concorrência) — e
   rode-os **simultaneamente** sob um único orçamento de RAM/concorrência. Os

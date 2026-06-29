@@ -11,7 +11,7 @@
 ## Knowledge skills
 
 - [following-architecture-conventions](following-architecture-conventions/SKILL.md) `knowledge` — layers, downward-only imports, ESM `.js`, named exports, style; load before writing any TS in src/.
-- [working-on-orchestrator](working-on-orchestrator/SKILL.md) `knowledge` — run lifecycle, AutoScaler math, memory-guard requeue (`killedAgentIds`), the multi-run `GlobalScheduler` (subordinate mode, priority backfill, cross-run kill, `run-many`), CheckStep judge 9998, checkRuns, the `simulation/` SimulationEngine demo driver; for any src/orchestrator change.
+- [working-on-orchestrator](working-on-orchestrator/SKILL.md) `knowledge` — run lifecycle, AutoScaler math, memory-guard requeue (`killedAgentIds`), the interactive-retry hold (`awaiting_retry` + `retryTask`/`finish`, `interactiveRetry` option), the multi-run `GlobalScheduler` (subordinate mode, priority backfill, cross-run kill, `run-many`), CheckStep judge 9998, checkRuns, the `simulation/` SimulationEngine demo driver; for any src/orchestrator change.
 - [orchestrating-git-worktrees](orchestrating-git-worktrees/SKILL.md) `knowledge` — worktree/branch naming (branch-namer), ascending --no-ff merges, never-rewind invariant, preflight, conflict policy; for src/git work and ANY stage-merge behavior change.
 - [integrating-llm-backends](integrating-llm-backends/SKILL.md) `knowledge` — backend registry (pi/copilot/azure/stub), BackendBundle, API-key chain, model catalogs, new-backend checklist.
 - [isolating-agent-ports](isolating-agent-ports/SKILL.md) `knowledge` — port windows from 55100, .env.huu, with-ports sourcing gotcha, shim compile cache; for port collisions and shim work.

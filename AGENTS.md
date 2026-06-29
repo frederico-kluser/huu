@@ -135,6 +135,26 @@ publishes; accumulates like tokens/logs, NOT reset on requeue). The Ink kanban
 `→ <action>` marker folded onto the `log:` line (the merge costs no extra
 `cardHeight()` row; the counters label does — keep them in sync).
 
+### Interactive retry of failed cards (`awaiting_retry`)
+
+A timed-out card carries `AgentStatus.errorKind = 'timeout'` (vs `'failed'`),
+surfaced distinctly in both front-ends (amber `TIMEOUT` vs red `FAILED`). When
+the step walk ends with one or more task cards in `error` AND the orchestrator
+was created with `OrchestratorOptions.interactiveRetry` (set by the single-run
+TUI `RunDashboard` and every web run — NOT by `run-many`/smoke/simulation), the
+run does not tear down: it enters a new `OrchestratorState.status` value
+**`awaiting_retry`**, keeping the integration worktree alive while `start()`
+parks on a finish gate. `Orchestrator.retryTask(agentId, {timeoutMs?})` re-runs
+ONE failed task against the current integration HEAD (reusing the pool +
+per-attempt auto-retry, with an optional longer per-task timeout) and merges its
+branch on success; `finish()` (or `abort()`) releases the gate so the run
+finalizes normally. User retries bump `AgentStatus.manualRetries` (kanban `⟳N`).
+Headless paths are byte-identical — without `interactiveRetry`, `start()`
+resolves immediately as before. TUI: `R` retries the focused card, `D` finishes;
+web: an error card's drawer offers **Retry** (+ minutes for timeouts) and
+**Finish**, via `POST /api/run/retry` and `/api/run/finish`. The multi-run TUI
+dashboard has no per-card retry (no per-card focus); the web covers multi-run.
+
 ### Multi-run scheduling (GlobalScheduler)
 
 A `GlobalScheduler` (`src/orchestrator/global-scheduler.ts`) runs MULTIPLE

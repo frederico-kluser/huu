@@ -42,6 +42,18 @@
 - **Symptom: agent error after retries** → the summary's yellow ⚠ shows the
   first failure; open the card (`ENTER`) for the full log. The run still
   merges every agent that DID commit.
+- **Retry a failed card yourself** → when a run ends with cards in error it
+  pauses in **`awaiting_retry`** (status pill **review**, amber) instead of
+  jumping to the summary, keeping the integration worktree alive. A **timeout**
+  shows amber (`TIMEOUT`/`timeout`), any other failure red (`FAILED`/`failed`).
+  - **TUI**: focus the card, press **`R`** to retry it (a timeout asks for a new
+    time limit first), **`D`** to finish, **`Q`** to abort.
+  - **Web**: click the red/amber card → drawer **Retry** button (timeouts get a
+    minutes field); **Finish** leaves the review hold.
+  - The card re-runs against the current integration HEAD and, on success, its
+    branch is merged in — no need to re-run the whole pipeline. User retries
+    show a `⟳N` badge. (Single-run TUI and any web run only; the multi-run TUI
+    has no per-card retry.)
 - **Symptom: cards return to TODO with `↻N`** → not an error: the memory
   guard killed the newest agent under RAM pressure and requeued it.
 

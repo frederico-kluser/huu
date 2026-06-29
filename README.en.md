@@ -199,6 +199,16 @@ terminal TUI back.
   flat. Click a card for **per-agent tokens, cost, branch, files and live
   logs**. Global log console, concurrency control (Auto · Manual · MAX) and a
   stop button up top.
+- **Errors are signalled, and cards retry.** A card that **hit its time limit**
+  shows in **amber** (`timeout`), distinct from the **red** of any other failure
+  (`failed`). When a run ends with error cards, huu **doesn't jump straight to
+  the summary**: it pauses in a **review** state (keeping the integration
+  worktree alive) so you can recover failures one at a time. Click the red/amber
+  card and hit **Retry** — a timeout additionally offers a **new, longer time
+  limit**; any other error just re-runs. The card re-runs against the current
+  integration HEAD and, on success, its branch is merged in — no need to re-run
+  the whole pipeline. A **Finish** button leaves the review hold. (Single-run
+  TUI: `R` retries the focused card, `D` finishes.)
 - **Project queue, in parallel.** Select **several projects** — each with its
   own config (directory, provider, model, concurrency) — and run them
   **concurrently** under one shared RAM/concurrency budget. Earlier projects
