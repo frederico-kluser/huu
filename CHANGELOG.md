@@ -10,6 +10,18 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ### Changed
 
+- **Run log redesigned into a live, cross-project activity console.** The log
+  drawer's header is now a **live activity bar** that sums the agents running
+  **right now across every concurrent run** (`⚡ N running · M projects ·
+  Q queued`), refreshed on every frame — the count reflects all projects in
+  real time, not just the viewed one. Each agent gets a stable hue chip so
+  parallel work is visually separable, level glyphs + a colored rail flag
+  warnings/errors, and when more than one run is live the body becomes a single
+  timestamp-ordered stream merging every run's lines (each tagged with its
+  project). A level filter (All · ⚠ · ✕), a "↓ Latest" jump pill and
+  auto-expand-on-first-run round it out. Entirely client-side: the cross-run
+  count is derived from the run snapshots already on the wire — no
+  orchestrator/server/SimulationEngine change.
 - **Web project selector is now a dropdown labelled by project + pipeline.** When
   more than one run is live, the header selector switched from side-by-side tabs
   to a single `<select>` showing **`project · pipeline`** per run (a leading dot

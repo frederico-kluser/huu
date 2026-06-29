@@ -82,6 +82,9 @@ const S = {
   simPaused: false,
   lastSim: null,
   logOpen: false,
+  logFilter: 'all',           // 'all' | 'warn' | 'error' — run-log level filter
+  logAutoExpanded: false,     // auto-open the log once when a run first goes live
+  logUserToggled: false,      // user opened/closed it by hand → stop auto-opening
   /* Project queue. Each item carries its OWN config. On start ALL items are
      dispatched at once and run CONCURRENTLY under one server-side scheduler
      (priority = dispatch order; later items backfill earlier ones). Finished
@@ -1368,7 +1371,6 @@ function renderActiveRun() {
     updateConc(st);
     if (run.runId && run.runId !== boardRunId) { boardRunId = run.runId; resetBoardState(); }
     renderBoard(st);
-    renderLog(st.logs || []);
     if (S.openCardKey) refreshDrawer(st);
   }
   if (run.phase === 'done' || run.phase === 'error') {
@@ -1376,6 +1378,11 @@ function renderActiveRun() {
       ? `<b style="color:var(--red)">Failed:</b> ${esc(run.errorReason)}`
       : `<b>Done.</b> Pipeline “${esc(run.pipelineName)}” finished.`;
   } else { $('runSummary').textContent = ''; }
+
+  // Run log + live cross-project activity counter — refreshed on EVERY frame,
+  // even when the SELECTED run has no state yet but another run is already live
+  // (the counter sums all runs, so it must not depend on the viewed run's `st`).
+  renderLog();
 
   // /simulation drives its own chrome (pause / run-again); the launch flow
   // drives the concurrent queue (archive + stop-queue strip).
@@ -1808,23 +1815,137 @@ function drawerMeta(c) {
   ].join('');
 }
 
-/* ---------------- Global log ---------------- */
-$('logToggle').addEventListener('click', () => {
-  S.logOpen = !S.logOpen;
-  $('logbar').classList.toggle('open', S.logOpen);
-  $('logToggle').setAttribute('aria-expanded', String(S.logOpen));
+/* ---------------- Global run log (live activity console) ---------------- */
+const LOG_TAIL = 600; // cap rendered lines so a long multi-run stream stays light
+
+function setLogOpen(open) {
+  S.logOpen = open;
+  $('logbar').classList.toggle('open', open);
+  $('logToggle').setAttribute('aria-expanded', String(open));
+  if (open) renderLog();
+}
+// The whole header toggles (big target); the level filter handles its own clicks.
+$('logHead').addEventListener('click', (e) => {
+  if (e.target.closest('#logFilter')) return;
+  S.logUserToggled = true;
+  setLogOpen(!S.logOpen);
 });
-function renderLog(logs) {
-  $('logMeta').textContent = logs.length ? `${logs.length} lines` : '';
+$('logFilter').addEventListener('click', (e) => {
+  const chip = e.target.closest('.logfilter__chip');
+  if (!chip) return;
+  S.logFilter = chip.dataset.lvl || 'all';
+  for (const c of $('logFilter').children) c.classList.toggle('is-on', c === chip);
+  renderLog();
+});
+$('logJump').addEventListener('click', () => {
+  const b = $('logBody');
+  b.scrollTop = b.scrollHeight;
+  $('logJump').hidden = true;
+});
+$('logBody').addEventListener('scroll', () => {
+  const b = $('logBody');
+  $('logJump').hidden = b.scrollHeight - b.scrollTop - b.clientHeight < 48;
+});
+
+// Stable per-agent hue from its id (golden-angle spacing → distinct neighbors).
+function agentHue(id) { return Math.round((id * 137.508) % 360); }
+
+// Map a log entry's agentId to a short, glanceable source chip. Task agents get
+// a hue; reserved ids (orchestrator / integration / judge) get a semantic class.
+function logSource(l) {
+  const id = l.agentId;
+  if (id === 9999) return { label: 'INT', cls: 'int', glyph: '◆' };
+  if (id === 9998) return { label: 'JDG', cls: 'jdg' };
+  if (id < 0) return { label: 'ORQ', cls: 'orq' };
+  if (id >= 0 && id < 9000) return { label: 'A' + String(id).padStart(2, '0'), cls: 'agent', hue: agentHue(id) };
+  return { label: (l.kind || 'sys').slice(0, 3).toUpperCase(), cls: 'sys' };
+}
+
+// Live, cross-project activity: agents running RIGHT NOW summed over EVERY run
+// (not just the viewed one), plus queued tasks and how many projects are live.
+function liveActivity() {
+  let running = 0, queued = 0, projects = 0;
+  for (const r of S.runs.values()) {
+    if (r.phase !== 'running' || !r.state) continue;
+    running += r.state.activeAgentCount || 0;
+    queued += r.state.pendingTaskCount || 0;
+    projects += 1;
+  }
+  return { running, queued, projects };
+}
+
+// Build the rendered line model. One live run → just its log. Several → a single
+// timestamp-ordered stream with each line tagged by its project (the run's dir).
+function buildLogModel() {
+  const runs = [...S.runs.values()].filter((r) => r.state && Array.isArray(r.state.logs));
+  if (runs.length <= 1) {
+    const st = runs[0] ? runs[0].state : (S.run && S.run.state) || null;
+    return { rows: st ? st.logs.map((l) => ({ l, proj: null })) : [], multi: false };
+  }
+  const rows = [];
+  for (const r of runs) {
+    const proj = projectName(r.runDirectory) || String(r.runId || '').slice(0, 4);
+    for (const l of r.state.logs) rows.push({ l, proj });
+  }
+  rows.sort((a, b) => (a.l.timestamp || 0) - (b.l.timestamp || 0));
+  return { rows, multi: true };
+}
+
+function logLineHtml(l, proj, multi) {
+  const t = new Date(l.timestamp).toLocaleTimeString('en-GB');
+  const s = logSource(l);
+  const lvl = l.level || 'info';
+  const glyph = lvl === 'error' ? '✕' : lvl === 'warn' ? '⚠' : (s.glyph || '');
+  const hue = s.hue != null ? ` style="--ah:${s.hue}"` : '';
+  const tag = multi && proj ? `<span class="logline__proj">${esc(proj)}</span>` : '';
+  return `<div class="logline logline--${esc(lvl)} src-${s.cls}"${hue}>` +
+    `<span class="logline__t">${t}</span>` +
+    `<span class="logline__g">${glyph}</span>` +
+    `<span class="logline__chip">${esc(s.label)}</span>` +
+    tag +
+    `<span class="logline__m">${esc(l.message)}</span>` +
+    `</div>`;
+}
+
+function renderLog() {
+  // Header activity — GLOBAL, refreshed on every frame from any run.
+  const { running, queued, projects } = liveActivity();
+  const act = $('logActivity');
+  if (projects > 0) {
+    act.hidden = false;
+    $('actRunning').textContent = running;
+    $('actProjects').textContent = projects > 1 ? `· ${projects} projects` : '';
+    $('actQueued').textContent = queued > 0 ? `· ${queued} queued` : '';
+    $('logbar').classList.toggle('is-live', running > 0);
+  } else {
+    act.hidden = true;
+    $('logbar').classList.remove('is-live');
+  }
+
+  const { rows, multi } = buildLogModel();
+  const filtered = S.logFilter === 'all' ? rows : rows.filter((r) => (r.l.level || 'info') === S.logFilter);
+  $('logMeta').textContent = filtered.length ? `${filtered.length} lines` : '';
+
+  // Auto-open the log the first time a run goes live (unless the user already
+  // expressed a preference by toggling it). setLogOpen re-enters renderLog.
+  if (running > 0 && !S.logAutoExpanded && !S.logUserToggled) {
+    S.logAutoExpanded = true;
+    setLogOpen(true);
+    return;
+  }
   if (!S.logOpen) return;
+
   const body = $('logBody');
-  const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
-  body.innerHTML = logs.map((l) => {
-    const t = new Date(l.timestamp).toLocaleTimeString();
-    const src = l.agentId >= 0 && l.agentId < 9000 ? `#${l.agentId}` : (l.kind || '');
-    return `<div class="logline ${esc(l.level)}"><span class="lt">${t}</span><span class="ls">${esc(src)}</span><span class="lm">${esc(l.message)}</span></div>`;
-  }).join('');
-  if (atBottom) body.scrollTop = body.scrollHeight;
+  if (!filtered.length) {
+    body.innerHTML = `<div class="logbar__empty">${running > 0 ? 'Waiting for the first log line…' : 'No log entries yet.'}</div>`;
+    $('logJump').hidden = true;
+    return;
+  }
+  const view = filtered.length > LOG_TAIL ? filtered.slice(-LOG_TAIL) : filtered;
+  const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 48;
+  body.innerHTML = view.map(({ l, proj }) => logLineHtml(l, proj, multi)).join('');
+  if (atBottom) { body.scrollTop = body.scrollHeight; $('logJump').hidden = true; }
+  else $('logJump').hidden = false;
 }
 
 /* ---------------- Utils ---------------- */

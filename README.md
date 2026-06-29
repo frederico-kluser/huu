@@ -212,11 +212,17 @@ TUI no terminal.
   seguem. Cada execução é arquivada no **histórico** do navegador (IndexedDB)
   com todos os cards, os custos por card e o total por projeto — **exportável
   em JSON** com um clique.
-- **Log ao vivo, de verdade.** O texto que o agente vai gerando entra no
-  log **conforme sai** — não só nas trocas de ferramenta. E **tudo que o
-  pi devolve** (resposta + raciocínio) é espelhado em tempo real no
-  **console do navegador** (DevTools → Console), com o id do agente em cada
-  linha; silencie com `window.HUU_LOG_STREAM = false`.
+- **Log ao vivo, de verdade — agora um console de atividade.** O texto que o
+  agente vai gerando entra no log **conforme sai** — não só nas trocas de
+  ferramenta. O cabeçalho do log virou uma **barra de atividade ao vivo**: soma
+  quantas tasks estão rodando **agora, somando todos os projetos** em execução
+  (`⚡ N rodando · M projetos · Q na fila`), atualizado em tempo real. Cada
+  agente ganha uma **cor estável** e os níveis de aviso/erro saltam com glyph e
+  trilha colorida; com mais de um projeto vivo, as linhas de todos se fundem num
+  **stream único** ordenado por tempo, cada linha marcada com seu projeto. E
+  **tudo que o pi devolve** (resposta + raciocínio) segue espelhado em tempo
+  real no **console do navegador** (DevTools → Console), com o id do agente em
+  cada linha; silencie com `window.HUU_LOG_STREAM = false`.
 - **Sua key, no navegador.** Cole sua `OPENROUTER_API_KEY` no formulário de
   launch — ela é **validada na hora** contra o provider e fica só na aba do
   navegador (`sessionStorage`), enviada a cada run e **nunca escrita em
