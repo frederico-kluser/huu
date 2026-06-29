@@ -42,6 +42,19 @@
 - **Sintoma: agente em erro após retries** → o ⚠ amarelo da summary mostra a
   primeira falha; abra o card (`ENTER`) para o log completo. O run ainda
   mergeia todo agente que COMMITOU.
+- **Re-tente um card que falhou** → quando um run termina com cards em erro ele
+  pausa em **`awaiting_retry`** (pill de status **review**, âmbar) em vez de
+  pular pra summary, mantendo o worktree de integração vivo. Um **timeout**
+  aparece em âmbar (`TIMEOUT`/`timeout`), qualquer outra falha em vermelho
+  (`FAILED`/`failed`).
+  - **TUI**: foque o card, **`R`** re-tenta (um timeout pede um novo tempo
+    limite antes), **`D`** finaliza, **`Q`** aborta.
+  - **Web**: clique no card vermelho/âmbar → botão **Retry** no drawer (timeout
+    ganha um campo de minutos); **Finish** sai do modo review.
+  - O card roda de novo sobre o HEAD atual da integração e, se passar, é
+    mesclado — sem re-rodar o pipeline inteiro. Retries do usuário mostram um
+    badge `⟳N`. (Só TUI de execução única e qualquer run web; o dashboard
+    multi-run não tem retry por card.)
 - **Sintoma: cards voltam pro TODO com `↻N`** → não é erro: o memory guard
   matou o agente mais novo sob pressão de RAM e re-enfileirou.
 

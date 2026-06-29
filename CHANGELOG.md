@@ -8,6 +8,27 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+### Added
+
+- **Failed task cards can now be retried interactively — and timeouts are
+  signalled distinctly.** A timed-out card is shown in **amber** (`TIMEOUT`),
+  separate from the **red** of any other failure (`FAILED`), in both the Ink TUI
+  and the web kanban. When a single run (TUI) or any web run ends with failed
+  cards, it no longer jumps straight to the summary: it pauses in a new
+  **`awaiting_retry`** state (integration worktree kept alive) so you can recover
+  individual failures. Retrying a card re-runs that one task against the current
+  integration HEAD and, on success, merges its branch in — no need to re-run the
+  whole pipeline. A **timed-out** card can be retried with a **new, longer time
+  limit**; any other error just re-runs. User retries show a `⟳N` badge.
+  - **TUI**: on the run dashboard, `R` retries the focused error card (timeouts
+    prompt for a new limit first), `D` finishes the run, `Q` aborts.
+  - **Web**: red/amber cards open a drawer with a **Retry** button (timeouts also
+    get a minutes field); a **Finish** button leaves the review hold. New
+    endpoints `POST /api/run/retry` and `POST /api/run/finish`.
+  - Headless drivers (`run-many`, smoke, `/simulation`) are unaffected —
+    `Orchestrator` only holds open when the new `interactiveRetry` option is set,
+    so `start()` resolves immediately on every non-interactive path.
+
 ### Changed
 
 - **Web project selector is now a dropdown labelled by project + pipeline.** When

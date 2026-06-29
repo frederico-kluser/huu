@@ -124,6 +124,24 @@ Portuguese, matching the recon prompts). Below is the complete map.
 - `F` filter logs to a single agent (cycles through agents and back to "all")
 - `Q` abort the run · press `Q` twice to force-exit the dashboard immediately
 
+### Retry a failed task (`awaiting_retry`)
+
+When a single-run pipeline finishes its steps but **left one or more task cards
+in error**, the dashboard does **not** jump to the summary — it pauses in a
+**`review (retry?)`** state (amber status, integration worktree kept alive) so
+you can recover individual failures:
+
+- `R` — retry the **focused** error card. A **timed-out** card (amber `TIMEOUT`)
+  opens a small prompt for a **new time limit** before re-running; any other
+  failure (red `FAILED`) re-runs immediately. The card re-runs against the
+  current integration HEAD and, on success, its branch is merged in. A user
+  retry shows as a `⟳N` badge on the card.
+- `D` — **done**: leave the review hold and finalize the run (advances to the
+  summary). `Q` instead aborts, discarding any remaining failures.
+
+The multi-run dashboard does not offer per-card retry (it has no per-card
+focus); the web UI does.
+
 ## Multi-run dashboard (concurrent projects)
 
 Reached from **saved pipelines** (`M` on the welcome screen): check 2+ pipelines
