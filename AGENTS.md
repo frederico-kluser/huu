@@ -165,7 +165,11 @@ run is merging). The **web** front-end is wired: `WebRunManager` holds a
 `Map<runId>` of concurrent runs over one scheduler, `/api/run` returns a runId
 (no 409), SSE frames + the agent-stream firehose are per-`runId`, and the
 browser shows a **project selector** when >1 run is active (the queue dispatches
-all items at once). See the building-web-ui skill. The **Ink TUI** has the same
+all items at once). You can also **return to the launch view while the queue is
+running and add more projects** — each new `/api/run` is admitted LIVE by the
+shared scheduler (no 409, no restart), with a running banner on the home view
+(client `S.homePinned` gates the per-frame board auto-switch). See the
+building-web-ui skill. The **Ink TUI** has the same
 capability via `MultiRunDashboard` (`src/ui/components/MultiRunDashboard.tsx`):
 multi-select 2+ saved pipelines (SPACE) → run them concurrently with a
 `Tab`/`1-9` project switcher — see the building-tui-screens skill.

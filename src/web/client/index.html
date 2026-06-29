@@ -76,6 +76,14 @@
           <p class="muted">Deterministic processes over thinking agents — pick one, choose a model, go.</p>
         </div>
 
+        <!-- Live-queue indicator: shown on home WHILE a queue is running, so you
+             know projects you add now start automatically. Jumps to the board. -->
+        <div class="launch-running" id="launchRunning" hidden role="status" aria-live="polite">
+          <span class="lr-pulse" aria-hidden="true"></span>
+          <span class="lr-text" id="launchRunningText">Queue running</span>
+          <button type="button" class="btn btn--ghost btn--sm" id="launchViewBoard">View board →</button>
+        </div>
+
         <div class="launch-grid">
           <div class="panel glass panel--pipelines">
             <div class="panel__title"><span>Pipelines</span><span class="count" id="pipeCount"></span></div>
@@ -159,7 +167,7 @@
                 <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 <span id="addBtnLabel">Add to queue</span>
               </button>
-              <div class="config-hint muted" id="addHint">Build a queue of projects, then run them one after another.</div>
+              <div class="config-hint muted" id="addHint">Queue projects and run them concurrently — add more anytime, even while the queue is running.</div>
               <div class="run-error" id="runError" hidden></div>
             </form>
           </aside>

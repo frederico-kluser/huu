@@ -6,7 +6,7 @@ import {
   buildRunRecord, buildSyntheticRecord, exportRunsJson, downloadText, uid,
 } from './db.js';
 import { createBoardOrder } from './board-order.js';
-import { settleQueue } from './queue-util.js';
+import { settleQueue, summarizeQueue } from './queue-util.js';
 import { substituteFileInTitle } from './title-util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -73,6 +73,10 @@ const S = {
   runs: new Map(),            // runId -> snapshot (every concurrent run)
   activeRunId: null,          // which run the board/log/metrics show
   openCardKey: null,
+  // True while the user has intentionally returned to the launch (home) view
+  // during a LIVE queue (to add more projects). It suppresses the auto-switch
+  // back to the board on every SSE frame, so you can keep selecting in peace.
+  homePinned: false,
   // --- /simulation mode (synthetic demo run; no branches, no key) ---
   sim: false,
   simModels: [],
@@ -684,17 +688,28 @@ $('configForm').addEventListener('submit', (e) => {
     const i = S.queue.items.findIndex((x) => x.id === S.queue.editingId);
     if (i >= 0) { cfg.id = S.queue.editingId; S.queue.items[i] = cfg; }
     S.queue.editingId = null;
-    setAddBtnLabel('Add to queue');
+    setAddBtnLabel(addLabel());
     toast('Project updated');
   } else {
     S.queue.items.push(cfg);
-    toast('Added to queue');
+    if (S.queue.running) {
+      // The queue is LIVE — start this project right away (no second click, no
+      // prompt). It joins the running set and the server schedules it under the
+      // shared budget; you stay on home, free to keep adding more.
+      dispatchQueueItem(S.queue.items.length - 1);
+      toast('Added — starting now');
+    } else {
+      toast('Added to queue');
+    }
   }
   persistQueue();
   renderQueue();
+  renderLaunchRunning();
 });
 
 function setAddBtnLabel(t) { $('addBtnLabel').textContent = t; }
+/** The add-button's default label — reflects that adds dispatch live mid-queue. */
+function addLabel() { return S.queue.running ? 'Add & start' : 'Add to queue'; }
 
 /* ---------------- Queue rendering ---------------- */
 function itemReady(it) { return providerReady(providerInfoById(it.provider)); }
@@ -734,6 +749,8 @@ function renderQueue() {
   $('queueRun').disabled = q.running || q.items.length === 0;
   $('queueRunLabel').textContent = q.running ? 'Running…' : `Run queue${q.items.length ? ` (${q.items.length})` : ''}`;
   $('queueClear').disabled = q.running || q.items.length === 0;
+  // Reflect "adds dispatch immediately" in the button while a queue is live.
+  if (!q.editingId) setAddBtnLabel(addLabel());
 }
 
 // Delegated queue-item actions (remove / edit / reorder).
@@ -830,8 +847,10 @@ function startQueue() {
   q.processed = new Set();
   q.stopping = false;
   q.id = uid();
+  S.homePinned = false;            // a fresh "Run queue" opens onto the board
   persistQueue();
   renderQueue();
+  showView('run');                 // jump to the board now (was per-item in postRun)
   updateQueueChrome();
   // Dispatch ALL items at once — the server runs them concurrently under one
   // shared scheduler (priority = dispatch order; later items backfill earlier
@@ -871,7 +890,9 @@ async function postRun(i) {
     });
     const runId = r && r.run && r.run.runId;
     if (runId) { item.runId = runId; q.live.set(runId, item); }
-    showView('run');
+    // Don't force the board here: `startQueue` opens it for a fresh run, and the
+    // auto-switch in renderActiveRun handles the rest — UNLESS the user pinned
+    // home to add more, in which case they stay on the launch view by design.
     renderQueue();
   } catch (err) {
     // Couldn't start (missing key, bad dir, too many concurrent runs, …).
@@ -929,6 +950,7 @@ function finishQueue() {
   const q = S.queue;
   q.running = false;
   q.live = null;
+  S.homePinned = false;
   // Settled projects are now archived in History (IndexedDB) — drop them from
   // the queue so returning home doesn't show finished runs and re-run the same
   // pipelines on the next "Run queue". A clean finish settles every item, so the
@@ -958,6 +980,7 @@ function stopFinalize() {
   q.running = false;
   q.stopping = false;
   q.live = null;
+  S.homePinned = false;
   // Keep only what never finished; runs that already settled (incl. the ones
   // just aborted) are archived in History, so drop them from the queue.
   q.items = settleQueue(q.items).keep;
@@ -976,8 +999,31 @@ function updateQueueChrome() {
   // During a queue run the per-run abort is replaced by a queue-wide stop.
   $('abortBtn').hidden = !active || inQueue;
   $('stopQueueBtn').hidden = !inQueue || !active;
-  if (inQueue) $('backToLaunch').hidden = true;   // no wandering off mid-queue
+  // A running queue keeps streaming over SSE no matter which view is shown, so
+  // you CAN hop back home to add more projects (they start automatically).
+  // Offer "← Home" on the board; the launch view offers "View board →" via the
+  // running banner. (renderActiveRun runs first; this has the final say.)
+  if (inQueue && active) {
+    $('backToLaunch').hidden = false;
+    $('backToLaunch').textContent = '← Home';
+  } else {
+    $('backToLaunch').textContent = '← New run';
+  }
   renderQueueProgress();
+  renderLaunchRunning();
+}
+
+/* The launch-view "running" banner — shown on home WHILE a queue is live so the
+   user knows a project added now starts automatically. Hidden otherwise. */
+function renderLaunchRunning() {
+  const el = $('launchRunning');
+  if (!el) return;
+  if (!S.queue.running) { el.hidden = true; return; }
+  el.hidden = false;
+  const { total, running, settled } = summarizeQueue(S.queue.items);
+  $('launchRunningText').innerHTML =
+    `<b>${running}</b> running · ${settled}/${total} done` +
+    ` · <span class="muted">new projects start automatically</span>`;
 }
 function renderQueueProgress() {
   const q = S.queue;
@@ -1169,7 +1215,16 @@ function showView(which) {
 }
 $('backToLaunch').addEventListener('click', () => {
   if (S.sim) { showView('sim'); return; }
-  showView('launch'); renderGallery();
+  // Leaving the board while the queue is live → pin home so the per-frame
+  // auto-switch doesn't drag us back; the runs keep streaming in the background.
+  if (S.queue.running) S.homePinned = true;
+  showView('launch'); renderGallery(); renderLaunchRunning();
+});
+// "View board →" on the launch running-banner: unpin and jump to the board.
+$('launchViewBoard').addEventListener('click', () => {
+  S.homePinned = false;
+  showView('run');
+  renderActiveRun();
 });
 
 /* ---------------- Simulation mode (/simulation) ----------------
@@ -1338,12 +1393,15 @@ function renderActiveRun() {
   // after a run finished lands on home, not on a stale board. We only ever
   // switch TO the board here; a run that settles while you're watching it keeps
   // you on the board (the guard simply stops re-asserting the board view).
-  if (active && $('viewRun').hidden) showView('run');
+  // `homePinned` opts out entirely: the user deliberately went home mid-queue to
+  // add more projects, so don't drag them back on every frame.
+  if (active && $('viewRun').hidden && !S.homePinned) showView('run');
   const onRunView = !$('viewRun').hidden;
 
-  // Topbar run chrome belongs to the board context, not the home screen.
+  // Topbar run chrome belongs to the board context, not the home screen — so
+  // when the user pins home mid-queue (active but !onRunView) it stays hidden.
   $('runStatusGroup').hidden = !hasRun || !onRunView;
-  $('concControl').hidden = !active;
+  $('concControl').hidden = !active || !onRunView;
   // The per-run abort targets the VIEWED run; hidden during a queue (which uses
   // a queue-wide stop) and handled by updateQueueChrome.
   $('abortBtn').hidden = !active;

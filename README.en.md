@@ -206,7 +206,10 @@ terminal TUI back.
   (e.g. while one is merging) and yield the capacity back when it's needed — and
   under memory pressure the lowest-priority project's newest agent is killed
   first. A **project selector** in the header (a dropdown showing
-  **project · pipeline**) lets you switch between the live boards. If one fails,
+  **project · pipeline**) lets you switch between the live boards. **With the
+  queue already running you can go back home (← Home) and add more projects** —
+  they start **immediately**, no queue restart, and a *running* banner stays
+  visible while you pick. If one fails,
   the rest keep going. Every execution is archived to the
   browser **history** (IndexedDB) with all cards, per-card costs and the
   per-project total — **exportable as JSON** in one click.

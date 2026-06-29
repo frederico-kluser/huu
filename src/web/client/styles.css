@@ -361,6 +361,25 @@ body {
 .launch-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 22px; align-items: start; }
 @media (max-width: 880px) { .launch-grid { grid-template-columns: 1fr; } }
 
+/* Live-queue indicator on home — visible WHILE a queue is running, so the user
+   knows a project added here starts automatically. The dot pulses (green = live). */
+.launch-running { display: flex; align-items: center; gap: 12px; margin: 0 0 20px;
+  padding: 11px 16px; border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--elev));
+  animation: popin .2s cubic-bezier(.2,.7,.3,1); }
+.launch-running .lr-pulse { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--green); animation: lr-ping 1.6s ease-out infinite; }
+.launch-running .lr-text { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.launch-running .lr-text b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.launch-running .btn { margin-left: auto; flex: 0 0 auto; }
+@keyframes lr-ping {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 60%, transparent); }
+  70%  { box-shadow: 0 0 0 7px color-mix(in srgb, var(--green) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .launch-running .lr-pulse { animation: none; } }
+
 .panel { border-radius: var(--radius); padding: 18px; }
 .panel__title { display: flex; align-items: center; justify-content: space-between;
   font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
