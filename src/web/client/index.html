@@ -33,7 +33,8 @@
         </div>
       </div>
 
-      <!-- Project selector — one tab per concurrent run; shown only when >1 run. -->
+      <!-- Project selector — a dropdown (project · pipeline) to switch between
+           concurrent runs; shown only when >1 run is tracked. -->
       <div class="run-selector" id="runSelector" hidden></div>
 
       <div class="topbar__status" id="runStatusGroup" hidden>
@@ -55,6 +56,7 @@
           <button class="conc__btn" id="concUp" title="More agents">+</button>
         </div>
         <button class="btn" id="pauseBtn" hidden title="Pause / resume the simulation">Pause</button>
+        <button class="btn btn--primary" id="finishBtn" hidden title="Finish the run — stop waiting for retries">Finish</button>
         <button class="btn btn--danger" id="abortBtn" hidden>Stop</button>
         <button class="btn btn--danger" id="stopQueueBtn" hidden title="Stop the whole queue">Stop queue</button>
         <button class="iconbtn iconbtn--badge" id="historyBtn" title="Run history" aria-label="Run history">
@@ -73,6 +75,14 @@
         <div class="launch-head">
           <h1>Run a pipeline</h1>
           <p class="muted">Deterministic processes over thinking agents — pick one, choose a model, go.</p>
+        </div>
+
+        <!-- Live-queue indicator: shown on home WHILE a queue is running, so you
+             know projects you add now start automatically. Jumps to the board. -->
+        <div class="launch-running" id="launchRunning" hidden role="status" aria-live="polite">
+          <span class="lr-pulse" aria-hidden="true"></span>
+          <span class="lr-text" id="launchRunningText">Queue running</span>
+          <button type="button" class="btn btn--ghost btn--sm" id="launchViewBoard">View board →</button>
         </div>
 
         <div class="launch-grid">
@@ -124,6 +134,17 @@
                 <div class="model-hint" id="modelHint"></div>
               </div>
 
+              <div class="field">
+                <label for="resolverModelInput">Conflict resolver model</label>
+                <div class="combo" id="resolverModelCombo">
+                  <input id="resolverModelInput" class="combo__input" type="text" role="combobox"
+                         aria-expanded="false" aria-controls="resolverModelList" aria-autocomplete="list"
+                         autocomplete="off" spellcheck="false" placeholder="Same as run model" />
+                  <ul class="combo__list" id="resolverModelList" role="listbox" hidden></ul>
+                </div>
+                <div class="model-hint" id="resolverModelHint">Used only to resolve merge conflicts during integration · runs at max thinking · empty = same as run model</div>
+              </div>
+
               <!-- Key area: JS renders one row per credential the provider needs,
                    and a "change" affordance even when a key is already set. Keys
                    are validated against the provider, then kept only in this
@@ -147,7 +168,7 @@
                 <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 <span id="addBtnLabel">Add to queue</span>
               </button>
-              <div class="config-hint muted" id="addHint">Build a queue of projects, then run them one after another.</div>
+              <div class="config-hint muted" id="addHint">Queue projects and run them concurrently — add more anytime, even while the queue is running.</div>
               <div class="run-error" id="runError" hidden></div>
             </form>
           </aside>
@@ -194,14 +215,40 @@
           </div>
         </div>
 
-        <!-- Global log drawer -->
+        <!-- Global run log — a live activity console. The header doubles as a
+             cross-project activity bar: it sums the agents running RIGHT NOW
+             across every concurrent run (Σ activeAgentCount over S.runs), so the
+             count reflects ALL projects in real time, not just the viewed one.
+             The body unifies every run's log lines (project-tagged) when more
+             than one run is live. -->
         <div class="logbar glass" id="logbar">
-          <button class="logbar__toggle" id="logToggle" aria-expanded="false">
-            <span class="logbar__title">Run log</span>
+          <div class="logbar__head" id="logHead">
+            <button class="logbar__toggle" id="logToggle" type="button" aria-expanded="false" aria-controls="logBody">
+              <svg class="chev" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>
+              <span class="logbar__title">Run log</span>
+            </button>
+
+            <!-- Live: simultaneous tasks across ALL running projects. -->
+            <div class="activity" id="logActivity" hidden aria-live="polite">
+              <span class="activity__pulse" aria-hidden="true"></span>
+              <span class="activity__count"><b id="actRunning">0</b> running</span>
+              <span class="activity__sub" id="actProjects"></span>
+              <span class="activity__sub" id="actQueued"></span>
+            </div>
+
+            <span class="logbar__spacer"></span>
+
+            <div class="logfilter" id="logFilter" role="group" aria-label="Filter log by level">
+              <button type="button" class="logfilter__chip is-on" data-lvl="all">All</button>
+              <button type="button" class="logfilter__chip logfilter__chip--warn" data-lvl="warn" title="Warnings only" aria-label="Warnings only">⚠</button>
+              <button type="button" class="logfilter__chip logfilter__chip--error" data-lvl="error" title="Errors only" aria-label="Errors only">✕</button>
+            </div>
+
             <span class="logbar__meta" id="logMeta"></span>
-            <svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>
-          </button>
-          <div class="logbar__body" id="logBody"></div>
+          </div>
+
+          <div class="logbar__body" id="logBody" role="log"></div>
+          <button type="button" class="logjump" id="logJump" hidden>↓ Latest</button>
         </div>
 
         <div class="run-footer">
@@ -269,6 +316,7 @@
         </button>
       </div>
       <div class="drawer__meta" id="drawerMeta"></div>
+      <div class="drawer__retry" id="drawerRetry" hidden></div>
       <div class="drawer__logs-head">Logs</div>
       <pre class="drawer__logs" id="drawerLogs"></pre>
     </aside>
@@ -330,6 +378,10 @@
       </defs>
     </svg>
 
+    <!-- Motion animation engine (vendored, offline — see vendor/README.md).
+         Classic script: runs BEFORE the deferred module below, so window.Motion
+         is ready when app.js loads. app.js still degrades gracefully if absent. -->
+    <script src="vendor/motion.js"></script>
     <script src="app.js" type="module"></script>
   </body>
 </html>

@@ -119,6 +119,12 @@ export type OrchestratorSubscriber = (state: OrchestratorState) => void;
 
 const DEFAULT_CONCURRENCY = 10;
 const MAX_INSTANCES = 20;
+/**
+ * Offset for the synthetic `visitIndex` of a USER-retry merge card. Real stage
+ * visitIndexes are bounded by `maxNodeExecutions` (≤ 50), so starting retry
+ * merges at 1e6 guarantees they never collide with stage-walk merge cards.
+ */
+const RETRY_MERGE_VISIT_BASE = 1_000_000;
 const AUTO_SCALE_MAX_INSTANCES = 200;
 const MIN_INSTANCES = 1;
 const POLL_INTERVAL_MS = 500;
@@ -190,6 +196,17 @@ export interface OrchestratorOptions {
    * an empty-string key). Omit for the normal self-assigned path.
    */
   runId?: string;
+  /**
+   * Interactive front-ends (web, single-run TUI) set this true so that when
+   * the step walk ends with one or more task cards still in `error`, the run
+   * is HELD OPEN in `status: 'awaiting_retry'` instead of tearing down — the
+   * integration worktree stays alive so the user can {@link Orchestrator.retryTask}
+   * individual failed tasks (a timed-out card can be retried with a longer
+   * timeout) and then {@link Orchestrator.finish} the run. Omit (default false)
+   * for headless drivers (run-many, smoke, simulation): start() then resolves
+   * immediately on the existing path, byte-identical to before.
+   */
+  interactiveRetry?: boolean;
 }
 
 /**
@@ -300,6 +317,42 @@ export class Orchestrator {
    */
   private killedAgentIds: Set<number> = new Set();
   /**
+   * True when an interactive front-end asked us to hold the run open in
+   * `awaiting_retry` after a step walk that left failed cards (see
+   * OrchestratorOptions.interactiveRetry). False on every headless path.
+   */
+  private interactiveRetry = false;
+  /**
+   * Resolver of the promise `start()` parks on while `awaiting_retry`. Called
+   * by {@link finish} (graceful) or {@link abort} (discard) to let start()
+   * proceed to its terminal logic + integration teardown. Null when not held.
+   */
+  private finishResolve: (() => void) | null = null;
+  /**
+   * Every task that has passed through `spawnAndRun`, keyed by agentId — the
+   * source of truth for reconstructing a task on a USER-triggered retry (the
+   * card alone doesn't carry `files[]`/`hint`). Survives the stage that
+   * created it, since retries happen after the walk.
+   */
+  private tasksById: Map<number, AgentTask> = new Map();
+  /**
+   * Per-agent timeout override (ms) for the NEXT run of that task, set by
+   * {@link retryTask} when the user retries a timed-out card with a longer
+   * limit. Consumed by spawnAndRun's `computeCardTimeoutMs` and cleared after.
+   */
+  private retryTimeoutOverrides: Map<number, number> = new Map();
+  /**
+   * Agent ids with a retry currently in flight — guards against re-entrant
+   * retries (only one at a time; pendingTasks is single-slotted per pool).
+   */
+  private retryingIds: Set<number> = new Set();
+  /**
+   * Monotonic sequence for the synthetic `visitIndex` of retry merge cards.
+   * Offset far above any real step visitIndex (bounded by maxNodeExecutions
+   * ≤ 50) so retry merges never collide with stage-walk merge cards.
+   */
+  private retryMergeSeq = 0;
+  /**
    * Per-step iteration counter (`$runs`). Incremented every time the
    * cursor visits a step. Lookup by `step.name`. Used by check
    * evaluation to substitute `$runs` and by the dashboard to render
@@ -350,6 +403,7 @@ export class Orchestrator {
     const autoMode = options.autoScale !== false;
     this.scheduler = options.scheduler ?? null;
     this.externalRunId = options.runId;
+    this.interactiveRetry = options.interactiveRetry ?? false;
     this.portAllocator = new PortAllocator({
       basePort: pipeline.portAllocation?.basePort,
       windowSize: pipeline.portAllocation?.windowSize,
@@ -502,6 +556,9 @@ export class Orchestrator {
   abort(): void {
     if (this.aborted) return;
     this.aborted = true;
+    // If parked in `awaiting_retry`, unblock start() so it proceeds to
+    // teardown (discarding any remaining failed cards).
+    this.finishResolve?.();
     this.dlog('orch', 'abort_requested', {
       activeAgents: this.activeAgents.size,
       pendingTasks: this.pendingTasks.length,
@@ -609,6 +666,140 @@ export class Orchestrator {
 
     this.pendingTasks.unshift(task);
     this.poolWakeup?.();
+  }
+
+  // --- Interactive retry surface (held-open `awaiting_retry`) ---
+
+  /** True if any task card is currently in the terminal `error` state. */
+  private hasFailedCards(): boolean {
+    for (const a of this.agents.values()) {
+      if (a.state === 'error') return true;
+    }
+    return false;
+  }
+
+  /**
+   * Leave the `awaiting_retry` hold and let the run finalize (done/error) and
+   * tear down. No-op when the run isn't being held open. Idempotent.
+   */
+  finish(): void {
+    if (this.status !== 'awaiting_retry') return;
+    // A retry in flight is still touching the integration worktree; ignore so
+    // start()'s teardown can't race it. The caller can press finish again once
+    // the retry settles (status returns to awaiting_retry with no retry busy).
+    if (this.retryingIds.size > 0) return;
+    this.log({ level: 'info', message: 'run finished by user (awaiting_retry → done)' });
+    this.finishResolve?.();
+  }
+
+  /**
+   * USER-triggered retry of a single FAILED task. Valid ONLY while the run is
+   * held open in `awaiting_retry` (so no stage pool is racing on `pendingTasks`).
+   * Re-runs the task against the CURRENT integration HEAD in a fresh worktree —
+   * reusing the normal pool + per-attempt auto-retry — and, on success, merges
+   * its branch into the integration worktree so the recovered work lands. A
+   * timed-out card can be retried with a longer `timeoutMs`. Serial: ignores a
+   * call while another retry is in flight.
+   */
+  async retryTask(agentId: number, opts?: { timeoutMs?: number }): Promise<void> {
+    if (this.status !== 'awaiting_retry') return;
+    if (this.retryingIds.size > 0) return; // one retry at a time
+    const status = this.agents.get(agentId);
+    if (!status || status.state !== 'error') return;
+    const task = this.tasksById.get(agentId);
+    if (!task) {
+      this.log({
+        level: 'warn',
+        message: `cannot retry agent ${agentId}: original task not found`,
+        agentId,
+      });
+      return;
+    }
+
+    this.retryingIds.add(agentId);
+    if (opts?.timeoutMs && opts.timeoutMs > 0) {
+      this.retryTimeoutOverrides.set(agentId, opts.timeoutMs);
+    }
+    try {
+      // Leave `awaiting_retry` BEFORE the reset emit — otherwise a subscriber
+      // keyed on `awaiting_retry` would observe the error card already cleared
+      // (no failures) and prematurely treat the run as done mid-retry.
+      this.status = 'running';
+      // The prior failure already counted toward completedTasks; un-count it so
+      // the re-run's terminal path (finalize or final-fail) re-counts exactly once.
+      this.completedTasks = Math.max(0, this.completedTasks - 1);
+      this.updateAgentStatus(agentId, {
+        state: 'idle',
+        phase: 'pending',
+        currentFile: task.files.length > 0 ? task.files[0]! : null,
+        filesModified: [],
+        pushStatus: 'pending',
+        commitSha: undefined,
+        error: undefined,
+        errorKind: undefined,
+        attempt: undefined,
+        startedAt: undefined,
+        finishedAt: undefined,
+        manualRetries: (status.manualRetries ?? 0) + 1,
+      });
+      const overrideNote = opts?.timeoutMs
+        ? ` (timeout ${Math.round(opts.timeoutMs / 1000)}s)`
+        : '';
+      this.log({
+        level: 'info',
+        message: `user retrying agent ${agentId}${overrideNote}`,
+        agentId,
+      });
+      this.emit();
+
+      // Single-task pool: reuses spawnAndRun (fresh worktree off the current
+      // integration HEAD = this.stageBaseRef) and the per-attempt auto-retry.
+      await this.executeTaskPool([task]);
+
+      const after = this.agents.get(agentId);
+      if (!this.aborted && after && after.state === 'done' && after.commitSha) {
+        // Merge just this branch into the live integration worktree.
+        const visitIndex = RETRY_MERGE_VISIT_BASE + this.retryMergeSeq++;
+        this.stageIntegrations.push({
+          visitIndex,
+          stepIndex: task.stageIndex,
+          stageName: `${task.stageName} (retry)`,
+          runs: 0,
+          phase: 'merging',
+          modelId: this.pipeline.integrationModelId ?? this.config.modelId,
+          resolverUsed: false,
+          branchesMerged: [],
+          branchesPending: [],
+          conflicts: [],
+          startedAt: Date.now(),
+        });
+        this.status = 'integrating';
+        this.emit();
+        const ok = await this.runStageIntegration([task], visitIndex);
+        if (ok) {
+          // Advance integration HEAD so a subsequent retry stacks on top.
+          try {
+            this.stageBaseRef = await this.worktreeManager!
+              .getGitClient()
+              .getHead(this.manifest!.integrationWorktreePath);
+            this.manifest!.stageBaseCommits!.push(this.stageBaseRef);
+          } catch (err) {
+            this.dlog('orch', 'retry_head_read_failed', {
+              agentId,
+              err: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+      }
+    } finally {
+      this.retryTimeoutOverrides.delete(agentId);
+      this.retryingIds.delete(agentId);
+      // Stay held-open unless an abort unparked us in the meantime.
+      if (!this.aborted) {
+        this.status = 'awaiting_retry';
+      }
+      this.emit();
+    }
   }
 
   // --- GlobalScheduler RunDriver surface (multi-run subordinate mode) ---
@@ -934,6 +1125,27 @@ export class Orchestrator {
         }
       }
 
+      // Interactive front-ends: if the walk completed (no fatal merge error,
+      // not aborted) but left task cards in `error`, hold the run open in
+      // `awaiting_retry` so the user can retry individual failures against the
+      // still-live integration worktree. We park on a promise resolved by
+      // finish()/abort(); retries run in between via retryTask(). Headless
+      // drivers never set interactiveRetry, so this is skipped and the run
+      // resolves immediately, exactly as before.
+      if (
+        this.interactiveRetry &&
+        !this.aborted &&
+        (this.status as OrchestratorState['status']) !== 'error' &&
+        this.hasFailedCards()
+      ) {
+        this.status = 'awaiting_retry';
+        this.emit();
+        await new Promise<void>((resolve) => {
+          this.finishResolve = resolve;
+        });
+        this.finishResolve = null;
+      }
+
       // Read through a widened binding: the error assignments now live in
       // recordRunError()/mergeStepVisit(), so flow analysis would otherwise
       // narrow this.status to 'running' here and reject the comparison.
@@ -1186,9 +1398,14 @@ export class Orchestrator {
     if (!step) {
       throw new Error(`internal: task ${task.agentId} references unknown step "${task.stageName}"`);
     }
+    // Remember the task so a later USER retry can reconstruct it from the
+    // agentId alone (the card doesn't carry files[]/hint).
+    this.tasksById.set(task.agentId, task);
     const maxRetries = this.pipeline.maxRetries ?? DEFAULT_MAX_RETRIES;
     const totalAttempts = 1 + maxRetries;
-    const timeoutMs = computeCardTimeoutMs(task, this.pipeline);
+    // A user retry of a timed-out card may pin a longer per-task timeout.
+    const timeoutMs =
+      this.retryTimeoutOverrides.get(task.agentId) ?? computeCardTimeoutMs(task, this.pipeline);
     const git = this.worktreeManager!.getGitClient();
     this.dlog('orch', 'spawn_start', {
       agentId: task.agentId,
@@ -1981,6 +2198,7 @@ export class Orchestrator {
       repoRoot: this.preflight!.repoRoot,
       integrationWorktreePath: integration.worktreePath,
       integrationBranch: integration.branchName,
+      baseCommit: this.preflight!.baseCommit,
       runId,
       config: this.config,
       factory: this.conflictResolverFactory ?? this.agentFactory,
@@ -2234,6 +2452,11 @@ export class Orchestrator {
       // so a hint containing the literal `$file` can't be re-expanded.
       prompt = prompt.replaceAll('$hint', task.hint ?? '').replaceAll('$file', task.files[0]!);
     }
+    // `$baseCommit` = repo HEAD at run start (preflight). Lets a step diff the
+    // run against its origin (`git diff --name-only $baseCommit..HEAD`) or
+    // restore a frozen file (`git checkout $baseCommit -- <path>`) — e.g. the
+    // Test Suite cleanup step restoring any production source an agent drifted.
+    prompt = prompt.replaceAll('$baseCommit', this.preflight?.baseCommit ?? '');
     if (step.produces) {
       // The producer promised a memory file: append the deterministic
       // contract (exact path/format/cap) so the pipeline author never
@@ -2344,7 +2567,15 @@ export class Orchestrator {
       stageIndex: status.stageIndex,
       stageName: status.stageName,
     };
-    this.manifest.agentEntries.push(entry);
+    // agentIds are unique per task-instance (loop revisits allocate fresh ids),
+    // EXCEPT a user retry reuses the same id — replace the prior entry so the
+    // manifest reflects the FINAL outcome of each agent rather than duplicating.
+    const existing = this.manifest.agentEntries.findIndex((e) => e.agentId === agentId);
+    if (existing >= 0) {
+      this.manifest.agentEntries[existing] = entry;
+    } else {
+      this.manifest.agentEntries.push(entry);
+    }
   }
 
   private collectFilesModified(): string[] {

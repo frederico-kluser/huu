@@ -411,6 +411,13 @@ export interface AgentStatus {
    */
   requeues?: number;
   /**
+   * Times the USER manually retried this task from an `error` card (via
+   * `Orchestrator.retryTask`, available while the run is `awaiting_retry`).
+   * Distinct from `requeues` (automatic memory-guard kills) and `attempt`
+   * (the in-stage auto-retry counter). Accumulates across retries.
+   */
+  manualRetries?: number;
+  /**
    * Per-action occurrence counts, keyed by a short action name
    * (`stream`, `tool`, `file`, `log`, `usage`, `done`, `error`). Bumped once
    * per AgentEvent in `handleAgentEvent`; drives the kanban "actions" label.
@@ -451,7 +458,15 @@ export interface AutoScaleStatus {
 }
 
 export interface OrchestratorState {
-  status: 'idle' | 'starting' | 'running' | 'integrating' | 'done' | 'error';
+  /**
+   * `awaiting_retry` is a HELD-OPEN terminal-ish state: the step walk finished
+   * but left one or more task cards in `error`, and an interactive front-end
+   * (web / single-run TUI) asked the run to stay open so the user can retry
+   * individual failed tasks (see `Orchestrator.retryTask` / `finish`). The
+   * integration worktree is still alive in this state. Headless drivers never
+   * enter it — the run resolves straight to `done`/`error`.
+   */
+  status: 'idle' | 'starting' | 'running' | 'integrating' | 'awaiting_retry' | 'done' | 'error';
   runId: string;
   agents: AgentStatus[];
   logs: LogEntry[];

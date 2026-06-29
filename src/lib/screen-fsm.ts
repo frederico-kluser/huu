@@ -23,6 +23,7 @@ export type Screen =
   | { kind: 'model-selector'; backendKind: AgentBackendKind }
   | { kind: 'api-key'; missing: ApiKeySpec[] }
   | { kind: 'timeout-prompt'; modelId: string; apiKey: string }
+  | { kind: 'resolver-model-selector'; backendKind: AgentBackendKind; modelId: string; apiKey: string }
   | { kind: 'run'; modelId: string; apiKey: string }
   | { kind: 'summary'; result: OrchestratorResult };
 
@@ -38,6 +39,12 @@ export interface FsmState {
    */
   pipelines: Pipeline[] | null;
   modelId: string;
+  /**
+   * Optional model for the merge/integration conflict-resolver agent, chosen on
+   * the run-launch `resolver-model-selector` screen. Empty = inherit `modelId`.
+   * Applied to the pipeline(s) as `Pipeline.integrationModelId` before the run.
+   */
+  conflictResolverModelId: string;
   backendKind: AgentBackendKind;
   apiKey: string;
   requiresApiKey: boolean;
@@ -113,6 +120,9 @@ export type FsmEvent =
   // timeout-prompt
   | { type: 'timeout.submit'; minutes: number }
   | { type: 'timeout.cancel' }
+  // resolver-model-selector (optional conflict-resolver model pick)
+  | { type: 'resolverModelSelector.select'; modelId: string }
+  | { type: 'resolverModelSelector.skip' }
   // skip-model-selector fast path: dispatched from editor.onComplete or
   // BackendSelector.onSelect when every pipeline step already pins its
   // own modelId (so the global model selector would never be consulted).
@@ -163,6 +173,7 @@ export function initialState(opts: InitialStateOpts): FsmState {
     pipeline: opts.initialPipeline ?? null,
     pipelines: null,
     modelId: '',
+    conflictResolverModelId: '',
     backendKind: opts.initialBackend ?? 'pi',
     apiKey: opts.openrouterResolvedKey,
     requiresApiKey: opts.requiresApiKey,
@@ -443,7 +454,9 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
         ...state,
         pipeline: newPipeline,
         pipelines: newPipelines,
-        screen: { kind: 'run', modelId: mid, apiKey: ak },
+        // Offer the optional conflict-resolver model pick before the run; the
+        // overlay's cancel (Esc) skips it (resolver inherits the run model).
+        screen: { kind: 'resolver-model-selector', backendKind: state.backendKind, modelId: mid, apiKey: ak },
       };
     }
     case 'timeout.cancel':
@@ -451,6 +464,33 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
         ...state,
         screen: { kind: 'model-selector', backendKind: state.backendKind },
       };
+
+    // ── resolver-model-selector ──────────────────────────────────────────
+    // Optional: pin a (stronger) model for the merge conflict-resolver agent.
+    // `select` records it on the pipeline(s) as integrationModelId; `skip`
+    // leaves it unset so the resolver inherits the run model. Both advance to
+    // the run. The integration agent always runs at max thinking (backend).
+    case 'resolverModelSelector.select': {
+      const cur = state.screen;
+      if (cur.kind !== 'resolver-model-selector') return state;
+      const id = event.modelId;
+      const withResolver = (p: Pipeline): Pipeline => ({ ...p, integrationModelId: id });
+      return {
+        ...state,
+        conflictResolverModelId: id,
+        pipeline: state.pipeline ? withResolver(state.pipeline) : state.pipeline,
+        pipelines: state.pipelines ? state.pipelines.map(withResolver) : state.pipelines,
+        screen: { kind: 'run', modelId: cur.modelId, apiKey: cur.apiKey },
+      };
+    }
+    case 'resolverModelSelector.skip': {
+      const cur = state.screen;
+      if (cur.kind !== 'resolver-model-selector') return state;
+      return {
+        ...state,
+        screen: { kind: 'run', modelId: cur.modelId, apiKey: cur.apiKey },
+      };
+    }
 
     // ── runDirect (skip-model fast path) ─────────────────────────────────
     case 'runDirect': {

@@ -6,7 +6,8 @@ import {
   buildRunRecord, buildSyntheticRecord, exportRunsJson, downloadText, uid,
 } from './db.js';
 import { createBoardOrder } from './board-order.js';
-import { settleQueue } from './queue-util.js';
+import { settleQueue, summarizeQueue } from './queue-util.js';
+import { substituteFileInTitle } from './title-util.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -61,6 +62,9 @@ const S = {
   cwd: '',
   models: [],
   modelId: '',
+  // Optional override for the merge/integration conflict-resolver agent. Empty
+  // = inherit the run model. Maps to Pipeline.integrationModelId server-side.
+  conflictResolverModelId: '',
   modelSource: 'recommended', // 'openrouter-live' once loaded with a key
   mode: 'auto',
   manualN: 10,
@@ -69,6 +73,10 @@ const S = {
   runs: new Map(),            // runId -> snapshot (every concurrent run)
   activeRunId: null,          // which run the board/log/metrics show
   openCardKey: null,
+  // True while the user has intentionally returned to the launch (home) view
+  // during a LIVE queue (to add more projects). It suppresses the auto-switch
+  // back to the board on every SSE frame, so you can keep selecting in peace.
+  homePinned: false,
   // --- /simulation mode (synthetic demo run; no branches, no key) ---
   sim: false,
   simModels: [],
@@ -78,6 +86,9 @@ const S = {
   simPaused: false,
   lastSim: null,
   logOpen: false,
+  logFilter: 'all',           // 'all' | 'warn' | 'error' — run-log level filter
+  logAutoExpanded: false,     // auto-open the log once when a run first goes live
+  logUserToggled: false,      // user opened/closed it by hand → stop auto-opening
   /* Project queue. Each item carries its OWN config. On start ALL items are
      dispatched at once and run CONCURRENTLY under one server-side scheduler
      (priority = dispatch order; later items backfill earlier ones). Finished
@@ -238,6 +249,7 @@ function renderProviderSeg() {
       // A typed/custom id is provider-specific — re-seed from the new provider's
       // catalog instead of carrying it across.
       S.modelId = '';
+      S.conflictResolverModelId = '';
       renderProviderSeg();
       await refreshModelsAndKeys();
     });
@@ -269,10 +281,8 @@ async function refreshModelsAndKeys() {
     const preferred = S.models.find((m) => m.id === DEFAULT_MODEL_ID);
     S.modelId = preferred ? preferred.id : S.models[0].id;
   }
-  syncModelInput();
-  updateModelCap();
-  if (combo.open) renderModelOptions();
-  updateModelHint();
+  mainCombo.refresh();
+  resolverCombo.refresh();
   // Keys (by provider). A spec we already hold a validated key for in THIS
   // browser session is satisfied even though the server — which never saw it —
   // still reports it missing.
@@ -284,23 +294,6 @@ async function refreshModelsAndKeys() {
   }
   renderKeyArea();
   updateRunBtn();
-}
-
-function updateModelHint() {
-  const md = S.models.find((x) => x.id === S.modelId);
-  const h = $('modelHint');
-  if (!md) {
-    // Custom / free-typed id (or no pick yet): no catalog metadata to show.
-    h.innerHTML = S.modelId
-      ? '<span class="custom">custom model id</span> · sent to OpenRouter as-is'
-      : '';
-    return;
-  }
-  const price = md.inputPrice != null ? `$${md.inputPrice}/M in · $${md.outputPrice ?? '?'}/M out` : '';
-  const head = [md.thinking ? '<span class="thinking">thinking</span>' : '', esc(md.description || '')]
-    .filter(Boolean).join(' · ');
-  const tail = [price, fmtCtx(md.contextLength)].filter(Boolean).join(' · ');
-  h.innerHTML = [head, tail].filter(Boolean).join('<br>');
 }
 
 /* Render one row per credential the selected provider needs. Each value can be
@@ -393,8 +386,6 @@ $('keyArea').addEventListener('click', async (e) => {
    is the FULL live catalog — every model, no capability filter — downloaded
    from the public /models endpoint with or without a key (see
    refreshModelsAndKeys). Type any id to use one that isn't listed. */
-const combo = { open: false, active: -1, matches: [], query: '' };
-
 function modelById(id) { return S.models.find((m) => m.id === id) || null; }
 
 function fmtCtx(n) {
@@ -404,52 +395,36 @@ function fmtCtx(n) {
   return n + ' ctx';
 }
 
-/** Reflect the current selection as the input's display value. */
-function syncModelInput() {
-  const input = $('modelInput');
-  const md = modelById(S.modelId);
-  // A custom id the user typed isn't in the catalog — show the id verbatim so
-  // they can see exactly what will run, instead of a blank field.
-  input.value = md ? md.label : (S.modelId || '');
-  input.placeholder = S.models.length ? 'Search or type any model id…' : 'Type a model id…';
-}
-
-function updateModelCap() {
-  const cap = $('modelCap');
-  if (!cap) return;
-  const n = S.models.length;
-  if (S.provider !== 'openrouter') { cap.textContent = n ? `${n} model${n === 1 ? '' : 's'} available` : ''; return; }
-  if (S.modelSource === 'openrouter-live') {
-    cap.innerHTML = `<span class="live">${n} models</span> · full OpenRouter catalog · or type any model id`;
-  } else {
-    cap.textContent = "Couldn't reach OpenRouter — showing recommended models; type any model id to use it anyway";
-  }
-}
-
 /**
  * A typed value that isn't already an exact catalog id → offer it verbatim so
  * the user can run ANY OpenRouter model, even one not in the downloaded list
  * (a brand-new model, or one the catalog filter never had). This is the
  * free-text escape hatch: pick it and the raw id is sent to OpenRouter as-is.
  */
-function customCandidate() {
-  const q = combo.query.trim();
+function customCandidate(query) {
+  const q = query.trim();
   if (!q) return null;
   if (S.models.some((m) => m.id === q)) return null; // already a real option
   return { id: q, label: q, custom: true };
 }
 
-function comboMatches() {
-  const q = combo.query.trim().toLowerCase();
+function comboMatches(query) {
+  const q = query.trim().toLowerCase();
   const base = !q
     ? S.models.slice()
     : S.models.filter((m) =>
         m.id.toLowerCase().includes(q) || (m.label || '').toLowerCase().includes(q));
-  const custom = customCandidate();
+  const custom = customCandidate(query);
   return custom ? base.concat([custom]) : base;
 }
 
 function modelOptionHtml(m, i, active, sel) {
+  if (m.inherit) {
+    // Resolver combo only: the "clear back to the run model" row.
+    return `<li class="combo__opt combo__opt--custom${active ? ' active' : ''}${sel ? ' sel' : ''}" role="option" id="opt-${i}" data-id="${esc(m.id)}" aria-selected="${sel ? 'true' : 'false'}">` +
+      `<span class="combo__opt-name">Same as run model</span>` +
+      `<span class="combo__opt-id">inherit the run model for conflict resolution</span></li>`;
+  }
   if (m.custom) {
     return `<li class="combo__opt combo__opt--custom${active ? ' active' : ''}" role="option" id="opt-${i}" data-id="${esc(m.id)}" aria-selected="false">` +
       `<span class="combo__opt-name">Use “${esc(m.id)}”</span>` +
@@ -470,91 +445,186 @@ function modelOptionHtml(m, i, active, sel) {
     `<span class="combo__opt-id">${esc(m.id)}</span></li>`;
 }
 
-function renderModelOptions() {
-  const list = $('modelList');
-  const matches = comboMatches();
-  combo.matches = matches;
-  if (combo.active >= matches.length) combo.active = matches.length - 1;
-  // With the free-text candidate, a non-empty query always yields at least one
-  // row; an empty list means "no catalog and nothing typed yet".
-  if (!matches.length) {
-    list.innerHTML = S.models.length
-      ? '<li class="combo__empty">No matches — type a full model id to use it as-is</li>'
-      : '<li class="combo__empty">Type a model id, e.g. deepseek/deepseek-v4-flash</li>';
-    return;
-  }
-  list.innerHTML = matches.map((m, i) => modelOptionHtml(m, i, i === combo.active, m.id === S.modelId)).join('');
-  const input = $('modelInput');
-  if (combo.active >= 0) input.setAttribute('aria-activedescendant', 'opt-' + combo.active);
-  else input.removeAttribute('aria-activedescendant');
-  const act = list.querySelector('.combo__opt.active');
-  if (act) act.scrollIntoView({ block: 'nearest' });
-}
+/**
+ * Build a searchable model combobox bound to a value getter/setter and DOM
+ * element ids. Two instances exist: `mainCombo` drives the run model
+ * (S.modelId); `resolverCombo` drives the OPTIONAL conflict-resolver model
+ * (S.conflictResolverModelId; empty = inherit the run model). Both share the
+ * single S.models catalog loaded by refreshModelsAndKeys.
+ */
+function makeModelCombo(opts) {
+  const state = { open: false, active: -1, matches: [], query: '' };
+  const INHERIT = '__INHERIT__';
+  const inputEl = () => $(opts.inputId);
+  const listEl = () => $(opts.listId);
+  const get = opts.get;
+  const set = opts.set;
 
-function openCombo() {
-  if (!combo.open) { combo.open = true; $('modelInput').setAttribute('aria-expanded', 'true'); $('modelList').hidden = false; }
-  renderModelOptions();
-}
-function closeCombo() {
-  combo.open = false; combo.active = -1;
-  $('modelInput').setAttribute('aria-expanded', 'false');
-  $('modelList').hidden = true;
-}
-function selectModel(id) {
-  // Accept ANY non-empty id — catalog model OR a free-typed custom id. The
-  // server passes it straight to OpenRouter, so the user can run any model.
-  if (!id) return;
-  S.modelId = id;
-  combo.query = '';
-  syncModelInput();
-  closeCombo();
-  updateModelHint();
-}
-
-(function setupModelCombo() {
-  const input = $('modelInput');
-  const list = $('modelList');
-  if (!input || !list) return;
-  input.addEventListener('focus', () => {
-    // Clear to an empty filter so the user sees the COMPLETE list and can type
-    // to narrow it; the current pick is restored on blur/Escape if untouched.
-    combo.query = '';
-    input.value = '';
-    const all = comboMatches();
-    combo.active = Math.max(0, all.findIndex((m) => m.id === S.modelId));
-    openCombo();
-  });
-  input.addEventListener('input', () => { combo.query = input.value; combo.active = -1; openCombo(); });
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (!combo.open) { openCombo(); return; }
-      combo.active = Math.min(combo.active + 1, combo.matches.length - 1);
-      renderModelOptions();
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      combo.active = Math.max(combo.active - 1, 0);
-      renderModelOptions();
-    } else if (e.key === 'Enter') {
-      e.preventDefault(); // never submit the run form from the model field
-      if (combo.open && combo.matches.length) {
-        const pick = combo.active >= 0 ? combo.matches[combo.active] : combo.matches[0];
-        if (pick) selectModel(pick.id);
-      } else openCombo();
-    } else if (e.key === 'Escape') {
-      if (combo.open) { e.preventDefault(); combo.query = ''; syncModelInput(); closeCombo(); }
+  function matchesFor() {
+    const base = comboMatches(state.query);
+    // The resolver combo offers an explicit "inherit the run model" row at the
+    // top when the field is empty/unfiltered, so a prior pick can be cleared.
+    if (opts.allowEmpty && !state.query.trim()) {
+      return [{ id: INHERIT, label: 'Same as run model', inherit: true }].concat(base);
     }
-  });
-  // Delay so a click on an option (mousedown below) wins over the blur-close.
-  input.addEventListener('blur', () => { setTimeout(() => { combo.query = ''; syncModelInput(); closeCombo(); }, 150); });
-  // mousedown (not click) fires before the input blur, so the selection sticks.
-  list.addEventListener('mousedown', (e) => {
-    const li = e.target.closest ? e.target.closest('.combo__opt') : null;
-    if (!li || !li.dataset.id) return;
-    e.preventDefault();
-    selectModel(li.dataset.id);
-  });
-})();
+    return base;
+  }
+
+  const isSelected = (m) => (m.inherit ? !get() : m.id === get());
+
+  /** Reflect the current selection as the input's display value. */
+  function syncInput() {
+    const input = inputEl();
+    if (!input) return;
+    const md = modelById(get());
+    // A custom id the user typed isn't in the catalog — show the id verbatim so
+    // they can see exactly what will run, instead of a blank field.
+    input.value = md ? md.label : (get() || '');
+    input.placeholder = opts.placeholder
+      || (S.models.length ? 'Search or type any model id…' : 'Type a model id…');
+  }
+
+  function updateHint() {
+    if (!opts.hintId) return;
+    const h = $(opts.hintId);
+    if (!h) return;
+    const md = modelById(get());
+    if (!md) {
+      // Custom / free-typed id (or no pick yet): no catalog metadata to show.
+      h.innerHTML = get()
+        ? '<span class="custom">custom model id</span> · sent to OpenRouter as-is'
+        : (opts.emptyHint || '');
+      return;
+    }
+    const price = md.inputPrice != null ? `$${md.inputPrice}/M in · $${md.outputPrice ?? '?'}/M out` : '';
+    const head = [md.thinking ? '<span class="thinking">thinking</span>' : '', esc(md.description || '')]
+      .filter(Boolean).join(' · ');
+    const tail = [price, fmtCtx(md.contextLength)].filter(Boolean).join(' · ');
+    h.innerHTML = [head, tail].filter(Boolean).join('<br>');
+  }
+
+  function updateCap() {
+    if (!opts.capId) return;
+    const cap = $(opts.capId);
+    if (!cap) return;
+    const n = S.models.length;
+    if (S.provider !== 'openrouter') { cap.textContent = n ? `${n} model${n === 1 ? '' : 's'} available` : ''; return; }
+    if (S.modelSource === 'openrouter-live') {
+      cap.innerHTML = `<span class="live">${n} models</span> · full OpenRouter catalog · or type any model id`;
+    } else {
+      cap.textContent = "Couldn't reach OpenRouter — showing recommended models; type any model id to use it anyway";
+    }
+  }
+
+  function render() {
+    const list = listEl();
+    if (!list) return;
+    const matches = matchesFor();
+    state.matches = matches;
+    if (state.active >= matches.length) state.active = matches.length - 1;
+    // With the free-text candidate, a non-empty query always yields at least one
+    // row; an empty list means "no catalog and nothing typed yet".
+    if (!matches.length) {
+      list.innerHTML = S.models.length
+        ? '<li class="combo__empty">No matches — type a full model id to use it as-is</li>'
+        : '<li class="combo__empty">Type a model id, e.g. deepseek/deepseek-v4-flash</li>';
+      return;
+    }
+    list.innerHTML = matches.map((m, i) => modelOptionHtml(m, i, i === state.active, isSelected(m))).join('');
+    const input = inputEl();
+    if (state.active >= 0) input.setAttribute('aria-activedescendant', 'opt-' + state.active);
+    else input.removeAttribute('aria-activedescendant');
+    const act = list.querySelector('.combo__opt.active');
+    if (act) act.scrollIntoView({ block: 'nearest' });
+  }
+
+  function open() {
+    if (!state.open) { state.open = true; inputEl().setAttribute('aria-expanded', 'true'); listEl().hidden = false; }
+    render();
+  }
+  function close() {
+    state.open = false; state.active = -1;
+    inputEl().setAttribute('aria-expanded', 'false');
+    listEl().hidden = true;
+  }
+  function select(id) {
+    // Accept ANY non-empty id — catalog model OR a free-typed custom id — plus
+    // the inherit sentinel (resolver only), which clears back to the run model.
+    if (id === INHERIT) id = '';
+    else if (!id) return;
+    set(id);
+    state.query = '';
+    syncInput();
+    close();
+    updateHint();
+  }
+
+  function refresh() {
+    syncInput();
+    updateCap();
+    if (state.open) render();
+    updateHint();
+  }
+
+  const input = inputEl();
+  const list = listEl();
+  if (input && list) {
+    input.addEventListener('focus', () => {
+      // Clear to an empty filter so the user sees the COMPLETE list and can type
+      // to narrow it; the current pick is restored on blur/Escape if untouched.
+      state.query = '';
+      input.value = '';
+      const all = matchesFor();
+      state.active = Math.max(0, all.findIndex((m) => isSelected(m)));
+      open();
+    });
+    input.addEventListener('input', () => { state.query = input.value; state.active = -1; open(); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (!state.open) { open(); return; }
+        state.active = Math.min(state.active + 1, state.matches.length - 1);
+        render();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        state.active = Math.max(state.active - 1, 0);
+        render();
+      } else if (e.key === 'Enter') {
+        e.preventDefault(); // never submit the run form from the model field
+        if (state.open && state.matches.length) {
+          const pick = state.active >= 0 ? state.matches[state.active] : state.matches[0];
+          if (pick) select(pick.id);
+        } else open();
+      } else if (e.key === 'Escape') {
+        if (state.open) { e.preventDefault(); state.query = ''; syncInput(); close(); }
+      }
+    });
+    // Delay so a click on an option (mousedown below) wins over the blur-close.
+    input.addEventListener('blur', () => { setTimeout(() => { state.query = ''; syncInput(); close(); }, 150); });
+    // mousedown (not click) fires before the input blur, so the selection sticks.
+    list.addEventListener('mousedown', (e) => {
+      const li = e.target.closest ? e.target.closest('.combo__opt') : null;
+      if (!li || !li.dataset.id) return;
+      e.preventDefault();
+      select(li.dataset.id);
+    });
+  }
+
+  return { refresh, syncInput, updateHint, open, close, select };
+}
+
+const mainCombo = makeModelCombo({
+  inputId: 'modelInput', listId: 'modelList', hintId: 'modelHint', capId: 'modelCap',
+  get: () => S.modelId, set: (v) => { S.modelId = v; },
+});
+
+const resolverCombo = makeModelCombo({
+  inputId: 'resolverModelInput', listId: 'resolverModelList', hintId: 'resolverModelHint',
+  get: () => S.conflictResolverModelId, set: (v) => { S.conflictResolverModelId = v; },
+  allowEmpty: true,
+  placeholder: 'Same as run model',
+  emptyHint: 'Used only to resolve merge conflicts during integration · runs at max thinking · empty = same as run model',
+});
 
 /* ---------------- Launch: concurrency mode ---------------- */
 function renderModeSeg() {
@@ -597,6 +667,9 @@ function captureFormConfig() {
     backend: S.backend,
     modelId: S.modelId,
     modelLabel: md ? md.label : (S.modelId || 'default model'),
+    // Optional conflict-resolver model (empty = inherit modelId). Maps to
+    // Pipeline.integrationModelId server-side.
+    conflictResolverModelId: S.conflictResolverModelId,
     providerLabel: prov ? prov.label : S.provider,
     mode: S.mode,
     concurrency: S.mode === 'manual' ? S.manualN : undefined,
@@ -615,17 +688,28 @@ $('configForm').addEventListener('submit', (e) => {
     const i = S.queue.items.findIndex((x) => x.id === S.queue.editingId);
     if (i >= 0) { cfg.id = S.queue.editingId; S.queue.items[i] = cfg; }
     S.queue.editingId = null;
-    setAddBtnLabel('Add to queue');
+    setAddBtnLabel(addLabel());
     toast('Project updated');
   } else {
     S.queue.items.push(cfg);
-    toast('Added to queue');
+    if (S.queue.running) {
+      // The queue is LIVE — start this project right away (no second click, no
+      // prompt). It joins the running set and the server schedules it under the
+      // shared budget; you stay on home, free to keep adding more.
+      dispatchQueueItem(S.queue.items.length - 1);
+      toast('Added — starting now');
+    } else {
+      toast('Added to queue');
+    }
   }
   persistQueue();
   renderQueue();
+  renderLaunchRunning();
 });
 
 function setAddBtnLabel(t) { $('addBtnLabel').textContent = t; }
+/** The add-button's default label — reflects that adds dispatch live mid-queue. */
+function addLabel() { return S.queue.running ? 'Add & start' : 'Add to queue'; }
 
 /* ---------------- Queue rendering ---------------- */
 function itemReady(it) { return providerReady(providerInfoById(it.provider)); }
@@ -665,6 +749,8 @@ function renderQueue() {
   $('queueRun').disabled = q.running || q.items.length === 0;
   $('queueRunLabel').textContent = q.running ? 'Running…' : `Run queue${q.items.length ? ` (${q.items.length})` : ''}`;
   $('queueClear').disabled = q.running || q.items.length === 0;
+  // Reflect "adds dispatch immediately" in the button while a queue is live.
+  if (!q.editingId) setAddBtnLabel(addLabel());
 }
 
 // Delegated queue-item actions (remove / edit / reorder).
@@ -720,8 +806,9 @@ async function editQueueItem(id) {
   // Restore the saved model id (catalog OR custom) into the combobox. The old
   // code read a #modelSelect <select> that no longer exists — it would crash.
   S.modelId = it.modelId || S.modelId;
-  syncModelInput();
-  updateModelHint();
+  S.conflictResolverModelId = it.conflictResolverModelId || '';
+  mainCombo.refresh();
+  resolverCombo.refresh();
   S.mode = it.mode || 'auto';
   S.manualN = it.concurrency || S.manualN;
   renderModeSeg();
@@ -760,8 +847,10 @@ function startQueue() {
   q.processed = new Set();
   q.stopping = false;
   q.id = uid();
+  S.homePinned = false;            // a fresh "Run queue" opens onto the board
   persistQueue();
   renderQueue();
+  showView('run');                 // jump to the board now (was per-item in postRun)
   updateQueueChrome();
   // Dispatch ALL items at once — the server runs them concurrently under one
   // shared scheduler (priority = dispatch order; later items backfill earlier
@@ -791,6 +880,7 @@ async function postRun(i) {
         pipelineName: item.pipelineName,
         provider: item.provider,
         modelId: item.modelId,
+        conflictResolverModelId: item.conflictResolverModelId || undefined,
         mode: item.mode,
         concurrency: item.mode === 'manual' ? item.concurrency : undefined,
         apiKey: apiKey || undefined,
@@ -800,7 +890,9 @@ async function postRun(i) {
     });
     const runId = r && r.run && r.run.runId;
     if (runId) { item.runId = runId; q.live.set(runId, item); }
-    showView('run');
+    // Don't force the board here: `startQueue` opens it for a fresh run, and the
+    // auto-switch in renderActiveRun handles the rest — UNLESS the user pinned
+    // home to add more, in which case they stay on the launch view by design.
     renderQueue();
   } catch (err) {
     // Couldn't start (missing key, bad dir, too many concurrent runs, …).
@@ -858,6 +950,7 @@ function finishQueue() {
   const q = S.queue;
   q.running = false;
   q.live = null;
+  S.homePinned = false;
   // Settled projects are now archived in History (IndexedDB) — drop them from
   // the queue so returning home doesn't show finished runs and re-run the same
   // pipelines on the next "Run queue". A clean finish settles every item, so the
@@ -887,6 +980,7 @@ function stopFinalize() {
   q.running = false;
   q.stopping = false;
   q.live = null;
+  S.homePinned = false;
   // Keep only what never finished; runs that already settled (incl. the ones
   // just aborted) are archived in History, so drop them from the queue.
   q.items = settleQueue(q.items).keep;
@@ -905,8 +999,31 @@ function updateQueueChrome() {
   // During a queue run the per-run abort is replaced by a queue-wide stop.
   $('abortBtn').hidden = !active || inQueue;
   $('stopQueueBtn').hidden = !inQueue || !active;
-  if (inQueue) $('backToLaunch').hidden = true;   // no wandering off mid-queue
+  // A running queue keeps streaming over SSE no matter which view is shown, so
+  // you CAN hop back home to add more projects (they start automatically).
+  // Offer "← Home" on the board; the launch view offers "View board →" via the
+  // running banner. (renderActiveRun runs first; this has the final say.)
+  if (inQueue && active) {
+    $('backToLaunch').hidden = false;
+    $('backToLaunch').textContent = '← Home';
+  } else {
+    $('backToLaunch').textContent = '← New run';
+  }
   renderQueueProgress();
+  renderLaunchRunning();
+}
+
+/* The launch-view "running" banner — shown on home WHILE a queue is live so the
+   user knows a project added now starts automatically. Hidden otherwise. */
+function renderLaunchRunning() {
+  const el = $('launchRunning');
+  if (!el) return;
+  if (!S.queue.running) { el.hidden = true; return; }
+  el.hidden = false;
+  const { total, running, settled } = summarizeQueue(S.queue.items);
+  $('launchRunningText').innerHTML =
+    `<b>${running}</b> running · ${settled}/${total} done` +
+    ` · <span class="muted">new projects start automatically</span>`;
 }
 function renderQueueProgress() {
   const q = S.queue;
@@ -1042,6 +1159,13 @@ function shortDir(p) {
   return parts.length <= 3 ? p : '…/' + parts.slice(-2).join('/');
 }
 
+/** Last path segment of a directory — the "project" label for the run selector. */
+function projectName(p) {
+  if (!p) return '';
+  const parts = String(p).replace(/\/+$/, '').split('/');
+  return parts[parts.length - 1] || String(p);
+}
+
 /* ---------------- Folder picker (run directory) ---------------- */
 const folderState = { path: '' };
 $('dirBrowse').addEventListener('click', () => openFolder(S.runDir || S.cwd));
@@ -1091,7 +1215,16 @@ function showView(which) {
 }
 $('backToLaunch').addEventListener('click', () => {
   if (S.sim) { showView('sim'); return; }
-  showView('launch'); renderGallery();
+  // Leaving the board while the queue is live → pin home so the per-frame
+  // auto-switch doesn't drag us back; the runs keep streaming in the background.
+  if (S.queue.running) S.homePinned = true;
+  showView('launch'); renderGallery(); renderLaunchRunning();
+});
+// "View board →" on the launch running-banner: unpin and jump to the board.
+$('launchViewBoard').addEventListener('click', () => {
+  S.homePinned = false;
+  showView('run');
+  renderActiveRun();
 });
 
 /* ---------------- Simulation mode (/simulation) ----------------
@@ -1260,18 +1393,26 @@ function renderActiveRun() {
   // after a run finished lands on home, not on a stale board. We only ever
   // switch TO the board here; a run that settles while you're watching it keeps
   // you on the board (the guard simply stops re-asserting the board view).
-  if (active && $('viewRun').hidden) showView('run');
+  // `homePinned` opts out entirely: the user deliberately went home mid-queue to
+  // add more projects, so don't drag them back on every frame.
+  if (active && $('viewRun').hidden && !S.homePinned) showView('run');
   const onRunView = !$('viewRun').hidden;
 
-  // Topbar run chrome belongs to the board context, not the home screen.
+  // Topbar run chrome belongs to the board context, not the home screen — so
+  // when the user pins home mid-queue (active but !onRunView) it stays hidden.
   $('runStatusGroup').hidden = !hasRun || !onRunView;
-  $('concControl').hidden = !active;
+  $('concControl').hidden = !active || !onRunView;
   // The per-run abort targets the VIEWED run; hidden during a queue (which uses
   // a queue-wide stop) and handled by updateQueueChrome.
   $('abortBtn').hidden = !active;
   $('backToLaunch').hidden = active || !hasRun;
 
-  setStatus(run.phase);
+  // Held open for retries: the run is still 'running' (phase) but its inner
+  // status is 'awaiting_retry'. Offer an explicit Finish to leave the hold.
+  const awaitingRetry = !!(run.state && run.state.status === 'awaiting_retry');
+  $('finishBtn').hidden = !(awaitingRetry && !S.sim);
+
+  setStatus(run.phase, run.state && run.state.status);
   const st = run.state;
   // Gooey morph loader while the orchestrator spins up — shown while the run
   // is live but no cards have landed yet (preflight / worktree creation).
@@ -1293,7 +1434,6 @@ function renderActiveRun() {
     updateConc(st);
     if (run.runId && run.runId !== boardRunId) { boardRunId = run.runId; resetBoardState(); }
     renderBoard(st);
-    renderLog(st.logs || []);
     if (S.openCardKey) refreshDrawer(st);
   }
   if (run.phase === 'done' || run.phase === 'error') {
@@ -1302,35 +1442,180 @@ function renderActiveRun() {
       : `<b>Done.</b> Pipeline “${esc(run.pipelineName)}” finished.`;
   } else { $('runSummary').textContent = ''; }
 
+  // Run log + live cross-project activity counter — refreshed on EVERY frame,
+  // even when the SELECTED run has no state yet but another run is already live
+  // (the counter sums all runs, so it must not depend on the viewed run's `st`).
+  renderLog();
+
   // /simulation drives its own chrome (pause / run-again); the launch flow
   // drives the concurrent queue (archive + stop-queue strip).
   if (S.sim) updateSimChrome(run);
   else updateQueueChrome();
 }
 
+/* ---------------- Project selector (custom simulated dropdown) ----------------
+   A Motion-animated listbox listing every concurrent run as "project · pipeline",
+   shown only when MORE THAN ONE run is tracked. Picking an option switches the
+   viewed run; a leading status dot reflects each run's phase and finished/failed
+   runs carry a ✓/✕ mark so the open list stays glanceable.
+
+   Why NOT a native <select>: renderRunSelector() runs on every SSE snapshot
+   (~8×/s during a live run), and rebuilding a <select> slammed the OS popup shut
+   the instant it opened — the "opens and immediately closes" bug. This dropdown
+   keeps its open state in JS (runSel.open) over PERSISTENT DOM whose listeners
+   are wired ONCE: live re-renders only refresh the trigger label and (while open)
+   the option rows, never the open/closed state — so it stays open while the board
+   updates underneath it. */
+const runSel = { open: false, active: -1 };
+
+/** The vendored Motion engine (window.Motion) — null-safe so the UI still works
+ *  if vendor/motion.js ever fails to load. */
+function motionEngine() { return typeof window !== 'undefined' ? window.Motion : null; }
+function runSelMotion() { const m = motionEngine(); return m && m.animate && !prefersReducedMotion() ? m : null; }
+
+function runSelRuns() { return [...S.runs.values()].filter((r) => r.runId); }
+function runMark(phase) { return phase === 'done' ? '✓' : phase === 'error' ? '✕' : ''; }
+function runLabel(r) { const proj = projectName(r.runDirectory); const pipe = r.pipelineName || r.runId; return proj ? `${proj} · ${pipe}` : pipe; }
+
+function runSelOptionsHtml(runs) {
+  return runs.map((r, i) =>
+    `<li class="rsel__opt${r.runId === S.activeRunId ? ' sel' : ''}${i === runSel.active ? ' active' : ''}"`
+    + ` role="option" id="rsel-opt-${i}" data-id="${esc(r.runId)}"`
+    + ` aria-selected="${r.runId === S.activeRunId ? 'true' : 'false'}">`
+    + `<span class="run-select__dot" data-phase="${esc(r.phase || 'idle')}"></span>`
+    + `<span class="rsel__opt-label">${esc(runLabel(r))}</span>`
+    + `<span class="rsel__opt-mark">${runMark(r.phase)}</span></li>`,
+  ).join('');
+}
+
+/** Build the trigger + menu shell ONCE and wire listeners once; later renders reuse it. */
+function ensureRunSelDom(el) {
+  if ($('runSelTrigger')) return;
+  el.innerHTML =
+    `<button class="rsel__trigger" id="runSelTrigger" type="button" aria-haspopup="listbox"`
+    + ` aria-expanded="false" aria-label="Switch between running projects">`
+    + `<span class="run-select__dot" id="runSelDot" data-phase="idle"></span>`
+    + `<span class="rsel__label" id="runSelLabel"></span>`
+    + `<span class="rsel__chev" id="runSelChev" aria-hidden="true">⌄</span></button>`
+    + `<ul class="rsel__menu" id="runSelMenu" role="listbox" tabindex="-1" hidden></ul>`;
+  const trigger = $('runSelTrigger');
+  const menu = $('runSelMenu');
+  trigger.addEventListener('click', () => (runSel.open ? closeRunSel() : openRunSel()));
+  // All keyboard lives on the trigger (it keeps focus); the menu is presentation.
+  trigger.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { if (runSel.open) { e.preventDefault(); closeRunSel(); } return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); runSel.open ? moveRunSelActive(1) : openRunSel(); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); if (runSel.open) moveRunSelActive(-1); return; }
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (!runSel.open) { openRunSel(); return; }
+      const r = runSelRuns()[runSel.active];
+      if (r) pickRun(r.runId);
+    }
+  });
+  // mousedown (not click) so the pick wins before any focus/blur reshuffle.
+  menu.addEventListener('mousedown', (e) => {
+    const li = e.target.closest ? e.target.closest('.rsel__opt') : null;
+    if (li && li.dataset.id) { e.preventDefault(); pickRun(li.dataset.id); }
+  });
+}
+
+/** Refresh ONLY the option rows (keeps open/closed state untouched). */
+function renderRunSelMenu() {
+  const menu = $('runSelMenu');
+  if (!menu) return;
+  menu.innerHTML = runSelOptionsHtml(runSelRuns());
+  const trigger = $('runSelTrigger');
+  if (trigger) {
+    if (runSel.active >= 0) trigger.setAttribute('aria-activedescendant', 'rsel-opt-' + runSel.active);
+    else trigger.removeAttribute('aria-activedescendant');
+  }
+  const act = menu.querySelector('.rsel__opt.active');
+  if (act) act.scrollIntoView({ block: 'nearest' });
+}
+
+function moveRunSelActive(d) {
+  const runs = runSelRuns();
+  if (!runs.length) return;
+  if (runSel.active < 0) runSel.active = Math.max(0, runs.findIndex((r) => r.runId === S.activeRunId));
+  runSel.active = Math.min(runs.length - 1, Math.max(0, runSel.active + d));
+  renderRunSelMenu();
+}
+
+function pickRun(id) {
+  S.activeRunId = id;
+  closeRunSel();
+  renderRunSelector();
+  renderActiveRun();
+}
+
+function openRunSel() {
+  const menu = $('runSelMenu'), trigger = $('runSelTrigger'), chev = $('runSelChev');
+  if (!menu || runSel.open) return;
+  runSel.open = true;
+  runSel.active = Math.max(0, runSelRuns().findIndex((r) => r.runId === S.activeRunId));
+  trigger.setAttribute('aria-expanded', 'true');
+  renderRunSelMenu();
+  menu.hidden = false;
+  const M = runSelMotion();
+  if (M) {
+    M.animate(menu, { opacity: [0, 1], scale: [0.96, 1], y: [-6, 0] }, { type: 'spring', stiffness: 520, damping: 32 });
+    const opts = menu.querySelectorAll('.rsel__opt');
+    if (opts.length) M.animate(opts, { opacity: [0, 1], y: [-4, 0] }, { delay: M.stagger(0.025), duration: 0.18, ease: [0.2, 0.7, 0.3, 1] });
+    M.animate(chev, { rotate: 180 }, { type: 'spring', stiffness: 500, damping: 30 });
+  } else if (chev) { chev.style.transform = 'rotate(180deg)'; }
+}
+
+function closeRunSel() {
+  const menu = $('runSelMenu'), trigger = $('runSelTrigger'), chev = $('runSelChev');
+  if (!menu || !runSel.open) return;
+  runSel.open = false;
+  runSel.active = -1;
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.removeAttribute('aria-activedescendant');
+  const M = runSelMotion();
+  if (chev) { if (M) M.animate(chev, { rotate: 0 }, { type: 'spring', stiffness: 500, damping: 30 }); else chev.style.transform = 'rotate(0deg)'; }
+  if (M) {
+    // Hide only after the exit finishes AND only if still closed (a re-open mid-exit must win).
+    const anim = M.animate(menu, { opacity: [1, 0], scale: [1, 0.97], y: [0, -6] }, { duration: 0.14, ease: 'easeIn' });
+    const settle = () => { if (!runSel.open) menu.hidden = true; };
+    anim.finished.then(settle).catch(settle);
+  } else {
+    menu.hidden = true;
+  }
+}
+
 /**
- * The project selector — one tab per concurrent run, shown only when MORE THAN
- * ONE run is tracked. Clicking a tab switches the viewed run.
+ * Public entry, called on every render. Shows/updates the trigger and, while the
+ * menu is open, refreshes its rows — WITHOUT ever forcing it open or closed.
  */
 function renderRunSelector() {
   const el = $('runSelector');
   if (!el) return;
-  const runs = [...S.runs.values()].filter((r) => r.runId);
-  if (runs.length <= 1) { el.hidden = true; el.innerHTML = ''; return; }
+  const runs = runSelRuns();
+  if (runs.length <= 1) {
+    if (runSel.open) closeRunSel();
+    el.hidden = true;
+    return;
+  }
+  ensureRunSelDom(el);
   el.hidden = false;
-  el.innerHTML = runs
-    .map((r) => {
-      const sel = r.runId === S.activeRunId ? ' run-tab--active' : '';
-      const name = esc(r.pipelineName || r.runId);
-      return (
-        `<button class="run-tab${sel}" data-runid="${esc(r.runId)}" data-phase="${esc(r.phase)}" ` +
-        `title="${name} · ${esc(r.phase)}"><span class="run-tab__dot"></span>${name}</button>`
-      );
-    })
-    .join('');
+  const activeRun = (S.activeRunId && S.runs.get(S.activeRunId)) || runs[0];
+  const lbl = $('runSelLabel');
+  if (lbl) lbl.textContent = runLabel(activeRun);
+  const dot = $('runSelDot');
+  if (dot) dot.dataset.phase = activeRun.phase || 'idle';
+  if (runSel.open) renderRunSelMenu(); // live rows update; open state preserved
 }
 
-function setStatus(phase) {
+function setStatus(phase, innerStatus) {
+  // While the run is held open for retries the snapshot phase is still
+  // 'running'; surface the inner `awaiting_retry` as a distinct "review" pill.
+  if (innerStatus === 'awaiting_retry') {
+    $('statusText').textContent = 'review';
+    $('statusPill').dataset.s = 'awaiting';
+    return;
+  }
   const label = { idle: 'idle', running: 'running', done: 'done', error: 'error' }[phase] || phase;
   $('statusText').textContent = label;
   $('statusPill').dataset.s = phase;
@@ -1365,17 +1650,14 @@ $('abortBtn').addEventListener('click', async () => {
   try { await api('/api/run/abort', { method: 'POST', body: JSON.stringify({ runId: S.activeRunId }) }); toast('Stopping run…'); } catch (e) { toast(e.message, true); }
 });
 
-// Project selector: click a tab to switch which run's board is shown.
-(() => {
-  const rsel = $('runSelector');
-  if (rsel) rsel.addEventListener('click', (e) => {
-    const btn = e.target.closest('.run-tab');
-    if (!btn) return;
-    S.activeRunId = btn.dataset.runid;
-    renderRunSelector();
-    renderActiveRun();
-  });
-})();
+// Dismiss the project selector on any pointer-down outside it. mousedown (not
+// click) so it settles before the menu's own mousedown pick; clicks INSIDE the
+// host (trigger toggle, option pick) are handled by their own listeners.
+document.addEventListener('mousedown', (e) => {
+  if (!runSel.open) return;
+  const host = $('runSelector');
+  if (host && !host.contains(e.target)) closeRunSel();
+});
 
 /* ---------------- Board reconciler ---------------- */
 const ACTIVE_PHASES = new Set(['worktree_creating','worktree_ready','session_starting','streaming','tool_running','finalizing','validating','committing','pushing','cleaning_up']);
@@ -1511,17 +1793,27 @@ function agentCard(a) {
   if (a.phase === 'pending') { lane = 'todo'; cls = 'idle'; plabel = a.requeues ? 'requeued' : 'queued'; }
   else if (a.phase === 'done') { lane = 'done'; cls = 'done'; }
   else if (a.phase === 'no_changes') { lane = 'done'; cls = 'done'; plabel = 'no changes'; }
-  else if (a.phase === 'error') { lane = 'done'; cls = 'err'; }
+  else if (a.phase === 'error') {
+    // Signal a TIMEOUT distinctly from a generic failure (amber vs red) so the
+    // user knows a longer-timeout retry is the right move.
+    lane = 'done';
+    if (a.errorKind === 'timeout') { cls = 'tmo'; plabel = 'timeout'; }
+    else { cls = 'err'; plabel = 'failed'; }
+  }
+  const file = (a.currentFile || (a.files && a.files[0]) || '');
   return {
     key: 'a' + a.agentId, kind: 'agent', lane, cls, plabel,
-    title: a.stageName || `Task ${a.agentId}`,
-    file: (a.currentFile || (a.files && a.files[0]) || ''),
+    // Resolve the `$file` fan-out token so the user never sees a literal
+    // "$file" in the title (per-file/memory steps); full path stays in `file`.
+    title: substituteFileInTitle(a.stageName || `Task ${a.agentId}`, file),
+    file,
     idText: '#' + a.agentId,
     streaming: a.phase === 'streaming' || a.phase === 'tool_running',
     foot: footBits([
       a.tokensOut ? `${fmtNum(a.tokensIn + a.tokensOut)} tok` : '',
       a.cost ? `$${a.cost.toFixed(3)}` : '',
       a.requeues ? `↻${a.requeues}` : '',
+      a.manualRetries ? `retry ${a.manualRetries}` : '',
     ], a.requeues),
     raw: a,
   };
@@ -1533,7 +1825,7 @@ function mergeCard(m) {
   else if (m.phase === 'pending') { lane = 'todo'; cls = 'idle'; }
   return {
     key: 'm' + m.visitIndex, kind: 'merge', lane, cls, plabel: humanize(m.phase),
-    title: 'Merge · ' + (m.stageName || ''),
+    title: 'Merge · ' + substituteFileInTitle(m.stageName || '', null),
     file: (m.branchesMerged && m.branchesMerged.length ? `${m.branchesMerged.length} merged` : ''),
     idText: m.runs > 1 ? `×${m.runs}` : '',
     streaming: m.phase === 'merging' || m.phase === 'conflict_resolving',
@@ -1547,7 +1839,7 @@ function judgeCard(j) {
   else if (j.phase === 'error') { lane = 'done'; cls = 'err'; }
   return {
     key: 'j' + j.visitIndex, kind: 'judge', lane, cls, plabel: humanize(j.phase),
-    title: 'Judge · ' + (j.stepName || ''),
+    title: 'Judge · ' + substituteFileInTitle(j.stepName || '', null),
     file: j.outcomeLabel ? `→ ${j.outcomeLabel}` : esc(j.condition || '').slice(0, 60),
     idText: j.runs ? `run ${j.runs}` : '',
     streaming: j.phase === 'judging',
@@ -1658,6 +1950,7 @@ function refreshDrawer(st) {
   if (!c || !c.raw) return;
   $('drawerTitle').textContent = c.title;
   $('drawerMeta').innerHTML = drawerMeta(c);
+  renderDrawerRetry(c, st);
   if (S.openCardKey[0] === 'a') {
     // live tail from streamed state (full set fetched on open)
     const logs = c.raw.logs;
@@ -1694,7 +1987,7 @@ function drawerMeta(c) {
   const r = c.raw;
   if (c.kind === 'agent') {
     return [
-      kv('Phase', humanize(r.phase)), kv('Stage', r.stageName),
+      kv('Phase', humanize(r.phase)), kv('Stage', substituteFileInTitle(r.stageName, r.currentFile)),
       kv('Tokens in', fmtNum(r.tokensIn || 0)), kv('Tokens out', fmtNum(r.tokensOut || 0)),
       kv('Cost', r.cost != null ? '$' + r.cost.toFixed(4) : ''), kv('Requeues', r.requeues || 0),
       kv('Branch', r.branchName, { mono: true, wide: true }),
@@ -1722,23 +2015,192 @@ function drawerMeta(c) {
   ].join('');
 }
 
-/* ---------------- Global log ---------------- */
-$('logToggle').addEventListener('click', () => {
-  S.logOpen = !S.logOpen;
-  $('logbar').classList.toggle('open', S.logOpen);
-  $('logToggle').setAttribute('aria-expanded', String(S.logOpen));
+/* Retry controls inside the drawer — shown only for an agent card in `error`
+   while the run is held open in `awaiting_retry`. A timed-out card additionally
+   offers a new time limit; any other error just re-runs. */
+function renderDrawerRetry(c, st) {
+  const el = $('drawerRetry');
+  if (!el) return;
+  const r = c && c.raw;
+  const inError = c && c.kind === 'agent' && r && r.phase === 'error';
+  const awaiting = !!(st && st.status === 'awaiting_retry');
+  if (!inError || !awaiting) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  const isTimeout = r.errorKind === 'timeout';
+  el.innerHTML =
+    `<div class="retry-head ${isTimeout ? 'is-timeout' : 'is-failed'}">` +
+      (isTimeout
+        ? 'Timed out — re-run with a new time limit, or as-is.'
+        : 'Failed — re-run this task.') +
+    `</div>` +
+    (isTimeout
+      ? `<label class="retry-tmo">New timeout (min)` +
+        `<input id="retryMinutes" class="retry-tmo__input" type="number" min="1" step="1" value="15"></label>`
+      : '') +
+    `<button class="btn btn--primary retry-go" data-agent="${r.agentId}">` +
+      (isTimeout ? 'Retry with new timeout' : 'Retry task') +
+    `</button>`;
+}
+
+$('drawerRetry').addEventListener('click', async (e) => {
+  const btn = e.target.closest && e.target.closest('.retry-go');
+  if (!btn) return;
+  const agentId = +btn.dataset.agent;
+  const minEl = $('retryMinutes');
+  const timeoutMinutes = minEl ? Math.max(1, parseInt(minEl.value, 10) || 0) : undefined;
+  btn.disabled = true;
+  try {
+    await api('/api/run/retry', {
+      method: 'POST',
+      body: JSON.stringify({ runId: S.activeRunId, agentId, timeoutMinutes }),
+    });
+    toast('Retrying task #' + agentId + '…');
+  } catch (err) {
+    toast(err.message, true);
+    btn.disabled = false;
+  }
 });
-function renderLog(logs) {
-  $('logMeta').textContent = logs.length ? `${logs.length} lines` : '';
+
+$('finishBtn').addEventListener('click', async () => {
+  try {
+    await api('/api/run/finish', { method: 'POST', body: JSON.stringify({ runId: S.activeRunId }) });
+    toast('Finishing run…');
+  } catch (e) {
+    toast(e.message, true);
+  }
+});
+
+/* ---------------- Global run log (live activity console) ---------------- */
+const LOG_TAIL = 600; // cap rendered lines so a long multi-run stream stays light
+
+function setLogOpen(open) {
+  S.logOpen = open;
+  $('logbar').classList.toggle('open', open);
+  $('logToggle').setAttribute('aria-expanded', String(open));
+  if (open) renderLog();
+}
+// The whole header toggles (big target); the level filter handles its own clicks.
+$('logHead').addEventListener('click', (e) => {
+  if (e.target.closest('#logFilter')) return;
+  S.logUserToggled = true;
+  setLogOpen(!S.logOpen);
+});
+$('logFilter').addEventListener('click', (e) => {
+  const chip = e.target.closest('.logfilter__chip');
+  if (!chip) return;
+  S.logFilter = chip.dataset.lvl || 'all';
+  for (const c of $('logFilter').children) c.classList.toggle('is-on', c === chip);
+  renderLog();
+});
+$('logJump').addEventListener('click', () => {
+  const b = $('logBody');
+  b.scrollTop = b.scrollHeight;
+  $('logJump').hidden = true;
+});
+$('logBody').addEventListener('scroll', () => {
+  const b = $('logBody');
+  $('logJump').hidden = b.scrollHeight - b.scrollTop - b.clientHeight < 48;
+});
+
+// Stable per-agent hue from its id (golden-angle spacing → distinct neighbors).
+function agentHue(id) { return Math.round((id * 137.508) % 360); }
+
+// Map a log entry's agentId to a short, glanceable source chip. Task agents get
+// a hue; reserved ids (orchestrator / integration / judge) get a semantic class.
+function logSource(l) {
+  const id = l.agentId;
+  if (id === 9999) return { label: 'INT', cls: 'int', glyph: '◆' };
+  if (id === 9998) return { label: 'JDG', cls: 'jdg' };
+  if (id < 0) return { label: 'ORQ', cls: 'orq' };
+  if (id >= 0 && id < 9000) return { label: 'A' + String(id).padStart(2, '0'), cls: 'agent', hue: agentHue(id) };
+  return { label: (l.kind || 'sys').slice(0, 3).toUpperCase(), cls: 'sys' };
+}
+
+// Live, cross-project activity: agents running RIGHT NOW summed over EVERY run
+// (not just the viewed one), plus queued tasks and how many projects are live.
+function liveActivity() {
+  let running = 0, queued = 0, projects = 0;
+  for (const r of S.runs.values()) {
+    if (r.phase !== 'running' || !r.state) continue;
+    running += r.state.activeAgentCount || 0;
+    queued += r.state.pendingTaskCount || 0;
+    projects += 1;
+  }
+  return { running, queued, projects };
+}
+
+// Build the rendered line model. One live run → just its log. Several → a single
+// timestamp-ordered stream with each line tagged by its project (the run's dir).
+function buildLogModel() {
+  const runs = [...S.runs.values()].filter((r) => r.state && Array.isArray(r.state.logs));
+  if (runs.length <= 1) {
+    const st = runs[0] ? runs[0].state : (S.run && S.run.state) || null;
+    return { rows: st ? st.logs.map((l) => ({ l, proj: null })) : [], multi: false };
+  }
+  const rows = [];
+  for (const r of runs) {
+    const proj = projectName(r.runDirectory) || String(r.runId || '').slice(0, 4);
+    for (const l of r.state.logs) rows.push({ l, proj });
+  }
+  rows.sort((a, b) => (a.l.timestamp || 0) - (b.l.timestamp || 0));
+  return { rows, multi: true };
+}
+
+function logLineHtml(l, proj, multi) {
+  const t = new Date(l.timestamp).toLocaleTimeString('en-GB');
+  const s = logSource(l);
+  const lvl = l.level || 'info';
+  const glyph = lvl === 'error' ? '✕' : lvl === 'warn' ? '⚠' : (s.glyph || '');
+  const hue = s.hue != null ? ` style="--ah:${s.hue}"` : '';
+  const tag = multi && proj ? `<span class="logline__proj">${esc(proj)}</span>` : '';
+  return `<div class="logline logline--${esc(lvl)} src-${s.cls}"${hue}>` +
+    `<span class="logline__t">${t}</span>` +
+    `<span class="logline__g">${glyph}</span>` +
+    `<span class="logline__chip">${esc(s.label)}</span>` +
+    tag +
+    `<span class="logline__m">${esc(l.message)}</span>` +
+    `</div>`;
+}
+
+function renderLog() {
+  // Header activity — GLOBAL, refreshed on every frame from any run.
+  const { running, queued, projects } = liveActivity();
+  const act = $('logActivity');
+  if (projects > 0) {
+    act.hidden = false;
+    $('actRunning').textContent = running;
+    $('actProjects').textContent = projects > 1 ? `· ${projects} projects` : '';
+    $('actQueued').textContent = queued > 0 ? `· ${queued} queued` : '';
+    $('logbar').classList.toggle('is-live', running > 0);
+  } else {
+    act.hidden = true;
+    $('logbar').classList.remove('is-live');
+  }
+
+  const { rows, multi } = buildLogModel();
+  const filtered = S.logFilter === 'all' ? rows : rows.filter((r) => (r.l.level || 'info') === S.logFilter);
+  $('logMeta').textContent = filtered.length ? `${filtered.length} lines` : '';
+
+  // Auto-open the log the first time a run goes live (unless the user already
+  // expressed a preference by toggling it). setLogOpen re-enters renderLog.
+  if (running > 0 && !S.logAutoExpanded && !S.logUserToggled) {
+    S.logAutoExpanded = true;
+    setLogOpen(true);
+    return;
+  }
   if (!S.logOpen) return;
+
   const body = $('logBody');
-  const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
-  body.innerHTML = logs.map((l) => {
-    const t = new Date(l.timestamp).toLocaleTimeString();
-    const src = l.agentId >= 0 && l.agentId < 9000 ? `#${l.agentId}` : (l.kind || '');
-    return `<div class="logline ${esc(l.level)}"><span class="lt">${t}</span><span class="ls">${esc(src)}</span><span class="lm">${esc(l.message)}</span></div>`;
-  }).join('');
-  if (atBottom) body.scrollTop = body.scrollHeight;
+  if (!filtered.length) {
+    body.innerHTML = `<div class="logbar__empty">${running > 0 ? 'Waiting for the first log line…' : 'No log entries yet.'}</div>`;
+    $('logJump').hidden = true;
+    return;
+  }
+  const view = filtered.length > LOG_TAIL ? filtered.slice(-LOG_TAIL) : filtered;
+  const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 48;
+  body.innerHTML = view.map(({ l, proj }) => logLineHtml(l, proj, multi)).join('');
+  if (atBottom) { body.scrollTop = body.scrollHeight; $('logJump').hidden = true; }
+  else $('logJump').hidden = false;
 }
 
 /* ---------------- Utils ---------------- */

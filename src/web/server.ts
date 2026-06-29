@@ -302,6 +302,29 @@ export function createWebServer(opts: WebServerOptions): {
         concurrency: manager.getSnapshot(runId).state?.concurrency ?? null,
       });
     }
+    if (method === 'POST' && path === '/api/run/retry') {
+      // Retry one failed task card while the run is held open in
+      // `awaiting_retry`. Optional `timeoutMinutes` re-runs a timed-out card
+      // with a longer per-task limit. Fire-and-forget; progress streams over SSE.
+      const body = await readJsonBody(req);
+      const runId = String(body.runId ?? '');
+      const agentId = Number(body.agentId);
+      if (!runId || !Number.isFinite(agentId)) {
+        return sendJson(res, 400, { error: 'runId and numeric agentId required' });
+      }
+      const timeoutMinutes =
+        typeof body.timeoutMinutes === 'number' && body.timeoutMinutes > 0
+          ? body.timeoutMinutes
+          : undefined;
+      manager.retryTask(runId, agentId, timeoutMinutes);
+      return sendJson(res, 200, { ok: true });
+    }
+    if (method === 'POST' && path === '/api/run/finish') {
+      // Leave the `awaiting_retry` hold so the run finalizes and tears down.
+      const body = await readJsonBody(req);
+      manager.finish(String(body.runId ?? ''));
+      return sendJson(res, 200, { ok: true });
+    }
     if (method === 'GET' && path === '/events') {
       return openSse(req, res);
     }
@@ -353,6 +376,11 @@ export function createWebServer(opts: WebServerOptions): {
       backend,
       provider: provider ?? backendToProvider(backend),
       modelId: String(body.modelId ?? ''),
+      // Optional override for the merge/integration conflict-resolver agent.
+      // Empty → the resolver inherits the run model (Pipeline.integrationModelId).
+      conflictResolverModelId: body.conflictResolverModelId
+        ? String(body.conflictResolverModelId)
+        : undefined,
       // Browser-only key: the client sends the in-memory key it validated
       // earlier. Used for this run only; never persisted. Absent → the
       // run manager falls back to the env/mount/disk resolver (CLI path).
@@ -449,6 +477,7 @@ function serializeSnapshot(snap: RunSnapshot): Record<string, unknown> {
     phase: snap.phase,
     runId: snap.runId,
     pipelineName: snap.pipelineName,
+    runDirectory: snap.runDirectory,
     backend: snap.backend,
     modelId: snap.modelId,
     startedAt: snap.startedAt,

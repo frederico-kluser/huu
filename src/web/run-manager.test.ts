@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { WebRunManager, type RunSnapshot } from './run-manager.js';
+import { WebRunManager, applyResolverModel, type RunSnapshot } from './run-manager.js';
+import type { Pipeline } from '../lib/types.js';
 
 function waitFor(pred: () => boolean, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -15,6 +16,27 @@ function waitFor(pred: () => boolean, timeoutMs: number): Promise<boolean> {
     }, 5);
   });
 }
+
+describe('applyResolverModel', () => {
+  const base: Pipeline = { name: 'p', steps: [{ name: 's', prompt: 'x', files: [] }] };
+
+  it('pins integrationModelId from a non-empty conflict-resolver model', () => {
+    const out = applyResolverModel(base, 'deepseek/deepseek-v4-pro');
+    expect(out.integrationModelId).toBe('deepseek/deepseek-v4-pro');
+    expect(out).not.toBe(base); // new object, original untouched
+    expect(base.integrationModelId).toBeUndefined();
+  });
+
+  it('leaves the pipeline untouched (resolver inherits run model) when empty', () => {
+    expect(applyResolverModel(base, undefined)).toBe(base);
+    expect(applyResolverModel(base, '')).toBe(base);
+    expect(applyResolverModel(base, '   ')).toBe(base);
+  });
+
+  it('trims the supplied model id', () => {
+    expect(applyResolverModel(base, '  resolver-x  ').integrationModelId).toBe('resolver-x');
+  });
+});
 
 describe('WebRunManager — simulation', () => {
   it('drives a synthetic run to done over the same snapshot channel as a real run', async () => {
@@ -35,6 +57,8 @@ describe('WebRunManager — simulation', () => {
     });
     expect(first.phase).toBe('running');
     expect(first.pipelineName).toBeTruthy();
+    // Sims report the server cwd as their project so the selector can label them.
+    expect(first.runDirectory).toBe(process.cwd());
     expect(mgr.isActive()).toBe(true);
 
     const done = await waitFor(() => mgr.getSnapshot('sim-x').phase === 'done', 5000);
@@ -68,6 +92,29 @@ describe('WebRunManager — multi-run', () => {
     expect(mgr.getSnapshots().map((s) => s.runId).sort()).toEqual(['sim-a', 'sim-b']);
     expect(mgr.getSnapshot('sim-a').runId).toBe('sim-a');
     expect(mgr.getSnapshot('sim-b').runId).toBe('sim-b');
+
+    mgr.abort();
+    expect(await waitFor(() => !mgr.isActive(), 3000)).toBe(true);
+  });
+
+  it('admits a new run while another is already in flight (add-to-queue while running)', async () => {
+    // The backend guarantee the launch-view "add while running" feature relies
+    // on: a run started AFTER another is already streaming is accepted (no
+    // refusal) and driven to done automatically — no second user action.
+    const mgr = new WebRunManager(process.cwd(), () => {});
+    // A long first run, so it's demonstrably still going when we add the second.
+    mgr.startSimulation({ runId: 'sim-first', modelIds: [], fileCount: 40, concurrency: 2, tickMs: 8 });
+    expect(await waitFor(() => mgr.getSnapshot('sim-first').state != null, 3000)).toBe(true);
+    expect(mgr.getSnapshot('sim-first').phase).toBe('running');
+
+    // Add a second run mid-flight — accepted and tracked alongside the first.
+    const late = mgr.startSimulation({ runId: 'sim-late', modelIds: [], fileCount: 4, concurrency: 2, tickMs: 4 });
+    expect(late.phase).toBe('running');
+    expect(mgr.getSnapshots().map((s) => s.runId).sort()).toEqual(['sim-first', 'sim-late']);
+
+    // The late-added run reaches done on its own while the first still runs.
+    expect(await waitFor(() => mgr.getSnapshot('sim-late').phase === 'done', 5000)).toBe(true);
+    expect(mgr.getSnapshot('sim-first').phase).toBe('running');
 
     mgr.abort();
     expect(await waitFor(() => !mgr.isActive(), 3000)).toBe(true);

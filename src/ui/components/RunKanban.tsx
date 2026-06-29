@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { AgentStatus, CheckRun, Pipeline, StageIntegration } from '../../lib/types.js';
+import { substituteFileInTitle } from '../../lib/title-format.js';
 import { theme } from '../theme.js';
 
 // In-house kanban renderer. Replaces `ink-kanban-board` to keep the run
@@ -136,7 +137,7 @@ function buildCheckCard(e: CheckRun): BoardCard {
       : `[check] ${truncate(e.condition, 38)}`;
   return {
     key: `check-${e.visitIndex}`,
-    title: `judge: ${truncate(e.stepName, 22)}${e.runs > 1 ? ` ×${e.runs}` : ''}`,
+    title: `judge: ${truncate(substituteFileInTitle(e.stepName, null), 22)}${e.runs > 1 ? ` ×${e.runs}` : ''}`,
     subtitle,
     status: checkStatus(e),
     branchShort: undefined,
@@ -158,7 +159,7 @@ function buildIntegrationCard(e: StageIntegration, isOverride: boolean): BoardCa
       : `[merge] ${e.branchesMerged.length}/${total} branches · ${e.conflicts.length} conflicts`;
   return {
     key: `merge-${e.visitIndex}`,
-    title: `merge: ${truncate(e.stageName, 22)}${e.runs > 1 ? ` ×${e.runs}` : ''}`,
+    title: `merge: ${truncate(substituteFileInTitle(e.stageName, null), 22)}${e.runs > 1 ? ` ×${e.runs}` : ''}`,
     subtitle,
     status: integrationStatus(e),
     branchShort: undefined,
@@ -222,18 +223,23 @@ function buildCard(
     ? effectiveModelId.split('/').pop()
     : effectiveModelId;
   const fileLabel = agent.currentFile ?? '(rodada livre)';
-  const subtitle = `[${agent.stageName}] ${truncate(fileLabel, 32)}`;
+  // Resolve the `$file` fan-out token to the worked file's name so the user
+  // never sees a literal "$file" in the card (per-file/memory steps only).
+  const displayStage = substituteFileInTitle(agent.stageName, agent.currentFile);
+  const subtitle = `[${displayStage}] ${truncate(fileLabel, 32)}`;
   const log = lastLog ?? agent.logs[agent.logs.length - 1];
 
   const retryBadge = agent.attempt && agent.attempt > 1 ? ' (retry)' : '';
-  // Memory-guard requeues go in the TITLE, not a new line — cardHeight()
-  // budgets packCards by rendered rows and must stay in sync.
+  // Memory-guard requeues and USER retries go in the TITLE, not a new line —
+  // cardHeight() budgets packCards by rendered rows and must stay in sync.
   const requeueBadge = agent.requeues && agent.requeues > 0 ? ` ↻${agent.requeues}` : '';
+  const manualRetryBadge =
+    agent.manualRetries && agent.manualRetries > 0 ? ` ⟳${agent.manualRetries}` : '';
   return {
     key: String(agent.agentId),
-    title: `#${agent.agentId} ${truncate(agent.stageName, 24)}${
+    title: `#${agent.agentId} ${truncate(displayStage, 24)}${
       isOverride ? ' (step)' : ''
-    }${retryBadge}${requeueBadge}`,
+    }${retryBadge}${requeueBadge}${manualRetryBadge}`,
     subtitle,
     status,
     branchShort,

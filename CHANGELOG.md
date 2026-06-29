@@ -8,6 +8,128 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+### Added
+
+- **Add projects to a live queue from the home view.** While a queue is running
+  you can return to the launch view (**← Home**), add more projects, and they
+  dispatch **immediately** under the shared scheduler — no restart, no prompt.
+  A *running* banner on home (`N running · X/Y done`) stays visible while you
+  pick, with a **“View board →”** jump back to the kanban. Pure client-side: the
+  multi-run server already admitted concurrent runs, so the change is a sticky
+  `homePinned` flag that opts the home view out of the per-frame board
+  auto-switch, plus immediate dispatch on add and the home banner.
+
+- **Failed task cards can now be retried interactively — and timeouts are
+  signalled distinctly.** A timed-out card is shown in **amber** (`TIMEOUT`),
+  separate from the **red** of any other failure (`FAILED`), in both the Ink TUI
+  and the web kanban. When a single run (TUI) or any web run ends with failed
+  cards, it no longer jumps straight to the summary: it pauses in a new
+  **`awaiting_retry`** state (integration worktree kept alive) so you can recover
+  individual failures. Retrying a card re-runs that one task against the current
+  integration HEAD and, on success, merges its branch in — no need to re-run the
+  whole pipeline. A **timed-out** card can be retried with a **new, longer time
+  limit**; any other error just re-runs. User retries show a `⟳N` badge.
+  - **TUI**: on the run dashboard, `R` retries the focused error card (timeouts
+    prompt for a new limit first), `D` finishes the run, `Q` aborts.
+  - **Web**: red/amber cards open a drawer with a **Retry** button (timeouts also
+    get a minutes field); a **Finish** button leaves the review hold. New
+    endpoints `POST /api/run/retry` and `POST /api/run/finish`.
+  - Headless drivers (`run-many`, smoke, `/simulation`) are unaffected —
+    `Orchestrator` only holds open when the new `interactiveRetry` option is set,
+    so `start()` resolves immediately on every non-interactive path.
+
+### Changed
+
+- **Web project selector is now a custom, animated dropdown — no native
+  `<select>`.** When more than one run is live, the header selector is a simulated
+  listbox: a pill trigger plus a glass `role="listbox"` panel that opens and
+  closes with a [Motion](https://motion.dev) spring (chevron rotate + per-row
+  stagger), showing **`project · pipeline`** per run (a leading dot reflects each
+  run's phase; finished/failed runs carry a ✓/✕ marker). It replaces the OS
+  `<select>`, whose look couldn't be themed and — being rebuilt on every snapshot —
+  closed the instant it opened during a run (see *Fixed*). The run snapshot carries
+  its `runDirectory` so each run is labelled by the project it operates on, not just
+  the pipeline name. Keyboard-navigable (arrows/Enter/Esc), dismiss-on-outside-click,
+  and degrades gracefully (no animation) under `prefers-reduced-motion`. Motion is
+  **vendored** under `src/web/client/vendor/` so the no-build, offline browser client
+  keeps working with no CDN.
+- **Run log redesigned into a live, cross-project activity console.** The log
+  drawer's header is now a **live activity bar** that sums the agents running
+  **right now across every concurrent run** (`⚡ N running · M projects ·
+  Q queued`), refreshed on every frame — the count reflects all projects in
+  real time, not just the viewed one. Each agent gets a stable hue chip so
+  parallel work is visually separable, level glyphs + a colored rail flag
+  warnings/errors, and when more than one run is live the body becomes a single
+  timestamp-ordered stream merging every run's lines (each tagged with its
+  project). A level filter (All · ⚠ · ✕), a "↓ Latest" jump pill and
+  auto-expand-on-first-run round it out. Entirely client-side: the cross-run
+  count is derived from the run snapshots already on the wire — no
+  orchestrator/server/SimulationEngine change.
+- **`huu Test Suite` is now code-frozen — it writes tests and NEVER edits your
+  source.** The flagship pipeline's step prompts and judge were rewritten so the
+  production tree is read-only. The old escape hatch ("if a real bug is exposed,
+  fix `$file`") is gone: when a generated test reveals apparently-buggy behavior
+  the agent now **characterizes** it (pins the *actual* current behavior so the
+  suite stays green and truthful — Feathers, *Working Effectively with Legacy
+  Code*), records a fixed-shape `suspected-bug` finding, and — on runners with a
+  real expected-failure idiom (vitest `test.fails`, pytest strict `xfail`, RSpec
+  `pending`) — leaves a strict marker that flips red the day the bug is fixed.
+  Stacks without a native xfail (Go, Rust, JUnit 5) use characterization only —
+  `t.Skip`/`#[ignore]`/`@Disabled` are explicitly banned as bug trackers because
+  they assert nothing. Cleanup now prefers converting a bug-catching test to a
+  marker over deleting it (deletion is the last resort for structurally-broken
+  tests). Prompts also gained banned-token determinism rules and a per-test
+  mutation-strength self-check. Grounded in a fresh research pass over
+  characterization/golden-master testing, the documented LLM test-gen
+  "cheat-to-green" failure mode, mutation testing, and the cross-language
+  expected-failure mechanics.
+- The Test Suite judge (`5. Suite green and code untouched?`) now enforces the
+  freeze mechanically: it diffs the whole run against its base commit
+  (`git diff --name-only $baseCommit..HEAD`) and reworks if any non-test,
+  non-artifact source path changed, plus anti-cheat clauses that reject
+  assertion-free / weak-only / self-mocked "green by emptiness" tests and orphan
+  suspected-bug findings. These clauses are hard — never waved by the
+  `$runs >= 2` lean-approve shortcut.
+
+### Fixed
+
+- **The web project selector no longer "opens and immediately closes" mid-run.**
+  The header run-switcher was a native `<select>` that `renderRunSelector()`
+  rebuilt via `innerHTML` on every SSE snapshot (~8×/s during a live run), so the
+  OS dropdown was destroyed the instant it opened and you could never switch runs
+  while a pipeline was active. The selector is now a custom listbox whose
+  open/closed state lives in JS over persistent DOM (listeners wired once); live
+  re-renders only refresh the trigger label and option rows, so it stays open while
+  the board updates underneath it (see *Changed*).
+- **Run-board card titles now show the real file name instead of `$file`.** A
+  per-file/memory step named like `"Write tests for $file"` rendered the raw
+  `$file` token on its kanban card in both front-ends. The token is now resolved
+  for display to the worked file's basename (`"Write tests for Button.tsx"`) on
+  agent cards (live board, drawer, run history) in the web UI and the Ink TUI
+  (`RunKanban` + the agent detail modal); stage-level merge cards that span every
+  per-file branch collapse the token to the plural `"files"`. Display-only — the
+  agent PROMPT still receives the exact relative path. New shared helper
+  `substituteFileInTitle` (`src/lib/title-format.ts`, mirrored verbatim in
+  `src/web/client/title-util.js` for the no-build browser client).
+
+### Added
+
+- **`huu-tests-findings.md`** — a new Test Suite deliverable: the finalize step
+  rolls every `suspected-bug` FAQ finding into a human-readable table of bugs the
+  run surfaced but (by the freeze) did not fix, deduped by a stable `sb-<id>`
+  join key and cross-checked against the tests that pin them.
+- **`$baseCommit` work-step prompt token** and a **base-commit Git Context line
+  for judges** (`src/orchestrator/index.ts`, `src/orchestrator/check-evaluator.ts`).
+  Since stage merges are already committed by the time a step or judge runs, a
+  bare `git status` is clean; exposing the run's base commit lets a step diff
+  what the run actually changed (`git diff --name-only $baseCommit..HEAD`) or
+  restore a frozen file (`git checkout $baseCommit -- <path>`). The Test Suite
+  cleanup step uses it to actively restore any source an agent drifted.
+
+> Note (materialization trap): `pipeline-bootstrap.ts` never overwrites an
+> existing `pipelines/huu-test-suite.pipeline.json`. Users who already ran huu
+> keep their old copy — delete that file to re-materialize the code-frozen
+> version (the committed copy in this repo has been regenerated).
 ## [3.0.0] - 2026-06-26
 
 ### Added

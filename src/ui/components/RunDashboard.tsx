@@ -6,6 +6,7 @@ import { Orchestrator } from '../../orchestrator/index.js';
 import type { AgentFactory } from '../../orchestrator/types.js';
 import { RunKanban } from './RunKanban.js';
 import { RunModal } from './RunModal.js';
+import { TimeoutPrompt } from './TimeoutPrompt.js';
 import { LogArea } from './LogArea.js';
 import { MorphLoader, MorphMark } from './MorphLoader.js';
 import { theme } from '../theme.js';
@@ -76,12 +77,18 @@ export function RunDashboard({
         conflictResolverFactory,
         autoScale,
         initialConcurrency,
+        // Single-run TUI holds the run open in `awaiting_retry` when it ends
+        // with failed cards so the user can retry them (R) before the summary.
+        interactiveRetry: true,
       }),
   );
   const [state, setState] = useState<OrchestratorState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  // Non-null while the "retry a timed-out card with a new limit" overlay is
+  // open; holds the agentId being retried.
+  const [retryAgentId, setRetryAgentId] = useState<number | null>(null);
   const [aborting, setAborting] = useState(false);
   // `null` = show every log entry; otherwise filter to the matching agentId.
   // `f` toggles between "all" and "focused agent" so the sidebar can zoom in.
@@ -280,6 +287,8 @@ export function RunDashboard({
   // window is wide enough to drop key events.
   const modalOpenRef = useRef(modalOpen);
   modalOpenRef.current = modalOpen;
+  const retryAgentIdRef = useRef(retryAgentId);
+  retryAgentIdRef.current = retryAgentId;
   const focusedKeyRef = useRef(focusedKey);
   focusedKeyRef.current = focusedKey;
   const stateRef = useRef(state);
@@ -301,8 +310,30 @@ export function RunDashboard({
         leftArrow: key.leftArrow,
         rightArrow: key.rightArrow,
       });
-      if (modalOpenRef.current) {
-        // The modal owns its own input while open. Nothing to do here.
+      if (modalOpenRef.current || retryAgentIdRef.current !== null) {
+        // The modal / retry overlay owns its own input while open.
+        return;
+      }
+      // Retry the focused failed card. Only meaningful while the run is held
+      // open in `awaiting_retry`. A timed-out card opens a new-timeout overlay;
+      // any other error re-runs immediately.
+      if (input === 'r' || input === 'R') {
+        const s = stateRef.current;
+        if (s?.status !== 'awaiting_retry') return;
+        const fid = focusedKeyRef.current ? Number(focusedKeyRef.current) : null;
+        if (fid === null || Number.isNaN(fid)) return;
+        const agent = s.agents.find((a) => a.agentId === fid);
+        if (!agent || agent.state !== 'error') return;
+        if (agent.errorKind === 'timeout') {
+          setRetryAgentId(fid);
+        } else {
+          void orch.retryTask(fid);
+        }
+        return;
+      }
+      // Finish the run from the awaiting_retry hold (accept current state).
+      if (input === 'd' || input === 'D') {
+        if (stateRef.current?.status === 'awaiting_retry') orch.finish();
         return;
       }
       if (input === '+' || input === '=') {
@@ -438,6 +469,31 @@ export function RunDashboard({
     return <RunModal agent={focusedAgent} stepPrompt={stepPrompt} onClose={handleModalClose} />;
   }
 
+  if (retryAgentId !== null) {
+    // Default the prompt to the pipeline's current single-file limit (most
+    // per-file fan-outs are single-file); the user bumps it for the retry.
+    const curMs = pipeline.singleFileCardTimeoutMs ?? pipeline.cardTimeoutMs ?? 300_000;
+    const defaultMinutes = Math.max(1, Math.round(curMs / 60_000));
+    return (
+      <Box flexDirection="column" width="100%">
+        <Box paddingX={1}>
+          <Text dimColor>
+            Retrying task <Text bold color="cyan">#{retryAgentId}</Text> (timed out) — set a new time limit
+          </Text>
+        </Box>
+        <TimeoutPrompt
+          defaultMinutes={defaultMinutes}
+          onSubmit={(minutes) => {
+            const id = retryAgentId;
+            setRetryAgentId(null);
+            void orch.retryTask(id, { timeoutMs: minutes * 60_000 });
+          }}
+          onCancel={() => setRetryAgentId(null)}
+        />
+      </Box>
+    );
+  }
+
   const elapsed = Math.floor(state.elapsedMs / 1000);
   const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
   const ss = String(elapsed % 60).padStart(2, '0');
@@ -472,8 +528,19 @@ export function RunDashboard({
         <Text dimColor>{'  ·  '}</Text>
         <Text>{state.completedTasks}/{state.totalTasks}{' '}done</Text>
         <Text dimColor>{'  ·  status: '}</Text>
-        <Text bold color={state.status === 'done' ? 'green' : state.status === 'error' ? 'red' : 'cyan'}>
-          {state.status}
+        <Text
+          bold
+          color={
+            state.status === 'done'
+              ? 'green'
+              : state.status === 'error'
+              ? 'red'
+              : state.status === 'awaiting_retry'
+              ? 'yellow'
+              : 'cyan'
+          }
+        >
+          {state.status === 'awaiting_retry' ? 'review (retry?)' : state.status}
         </Text>
         {state.status !== 'error' && state.integrationStatus.conflicts.some((c) => !c.resolved) && (
           <>
@@ -550,9 +617,15 @@ export function RunDashboard({
         )}
       </Box>
       <Box paddingX={1} width="100%">
-        <Text dimColor>
-          <Text bold>+</Text>/<Text bold>-</Text> concurrency (pins manual) · <Text bold>↑↓←→</Text> navigate · <Text bold>ENTER</Text> details · <Text bold>F</Text> filter logs ({logFilter !== null ? `A${logFilter}` : 'all'}) · <Text bold>A</Text> toggle auto-scale · <Text bold>M</Text> max agents · <Text bold>Q</Text> abort (press twice to force-exit)
-        </Text>
+        {state.status === 'awaiting_retry' ? (
+          <Text dimColor>
+            <Text bold color="yellow">{state.agents.filter((a) => a.state === 'error').length} failed</Text> · <Text bold>↑↓←→</Text> navigate · <Text bold>R</Text> retry focused card · <Text bold>D</Text> done (finish run) · <Text bold>Q</Text> abort
+          </Text>
+        ) : (
+          <Text dimColor>
+            <Text bold>+</Text>/<Text bold>-</Text> concurrency (pins manual) · <Text bold>↑↓←→</Text> navigate · <Text bold>ENTER</Text> details · <Text bold>F</Text> filter logs ({logFilter !== null ? `A${logFilter}` : 'all'}) · <Text bold>A</Text> toggle auto-scale · <Text bold>M</Text> max agents · <Text bold>Q</Text> abort (press twice to force-exit)
+          </Text>
+        )}
       </Box>
     </Box>
   );

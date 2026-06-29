@@ -199,19 +199,39 @@ terminal TUI back.
   flat. Click a card for **per-agent tokens, cost, branch, files and live
   logs**. Global log console, concurrency control (Auto · Manual · MAX) and a
   stop button up top.
+- **Errors are signalled, and cards retry.** A card that **hit its time limit**
+  shows in **amber** (`timeout`), distinct from the **red** of any other failure
+  (`failed`). When a run ends with error cards, huu **doesn't jump straight to
+  the summary**: it pauses in a **review** state (keeping the integration
+  worktree alive) so you can recover failures one at a time. Click the red/amber
+  card and hit **Retry** — a timeout additionally offers a **new, longer time
+  limit**; any other error just re-runs. The card re-runs against the current
+  integration HEAD and, on success, its branch is merged in — no need to re-run
+  the whole pipeline. A **Finish** button leaves the review hold. (Single-run
+  TUI: `R` retries the focused card, `D` finishes.)
 - **Project queue, in parallel.** Select **several projects** — each with its
   own config (directory, provider, model, concurrency) — and run them
   **concurrently** under one shared RAM/concurrency budget. Earlier projects
   have priority; later ones **backfill** the idle slots of the earlier ones
   (e.g. while one is merging) and yield the capacity back when it's needed — and
   under memory pressure the lowest-priority project's newest agent is killed
-  first. A **project selector** in the header lets you switch between the live
-  boards. If one fails, the rest keep going. Every execution is archived to the
+  first. A **project selector** in the header (a dropdown showing
+  **project · pipeline**) lets you switch between the live boards. **With the
+  queue already running you can go back home (← Home) and add more projects** —
+  they start **immediately**, no queue restart, and a *running* banner stays
+  visible while you pick. If one fails,
+  the rest keep going. Every execution is archived to the
   browser **history** (IndexedDB) with all cards, per-card costs and the
   per-project total — **exportable as JSON** in one click.
-- **Truly live log.** The text the agent generates lands in the log **as it
-  streams** — not just at tool boundaries. And **everything pi returns**
-  (reply + reasoning) is mirrored in real time to the **browser console**
+- **Truly live log — now an activity console.** The text the agent generates
+  lands in the log **as it streams** — not just at tool boundaries. The log
+  header is now a **live activity bar**: it sums how many tasks are running
+  **right now across every project** in flight (`⚡ N running · M projects ·
+  Q queued`), updated in real time. Each agent gets a **stable color**, and
+  warnings/errors stand out with a glyph and a colored rail; with more than one
+  project live, every project's lines merge into **one time-ordered stream**,
+  each line tagged with its project. And **everything pi returns** (reply +
+  reasoning) is still mirrored in real time to the **browser console**
   (DevTools → Console), each line tagged with its agent id; silence it with
   `window.HUU_LOG_STREAM = false`.
 - **Your key, in the browser.** Paste your `OPENROUTER_API_KEY` in the

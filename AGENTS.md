@@ -61,7 +61,9 @@ paragraph, for the current list.
 [container]  cli.tsx → web/serve.ts (DEFAULT front-end) | app.tsx (TUI, via --cli)
                 ↓
               web/ (node:http + SSE server + vanilla-JS browser client:
-                kanban, real-time run log, and an agent-output firehose
+                kanban, a real-time run-log activity console (live cross-run
+                task counter, per-agent hue, unified multi-project stream), and
+                an agent-output firehose
                 mirrored to the browser console; the `/simulation` route serves
                 a fully synthetic demo run — SimulationEngine, no git/LLM/key
                 — see the building-web-ui skill)
@@ -133,6 +135,26 @@ publishes; accumulates like tokens/logs, NOT reset on requeue). The Ink kanban
 `→ <action>` marker folded onto the `log:` line (the merge costs no extra
 `cardHeight()` row; the counters label does — keep them in sync).
 
+### Interactive retry of failed cards (`awaiting_retry`)
+
+A timed-out card carries `AgentStatus.errorKind = 'timeout'` (vs `'failed'`),
+surfaced distinctly in both front-ends (amber `TIMEOUT` vs red `FAILED`). When
+the step walk ends with one or more task cards in `error` AND the orchestrator
+was created with `OrchestratorOptions.interactiveRetry` (set by the single-run
+TUI `RunDashboard` and every web run — NOT by `run-many`/smoke/simulation), the
+run does not tear down: it enters a new `OrchestratorState.status` value
+**`awaiting_retry`**, keeping the integration worktree alive while `start()`
+parks on a finish gate. `Orchestrator.retryTask(agentId, {timeoutMs?})` re-runs
+ONE failed task against the current integration HEAD (reusing the pool +
+per-attempt auto-retry, with an optional longer per-task timeout) and merges its
+branch on success; `finish()` (or `abort()`) releases the gate so the run
+finalizes normally. User retries bump `AgentStatus.manualRetries` (kanban `⟳N`).
+Headless paths are byte-identical — without `interactiveRetry`, `start()`
+resolves immediately as before. TUI: `R` retries the focused card, `D` finishes;
+web: an error card's drawer offers **Retry** (+ minutes for timeouts) and
+**Finish**, via `POST /api/run/retry` and `/api/run/finish`. The multi-run TUI
+dashboard has no per-card retry (no per-card focus); the web covers multi-run.
+
 ### Multi-run scheduling (GlobalScheduler)
 
 A `GlobalScheduler` (`src/orchestrator/global-scheduler.ts`) runs MULTIPLE
@@ -163,7 +185,11 @@ run is merging). The **web** front-end is wired: `WebRunManager` holds a
 `Map<runId>` of concurrent runs over one scheduler, `/api/run` returns a runId
 (no 409), SSE frames + the agent-stream firehose are per-`runId`, and the
 browser shows a **project selector** when >1 run is active (the queue dispatches
-all items at once). See the building-web-ui skill. The **Ink TUI** has the same
+all items at once). You can also **return to the launch view while the queue is
+running and add more projects** — each new `/api/run` is admitted LIVE by the
+shared scheduler (no 409, no restart), with a running banner on the home view
+(client `S.homePinned` gates the per-frame board auto-switch). See the
+building-web-ui skill. The **Ink TUI** has the same
 capability via `MultiRunDashboard` (`src/ui/components/MultiRunDashboard.tsx`):
 multi-select 2+ saved pipelines (SPACE) → run them concurrently with a
 `Tab`/`1-9` project switcher — see the building-tui-screens skill.
@@ -178,7 +204,7 @@ default pipelines into `pipelines/` on first run. Each one is idempotent
 
 | Pipeline | What it does | Methodology |
 |---|---|---|
-| `huu Test Suite` (`_default`) | Stack detection → test runner setup → **autonomous recon** picks the most test-worthy files (memory-scope, NO manual picking) → parallel per-file unit tests → cleanup + coverage badge, gated by a CheckStep loop that reworks until the suite is green. Prompts bake in mutation-surviving assertion rules and an anti-flaky determinism ruleset. | Google Testing Blog (behavior, not implementation) + [Fowler non-determinism](https://martinfowler.com/articles/nonDeterminism.html) + [Stryker](https://stryker-mutator.io/) follow-up |
+| `huu Test Suite` (`_default`) | Stack detection → test runner setup → **autonomous recon** picks the most test-worthy files (memory-scope, NO manual picking) → parallel per-file unit tests → cleanup + coverage badge, gated by a CheckStep loop that reworks until the suite is green. **CODE-FROZEN**: it only writes tests + its own artifacts and NEVER edits your source — a bug a test exposes is *characterized* (current behavior pinned) and reported in `huu-tests-findings.md`, never fixed. Prompts bake in mutation-surviving assertion rules and an anti-flaky determinism ruleset; the judge diffs `$baseCommit..HEAD` to enforce the freeze and reject cheap-green (assertion-free) tests. | Google Testing Blog (behavior, not implementation) + [Fowler non-determinism](https://martinfowler.com/articles/nonDeterminism.html) + Feathers characterization testing + [Stryker](https://stryker-mutator.io/) follow-up |
 | `huu Knowledge System` | Builds the full knowledge-skills system on a shared `.huu/knowledge/` blackboard — fully autonomous via `scope: "memory"` (no user file-picking): recon writes the study list (with per-file hints) → memory fan-out deep study (findings) → ONE synthesis step (topics + routing ground truth, written before any skill exists) → per-topic dossiers → skills materialized one-parallel-agent-per-dossier (memory fan-out, judge-looped) → meta-skills + LEARNINGS + routing surface (router-aware: extends an existing router/`catalog.md`, else creates `project-knowledge`) → blind routing eval gated by a description-sharpening rework loop. Engineered for small models: one cognitive op per step, mechanical judges, stub-safe forward defaults. Setup pipeline — mutates the repo. | [Agent Skills spec](https://agentskills.io/specification) + CoALA memory taxonomy + Voyager self-verification |
 | `huu Docs Audit` | Inventories every doc, classifies via the Diátaxis compass, scores the README (standard-readme grounded), flags stale references, measures inline API-doc coverage. Report-only + judge gate. | [Diátaxis](https://diataxis.fr/) + [standard-readme](https://github.com/RichardLitt/standard-readme) |
 | `huu Quality Audit` | Sonar-style report: cyclomatic + cognitive complexity, size metrics, churn×complexity hotspots (git-log mining), duplication, dead code, hotspot-weighted composite score. Report-only + judge gate. | [SonarSource cognitive complexity](https://www.sonarsource.com/docs/CognitiveComplexity.pdf) + [Tornhill hotspots](https://docs.enterprise.codescene.io/versions/4.0.16/guides/technical/hotspots.html) |
@@ -230,10 +256,17 @@ depcheck, vulture, …) is invoked ephemerally via `npx --yes`,
 to your project's manifests.
 
 Two pipelines mutate production state by design (setup pipelines, not
-audits): `huu Test Suite` (writes `huu-tests.md` to repo root + inserts
-a tests-coverage badge in `README.md`; its recon hands off a transient
-`huu-tests-targets.json` at the root that the finalize step deletes) and
-`huu Knowledge System`
+audits): `huu Test Suite` (writes test files + `huu-tests.md` +
+`huu-tests-faq.json` + `huu-tests-findings.md` to the repo root, inserts
+a tests-coverage badge in `README.md`, and adds only test/dev-deps + a
+test script to the runner manifest; its recon hands off a transient
+`huu-tests-targets.json` at the root that the finalize step deletes). It
+is **code-frozen** — it never edits application/library source: the
+cleanup step restores any drifted file to `$baseCommit` and the judge
+rejects the run if `git diff --name-only $baseCommit..HEAD` shows a
+non-test source path. Suspected bugs are pinned by characterization
+tests and surfaced in `huu-tests-findings.md`, not fixed. The other
+setup pipeline is `huu Knowledge System`
 (writes `.agents/skills/**` + `.huu/knowledge/**`, same single
 `.gitignore` adjustment rule with `!.huu/knowledge/`).
 

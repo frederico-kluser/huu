@@ -1,8 +1,8 @@
 ---
 name: working-on-orchestrator
-description: Explains huu's run lifecycle and its invariants — stage loop, task decomposition, worker pool, AutoScaler memory math, the memory-guard kill/requeue path with its consumable killedAgentIds Set, CheckStep judge execution (reserved agentId 9998) and checkRuns kanban state. Use when changing anything in src/orchestrator/ — scheduling, concurrency, requeue, check execution, run state — or when debugging why agents are killed, requeued or misrouted.
+description: Explains huu's run lifecycle and its invariants — stage loop, task decomposition, worker pool, AutoScaler memory math, the memory-guard kill/requeue path with its consumable killedAgentIds Set, the interactive-retry hold (awaiting_retry + retryTask/finish), CheckStep judge execution (reserved agentId 9998) and checkRuns kanban state. Use when changing anything in src/orchestrator/ — scheduling, concurrency, requeue, retry, check execution, run state — or when debugging why agents are killed, requeued or misrouted.
 metadata:
-  version: 0.4.0
+  version: 0.5.0
   type: knowledge
 ---
 
@@ -45,6 +45,12 @@ At ≥95% RAM/CPU the guard kills the NEWEST agent (picked by `startedAt` — le
 
 The marker for "this failure was a guard kill, not a real error" is the consumable Set `killedAgentIds` in `orchestrator/index.ts:231` — `.add()` at kill time (`:414`), `.delete()` when the rejection is processed (`:1187`). It is deliberately NOT a status flag on the task: the agent's promise may reject long after the kill, and a lingering flag would misclassify a later, genuine error of the requeued attempt. `requeue.test.ts` pins this race — keep it green and don't "simplify" the Set into a boolean.
 
+### Interactive retry (`awaiting_retry`) — USER-triggered, holds the run open
+
+The integration worktree is torn down in `start()`'s `finally`, so a retry that must MERGE its result has to run while the run is alive. Mechanism: a new `OrchestratorState.status` value `awaiting_retry`, gated by `OrchestratorOptions.interactiveRetry` (default false → headless/`run-many`/smoke/sim/tests are byte-identical; `start()` resolves immediately). After the step-walk loop and BEFORE the terminal status logic, if `interactiveRetry && !aborted && status!=='error' && hasFailedCards()`, set `awaiting_retry`, emit, and `await new Promise(r => this.finishResolve = r)` — INSIDE the try, so teardown only runs after the gate resolves. `finish()` (idempotent; bails while `retryingIds.size>0` so teardown can't race a merge) and `abort()` both resolve the gate.
+
+`retryTask(agentId, {timeoutMs?})` reuses ALL existing machinery: reconstruct the task from a `tasksById` map (the CARD lacks `files[]`/`hint` — populate the map at the TOP of `spawnAndRun`, the single choke point every task passes through), reset the card to `pending` (clear error/`errorKind`, bump `AgentStatus.manualRetries`, kanban `⟳N`), `executeTaskPool([task])` (re-runs off `stageBaseRef` = current integration HEAD, with per-attempt auto-retry), then on `state==='done' && commitSha` push a synthetic StageIntegration card (`visitIndex = RETRY_MERGE_VISIT_BASE` 1e6 + seq, never collides with walk visitIndexes ≤ `maxNodeExecutions`) and `runStageIntegration([task], visitIndex)` to merge just that branch, advancing `stageBaseRef` so retries stack. A timed-out card retries with a longer per-task timeout via a `retryTimeoutOverrides` `Map<agentId,ms>` consumed in spawnAndRun (`override ?? computeCardTimeoutMs(...)`). THREE traps: (1) flip `status` OUT of `awaiting_retry` (→ `running`) BEFORE the reset-emit, else a subscriber keyed on `awaiting_retry` sees the card already cleared and prematurely finishes mid-retry; (2) DECREMENT `completedTasks` before re-running (the failure already counted it; the re-run re-counts once → net zero); (3) make `appendManifestEntry` REPLACE an existing same-agentId entry (a retry reuses the id → else a duplicate). `errorKind` (`'timeout'|'failed'`) was ALREADY set on final-fail — only the UI/retry surface was new. Pinned by `retry-task.test.ts`.
+
 ### Multi-run scheduling (`global-scheduler.ts`) — subordinate mode
 
 A `GlobalScheduler` runs N runs in ONE process under a single shared budget. It owns the ONLY machine read (one `SystemMetricsSampler` + one budget `AutoScaler`); per-run AutoScalers go dormant. An `Orchestrator` turns subordinate via `OrchestratorOptions.scheduler`:
@@ -69,4 +75,4 @@ A `GlobalScheduler` runs N runs in ONE process under a single shared budget. It 
 - `src/orchestrator/index.ts`, `src/orchestrator/auto-scaler.ts`, `src/orchestrator/requeue.test.ts` (the race spec)
 - Related skills: orchestrating-git-worktrees, isolating-agent-ports, writing-tests
 
-> Facts verified against source on 2026-06-12 (line refs included above); greedy/MAX auto-scaling mode verified against source on 2026-06-25; `simulation/` SimulationEngine demo driver added 2026-06-26; multi-run `GlobalScheduler` + subordinate mode added 2026-06-26.
+> Facts verified against source on 2026-06-12 (line refs included above); greedy/MAX auto-scaling mode verified against source on 2026-06-25; `simulation/` SimulationEngine demo driver added 2026-06-26; multi-run `GlobalScheduler` + subordinate mode added 2026-06-26; interactive-retry hold (`awaiting_retry`/`retryTask`/`finish`, `interactiveRetry` option) added + promoted from `[task:timeout-error-retry]` 2026-06-29.

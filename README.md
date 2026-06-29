@@ -200,6 +200,16 @@ TUI no terminal.
   cards. Clique num card pra ver **tokens, custo, branch, arquivos e logs ao
   vivo** por agente. Console de log global, controle de concorrência
   (Auto · Manual · MAX) e botão de parar no topo.
+- **Erro sinalizado e re-execução por card.** Um card que **estourou o tempo
+  limite** aparece em **âmbar** (`timeout`), distinto do **vermelho** de
+  qualquer outra falha (`failed`). Quando uma execução termina com cards em
+  erro, o huu **não pula direto pro resumo**: ele pausa em modo **review**
+  (mantendo o worktree de integração vivo) pra você recuperar as falhas uma a
+  uma. Clique no card vermelho/âmbar e use **Retry** — um timeout ainda oferece
+  um **novo tempo limite** maior; qualquer outro erro só re-executa. O card roda
+  de novo sobre o HEAD atual da integração e, se passar, é mesclado — sem
+  re-rodar o pipeline inteiro. O botão **Finish** encerra o review. (No TUI de
+  execução única: `R` re-tenta o card em foco, `D` finaliza.)
 - **Fila de projetos, em paralelo.** Selecione **vários projetos** — cada um
   com sua própria config (diretório, provider, modelo, concorrência) — e
   rode-os **simultaneamente** sob um único orçamento de RAM/concorrência. Os
@@ -207,15 +217,24 @@ TUI no terminal.
   vagas ociosas dos anteriores (ex.: enquanto um está em merge) e devolvem a
   capacidade quando ela é necessária — e sob pressão de memória mata-se primeiro
   o agente mais novo do projeto de menor prioridade. Um **seletor de projetos**
-  no topo permite alternar entre os boards ao vivo. Se um falha, os outros
-  seguem. Cada execução é arquivada no **histórico** do navegador (IndexedDB)
+  no topo (um dropdown que mostra **projeto · pipeline**) permite alternar entre
+  os boards ao vivo. **Com a fila já rodando, dá para voltar à home (← Home) e
+  adicionar mais projetos** — eles começam a rodar **na hora**, sem reiniciar a
+  fila, e um aviso de *rodando* fica visível enquanto você seleciona. Se um
+  falha, os outros seguem. Cada execução é arquivada no **histórico** do navegador (IndexedDB)
   com todos os cards, os custos por card e o total por projeto — **exportável
   em JSON** com um clique.
-- **Log ao vivo, de verdade.** O texto que o agente vai gerando entra no
-  log **conforme sai** — não só nas trocas de ferramenta. E **tudo que o
-  pi devolve** (resposta + raciocínio) é espelhado em tempo real no
-  **console do navegador** (DevTools → Console), com o id do agente em cada
-  linha; silencie com `window.HUU_LOG_STREAM = false`.
+- **Log ao vivo, de verdade — agora um console de atividade.** O texto que o
+  agente vai gerando entra no log **conforme sai** — não só nas trocas de
+  ferramenta. O cabeçalho do log virou uma **barra de atividade ao vivo**: soma
+  quantas tasks estão rodando **agora, somando todos os projetos** em execução
+  (`⚡ N rodando · M projetos · Q na fila`), atualizado em tempo real. Cada
+  agente ganha uma **cor estável** e os níveis de aviso/erro saltam com glyph e
+  trilha colorida; com mais de um projeto vivo, as linhas de todos se fundem num
+  **stream único** ordenado por tempo, cada linha marcada com seu projeto. E
+  **tudo que o pi devolve** (resposta + raciocínio) segue espelhado em tempo
+  real no **console do navegador** (DevTools → Console), com o id do agente em
+  cada linha; silencie com `window.HUU_LOG_STREAM = false`.
 - **Sua key, no navegador.** Cole sua `OPENROUTER_API_KEY` no formulário de
   launch — ela é **validada na hora** contra o provider e fica só na aba do
   navegador (`sessionStorage`), enviada a cada run e **nunca escrita em

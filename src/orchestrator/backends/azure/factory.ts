@@ -4,7 +4,7 @@ import {
   AuthStorage,
   ModelRegistry,
 } from '@mariozechner/pi-coding-agent';
-import { getModel, type Model } from '@mariozechner/pi-ai';
+import { getModel, clampThinkingLevel, type Model } from '@mariozechner/pi-ai';
 import type { AgentEvent, AgentFactory, SpawnedAgent } from '../../types.js';
 import { supportsThinking } from '../../../lib/model-factory.js';
 import { checkAzureReachable } from '../../../lib/azure.js';
@@ -12,6 +12,7 @@ import { AuthError } from '../../../lib/auth-error.js';
 import { buildAgentMessageHeader } from '../_shared/build-message.js';
 import { createDisposableState } from '../_shared/lifecycle.js';
 import { translatePiEvent } from '../pi/event-mapper.js';
+import { pickThinkingLevel } from '../pi/factory.js';
 
 const AZURE_PROVIDER = 'azure-openai-responses' as const;
 
@@ -120,9 +121,14 @@ export const azureAgentFactory: AgentFactory = async (
   const modelRegistry = ModelRegistry.create(authStorage);
   modelRegistry.registerProvider(AZURE_PROVIDER, {});
 
-  const thinkingLevel = supportsThinking(modelId)
-    ? 'medium'
-    : await resolveThinkingLevel(modelId, onEvent);
+  const baseThinking = await resolveThinkingLevel(modelId, onEvent);
+  // The conflict-resolver (integration) agent runs at the model's max thinking
+  // level; regular agents keep the base level.
+  const thinkingLevel = pickThinkingLevel(
+    baseThinking,
+    runtimeContext?.maxThinking ?? false,
+    clampThinkingLevel(model, 'xhigh'),
+  );
 
   const { session } = await createAgentSession({
     model,

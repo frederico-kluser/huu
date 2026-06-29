@@ -243,6 +243,57 @@ describe('web server', () => {
     const snap = manager.getSnapshot();
     expect(phase, snap.errorReason ?? 'no error reason').toBe('done');
     expect(snap.state).not.toBeNull();
+    // The snapshot carries the project directory it ran in (defaults to cwd),
+    // so the client can label the run selector by project, not just pipeline.
+    expect(snap.runDirectory).toBe(repo);
+  }, 30_000);
+
+  it('validates POST /api/run/retry and no-ops an unknown run', async () => {
+    // Missing/invalid agentId is a 400.
+    const bad = await fetch(base + '/api/run/retry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId: 'nope' }),
+    });
+    expect(bad.status).toBe(400);
+
+    // Well-formed payload for an unknown run id is accepted as a silent no-op
+    // (the run may have already finalized) — never a 500.
+    const ok = await fetch(base + '/api/run/retry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId: 'nope', agentId: 1, timeoutMinutes: 7 }),
+    });
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).ok).toBe(true);
+  });
+
+  it('accepts POST /api/run/finish for any run id', async () => {
+    const res = await fetch(base + '/api/run/finish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId: 'nope' }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+  });
+
+  it('accepts conflictResolverModelId on POST /api/run and starts the run', async () => {
+    const res = await fetch(base + '/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pipelineName: 'web-test-pipe',
+        backend: 'stub',
+        modelId: 'stub',
+        conflictResolverModelId: 'deepseek/deepseek-v4-pro',
+      }),
+    });
+    expect(res.status).toBe(200);
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(j.run.runId).toBeTruthy();
+    manager.abort();
   }, 30_000);
 
   it('accepts concurrent runs (no 409) and tracks each by a distinct runId', async () => {
@@ -260,6 +311,9 @@ describe('web server', () => {
     expect(j1.run.runId).toBeTruthy();
     expect(j2.run.runId).toBeTruthy();
     expect(j1.run.runId).not.toBe(j2.run.runId);
+    // The serialized snapshot exposes the run directory for the project selector.
+    expect(j1.run.runDirectory).toBe(repo);
+    expect(j2.run.runDirectory).toBe(repo);
     // Both runs are tracked by the manager (same repo → repo-lock serializes git).
     const ids = manager.getSnapshots().map((s) => s.runId);
     expect(ids).toContain(j1.run.runId);

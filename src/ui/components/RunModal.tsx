@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
 import type { AgentStatus } from '../../lib/types.js';
+import { substituteFileInTitle } from '../../lib/title-format.js';
 
 // In-house agent detail modal. Replaces the previous ink-kanban-board
 // `CardDetailModal` so the run path has zero dependency on third-party
@@ -270,7 +271,7 @@ export function RunModal({ agent, stepPrompt, onClose }: Props): React.JSX.Eleme
       node: (
         <Text wrap="truncate-end">
           <Text dimColor>  stage    </Text>
-          {agent.stageIndex + 1} — {agent.stageName}
+          {agent.stageIndex + 1} — {substituteFileInTitle(agent.stageName, agent.currentFile)}
         </Text>
       ),
     });
@@ -403,7 +404,7 @@ export function RunModal({ agent, stepPrompt, onClose }: Props): React.JSX.Eleme
           <Text wrap="truncate-end">
             <Text bold color="cyan">agent #{agent.agentId}</Text>
             <Text dimColor>  ·  </Text>
-            <Text>{agent.stageName}</Text>
+            <Text>{substituteFileInTitle(agent.stageName, agent.currentFile)}</Text>
           </Text>
           <Text>
             <Text dimColor>{scrollLabel}{followLabel}</Text>
