@@ -10,12 +10,19 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ### Changed
 
-- **Web project selector is now a dropdown labelled by project + pipeline.** When
-  more than one run is live, the header selector switched from side-by-side tabs
-  to a single `<select>` showing **`project · pipeline`** per run (a leading dot
-  reflects the active run's phase; finished/failed runs carry a ✓/✕ marker). The
-  run snapshot now carries its `runDirectory` so each run can be labelled by the
-  project it operates on, not just the pipeline name.
+- **Web project selector is now a custom, animated dropdown — no native
+  `<select>`.** When more than one run is live, the header selector is a simulated
+  listbox: a pill trigger plus a glass `role="listbox"` panel that opens and
+  closes with a [Motion](https://motion.dev) spring (chevron rotate + per-row
+  stagger), showing **`project · pipeline`** per run (a leading dot reflects each
+  run's phase; finished/failed runs carry a ✓/✕ marker). It replaces the OS
+  `<select>`, whose look couldn't be themed and — being rebuilt on every snapshot —
+  closed the instant it opened during a run (see *Fixed*). The run snapshot carries
+  its `runDirectory` so each run is labelled by the project it operates on, not just
+  the pipeline name. Keyboard-navigable (arrows/Enter/Esc), dismiss-on-outside-click,
+  and degrades gracefully (no animation) under `prefers-reduced-motion`. Motion is
+  **vendored** under `src/web/client/vendor/` so the no-build, offline browser client
+  keeps working with no CDN.
 - **`huu Test Suite` is now code-frozen — it writes tests and NEVER edits your
   source.** The flagship pipeline's step prompts and judge were rewritten so the
   production tree is read-only. The old escape hatch ("if a real bug is exposed,
@@ -44,6 +51,14 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ### Fixed
 
+- **The web project selector no longer "opens and immediately closes" mid-run.**
+  The header run-switcher was a native `<select>` that `renderRunSelector()`
+  rebuilt via `innerHTML` on every SSE snapshot (~8×/s during a live run), so the
+  OS dropdown was destroyed the instant it opened and you could never switch runs
+  while a pipeline was active. The selector is now a custom listbox whose
+  open/closed state lives in JS over persistent DOM (listeners wired once); live
+  re-renders only refresh the trigger label and option rows, so it stays open while
+  the board updates underneath it (see *Changed*).
 - **Run-board card titles now show the real file name instead of `$file`.** A
   per-file/memory step named like `"Write tests for $file"` rendered the raw
   `$file` token on its kanban card in both front-ends. The token is now resolved

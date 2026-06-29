@@ -1383,33 +1383,159 @@ function renderActiveRun() {
   else updateQueueChrome();
 }
 
+/* ---------------- Project selector (custom simulated dropdown) ----------------
+   A Motion-animated listbox listing every concurrent run as "project · pipeline",
+   shown only when MORE THAN ONE run is tracked. Picking an option switches the
+   viewed run; a leading status dot reflects each run's phase and finished/failed
+   runs carry a ✓/✕ mark so the open list stays glanceable.
+
+   Why NOT a native <select>: renderRunSelector() runs on every SSE snapshot
+   (~8×/s during a live run), and rebuilding a <select> slammed the OS popup shut
+   the instant it opened — the "opens and immediately closes" bug. This dropdown
+   keeps its open state in JS (runSel.open) over PERSISTENT DOM whose listeners
+   are wired ONCE: live re-renders only refresh the trigger label and (while open)
+   the option rows, never the open/closed state — so it stays open while the board
+   updates underneath it. */
+const runSel = { open: false, active: -1 };
+
+/** The vendored Motion engine (window.Motion) — null-safe so the UI still works
+ *  if vendor/motion.js ever fails to load. */
+function motionEngine() { return typeof window !== 'undefined' ? window.Motion : null; }
+function runSelMotion() { const m = motionEngine(); return m && m.animate && !prefersReducedMotion() ? m : null; }
+
+function runSelRuns() { return [...S.runs.values()].filter((r) => r.runId); }
+function runMark(phase) { return phase === 'done' ? '✓' : phase === 'error' ? '✕' : ''; }
+function runLabel(r) { const proj = projectName(r.runDirectory); const pipe = r.pipelineName || r.runId; return proj ? `${proj} · ${pipe}` : pipe; }
+
+function runSelOptionsHtml(runs) {
+  return runs.map((r, i) =>
+    `<li class="rsel__opt${r.runId === S.activeRunId ? ' sel' : ''}${i === runSel.active ? ' active' : ''}"`
+    + ` role="option" id="rsel-opt-${i}" data-id="${esc(r.runId)}"`
+    + ` aria-selected="${r.runId === S.activeRunId ? 'true' : 'false'}">`
+    + `<span class="run-select__dot" data-phase="${esc(r.phase || 'idle')}"></span>`
+    + `<span class="rsel__opt-label">${esc(runLabel(r))}</span>`
+    + `<span class="rsel__opt-mark">${runMark(r.phase)}</span></li>`,
+  ).join('');
+}
+
+/** Build the trigger + menu shell ONCE and wire listeners once; later renders reuse it. */
+function ensureRunSelDom(el) {
+  if ($('runSelTrigger')) return;
+  el.innerHTML =
+    `<button class="rsel__trigger" id="runSelTrigger" type="button" aria-haspopup="listbox"`
+    + ` aria-expanded="false" aria-label="Switch between running projects">`
+    + `<span class="run-select__dot" id="runSelDot" data-phase="idle"></span>`
+    + `<span class="rsel__label" id="runSelLabel"></span>`
+    + `<span class="rsel__chev" id="runSelChev" aria-hidden="true">⌄</span></button>`
+    + `<ul class="rsel__menu" id="runSelMenu" role="listbox" tabindex="-1" hidden></ul>`;
+  const trigger = $('runSelTrigger');
+  const menu = $('runSelMenu');
+  trigger.addEventListener('click', () => (runSel.open ? closeRunSel() : openRunSel()));
+  // All keyboard lives on the trigger (it keeps focus); the menu is presentation.
+  trigger.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { if (runSel.open) { e.preventDefault(); closeRunSel(); } return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); runSel.open ? moveRunSelActive(1) : openRunSel(); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); if (runSel.open) moveRunSelActive(-1); return; }
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (!runSel.open) { openRunSel(); return; }
+      const r = runSelRuns()[runSel.active];
+      if (r) pickRun(r.runId);
+    }
+  });
+  // mousedown (not click) so the pick wins before any focus/blur reshuffle.
+  menu.addEventListener('mousedown', (e) => {
+    const li = e.target.closest ? e.target.closest('.rsel__opt') : null;
+    if (li && li.dataset.id) { e.preventDefault(); pickRun(li.dataset.id); }
+  });
+}
+
+/** Refresh ONLY the option rows (keeps open/closed state untouched). */
+function renderRunSelMenu() {
+  const menu = $('runSelMenu');
+  if (!menu) return;
+  menu.innerHTML = runSelOptionsHtml(runSelRuns());
+  const trigger = $('runSelTrigger');
+  if (trigger) {
+    if (runSel.active >= 0) trigger.setAttribute('aria-activedescendant', 'rsel-opt-' + runSel.active);
+    else trigger.removeAttribute('aria-activedescendant');
+  }
+  const act = menu.querySelector('.rsel__opt.active');
+  if (act) act.scrollIntoView({ block: 'nearest' });
+}
+
+function moveRunSelActive(d) {
+  const runs = runSelRuns();
+  if (!runs.length) return;
+  if (runSel.active < 0) runSel.active = Math.max(0, runs.findIndex((r) => r.runId === S.activeRunId));
+  runSel.active = Math.min(runs.length - 1, Math.max(0, runSel.active + d));
+  renderRunSelMenu();
+}
+
+function pickRun(id) {
+  S.activeRunId = id;
+  closeRunSel();
+  renderRunSelector();
+  renderActiveRun();
+}
+
+function openRunSel() {
+  const menu = $('runSelMenu'), trigger = $('runSelTrigger'), chev = $('runSelChev');
+  if (!menu || runSel.open) return;
+  runSel.open = true;
+  runSel.active = Math.max(0, runSelRuns().findIndex((r) => r.runId === S.activeRunId));
+  trigger.setAttribute('aria-expanded', 'true');
+  renderRunSelMenu();
+  menu.hidden = false;
+  const M = runSelMotion();
+  if (M) {
+    M.animate(menu, { opacity: [0, 1], scale: [0.96, 1], y: [-6, 0] }, { type: 'spring', stiffness: 520, damping: 32 });
+    const opts = menu.querySelectorAll('.rsel__opt');
+    if (opts.length) M.animate(opts, { opacity: [0, 1], y: [-4, 0] }, { delay: M.stagger(0.025), duration: 0.18, ease: [0.2, 0.7, 0.3, 1] });
+    M.animate(chev, { rotate: 180 }, { type: 'spring', stiffness: 500, damping: 30 });
+  } else if (chev) { chev.style.transform = 'rotate(180deg)'; }
+}
+
+function closeRunSel() {
+  const menu = $('runSelMenu'), trigger = $('runSelTrigger'), chev = $('runSelChev');
+  if (!menu || !runSel.open) return;
+  runSel.open = false;
+  runSel.active = -1;
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.removeAttribute('aria-activedescendant');
+  const M = runSelMotion();
+  if (chev) { if (M) M.animate(chev, { rotate: 0 }, { type: 'spring', stiffness: 500, damping: 30 }); else chev.style.transform = 'rotate(0deg)'; }
+  if (M) {
+    // Hide only after the exit finishes AND only if still closed (a re-open mid-exit must win).
+    const anim = M.animate(menu, { opacity: [1, 0], scale: [1, 0.97], y: [0, -6] }, { duration: 0.14, ease: 'easeIn' });
+    const settle = () => { if (!runSel.open) menu.hidden = true; };
+    anim.finished.then(settle).catch(settle);
+  } else {
+    menu.hidden = true;
+  }
+}
+
 /**
- * The project selector — a dropdown listing every concurrent run as
- * "project · pipeline", shown only when MORE THAN ONE run is tracked. Picking an
- * option switches the viewed run. A leading status dot reflects the active run's
- * phase; finished/failed runs carry a ✓/✕ marker in their option so the open
- * list stays glanceable.
+ * Public entry, called on every render. Shows/updates the trigger and, while the
+ * menu is open, refreshes its rows — WITHOUT ever forcing it open or closed.
  */
 function renderRunSelector() {
   const el = $('runSelector');
   if (!el) return;
-  const runs = [...S.runs.values()].filter((r) => r.runId);
-  if (runs.length <= 1) { el.hidden = true; el.innerHTML = ''; return; }
+  const runs = runSelRuns();
+  if (runs.length <= 1) {
+    if (runSel.open) closeRunSel();
+    el.hidden = true;
+    return;
+  }
+  ensureRunSelDom(el);
   el.hidden = false;
-  const activePhase = (S.activeRunId && S.runs.get(S.activeRunId)) ? S.runs.get(S.activeRunId).phase : 'idle';
-  const options = runs
-    .map((r) => {
-      const proj = projectName(r.runDirectory);
-      const pipe = r.pipelineName || r.runId;
-      const label = proj ? `${proj} · ${pipe}` : pipe;
-      const mark = r.phase === 'done' ? ' ✓' : r.phase === 'error' ? ' ✕' : '';
-      const sel = r.runId === S.activeRunId ? ' selected' : '';
-      return `<option value="${esc(r.runId)}"${sel}>${esc(label + mark)}</option>`;
-    })
-    .join('');
-  el.innerHTML =
-    `<span class="run-select__dot" data-phase="${esc(activePhase)}"></span>` +
-    `<select class="run-select" id="runSelect" aria-label="Switch between running projects">${options}</select>`;
+  const activeRun = (S.activeRunId && S.runs.get(S.activeRunId)) || runs[0];
+  const lbl = $('runSelLabel');
+  if (lbl) lbl.textContent = runLabel(activeRun);
+  const dot = $('runSelDot');
+  if (dot) dot.dataset.phase = activeRun.phase || 'idle';
+  if (runSel.open) renderRunSelMenu(); // live rows update; open state preserved
 }
 
 function setStatus(phase) {
@@ -1447,18 +1573,14 @@ $('abortBtn').addEventListener('click', async () => {
   try { await api('/api/run/abort', { method: 'POST', body: JSON.stringify({ runId: S.activeRunId }) }); toast('Stopping run…'); } catch (e) { toast(e.message, true); }
 });
 
-// Project selector: pick an option to switch which run's board is shown. The
-// <select> is rebuilt on every render, so delegate the (bubbling) change event
-// from the stable container.
-(() => {
-  const rsel = $('runSelector');
-  if (rsel) rsel.addEventListener('change', (e) => {
-    if (!e.target || e.target.id !== 'runSelect') return;
-    S.activeRunId = e.target.value;
-    renderRunSelector();
-    renderActiveRun();
-  });
-})();
+// Dismiss the project selector on any pointer-down outside it. mousedown (not
+// click) so it settles before the menu's own mousedown pick; clicks INSIDE the
+// host (trigger toggle, option pick) are handled by their own listeners.
+document.addEventListener('mousedown', (e) => {
+  if (!runSel.open) return;
+  const host = $('runSelector');
+  if (host && !host.contains(e.target)) closeRunSel();
+});
 
 /* ---------------- Board reconciler ---------------- */
 const ACTIVE_PHASES = new Set(['worktree_creating','worktree_ready','session_starting','streaming','tool_running','finalizing','validating','committing','pushing','cleaning_up']);
