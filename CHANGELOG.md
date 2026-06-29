@@ -23,6 +23,18 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
   and degrades gracefully (no animation) under `prefers-reduced-motion`. Motion is
   **vendored** under `src/web/client/vendor/` so the no-build, offline browser client
   keeps working with no CDN.
+- **Run log redesigned into a live, cross-project activity console.** The log
+  drawer's header is now a **live activity bar** that sums the agents running
+  **right now across every concurrent run** (`⚡ N running · M projects ·
+  Q queued`), refreshed on every frame — the count reflects all projects in
+  real time, not just the viewed one. Each agent gets a stable hue chip so
+  parallel work is visually separable, level glyphs + a colored rail flag
+  warnings/errors, and when more than one run is live the body becomes a single
+  timestamp-ordered stream merging every run's lines (each tagged with its
+  project). A level filter (All · ⚠ · ✕), a "↓ Latest" jump pill and
+  auto-expand-on-first-run round it out. Entirely client-side: the cross-run
+  count is derived from the run snapshots already on the wire — no
+  orchestrator/server/SimulationEngine change.
 - **`huu Test Suite` is now code-frozen — it writes tests and NEVER edits your
   source.** The flagship pipeline's step prompts and judge were rewritten so the
   production tree is read-only. The old escape hatch ("if a real bug is exposed,

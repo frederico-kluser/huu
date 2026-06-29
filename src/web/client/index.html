@@ -206,14 +206,40 @@
           </div>
         </div>
 
-        <!-- Global log drawer -->
+        <!-- Global run log — a live activity console. The header doubles as a
+             cross-project activity bar: it sums the agents running RIGHT NOW
+             across every concurrent run (Σ activeAgentCount over S.runs), so the
+             count reflects ALL projects in real time, not just the viewed one.
+             The body unifies every run's log lines (project-tagged) when more
+             than one run is live. -->
         <div class="logbar glass" id="logbar">
-          <button class="logbar__toggle" id="logToggle" aria-expanded="false">
-            <span class="logbar__title">Run log</span>
+          <div class="logbar__head" id="logHead">
+            <button class="logbar__toggle" id="logToggle" type="button" aria-expanded="false" aria-controls="logBody">
+              <svg class="chev" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>
+              <span class="logbar__title">Run log</span>
+            </button>
+
+            <!-- Live: simultaneous tasks across ALL running projects. -->
+            <div class="activity" id="logActivity" hidden aria-live="polite">
+              <span class="activity__pulse" aria-hidden="true"></span>
+              <span class="activity__count"><b id="actRunning">0</b> running</span>
+              <span class="activity__sub" id="actProjects"></span>
+              <span class="activity__sub" id="actQueued"></span>
+            </div>
+
+            <span class="logbar__spacer"></span>
+
+            <div class="logfilter" id="logFilter" role="group" aria-label="Filter log by level">
+              <button type="button" class="logfilter__chip is-on" data-lvl="all">All</button>
+              <button type="button" class="logfilter__chip logfilter__chip--warn" data-lvl="warn" title="Warnings only" aria-label="Warnings only">⚠</button>
+              <button type="button" class="logfilter__chip logfilter__chip--error" data-lvl="error" title="Errors only" aria-label="Errors only">✕</button>
+            </div>
+
             <span class="logbar__meta" id="logMeta"></span>
-            <svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>
-          </button>
-          <div class="logbar__body" id="logBody"></div>
+          </div>
+
+          <div class="logbar__body" id="logBody" role="log"></div>
+          <button type="button" class="logjump" id="logJump" hidden>↓ Latest</button>
         </div>
 
         <div class="run-footer">

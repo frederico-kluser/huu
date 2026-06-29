@@ -61,7 +61,9 @@ paragraph, for the current list.
 [container]  cli.tsx → web/serve.ts (DEFAULT front-end) | app.tsx (TUI, via --cli)
                 ↓
               web/ (node:http + SSE server + vanilla-JS browser client:
-                kanban, real-time run log, and an agent-output firehose
+                kanban, a real-time run-log activity console (live cross-run
+                task counter, per-agent hue, unified multi-project stream), and
+                an agent-output firehose
                 mirrored to the browser console; the `/simulation` route serves
                 a fully synthetic demo run — SimulationEngine, no git/LLM/key
                 — see the building-web-ui skill)
