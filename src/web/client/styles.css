@@ -263,7 +263,7 @@ body {
 /* Project selector — a dropdown (project · pipeline) to switch between
    concurrent runs (shown only when >1). */
 .run-selector {
-  display: flex; align-items: center; gap: 8px; flex: 0 1 auto;
+  position: relative; display: flex; align-items: center; gap: 8px; flex: 0 1 auto;
   min-width: 0; padding: 2px;
 }
 .run-select__dot {
@@ -272,20 +272,45 @@ body {
 .run-select__dot[data-phase='running'] { background: var(--blue); animation: pulse 1.4s infinite; }
 .run-select__dot[data-phase='done'] { background: var(--green); }
 .run-select__dot[data-phase='error'] { background: var(--red); }
-.run-select {
-  max-width: 260px; padding: 5px 28px 5px 12px; border-radius: 999px;
+/* Simulated <select>: a pill trigger + a custom glass listbox (NOT the OS popup),
+   animated open/closed with Motion. */
+.rsel__trigger {
+  display: flex; align-items: center; gap: 8px; max-width: 280px;
+  padding: 5px 11px 5px 12px; border-radius: 999px;
   background-color: var(--glass, var(--accent-soft)); color: var(--text);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath d='M7 10l5 5 5-5z' fill='%238a8a8e'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 9px center;
   border: 1px solid var(--separator); cursor: pointer;
-  font-size: 12px; font-weight: 600; letter-spacing: -0.01em;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  font: inherit; font-size: 12px; font-weight: 600; letter-spacing: -0.01em;
 }
-.run-select:hover { border-color: var(--separator-strong); }
-.run-select:focus-visible {
+.rsel__trigger:hover { border-color: var(--separator-strong); }
+.rsel__trigger:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent); outline-offset: 1px;
 }
+.rsel__label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rsel__chev { flex: 0 0 auto; color: var(--text-3); font-size: 13px; line-height: 1;
+  transform-origin: 50% 55%; }
+
+.rsel__menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+  margin: 0; padding: 5px; list-style: none;
+  min-width: max(220px, 100%); max-width: 340px; max-height: min(360px, 60vh); overflow: auto;
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  border: 1px solid var(--separator); border-radius: var(--radius-sm); box-shadow: var(--shadow);
+  will-change: transform, opacity;
+}
+.rsel__menu[hidden] { display: none; }
+.rsel__opt {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px; border-radius: 9px; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--text);
+}
+.rsel__opt:hover, .rsel__opt.active { background: var(--accent-soft); }
+.rsel__opt.sel { box-shadow: inset 0 0 0 1px var(--accent); }
+.rsel__opt-label { flex: 1 1 auto; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rsel__opt-mark { flex: 0 0 auto; margin-left: auto; color: var(--text-3); font-size: 12px;
+  font-variant-numeric: tabular-nums; }
 @keyframes pulse {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 60%, transparent); }
   70% { box-shadow: 0 0 0 7px transparent; }

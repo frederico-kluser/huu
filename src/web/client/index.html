@@ -342,6 +342,10 @@
       </defs>
     </svg>
 
+    <!-- Motion animation engine (vendored, offline — see vendor/README.md).
+         Classic script: runs BEFORE the deferred module below, so window.Motion
+         is ready when app.js loads. app.js still degrades gracefully if absent. -->
+    <script src="vendor/motion.js"></script>
     <script src="app.js" type="module"></script>
   </body>
 </html>
