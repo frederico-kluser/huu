@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { WebRunManager, applyResolverModel, type RunSnapshot } from './run-manager.js';
+import { WebRunManager, applyResolverModel, applyTimeout, type RunSnapshot } from './run-manager.js';
 import type { Pipeline } from '../lib/types.js';
 
 function waitFor(pred: () => boolean, timeoutMs: number): Promise<boolean> {
@@ -35,6 +35,30 @@ describe('applyResolverModel', () => {
 
   it('trims the supplied model id', () => {
     expect(applyResolverModel(base, '  resolver-x  ').integrationModelId).toBe('resolver-x');
+  });
+});
+
+describe('applyTimeout', () => {
+  // The web launch "Max time per agent" field flows here via RunParams.timeoutMinutes:
+  // one value caps every agent across the whole pipeline (both card timeouts).
+  const base: Pipeline = { name: 'p', steps: [{ name: 's', prompt: 'x', files: [] }] };
+
+  it('sets BOTH card timeouts from the per-agent minutes', () => {
+    const out = applyTimeout(base, 15);
+    expect(out.cardTimeoutMs).toBe(15 * 60_000);
+    expect(out.singleFileCardTimeoutMs).toBe(15 * 60_000);
+    expect(out).not.toBe(base); // new object, original untouched
+    expect(base.cardTimeoutMs).toBeUndefined();
+  });
+
+  it('floors fractional minutes to whole milliseconds', () => {
+    expect(applyTimeout(base, 1.5).cardTimeoutMs).toBe(90_000);
+  });
+
+  it('leaves the pipeline on its built-in default when no timeout is given', () => {
+    expect(applyTimeout(base, undefined)).toBe(base);
+    expect(applyTimeout(base, 0)).toBe(base);
+    expect(applyTimeout(base, -5)).toBe(base);
   });
 });
 

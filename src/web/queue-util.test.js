@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSettled, settleQueue, summarizeQueue } from './client/queue-util.js';
+import { isSettled, parseTimeoutMinutes, settleQueue, summarizeQueue } from './client/queue-util.js';
 
 // Pure, DOM-free queue logic. The browser app.js prunes the queue with this the
 // moment a queue run finishes (finishQueue) or is stopped (stopFinalize). The
@@ -117,5 +117,36 @@ describe('summarizeQueue', () => {
     expect(summarizeQueue(undefined)).toEqual(zero);
     expect(summarizeQueue(null)).toEqual(zero);
     expect(summarizeQueue([])).toEqual(zero);
+  });
+});
+
+describe('parseTimeoutMinutes', () => {
+  // Normalizes the launch-form "max time per agent" field. Empty/invalid →
+  // undefined so the run keeps the pipeline's built-in default timeout.
+  it('returns a positive integer for valid input (string or number)', () => {
+    expect(parseTimeoutMinutes('15')).toBe(15);
+    expect(parseTimeoutMinutes('  20 ')).toBe(20);
+    expect(parseTimeoutMinutes(30)).toBe(30);
+    expect(parseTimeoutMinutes('1')).toBe(1);
+  });
+
+  it('floors fractional minutes', () => {
+    expect(parseTimeoutMinutes('15.9')).toBe(15);
+    expect(parseTimeoutMinutes(7.2)).toBe(7);
+  });
+
+  it('treats blank / null / undefined as no override (undefined)', () => {
+    expect(parseTimeoutMinutes('')).toBeUndefined();
+    expect(parseTimeoutMinutes('   ')).toBeUndefined();
+    expect(parseTimeoutMinutes(null)).toBeUndefined();
+    expect(parseTimeoutMinutes(undefined)).toBeUndefined();
+  });
+
+  it('rejects zero, negatives and non-numeric junk', () => {
+    expect(parseTimeoutMinutes('0')).toBeUndefined();
+    expect(parseTimeoutMinutes('-5')).toBeUndefined();
+    expect(parseTimeoutMinutes('abc')).toBeUndefined();
+    expect(parseTimeoutMinutes('15min')).toBeUndefined();
+    expect(parseTimeoutMinutes(NaN)).toBeUndefined();
   });
 });

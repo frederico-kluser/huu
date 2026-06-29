@@ -419,7 +419,7 @@ export class WebRunManager {
  * TimeoutPrompt: both the multi-file and single-file card timeouts are set.
  * Returns the original pipeline untouched when no timeout is requested.
  */
-function applyTimeout(pipeline: Pipeline, minutes?: number): Pipeline {
+export function applyTimeout(pipeline: Pipeline, minutes?: number): Pipeline {
   if (!minutes || minutes <= 0) return pipeline;
   const ms = Math.floor(minutes * 60_000);
   return { ...pipeline, cardTimeoutMs: ms, singleFileCardTimeoutMs: ms };

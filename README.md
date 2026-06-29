@@ -210,6 +210,14 @@ TUI no terminal.
   de novo sobre o HEAD atual da integração e, se passar, é mesclado — sem
   re-rodar o pipeline inteiro. O botão **Finish** encerra o review. (No TUI de
   execução única: `R` re-tenta o card em foco, `D` finaliza.)
+- **Tempo máximo por agente — global e por projeto.** Um painel de **Settings**
+  (⚙ no topo) guarda um **Max time per agent** global (minutos) que limita o tempo
+  de **cada agente** em toda a pipeline, para **todo run iniciado neste navegador**;
+  o campo de cada projeto no launch **sobrescreve** o global (vazio = herda). Vazio
+  em tudo usa o padrão da pipeline (10 min · 5 min em single-file). O global e o
+  valor por projeto persistem no navegador e ficam no histórico. **Só na Web UI —
+  o CLI mantém as próprias regras.** (Antes só dava para ajustar o tempo **ao
+  re-tentar** um card já estourado; configurar no início era só no TUI.)
 - **Fila de projetos, em paralelo.** Selecione **vários projetos** — cada um
   com sua própria config (diretório, provider, modelo, concorrência) — e
   rode-os **simultaneamente** sob um único orçamento de RAM/concorrência. Os

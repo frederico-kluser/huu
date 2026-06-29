@@ -209,6 +209,15 @@ terminal TUI back.
   integration HEAD and, on success, its branch is merged in — no need to re-run
   the whole pipeline. A **Finish** button leaves the review hold. (Single-run
   TUI: `R` retries the focused card, `D` finishes.)
+- **Max time per agent — global and per project.** A **Settings** panel (⚙ in the
+  topbar) holds a global **Max time per agent** (minutes) that caps **every
+  agent's** run time across the whole pipeline for **every run started from this
+  browser**; each project's launch field **overrides** it (blank inherits the
+  global). Blank everywhere keeps the pipeline's default (10 min · 5 min for
+  single-file tasks). The global and per-project values persist in the browser and
+  are recorded in History. **Web UI only — the CLI keeps its own rules.**
+  (Previously the web could only raise the limit when *retrying* an
+  already-timed-out card; setting it up front was TUI-only.)
 - **Project queue, in parallel.** Select **several projects** — each with its
   own config (directory, provider, model, concurrency) — and run them
   **concurrently** under one shared RAM/concurrency budget. Earlier projects

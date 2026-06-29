@@ -6,7 +6,7 @@ import {
   buildRunRecord, buildSyntheticRecord, exportRunsJson, downloadText, uid,
 } from './db.js';
 import { createBoardOrder } from './board-order.js';
-import { settleQueue, summarizeQueue } from './queue-util.js';
+import { parseTimeoutMinutes, settleQueue, summarizeQueue } from './queue-util.js';
 import { substituteFileInTitle } from './title-util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -68,6 +68,10 @@ const S = {
   modelSource: 'recommended', // 'openrouter-live' once loaded with a key
   mode: 'auto',
   manualN: 10,
+  timeoutMin: '',             // launch form "max time per agent" (min); '' = pipeline default
+  // Browser-local Web UI settings (persisted under huu.settings.v1). Applies to
+  // runs started from THIS browser only; the CLI keeps its own rules.
+  settings: { maxAgentMinutes: undefined },
   keyStatus: { ok: true, missing: [] },
   run: { phase: 'idle' },     // the ACTIVE (viewed) run — a pointer into `runs`
   runs: new Map(),            // runId -> snapshot (every concurrent run)
@@ -95,7 +99,7 @@ const S = {
      runs are archived to IndexedDB (see db.js). The queue config (no keys) is
      mirrored to localStorage so a half-built queue survives a reload. */
   queue: {
-    items: [],          // [{ id, pipelineName, provider, backend, modelId, modelLabel, providerLabel, mode, concurrency, runDirectory, status, runId }]
+    items: [],          // [{ id, pipelineName, provider, backend, modelId, modelLabel, providerLabel, mode, concurrency, timeoutMinutes, runDirectory, status, runId }]
     running: false,
     live: null,         // Map<runId, item> — runs still in flight
     settled: 0,         // how many items have reached a terminal state
@@ -173,7 +177,9 @@ async function boot() {
   // Restore a half-built queue (config only — keys are never persisted) and
   // reflect the saved-history count on the topbar.
   restoreQueue();
+  loadSettings();
   renderQueue();
+  syncTimeoutField();
   refreshHistoryBadge();
 }
 
@@ -636,6 +642,7 @@ for (const btn of $('modeSeg').children) {
   btn.addEventListener('click', () => { S.mode = btn.dataset.mode; renderModeSeg(); });
 }
 $('concRange').addEventListener('input', (e) => { S.manualN = +e.target.value; $('concOut').textContent = S.manualN; });
+$('timeoutInput').addEventListener('input', (e) => { S.timeoutMin = e.target.value; });
 
 function updateRunBtn() {
   // The form now ADDS a project to the queue; a key isn't required to add (it's
@@ -673,6 +680,9 @@ function captureFormConfig() {
     providerLabel: prov ? prov.label : S.provider,
     mode: S.mode,
     concurrency: S.mode === 'manual' ? S.manualN : undefined,
+    // Per-run "max time per agent" (minutes). undefined = the pipeline's own
+    // default. Maps to Pipeline.cardTimeoutMs + singleFileCardTimeoutMs server-side.
+    timeoutMinutes: parseTimeoutMinutes(S.timeoutMin),
     runDirectory: S.runDir || S.cwd,
     status: 'pending',
   };
@@ -735,7 +745,7 @@ function renderQueue() {
       <div class="queue-item__idx">${i + 1}</div>
       <div class="queue-item__main">
         <div class="queue-item__name"><span class="ico">${pipeIcon(it.pipelineName)}</span><span class="txt">${esc(it.pipelineName)}</span></div>
-        <div class="queue-item__meta">${esc(shortDir(it.runDirectory))}<span class="sep">·</span>${esc(it.modelLabel || 'default')}<span class="sep">·</span>${esc(it.providerLabel || it.provider)}${ready ? '' : '<span class="sep">·</span><span class="warn">key needed</span>'}</div>
+        <div class="queue-item__meta">${esc(shortDir(it.runDirectory))}<span class="sep">·</span>${esc(it.modelLabel || 'default')}<span class="sep">·</span>${esc(it.providerLabel || it.provider)}${(it.timeoutMinutes || globalTimeoutMinutes()) ? '<span class="sep">·</span>⏱ ' + (it.timeoutMinutes || globalTimeoutMinutes()) + 'm' : ''}${ready ? '' : '<span class="sep">·</span><span class="warn">key needed</span>'}</div>
       </div>
       <div class="queue-item__actions">
         ${statusBadge(it.status)}
@@ -811,6 +821,8 @@ async function editQueueItem(id) {
   resolverCombo.refresh();
   S.mode = it.mode || 'auto';
   S.manualN = it.concurrency || S.manualN;
+  S.timeoutMin = it.timeoutMinutes ? String(it.timeoutMinutes) : '';
+  $('timeoutInput').value = S.timeoutMin;
   renderModeSeg();
   S.queue.editingId = id;
   setAddBtnLabel('Update project');
@@ -883,6 +895,7 @@ async function postRun(i) {
         conflictResolverModelId: item.conflictResolverModelId || undefined,
         mode: item.mode,
         concurrency: item.mode === 'manual' ? item.concurrency : undefined,
+        timeoutMinutes: item.timeoutMinutes || globalTimeoutMinutes() || undefined,
         apiKey: apiKey || undefined,
         endpoint: endpoint || undefined,
         runDirectory: item.runDirectory || undefined,
@@ -1050,6 +1063,46 @@ async function openHistory() {
   await renderHistory();
 }
 function closeHistory() { $('historyScrim').hidden = true; $('historyModal').hidden = true; }
+
+/* ---------------- Web UI settings (browser-local; ⚙ in the topbar) ----------------
+   A GLOBAL default that applies to every run started from THIS browser. The CLI
+   keeps its own rules. Persisted (no keys) under huu.settings.v1. */
+const SETTINGS_LS = 'huu.settings.v1';
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_LS);
+    if (raw) S.settings.maxAgentMinutes = parseTimeoutMinutes(JSON.parse(raw).maxAgentMinutes);
+  } catch { /* corrupt / disabled — keep defaults */ }
+}
+function saveSettings() {
+  try { localStorage.setItem(SETTINGS_LS, JSON.stringify(S.settings)); }
+  catch { /* storage disabled — settings just won't persist */ }
+}
+/** The global default "max time per agent" (minutes), or undefined = pipeline default. */
+function globalTimeoutMinutes() { return S.settings.maxAgentMinutes; }
+/** Reflect the global default into the per-project field's placeholder (blank inherits it). */
+function syncTimeoutField() {
+  const g = S.settings.maxAgentMinutes;
+  const el = $('timeoutInput');
+  if (el) el.placeholder = g ? g + ' (global)' : 'default';
+}
+
+$('settingsBtn').addEventListener('click', openSettings);
+$('settingsClose').addEventListener('click', closeSettings);
+$('settingsScrim').addEventListener('click', closeSettings);
+function openSettings() {
+  $('globalTimeoutInput').value = S.settings.maxAgentMinutes ? String(S.settings.maxAgentMinutes) : '';
+  $('settingsScrim').hidden = false;
+  $('settingsModal').hidden = false;
+}
+function closeSettings() { $('settingsScrim').hidden = true; $('settingsModal').hidden = true; }
+$('globalTimeoutInput').addEventListener('input', (e) => {
+  S.settings.maxAgentMinutes = parseTimeoutMinutes(e.target.value);
+  saveSettings();
+  syncTimeoutField();   // the per-project placeholder follows the global
+  renderQueue();        // queued cards show the effective (override ?? global) timeout
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('settingsModal').hidden) closeSettings(); });
 
 async function renderHistory() {
   const list = $('historyList');

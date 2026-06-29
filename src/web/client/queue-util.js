@@ -60,3 +60,19 @@ export function summarizeQueue(items) {
   }
   return { total: list.length, done, error, running, pending, settled: done + error };
 }
+
+/**
+ * Normalize the launch-form "max time per agent" input into a positive integer
+ * number of MINUTES, or `undefined` when blank/invalid. One value covers the
+ * WHOLE pipeline: the server's `applyTimeout` maps it onto every card timeout
+ * (multi-file AND single-file), and `undefined` leaves the pipeline's built-in
+ * defaults untouched — so an empty field means "use the pipeline default".
+ *
+ * @param {string|number|null|undefined} raw the raw input value
+ * @returns {number|undefined} a positive integer minutes, or undefined
+ */
+export function parseTimeoutMinutes(raw) {
+  if (raw == null) return undefined;
+  const n = Math.floor(Number(String(raw).trim()));
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}

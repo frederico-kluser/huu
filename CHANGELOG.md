@@ -10,6 +10,18 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ### Added
 
+- **Set a per-agent time limit from the web — globally and per project.** A new
+  **Settings** panel (⚙ in the topbar) holds a global **Max time per agent**
+  (minutes) that caps every agent's run time across the **whole pipeline** for
+  **every run started from this browser**; each project's launch field can
+  **override** it (blank inherits the global). It's sent as `timeoutMinutes`,
+  which the server applies to both the multi-file and single-file card timeouts;
+  blank everywhere keeps the pipeline's built-in default (10 min · 5 min for
+  single-file tasks). The global setting and the per-project value persist in the
+  browser and are recorded in History. **Web UI only — the CLI keeps its own
+  rules.** Previously the web could only raise the limit when *retrying* an
+  already-timed-out card; setting it up front was TUI-only.
+
 - **Add projects to a live queue from the home view.** While a queue is running
   you can return to the launch view (**← Home**), add more projects, and they
   dispatch **immediately** under the shared scheduler — no restart, no prompt.
