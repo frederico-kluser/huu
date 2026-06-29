@@ -34,3 +34,29 @@ export function settleQueue(items) {
   }
   return { keep, done, error };
 }
+
+/**
+ * Tally a queue's items by status — drives the launch-view "running" indicator
+ * (shown while the user is back on home adding more projects to a live queue).
+ * Pure + DOM-free so it unit-tests in Node. `settled` = done + error (terminal,
+ * already archived to History); `running` counts in-flight runs; `pending`
+ * counts items not yet dispatched.
+ *
+ * @param {Array<{status?: string}>} items the current queue items
+ * @returns {{ total: number, done: number, error: number, running: number, pending: number, settled: number }}
+ */
+export function summarizeQueue(items) {
+  const list = Array.isArray(items) ? items : [];
+  let done = 0;
+  let error = 0;
+  let running = 0;
+  let pending = 0;
+  for (const it of list) {
+    const s = it && it.status;
+    if (s === 'done') done++;
+    else if (s === 'error') error++;
+    else if (s === 'running') running++;
+    else pending++;
+  }
+  return { total: list.length, done, error, running, pending, settled: done + error };
+}

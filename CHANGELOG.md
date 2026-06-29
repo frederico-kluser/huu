@@ -8,6 +8,17 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+### Added
+
+- **Add projects to a live queue from the home view.** While a queue is running
+  you can return to the launch view (**← Home**), add more projects, and they
+  dispatch **immediately** under the shared scheduler — no restart, no prompt.
+  A *running* banner on home (`N running · X/Y done`) stays visible while you
+  pick, with a **“View board →”** jump back to the kanban. Pure client-side: the
+  multi-run server already admitted concurrent runs, so the change is a sticky
+  `homePinned` flag that opts the home view out of the per-frame board
+  auto-switch, plus immediate dispatch on add and the home banner.
+
 ### Changed
 
 - **Web project selector is now a dropdown labelled by project + pipeline.** When

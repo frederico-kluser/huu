@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSettled, settleQueue } from './client/queue-util.js';
+import { isSettled, settleQueue, summarizeQueue } from './client/queue-util.js';
 
 // Pure, DOM-free queue logic. The browser app.js prunes the queue with this the
 // moment a queue run finishes (finishQueue) or is stopped (stopFinalize). The
@@ -80,5 +80,42 @@ describe('settleQueue', () => {
     expect(settleQueue(undefined)).toEqual({ keep: [], done: 0, error: 0 });
     expect(settleQueue(null)).toEqual({ keep: [], done: 0, error: 0 });
     expect(settleQueue([null, undefined, { id: 'a', status: 'done' }]).keep).toEqual([null, undefined]);
+  });
+});
+
+describe('summarizeQueue', () => {
+  // Feeds the launch-view "running" indicator while the user is back on home
+  // adding more projects to a LIVE queue (they dispatch automatically).
+  it('tallies a mixed live queue by status', () => {
+    const s = summarizeQueue([
+      { status: 'done' },
+      { status: 'error' },
+      { status: 'running' },
+      { status: 'running' },
+      { status: 'pending' },
+    ]);
+    expect(s).toEqual({ total: 5, done: 1, error: 1, running: 2, pending: 1, settled: 2 });
+  });
+
+  it('treats undefined/unknown status as pending (a freshly added item)', () => {
+    const s = summarizeQueue([{ status: undefined }, {}, { status: 'queued' }]);
+    expect(s.pending).toBe(3);
+    expect(s.running).toBe(0);
+    expect(s.settled).toBe(0);
+    expect(s.total).toBe(3);
+  });
+
+  it('reports an all-settled queue (the moment it finishes)', () => {
+    const s = summarizeQueue([{ status: 'done' }, { status: 'done' }, { status: 'error' }]);
+    expect(s.settled).toBe(3);
+    expect(s.running).toBe(0);
+    expect(s.pending).toBe(0);
+  });
+
+  it('tolerates missing / non-array input', () => {
+    const zero = { total: 0, done: 0, error: 0, running: 0, pending: 0, settled: 0 };
+    expect(summarizeQueue(undefined)).toEqual(zero);
+    expect(summarizeQueue(null)).toEqual(zero);
+    expect(summarizeQueue([])).toEqual(zero);
   });
 });

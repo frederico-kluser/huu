@@ -97,6 +97,29 @@ describe('WebRunManager — multi-run', () => {
     expect(await waitFor(() => !mgr.isActive(), 3000)).toBe(true);
   });
 
+  it('admits a new run while another is already in flight (add-to-queue while running)', async () => {
+    // The backend guarantee the launch-view "add while running" feature relies
+    // on: a run started AFTER another is already streaming is accepted (no
+    // refusal) and driven to done automatically — no second user action.
+    const mgr = new WebRunManager(process.cwd(), () => {});
+    // A long first run, so it's demonstrably still going when we add the second.
+    mgr.startSimulation({ runId: 'sim-first', modelIds: [], fileCount: 40, concurrency: 2, tickMs: 8 });
+    expect(await waitFor(() => mgr.getSnapshot('sim-first').state != null, 3000)).toBe(true);
+    expect(mgr.getSnapshot('sim-first').phase).toBe('running');
+
+    // Add a second run mid-flight — accepted and tracked alongside the first.
+    const late = mgr.startSimulation({ runId: 'sim-late', modelIds: [], fileCount: 4, concurrency: 2, tickMs: 4 });
+    expect(late.phase).toBe('running');
+    expect(mgr.getSnapshots().map((s) => s.runId).sort()).toEqual(['sim-first', 'sim-late']);
+
+    // The late-added run reaches done on its own while the first still runs.
+    expect(await waitFor(() => mgr.getSnapshot('sim-late').phase === 'done', 5000)).toBe(true);
+    expect(mgr.getSnapshot('sim-first').phase).toBe('running');
+
+    mgr.abort();
+    expect(await waitFor(() => !mgr.isActive(), 3000)).toBe(true);
+  });
+
   it('aborts one run by runId, leaving the other running', async () => {
     const mgr = new WebRunManager(process.cwd(), () => {});
     // Long sims so the survivor is still running after we kill the other.
