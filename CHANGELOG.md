@@ -8,6 +8,8 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-06-29
+
 ### Added
 
 - **Set a per-agent time limit from the web — globally and per project.** A new
@@ -49,6 +51,18 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
   - Headless drivers (`run-many`, smoke, `/simulation`) are unaffected —
     `Orchestrator` only holds open when the new `interactiveRetry` option is set,
     so `start()` resolves immediately on every non-interactive path.
+
+- **`huu-tests-findings.md`** — a new Test Suite deliverable: the finalize step
+  rolls every `suspected-bug` FAQ finding into a human-readable table of bugs the
+  run surfaced but (by the freeze) did not fix, deduped by a stable `sb-<id>`
+  join key and cross-checked against the tests that pin them.
+- **`$baseCommit` work-step prompt token** and a **base-commit Git Context line
+  for judges** (`src/orchestrator/index.ts`, `src/orchestrator/check-evaluator.ts`).
+  Since stage merges are already committed by the time a step or judge runs, a
+  bare `git status` is clean; exposing the run's base commit lets a step diff
+  what the run actually changed (`git diff --name-only $baseCommit..HEAD`) or
+  restore a frozen file (`git checkout $baseCommit -- <path>`). The Test Suite
+  cleanup step uses it to actively restore any source an agent drifted.
 
 ### Changed
 
@@ -123,20 +137,6 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
   agent PROMPT still receives the exact relative path. New shared helper
   `substituteFileInTitle` (`src/lib/title-format.ts`, mirrored verbatim in
   `src/web/client/title-util.js` for the no-build browser client).
-
-### Added
-
-- **`huu-tests-findings.md`** — a new Test Suite deliverable: the finalize step
-  rolls every `suspected-bug` FAQ finding into a human-readable table of bugs the
-  run surfaced but (by the freeze) did not fix, deduped by a stable `sb-<id>`
-  join key and cross-checked against the tests that pin them.
-- **`$baseCommit` work-step prompt token** and a **base-commit Git Context line
-  for judges** (`src/orchestrator/index.ts`, `src/orchestrator/check-evaluator.ts`).
-  Since stage merges are already committed by the time a step or judge runs, a
-  bare `git status` is clean; exposing the run's base commit lets a step diff
-  what the run actually changed (`git diff --name-only $baseCommit..HEAD`) or
-  restore a frozen file (`git checkout $baseCommit -- <path>`). The Test Suite
-  cleanup step uses it to actively restore any source an agent drifted.
 
 > Note (materialization trap): `pipeline-bootstrap.ts` never overwrites an
 > existing `pipelines/huu-test-suite.pipeline.json`. Users who already ran huu
@@ -837,7 +837,8 @@ Initial public release. Available on npm as `huu-pipe`
 - `safe.directory '*'` set system-wide in the image.
 
 
-[Unreleased]: https://github.com/frederico-kluser/huu/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/frederico-kluser/huu/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/frederico-kluser/huu/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/frederico-kluser/huu/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/frederico-kluser/huu/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/frederico-kluser/huu/compare/v1.4.0...v2.0.0
