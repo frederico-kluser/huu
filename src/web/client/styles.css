@@ -259,6 +259,9 @@ body {
 .status-pill[data-s='done'] { background: color-mix(in srgb, var(--green) 16%, transparent); }
 .status-pill[data-s='error'] .dot { background: var(--red); }
 .status-pill[data-s='error'] { background: color-mix(in srgb, var(--red) 16%, transparent); }
+/* Run held open for retries (awaiting_retry) — amber "review" pill. */
+.status-pill[data-s='awaiting'] .dot { background: var(--yellow); box-shadow: 0 0 0 0 var(--yellow); animation: pulse 1.4s infinite; }
+.status-pill[data-s='awaiting'] { background: color-mix(in srgb, var(--yellow) 16%, transparent); }
 
 /* Project selector — a dropdown (project · pipeline) to switch between
    concurrent runs (shown only when >1). */
@@ -524,6 +527,9 @@ input[type='range'] { flex: 1; accent-color: var(--accent); }
 .phase.active i { animation: pulse-sm 1.2s infinite; }
 .phase.done { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
 .phase.err { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
+/* Timeout reads as amber (recoverable: retry with a longer limit), distinct
+   from the red of a generic failure. */
+.phase.tmo { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 16%, transparent); }
 .phase.idle { color: var(--text-3); }
 @keyframes pulse-sm { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 .metriclet { font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
@@ -580,6 +586,17 @@ input[type='range'] { flex: 1; accent-color: var(--accent); }
 .drawer__head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .drawer__title { font-weight: 700; font-size: 17px; letter-spacing: -0.02em; flex: 1; min-width: 0; }
 .drawer__meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin-bottom: 14px; }
+/* Retry panel for a failed/timed-out agent card while the run is held open. */
+.drawer__retry { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px;
+  padding: 12px; border-radius: 12px; border: 1px solid var(--separator); background: var(--elev-2); }
+.retry-head { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.retry-head.is-timeout { color: var(--yellow); }
+.retry-head.is-failed { color: var(--red); }
+.retry-tmo { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 12px; color: var(--text-2); }
+.retry-tmo__input { width: 96px; padding: 7px 10px; border-radius: 9px; border: 1px solid var(--separator);
+  background: var(--elev); color: var(--text); font: inherit; text-align: right; }
+.retry-go { align-self: flex-start; }
 .kv { display: flex; flex-direction: column; gap: 2px; }
 .kv__k { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); }
 .kv__v { font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; word-break: break-word; }

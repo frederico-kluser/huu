@@ -245,6 +245,10 @@ export class WebRunManager {
       initialConcurrency: params.concurrency,
       scheduler: this.ensureScheduler(),
       runId,
+      // Hold the run open in `awaiting_retry` when it ends with failed cards so
+      // the browser can retry individual failures (a timed-out card with a
+      // longer limit) before the run tears down. See server `/api/run/retry`.
+      interactiveRetry: true,
     });
 
     if (mode === 'greedy') orch.enableGreedyMode();
@@ -388,6 +392,25 @@ export class WebRunManager {
     if (mode === 'auto') driver.enableAutoScale();
     else if (mode === 'manual') driver.disableAutoScale();
     else driver.enableGreedyMode();
+  }
+
+  /**
+   * Retry a single failed task card while a real run is held open in
+   * `awaiting_retry`. Optional `timeoutMinutes` re-runs a timed-out card with a
+   * longer per-task limit. No-op for /simulation or unknown ids. Fire-and-forget
+   * — progress streams over SSE like any other state change.
+   */
+  retryTask(runId: string, agentId: number, timeoutMinutes?: number): void {
+    const orch = this.runs.get(runId)?.orch;
+    if (!orch) return;
+    const timeoutMs =
+      timeoutMinutes && timeoutMinutes > 0 ? Math.floor(timeoutMinutes * 60_000) : undefined;
+    void orch.retryTask(agentId, timeoutMs ? { timeoutMs } : undefined);
+  }
+
+  /** Leave the `awaiting_retry` hold so the run finalizes + tears down. */
+  finish(runId: string): void {
+    this.runs.get(runId)?.orch?.finish();
   }
 }
 

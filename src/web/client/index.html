@@ -56,6 +56,7 @@
           <button class="conc__btn" id="concUp" title="More agents">+</button>
         </div>
         <button class="btn" id="pauseBtn" hidden title="Pause / resume the simulation">Pause</button>
+        <button class="btn btn--primary" id="finishBtn" hidden title="Finish the run — stop waiting for retries">Finish</button>
         <button class="btn btn--danger" id="abortBtn" hidden>Stop</button>
         <button class="btn btn--danger" id="stopQueueBtn" hidden title="Stop the whole queue">Stop queue</button>
         <button class="iconbtn iconbtn--badge" id="historyBtn" title="Run history" aria-label="Run history">
@@ -281,6 +282,7 @@
         </button>
       </div>
       <div class="drawer__meta" id="drawerMeta"></div>
+      <div class="drawer__retry" id="drawerRetry" hidden></div>
       <div class="drawer__logs-head">Logs</div>
       <pre class="drawer__logs" id="drawerLogs"></pre>
     </aside>
