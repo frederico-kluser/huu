@@ -28,7 +28,7 @@ function setupRepo(dir: string): void {
  * agents record their task + rendered prompt for assertions.
  */
 function makeMemoryFlowFactory(opts: {
-  producerWrites?: 'valid' | 'corrupt' | 'none';
+  producerWrites?: 'valid' | 'corrupt' | 'none' | 'oversized-hint';
 }): {
   factory: AgentFactory;
   consumerTasks: AgentTask[];
@@ -59,6 +59,19 @@ function makeMemoryFlowFactory(opts: {
         } else if (opts.producerWrites === 'corrupt') {
           mkdirSync(join(cwd, '.huu'), { recursive: true });
           writeFileSync(join(cwd, '.huu', 'scan.json'), '{ broken', 'utf8');
+          onEvent({ type: 'file_write', file: '.huu/scan.json' });
+        } else if (opts.producerWrites === 'oversized-hint') {
+          // A valid file whose only flaw is a hint past the length cap — must
+          // be SALVAGED (truncated), not fail the run.
+          mkdirSync(join(cwd, '.huu'), { recursive: true });
+          writeFileSync(
+            join(cwd, '.huu', 'scan.json'),
+            JSON.stringify({
+              _format: 'huu-memory-v1',
+              files: [{ path: 'a.ts', hint: 'L'.repeat(900) }],
+            }),
+            'utf8',
+          );
           onEvent({ type: 'file_write', file: '.huu/scan.json' });
         } else {
           // Producer chose to write nothing — still commit SOMETHING so the
@@ -245,6 +258,31 @@ describe('memory scope (filesFrom fan-out)', () => {
 
       expect(result.manifest.status).toBe('error');
       expect(consumerTasks).toHaveLength(0);
+    },
+    60_000,
+  );
+
+  it(
+    'an over-length hint is salvaged (truncated), not fatal — the run completes and the consumer still fans out',
+    async () => {
+      const { factory, consumerTasks } = makeMemoryFlowFactory({
+        producerWrites: 'oversized-hint',
+      });
+      const orch = new Orchestrator(
+        { apiKey: 'stub', modelId: 'stub-model', backend: 'stub' },
+        memoryPipeline(),
+        scratch,
+        factory,
+        { initialConcurrency: 2, autoScale: false },
+      );
+
+      const result = await orch.start();
+
+      // The whole point: a soft field over its cap must NOT abort the run.
+      expect(result.manifest.status).toBe('done');
+      expect(consumerTasks).toHaveLength(1);
+      expect(consumerTasks[0]!.files).toEqual(['a.ts']);
+      expect(consumerTasks[0]!.hint).toHaveLength(600);
     },
     60_000,
   );

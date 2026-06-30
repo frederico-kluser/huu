@@ -75,6 +75,14 @@ export type StepScope = 'project' | 'per-file' | 'flexible' | 'memory';
 export const DEFAULT_MEMORY_MAX_FILES = 40;
 
 /**
+ * Soft length cap for a per-file `hint` in a huu-memory-v1 file. An LLM
+ * producer that writes a longer hint is NOT punished: the resolver TRUNCATES
+ * the hint to this length and emits a warning. A cosmetic, optional field
+ * must never be able to abort a run — hence a clamp, not a schema rejection.
+ */
+export const DEFAULT_MEMORY_HINT_MAX_CHARS = 600;
+
+/**
  * Work step — agents that actually modify the worktree.
  *
  * `type` is optional only for back-compat with pipelines saved before v0.4

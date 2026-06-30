@@ -5,33 +5,37 @@
 // previous stage — so check-loop rewrites are picked up for free) and fans
 // out one task per listed file.
 //
-// Failure split (deterministic and stub-safe):
+// Failure split (deterministic and stub-safe). Guiding rule: the memory layer
+// must NEVER abort a run for a SALVAGEABLE reason — only a file that is not a
+// usable list AT ALL is fatal.
 // - MISSING memory file → { files: [] } + warning: absence can be legitimate
 //   (the producer chose nothing; stub runs write no files). The stage then
 //   completes empty and the run TERMINATES instead of crashing.
-// - PRESENT but corrupt (bad JSON, wrong _format, schema violation, or
-//   every path unusable) → throws MemoryFileError: corruption is never
-//   legitimate and must fail the run loudly.
+// - SOFT, per-entry problems are SALVAGED, each with a warning, never fatal:
+//   a hint over the length cap is TRUNCATED; a non-string hint / non-numeric
+//   priority is IGNORED; an entry that is not a string or a `{ path }` object
+//   (or whose path is empty) is DROPPED. An LLM producer should never kill a
+//   run over the shape of one optional field.
+// - STRUCTURAL corruption is fatal — throws MemoryFileError: not valid JSON,
+//   wrong/absent `_format`, `files` not an array, OR a list that named real
+//   paths of which NONE survive validation. Those mean "this is not a usable
+//   list", which must fail loudly.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, normalize } from 'node:path';
 import { z } from 'zod';
-import { DEFAULT_MEMORY_MAX_FILES } from '../lib/types.js';
+import { DEFAULT_MEMORY_HINT_MAX_CHARS, DEFAULT_MEMORY_MAX_FILES } from '../lib/types.js';
 
 export const MEMORY_FORMAT_TAG = 'huu-memory-v1';
 
-const MemoryEntrySchema = z.union([
-  z.string().min(1),
-  z.object({
-    path: z.string().min(1),
-    hint: z.string().max(600).optional(),
-    priority: z.number().optional(),
-  }),
-]);
-
+// Only the top-level SHAPE is a hard gate: the file must announce the format
+// tag and carry a `files` ARRAY. Entries are deliberately `unknown` here and
+// salvaged per-entry in `normalizeEntry` below, so a soft problem in one entry
+// (long hint, bad priority, wrong shape) can never fail the whole parse — and
+// thus can never abort the run. See the module header's failure split.
 export const MemoryFileSchema = z.object({
   _format: z.literal(MEMORY_FORMAT_TAG),
-  files: z.array(MemoryEntrySchema),
+  files: z.array(z.unknown()),
 });
 
 /** Thrown when the memory file exists but cannot be trusted. */
@@ -70,6 +74,56 @@ const SKIPPED_PREFIXES = [
 
 function isSkipped(path: string): boolean {
   return SKIPPED_PREFIXES.some((p) => path === p.slice(0, -1) || path.startsWith(p) || path.includes(`/${p}`));
+}
+
+type Normalized = { path: string; hint?: string; priority: number; order: number };
+
+/**
+ * Salvage ONE raw `files` entry into a normalized record, or drop it. Soft
+ * problems never throw: an over-length hint is truncated to
+ * {@link DEFAULT_MEMORY_HINT_MAX_CHARS}, a non-string hint or non-numeric
+ * priority is ignored, and an entry with no usable path is dropped. Every
+ * adjustment appends a warning so the choice is visible in the run log.
+ * Returns `null` when the entry yields no usable path.
+ */
+function normalizeEntry(entry: unknown, order: number, warnings: string[]): Normalized | null {
+  if (typeof entry === 'string') {
+    if (entry.length === 0) {
+      warnings.push(`dropped entry #${order}: empty path string`);
+      return null;
+    }
+    return { path: entry, priority: 0, order };
+  }
+  if (entry !== null && typeof entry === 'object' && !Array.isArray(entry)) {
+    const obj = entry as Record<string, unknown>;
+    if (typeof obj.path !== 'string' || obj.path.length === 0) {
+      warnings.push(`dropped entry #${order}: missing or empty "path"`);
+      return null;
+    }
+    const path = obj.path;
+    let hint: string | undefined;
+    if (typeof obj.hint === 'string') {
+      if (obj.hint.length > DEFAULT_MEMORY_HINT_MAX_CHARS) {
+        warnings.push(
+          `truncated hint for "${path}" (${obj.hint.length} → ${DEFAULT_MEMORY_HINT_MAX_CHARS} chars)`,
+        );
+        hint = obj.hint.slice(0, DEFAULT_MEMORY_HINT_MAX_CHARS);
+      } else {
+        hint = obj.hint;
+      }
+    } else if (obj.hint !== undefined) {
+      warnings.push(`ignored non-string hint for "${path}"`);
+    }
+    let priority = 0;
+    if (typeof obj.priority === 'number' && Number.isFinite(obj.priority)) {
+      priority = obj.priority;
+    } else if (obj.priority !== undefined) {
+      warnings.push(`ignored non-numeric priority for "${path}" (defaulted to 0)`);
+    }
+    return { path, hint, priority, order };
+  }
+  warnings.push(`dropped entry #${order}: not a path string or { path } object`);
+  return null;
 }
 
 /**
@@ -112,12 +166,16 @@ export function resolveMemoryFiles(
     );
   }
 
-  type Normalized = { path: string; hint?: string; priority: number; order: number };
-  const normalized: Normalized[] = parsed.data.files.map((entry, order) =>
-    typeof entry === 'string'
-      ? { path: entry, priority: 0, order }
-      : { path: entry.path, hint: entry.hint, priority: entry.priority ?? 0, order },
-  );
+  // Salvage each entry independently — a malformed one is dropped (with a
+  // warning), never a parse failure. `normalized` therefore holds only the
+  // entries that yielded a usable path; the "named files but NONE usable"
+  // backstop below still fires for a producer that emitted real-looking
+  // paths that all turn out to be unusable.
+  const normalized: Normalized[] = [];
+  parsed.data.files.forEach((entry, order) => {
+    const n = normalizeEntry(entry, order, warnings);
+    if (n) normalized.push(n);
+  });
 
   const seen = new Set<string>();
   const usable: Normalized[] = [];

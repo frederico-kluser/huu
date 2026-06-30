@@ -107,4 +107,43 @@ describe('resolveMemoryFiles (huu-memory-v1)', () => {
     expect(res.files).toEqual(['b.ts', 'c.ts']);
     expect(res.warnings.join(' ')).toContain('truncated to maxFiles=2');
   });
+
+  // The memory layer must NEVER fail a run for a SALVAGEABLE reason. A soft,
+  // optional field over its cap (or of the wrong type) is salvaged with a
+  // warning, not thrown — the regression that motivated this contract.
+  it('truncates an over-length hint instead of failing the run', () => {
+    const longHint = 'x'.repeat(800);
+    const rel = writeMemory({
+      _format: MEMORY_FORMAT_TAG,
+      files: [{ path: 'a.ts', hint: longHint }],
+    });
+    const res = resolveMemoryFiles(rel, root);
+    expect(res.missing).toBe(false);
+    expect(res.files).toEqual(['a.ts']);
+    expect(res.hints.get('a.ts')).toBe('x'.repeat(600));
+    expect(res.warnings.join(' ')).toContain('truncated hint');
+  });
+
+  it('ignores a non-string hint and a non-numeric priority but keeps the entry', () => {
+    const rel = writeMemory({
+      _format: MEMORY_FORMAT_TAG,
+      files: [{ path: 'a.ts', hint: 123, priority: 'high' }],
+    });
+    const res = resolveMemoryFiles(rel, root);
+    expect(res.files).toEqual(['a.ts']);
+    expect(res.hints.has('a.ts')).toBe(false);
+    const w = res.warnings.join(' | ');
+    expect(w).toContain('non-string hint');
+    expect(w).toContain('non-numeric priority');
+  });
+
+  it('drops malformed entries (no usable path) but keeps the good ones', () => {
+    const rel = writeMemory({
+      _format: MEMORY_FORMAT_TAG,
+      files: [42, null, { hint: 'no path here' }, { path: '' }, 'a.ts'],
+    });
+    const res = resolveMemoryFiles(rel, root);
+    expect(res.files).toEqual(['a.ts']);
+    expect(res.warnings.join(' ')).toContain('dropped entry');
+  });
 });
