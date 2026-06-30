@@ -553,6 +553,10 @@ caro/overkill para Q&A puro com saída structured.
 | --------------------------------- | ----------------- | -------------------------- |
 | `DEFAULT_CONCURRENCY`             | `10`              | `orchestrator/index.ts`    |
 | `MAX_INSTANCES` / `MIN_INSTANCES` | `20` / `1`        | `orchestrator/index.ts`    |
+| `DEFAULT_RAM_PERCENT`             | `85` (dial de budget; clamp 10–95)         | `lib/budget.ts`               |
+| `DEFAULT_AGENT_MEMORY_ESTIMATE_MB` | `1536` (seed pessimista; clamp 128–2048)  | `orchestrator/auto-scaler.ts` |
+| `DEFAULT_ADMIT_PSI`               | `0.5` (freio de admissão PSI some-avg10 %) | `orchestrator/auto-scaler.ts` |
+| `DEFAULT_OOM_SCORE_ADJ`           | `-100` (conservador)                       | `lib/oom-score.ts`            |
 | `POLL_INTERVAL_MS`                | `500`             | `orchestrator/index.ts`    |
 | `STATE_FLUSH_INTERVAL_MS`         | `125` (8 Hz)      | `RunDashboard.tsx`         |
 | `DEFAULT_CARD_TIMEOUT_MS`         | `600_000` (10min) | `lib/types.ts`             |

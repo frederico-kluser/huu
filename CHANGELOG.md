@@ -8,6 +8,37 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+### Added
+
+- **RAM budget dial — "fill the machine, never crash" (resource-control Fase 1).**
+  Concurrency is now governed by a configurable share of TOTAL RAM instead of an
+  opaque safety margin: set it with `HUU_RAM_PERCENT`, the `--ram-percent=<n>`
+  flag, or the new **RAM budget %** field in the web Settings panel (machine-global
+  — one machine, one RAM, no per-project override). Default 85%, clamped 10–95.
+- **Pressure-aware admission (Linux PSI).** The scaler now reads memory
+  Pressure Stall Information (`/proc/pressure/memory`, or the per-cgroup
+  `memory.pressure` in a container) and freezes new agents the moment real
+  pressure appears — *before* RAM saturates. Where PSI is unavailable (macOS,
+  kernels without it) it falls back to the previous RAM-percent gate.
+- **Lazy admission in the web UI.** Launching a queue of projects no longer
+  starts them all at once: the server admits the first immediately and holds the
+  rest in a new **queued** state, pulling each in as the shared budget frees up
+  (the headless `run-many` already did this; the browser now does too). This is
+  the direct fix for the multi-project out-of-memory crash.
+- **Configurable OOM protection.** `huu` nudges its own `oom_score_adj` so the
+  kernel prefers other processes under pressure; tune via `HUU_OOM_SCORE_ADJ`
+  (conservative default, best-effort — takes effect where the process is
+  privileged, e.g. the container).
+
+### Changed
+
+- The per-agent memory estimate now starts **pessimistic** and corrects downward
+  from real measurements, so a cold start admits cautiously and opens up once it
+  confirms agents fit — the inverse of the old optimistic seed that over-admitted.
+- New agents **ramp up** over a few cycles (geometric, ~+50% per tick) instead of
+  the whole pool spawning in one burst. Manual (`--concurrency`) still fills
+  immediately.
+
 ## [3.1.0] - 2026-06-29
 
 ### Added

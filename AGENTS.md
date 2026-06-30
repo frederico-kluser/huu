@@ -112,12 +112,24 @@ recipes. See the `running-in-docker` skill for the full lifecycle.
 
 The orchestrator always instantiates the `AutoScaler`
 (`src/orchestrator/auto-scaler.ts`). In `auto` mode (the default) the
-concurrency target is memory-headroom based: `ramAvailableBytes` minus a
-10%/512MiB safety margin, divided by an EMA-observed per-agent footprint
-(seeded 250MiB, clamped 128MiB–2GiB). `--concurrency=N` or
-`--no-auto-scale` (or `RunConfig.concurrency` in headless) pins `manual`
-mode. A third mode, `greedy` (TUI label **MAX**, the `M` hotkey), floods
-one agent per queued task up to the hard ceiling and lets the guard be the
+concurrency target is the **RAM BUDGET dial** — a configurable % of TOTAL RAM
+(`HUU_RAM_PERCENT` / `--ram-percent` / web Setting; default 85, clamp 10–95;
+`src/lib/budget.ts`, floored at `total − 512MiB` for the OS) minus
+`ramUsedBytes`, divided by an EMA-observed per-agent footprint (seeded
+PESSIMISTIC at 1536MiB so a cold start under-admits then opens up as the EMA
+corrects DOWN; clamped 128MiB–2GiB). The dial is **machine-global**: in
+multi-run it configures the one shared budget `AutoScaler` via
+`GlobalScheduler.setBudgetPercent`. The **front brake is Linux PSI**:
+`shouldSpawn()` freezes admission when `SystemMetrics.memPressureSome10`
+(cgroup `memory.pressure` → `/proc/pressure/memory`; `null` off-Linux → falls
+back to the RAM stop-gate) crosses `admitPsiThreshold` (0.5%) — pressure rises
+BEFORE RAM saturates. Spawns FAST-RAMP geometrically (`executeTaskPool` caps new
+spawns/tick to `max(1, ceil(busy·0.5))`, manual mode excepted) so no single tick
+bursts the pool. `huu` also nudges its own `oom_score_adj` (best-effort,
+configurable via `HUU_OOM_SCORE_ADJ`, conservative default; `src/lib/oom-score.ts`).
+`--concurrency=N` or `--no-auto-scale` (or `RunConfig.concurrency` in headless)
+pins `manual` mode. A third mode, `greedy` (TUI label **MAX**, the `M` hotkey),
+floods one agent per queued task up to the hard ceiling and lets the guard be the
 sole backstop, so concurrency settles at the destroy threshold. The MEMORY
 GUARD runs in ALL THREE modes: at ≥95% RAM/CPU it kills the
 NEWEST agent (least work done — picked by `startedAt`), resets its card to
@@ -184,12 +196,16 @@ admit the top run, pull in the next only on sustained spare capacity or while a
 run is merging). The **web** front-end is wired: `WebRunManager` holds a
 `Map<runId>` of concurrent runs over one scheduler, `/api/run` returns a runId
 (no 409), SSE frames + the agent-stream firehose are per-`runId`, and the
-browser shows a **project selector** when >1 run is active (the queue dispatches
-all items at once). You can also **return to the launch view while the queue is
-running and add more projects** — each new `/api/run` is admitted LIVE by the
-shared scheduler (no 409, no restart), with a running banner on the home view
-(client `S.homePinned` gates the per-frame board auto-switch). See the
-building-web-ui skill. The **Ink TUI** has the same
+browser shows a **project selector** when >1 run is active. Admission is **LAZY
+server-side** (the OOM fix — the queue no longer dispatches everything at once):
+`WebRunManager` keeps a `pending` queue drained by a 500ms loop using the shared
+`AdmissionController` (`src/lib/admission-controller.ts`, also used by
+`run-many`) — the first run starts immediately, the rest sit in a **`queued`**
+phase until the shared budget shows sustained spare capacity (`MAX_LIVE_RUNS`
+admitted at once, `MAX_CONCURRENT_RUNS` total accepted). The browser still POSTs
+the whole queue (it just renders `queued`); the SERVER paces them. You can also
+**return to the launch view and add more projects** mid-run — each new
+`/api/run` is accepted and queued. See the building-web-ui skill. The **Ink TUI** has the same
 capability via `MultiRunDashboard` (`src/ui/components/MultiRunDashboard.tsx`):
 multi-select 2+ saved pipelines (SPACE) → run them concurrently with a
 `Tab`/`1-9` project switcher — see the building-tui-screens skill.
