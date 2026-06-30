@@ -43,6 +43,7 @@ function metrics(ramPercent: number, ramAvailableGiB: number): SystemMetrics {
     processRssBytes: 1,
     loadAvg1: 0,
     containerAware: false,
+    memPressureSome10: null,
   };
 }
 

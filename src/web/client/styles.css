@@ -262,6 +262,8 @@ body {
 /* Run held open for retries (awaiting_retry) — amber "review" pill. */
 .status-pill[data-s='awaiting'] .dot { background: var(--yellow); box-shadow: 0 0 0 0 var(--yellow); animation: pulse 1.4s infinite; }
 .status-pill[data-s='awaiting'] { background: color-mix(in srgb, var(--yellow) 16%, transparent); }
+.status-pill[data-s='queued'] .dot { background: var(--yellow); }
+.status-pill[data-s='queued'] { background: color-mix(in srgb, var(--yellow) 16%, transparent); }
 
 /* Project selector — a dropdown (project · pipeline) to switch between
    concurrent runs (shown only when >1). */
@@ -273,6 +275,7 @@ body {
   width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); flex: 0 0 auto;
 }
 .run-select__dot[data-phase='running'] { background: var(--blue); animation: pulse 1.4s infinite; }
+.run-select__dot[data-phase='queued'] { background: var(--yellow); }
 .run-select__dot[data-phase='done'] { background: var(--green); }
 .run-select__dot[data-phase='error'] { background: var(--red); }
 /* Simulated <select>: a pill trigger + a custom glass listbox (NOT the OS popup),
@@ -852,6 +855,7 @@ input[type='range'] { flex: 1; accent-color: var(--accent); }
 .queue-status.done { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
 .queue-status.error { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
 .queue-status.pending { color: var(--text-3); background: var(--elev-2); }
+.queue-status.queued { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 14%, transparent); }
 .queue-foot { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
 .queue-foot .btn--primary { margin-left: auto; }
 

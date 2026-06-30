@@ -31,6 +31,7 @@ import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import {
   getSystemMetrics,
+  parseMemoryPressureSome10,
   resetCpuSnapshot,
   resetDarwinAvailableCache,
   SystemMetricsSampler,
@@ -400,5 +401,25 @@ describe('SystemMetricsSampler', () => {
     // The fresh sampler has never sampled → 0, regardless of the default
     // singleton already holding a snapshot.
     expect(fresh.sample().cpuPercent).toBe(0);
+  });
+});
+
+describe('parseMemoryPressureSome10', () => {
+  it('extracts the some-line avg10 from a real PSI body', () => {
+    const body =
+      'some avg10=0.42 avg60=0.10 avg300=0.03 total=12345678\n' +
+      'full avg10=0.00 avg60=0.00 avg300=0.00 total=6789012\n';
+    expect(parseMemoryPressureSome10(body)).toBe(0.42);
+  });
+
+  it('handles integer and high values', () => {
+    expect(parseMemoryPressureSome10('some avg10=27 avg60=5 avg300=1 total=1')).toBe(27);
+    expect(parseMemoryPressureSome10('some avg10=100.00 avg60=0 avg300=0 total=1')).toBe(100);
+  });
+
+  it('returns null when the some line or avg10 is absent', () => {
+    expect(parseMemoryPressureSome10('full avg10=1.0 avg60=0 avg300=0 total=1')).toBeNull();
+    expect(parseMemoryPressureSome10('')).toBeNull();
+    expect(parseMemoryPressureSome10('garbage')).toBeNull();
   });
 });

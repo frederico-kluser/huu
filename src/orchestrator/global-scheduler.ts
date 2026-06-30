@@ -1,5 +1,6 @@
 import { AutoScaler } from './auto-scaler.js';
 import { SystemMetricsSampler, type SystemMetrics } from '../lib/resource-monitor.js';
+import { resolveRamPercent } from '../lib/budget.js';
 
 /**
  * GlobalScheduler — the single owner of the machine for MULTI-RUN scheduling.
@@ -132,7 +133,8 @@ export class GlobalScheduler {
   ) {
     this.sampler = opts.sampler ?? new SystemMetricsSampler();
     const monitor = opts.resourceMonitor ?? (() => this.sampler.sample());
-    this.budget = opts.budget ?? new AutoScaler({ resourceMonitor: monitor });
+    this.budget =
+      opts.budget ?? new AutoScaler({ resourceMonitor: monitor, budgetPercent: resolveRamPercent() });
     this.budget.setMode('auto');
   }
 
@@ -153,6 +155,15 @@ export class GlobalScheduler {
       this.tickTimer = null;
     }
     this.budget.stop();
+  }
+
+  /**
+   * Update the machine-global RAM budget dial at runtime (e.g. the web Setting
+   * changed between runs). Applies to the single budget AutoScaler that governs
+   * every subordinate run.
+   */
+  setBudgetPercent(pct: number): void {
+    this.budget.setBudgetPercent(pct);
   }
 
   /** Admit a run. Returns a handle for later unregister(). Re-grants at once. */

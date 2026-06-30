@@ -388,6 +388,15 @@
           </div>
           <div class="config-hint muted" id="globalTimeoutHint">Default for every run started from this browser, applied to the whole pipeline. Empty = the pipeline's default (10 min · 5 min for single-file tasks). A per-project value overrides this. Web UI only — the CLI keeps its own rules.</div>
         </div>
+        <div class="field">
+          <label for="globalRamPercentInput">RAM budget</label>
+          <div class="timeout-row">
+            <input type="number" id="globalRamPercentInput" class="timeout-input" min="10" max="95" step="1"
+                   inputmode="numeric" placeholder="85" aria-describedby="globalRamPercentHint" />
+            <span class="timeout-unit">%</span>
+          </div>
+          <div class="config-hint muted" id="globalRamPercentHint">Share of total RAM huu may use across ALL concurrent runs on this machine (10–95). Higher = more parallelism, thinner safety margin; the rest is reserved for the OS. Empty = 85%. Machine-global — there is no per-project override. Web UI only.</div>
+        </div>
       </div>
     </div>
 

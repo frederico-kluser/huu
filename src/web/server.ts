@@ -396,6 +396,10 @@ export function createWebServer(opts: WebServerOptions): {
         typeof body.timeoutMinutes === 'number'
           ? body.timeoutMinutes
           : undefined,
+      // Machine-global RAM budget dial (% of total). Configures the shared
+      // GlobalScheduler budget; absent → HUU_RAM_PERCENT/85 default.
+      ramPercent:
+        typeof body.ramPercent === 'number' ? body.ramPercent : undefined,
     };
     try {
       const snap = manager.start(params);

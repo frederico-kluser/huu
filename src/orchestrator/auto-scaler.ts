@@ -1,10 +1,22 @@
 import type { SystemMetrics } from '../lib/resource-monitor.js';
 import type { AutoScaleStatus } from '../lib/types.js';
+import { DEFAULT_RAM_PERCENT, clampPercent, ramBudgetBytes } from '../lib/budget.js';
 
 export interface AutoScalerConfig {
   resourceMonitor: () => SystemMetrics;
-  /** Seed for the observed per-agent memory estimate (MiB). Default 250. */
+  /** Seed for the observed per-agent memory estimate (MiB). Default 1536 (pessimistic). */
   agentMemoryEstimateMb?: number;
+  /**
+   * RAM budget as a percent of total memory — the admission ceiling (replaces
+   * the legacy safetyMarginPercent headroom math; see `src/lib/budget.ts`).
+   * Default 85. Consumed by targetConcurrency()/headroomCapacity().
+   */
+  budgetPercent?: number;
+  /**
+   * PSI `some avg10` (%) at/above which admission freezes (front brake). Default
+   * 0.5. Ignored when PSI is unavailable (memPressureSome10 === null).
+   */
+  admitPsiThreshold?: number;
   stopThresholdPercent?: number;
   destroyThresholdPercent?: number;
   cooldownMs?: number;
@@ -35,7 +47,12 @@ export type AutoScaleMode = 'auto' | 'manual' | 'greedy';
 
 type AutoScaleState = 'NORMAL' | 'SCALING_UP' | 'BACKING_OFF' | 'COOLDOWN' | 'DESTROYING';
 
-const DEFAULT_AGENT_MEMORY_ESTIMATE_MB = 250;
+// Pessimistic cold-start seed: a pi-coding-agent's real working set is ~0.5–1.5
+// GiB, far above the old 250 MiB seed that let the scaler over-admit dozens of
+// agents before the EMA corrected (the OOM incident). Start HIGH and let the
+// EMA correct DOWN as real per-agent footprint is observed — admit cautiously,
+// open the tap once it's confirmed to fit.
+const DEFAULT_AGENT_MEMORY_ESTIMATE_MB = 1536;
 const DEFAULT_STOP_THRESHOLD = 90;
 const DEFAULT_DESTROY_THRESHOLD = 95;
 const DEFAULT_COOLDOWN_MS = 30_000;
@@ -45,8 +62,13 @@ const DEFAULT_SAFETY_MARGIN_PERCENT = 10;
 const DEFAULT_MIN_AGENT_MEMORY_MB = 128;
 const DEFAULT_MAX_AGENT_MEMORY_MB = 2048;
 const DEFAULT_EMA_ALPHA = 0.2;
-/** The percent margin never shrinks below this absolute floor. */
-const MIN_SAFETY_MARGIN_BYTES = 512 * 1024 * 1024;
+/**
+ * PSI `some avg10` (%) at/above which admission FREEZES (the front brake). PSI
+ * rises before RAM% saturates, so this catches a burst the lagging RAM gate
+ * misses. Deliberately low — the goal is to fill the machine to the budget, not
+ * to run pressure-free.
+ */
+const DEFAULT_ADMIT_PSI = 0.5;
 const POLL_INTERVAL_MS = 1_000;
 const MIB = 1024 * 1024;
 
@@ -75,6 +97,8 @@ export class AutoScaler {
     this.config = {
       resourceMonitor: config.resourceMonitor,
       agentMemoryEstimateMb: config.agentMemoryEstimateMb ?? DEFAULT_AGENT_MEMORY_ESTIMATE_MB,
+      budgetPercent: config.budgetPercent ?? DEFAULT_RAM_PERCENT,
+      admitPsiThreshold: config.admitPsiThreshold ?? DEFAULT_ADMIT_PSI,
       stopThresholdPercent: config.stopThresholdPercent ?? DEFAULT_STOP_THRESHOLD,
       destroyThresholdPercent: config.destroyThresholdPercent ?? DEFAULT_DESTROY_THRESHOLD,
       cooldownMs: config.cooldownMs ?? DEFAULT_COOLDOWN_MS,
@@ -117,28 +141,42 @@ export class AutoScaler {
     this.mode = mode;
   }
 
+  /** Update the RAM budget percent (the machine-global dial changed at runtime). */
+  setBudgetPercent(pct: number): void {
+    this.config.budgetPercent = clampPercent(pct);
+  }
+
   getMode(): AutoScaleMode {
     return this.mode;
   }
 
   shouldSpawn(): boolean {
     if (!this.enabled) return true; // not polling — never gate the pool
-    const { cpuPercent, ramPercent } = this.currentMetrics;
+    const { cpuPercent, ramPercent, memPressureSome10 } = this.currentMetrics;
     if (this.mode === 'manual') {
-      // Guard-only: respect the user's concurrency choice unless memory is
+      // Guard-only: respect the user's pinned concurrency unless memory is
       // already at the destroy threshold (spawning would kill someone else).
+      // PSI does NOT gate manual — the user asked for an exact pool size.
       return ramPercent < this.config.destroyThresholdPercent;
     }
+    // PSI front-brake (auto + greedy): freeze admission once memory pressure
+    // crosses the threshold. PSI rises BEFORE RAM% saturates, so this catches a
+    // burst the lagging RAM gate would miss. Null PSI (macOS / no CONFIG_PSI /
+    // unreadable) → skip and fall back to the RAM gate below.
+    const psiBlocked =
+      memPressureSome10 !== null && memPressureSome10 >= this.config.admitPsiThreshold;
     if (this.mode === 'greedy') {
       // Flood up to the destroy threshold, then let the guard reclaim. Gate on
       // both CPU and RAM so the spawn line matches shouldDestroy()'s (CPU OR
       // RAM ≥ threshold) — otherwise we'd respawn into a CPU-driven kill.
       // Damped: hold off while cooling down from the last guard kill.
       if (this.state === 'COOLDOWN') return false;
+      if (psiBlocked) return false;
       const { destroyThresholdPercent } = this.config;
       return cpuPercent < destroyThresholdPercent && ramPercent < destroyThresholdPercent;
     }
     if (this.state === 'COOLDOWN') return false;
+    if (psiBlocked) return false;
     const { stopThresholdPercent } = this.config;
     if (cpuPercent >= stopThresholdPercent || ramPercent >= stopThresholdPercent) {
       return false;
@@ -155,35 +193,41 @@ export class AutoScaler {
   }
 
   /**
-   * Memory-headroom admission: how many agents fit in the claimable memory
-   * after reserving a safety margin, on top of the ones already running.
+   * How many MORE agents fit under the RAM BUDGET (the % dial — now the
+   * admission invariant, replacing the legacy available−margin headroom):
    *
-   *   margin     = max(total × safetyMarginPercent, 512 MiB)
-   *   headroom   = max(0, available − margin)
+   *   budget     = ramBudgetBytes(total, budgetPercent)   // % of total, OS-reserve-floored
+   *   headroom   = max(0, budget − used)
    *   additional = floor(headroom / observedAgentBytes)
    *
-   * Capped by pending work (never over-provision idle slots) and maxAgents;
+   * Uses ramUsedBytes (real used, cgroup-aware) vs the budget, NOT
+   * ramAvailableBytes vs a margin.
+   */
+  private budgetAdditional(): number {
+    const { ramTotalBytes, ramUsedBytes } = this.currentMetrics;
+    const budgetBytes = ramBudgetBytes(ramTotalBytes, this.config.budgetPercent);
+    const headroom = Math.max(0, budgetBytes - ramUsedBytes);
+    return Math.floor(headroom / this.observedAgentBytes);
+  }
+
+  /**
+   * Admission target: active agents plus how many more fit under the RAM budget,
+   * capped by pending work (never over-provision idle slots) and maxAgents;
    * never below 1 so the run always makes progress.
    */
   targetConcurrency(): number {
-    const { ramTotalBytes, ramAvailableBytes } = this.currentMetrics;
-    const { safetyMarginPercent, maxAgents } = this.config;
+    const { maxAgents } = this.config;
     if (this.mode === 'greedy') {
       // Flood: aim for one agent per queued task (never over-provision idle
-      // slots), capped only by the hard ceiling. No headroom estimate — the
+      // slots), capped only by the hard ceiling. No budget estimate — the
       // memory guard is what holds the line. shouldSpawn() still gates each
-      // actual spawn at the destroy threshold.
+      // actual spawn at the destroy threshold (and PSI).
       const ceiling = this.pendingTaskCount > 0
         ? Math.min(this.activeAgentCount + this.pendingTaskCount, maxAgents)
         : maxAgents;
       return Math.max(1, ceiling);
     }
-    const margin = Math.max(
-      ramTotalBytes * (safetyMarginPercent / 100),
-      MIN_SAFETY_MARGIN_BYTES,
-    );
-    const headroom = Math.max(0, ramAvailableBytes - margin);
-    const additional = Math.floor(headroom / this.observedAgentBytes);
+    const additional = this.budgetAdditional();
     const ceiling = this.pendingTaskCount > 0
       ? Math.min(this.activeAgentCount + this.pendingTaskCount, maxAgents)
       : maxAgents;
@@ -191,22 +235,16 @@ export class AutoScaler {
   }
 
   /**
-   * Memory-headroom capacity WITHOUT the demand ceiling: active agents plus how
-   * many more fit in the claimable RAM, capped only by maxAgents (never by
-   * pending work). `targetConcurrency()` is this clamped down to actual demand;
-   * the GlobalScheduler compares THIS to total demand to learn whether the
-   * machine could absorb another admitted run (its admission signal).
+   * Budget capacity WITHOUT the demand ceiling: active agents plus how many more
+   * fit under the RAM budget, capped only by maxAgents (never by pending work).
+   * `targetConcurrency()` is this clamped down to actual demand; the
+   * GlobalScheduler compares THIS to total demand to learn whether the machine
+   * could absorb another admitted run (its admission signal).
    */
   headroomCapacity(): number {
     const { maxAgents } = this.config;
     if (this.mode === 'greedy') return maxAgents;
-    const { ramTotalBytes, ramAvailableBytes } = this.currentMetrics;
-    const margin = Math.max(
-      ramTotalBytes * (this.config.safetyMarginPercent / 100),
-      MIN_SAFETY_MARGIN_BYTES,
-    );
-    const headroom = Math.max(0, ramAvailableBytes - margin);
-    const additional = Math.floor(headroom / this.observedAgentBytes);
+    const additional = this.budgetAdditional();
     return Math.max(1, Math.min(this.activeAgentCount + additional, maxAgents));
   }
 

@@ -19,6 +19,7 @@ import type { AppConfig, OrchestratorState, OrchestratorResult, Pipeline } from 
 import type { AgentFactory } from '../orchestrator/types.js';
 import { Orchestrator } from '../orchestrator/index.js';
 import { GlobalScheduler } from '../orchestrator/global-scheduler.js';
+import { AdmissionController } from './admission-controller.js';
 
 export interface RunSpec {
   pipeline: Pipeline;
@@ -92,7 +93,10 @@ export async function runMany(
   const unsubscribes: Array<() => void> = [];
   const statusByIndex = new Map<number, OrchestratorState['status']>();
   let admitted = 0;
-  let headroomStreak = 0;
+  const controller = new AdmissionController({
+    maxAdmitted,
+    hysteresisChecks: admitHysteresisChecks,
+  });
 
   const admitOne = (): void => {
     const i = admitted++;
@@ -144,16 +148,17 @@ export async function runMany(
       }
       const finished = results.reduce((n, r) => (r ? n + 1 : n), 0);
       const liveAdmitted = admitted - finished;
-      if (liveAdmitted >= maxAdmitted) {
-        headroomStreak = 0; // at the cap — require fresh sustained headroom later
-        return;
-      }
       // A run merging (status 'integrating') has its pool drained, so the box is
       // idle even though it's "busy" — the case the user cares about most.
       const anyIntegrating = [...statusByIndex.values()].some((s) => s === 'integrating');
-      headroomStreak = scheduler.remaining > 0 ? headroomStreak + 1 : 0;
-      if (anyIntegrating || headroomStreak >= admitHysteresisChecks) {
-        headroomStreak = 0;
+      if (
+        controller.shouldAdmit({
+          liveAdmitted,
+          pendingCount: specs.length - admitted,
+          schedulerRemaining: scheduler.remaining,
+          anyIntegrating,
+        })
+      ) {
         admitOne();
       }
     }, admitCheckMs);

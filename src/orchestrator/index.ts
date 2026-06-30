@@ -59,6 +59,7 @@ import { ensureNativeShim, type NativeShim } from './native-shim.js';
 import { AutoScaler } from './auto-scaler.js';
 import type { GlobalScheduler, RunDriverHandle } from './global-scheduler.js';
 import { getSystemMetrics } from '../lib/resource-monitor.js';
+import { resolveRamPercent } from '../lib/budget.js';
 import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname, isAbsolute } from 'node:path';
@@ -181,6 +182,13 @@ export interface OrchestratorOptions {
    * active in both modes.
    */
   autoScale?: boolean;
+  /**
+   * RAM budget as a percent of total memory — the admission ceiling for this
+   * run's AutoScaler. Machine-global dial; in multi-run the GlobalScheduler owns
+   * the budget instead (this run's AutoScaler is dormant). Falls back to
+   * `HUU_RAM_PERCENT`/85 via `src/lib/budget.ts` when omitted.
+   */
+  budgetPercent?: number;
   /**
    * When set, this run is SUBORDINATE to a GlobalScheduler (multi-run
    * scheduling): the scheduler owns the concurrency target (`grantFor`) and the
@@ -415,6 +423,7 @@ export class Orchestrator {
     });
     this.autoScaler = new AutoScaler({
       resourceMonitor: getSystemMetrics,
+      budgetPercent: resolveRamPercent(options.budgetPercent),
     });
     this.autoScaler.setMode(autoMode ? 'auto' : 'manual');
     this.autoScaleDisabledByUser = !autoMode;
@@ -1344,10 +1353,18 @@ export class Orchestrator {
         }
       }
 
-      // Spawn replacements up to instanceCount
+      // Spawn replacements up to instanceCount, but FAST-RAMP: cap NEW spawns
+      // this tick to ≈ +50% of the busy count (min 1) so a single tick can't
+      // burst dozens of agents at once — the spike that OOM-killed the process
+      // when the whole queue dispatched together. Geometric growth still reaches
+      // the target in a few 500 ms ticks, and shouldSpawn() (PSI + budget) is
+      // re-checked per spawn. Manual mode (user-pinned pool) fills immediately.
       const busyCount = this.activeAgents.size + this.spawningIds.size;
       const slotsAvailable = Math.max(0, this.instanceCount - busyCount);
-      for (let i = 0; i < slotsAvailable && this.pendingTasks.length > 0; i++) {
+      const ramping = this.scheduler != null || this.autoScaler.getMode() !== 'manual';
+      const perTickCap = ramping ? Math.max(1, Math.ceil(busyCount * 0.5)) : slotsAvailable;
+      const toSpawn = Math.min(slotsAvailable, perTickCap);
+      for (let i = 0; i < toSpawn && this.pendingTasks.length > 0; i++) {
         if (!(this.scheduler ? this.scheduler.shouldSpawn() : this.autoScaler.shouldSpawn())) {
           break;
         }

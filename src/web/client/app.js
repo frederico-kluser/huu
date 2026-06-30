@@ -71,7 +71,7 @@ const S = {
   timeoutMin: '',             // launch form "max time per agent" (min); '' = pipeline default
   // Browser-local Web UI settings (persisted under huu.settings.v1). Applies to
   // runs started from THIS browser only; the CLI keeps its own rules.
-  settings: { maxAgentMinutes: undefined },
+  settings: { maxAgentMinutes: undefined, ramPercent: undefined },
   keyStatus: { ok: true, missing: [] },
   run: { phase: 'idle' },     // the ACTIVE (viewed) run — a pointer into `runs`
   runs: new Map(),            // runId -> snapshot (every concurrent run)
@@ -725,6 +725,7 @@ function addLabel() { return S.queue.running ? 'Add & start' : 'Add to queue'; }
 function itemReady(it) { return providerReady(providerInfoById(it.provider)); }
 
 function statusBadge(s) {
+  if (s === 'queued') return '<span class="queue-status queued">queued</span>';
   if (s === 'running') return '<span class="queue-status running">running</span>';
   if (s === 'done') return '<span class="queue-status done">done</span>';
   if (s === 'error') return '<span class="queue-status error">failed</span>';
@@ -874,7 +875,10 @@ function dispatchQueueItem(i) {
   const q = S.queue;
   const item = q.items[i];
   if (!item) return;
-  item.status = 'running';
+  // The server lazily admits runs (it may hold this one as 'queued' until there
+  // is RAM headroom). Reflect that here; onRunFrame() flips it to 'running' once
+  // the server admits it.
+  item.status = 'queued';
   renderQueue();
   postRun(i);
 }
@@ -896,6 +900,7 @@ async function postRun(i) {
         mode: item.mode,
         concurrency: item.mode === 'manual' ? item.concurrency : undefined,
         timeoutMinutes: item.timeoutMinutes || globalTimeoutMinutes() || undefined,
+        ramPercent: globalRamPercent() || undefined,
         apiKey: apiKey || undefined,
         endpoint: endpoint || undefined,
         runDirectory: item.runDirectory || undefined,
@@ -930,6 +935,14 @@ function onRunFrame(run) {
   if (q.processed.has(run.runId)) return;            // already archived
   const item = q.live && q.live.get(run.runId);
   if (!item) return;                                  // not one of THIS queue's runs
+  // Keep the queue chip in sync with the server's queued → running progression.
+  if (run.phase === 'queued' || run.phase === 'running') {
+    if (item.status !== run.phase) {
+      item.status = run.phase;
+      renderQueue();
+    }
+    return;
+  }
   if (run.phase !== 'done' && run.phase !== 'error') return;
   q.processed.add(run.runId);
   q.live.delete(run.runId);
@@ -1007,7 +1020,7 @@ function stopFinalize() {
 function updateQueueChrome() {
   const q = S.queue;
   let active = false;
-  for (const r of S.runs.values()) if (r.phase === 'running') { active = true; break; }
+  for (const r of S.runs.values()) if (r.phase === 'running' || r.phase === 'queued') { active = true; break; }
   const inQueue = q.running;
   // During a queue run the per-run abort is replaced by a queue-wide stop.
   $('abortBtn').hidden = !active || inQueue;
@@ -1071,7 +1084,11 @@ const SETTINGS_LS = 'huu.settings.v1';
 function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_LS);
-    if (raw) S.settings.maxAgentMinutes = parseTimeoutMinutes(JSON.parse(raw).maxAgentMinutes);
+    if (raw) {
+      const o = JSON.parse(raw);
+      S.settings.maxAgentMinutes = parseTimeoutMinutes(o.maxAgentMinutes);
+      S.settings.ramPercent = parseRamPercent(o.ramPercent);
+    }
   } catch { /* corrupt / disabled — keep defaults */ }
 }
 function saveSettings() {
@@ -1080,6 +1097,14 @@ function saveSettings() {
 }
 /** The global default "max time per agent" (minutes), or undefined = pipeline default. */
 function globalTimeoutMinutes() { return S.settings.maxAgentMinutes; }
+/** Parse a RAM-budget percent (10–95 int), or undefined for the 85% default. */
+function parseRamPercent(v) {
+  const n = Math.floor(Number(v));
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.max(10, Math.min(95, n));
+}
+/** The machine-global RAM budget percent, or undefined = the 85% default. */
+function globalRamPercent() { return S.settings.ramPercent; }
 /** Reflect the global default into the per-project field's placeholder (blank inherits it). */
 function syncTimeoutField() {
   const g = S.settings.maxAgentMinutes;
@@ -1092,6 +1117,7 @@ $('settingsClose').addEventListener('click', closeSettings);
 $('settingsScrim').addEventListener('click', closeSettings);
 function openSettings() {
   $('globalTimeoutInput').value = S.settings.maxAgentMinutes ? String(S.settings.maxAgentMinutes) : '';
+  $('globalRamPercentInput').value = S.settings.ramPercent ? String(S.settings.ramPercent) : '';
   $('settingsScrim').hidden = false;
   $('settingsModal').hidden = false;
 }
@@ -1101,6 +1127,10 @@ $('globalTimeoutInput').addEventListener('input', (e) => {
   saveSettings();
   syncTimeoutField();   // the per-project placeholder follows the global
   renderQueue();        // queued cards show the effective (override ?? global) timeout
+});
+$('globalRamPercentInput').addEventListener('input', (e) => {
+  S.settings.ramPercent = parseRamPercent(e.target.value);
+  saveSettings();       // machine-global; applied to the shared budget on the next run
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('settingsModal').hidden) closeSettings(); });
 
@@ -1669,7 +1699,7 @@ function setStatus(phase, innerStatus) {
     $('statusPill').dataset.s = 'awaiting';
     return;
   }
-  const label = { idle: 'idle', running: 'running', done: 'done', error: 'error' }[phase] || phase;
+  const label = { idle: 'idle', queued: 'queued', running: 'running', done: 'done', error: 'error' }[phase] || phase;
   $('statusText').textContent = label;
   $('statusPill').dataset.s = phase;
 }
