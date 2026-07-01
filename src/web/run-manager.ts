@@ -27,6 +27,7 @@ import {
 import { findSpec, resolveApiKey } from '../lib/api-key.js';
 import { backendToProvider } from '../lib/providers.js';
 import { generateRunId } from '../lib/run-id.js';
+import { resolveRamPercent } from '../lib/budget.js';
 import type {
   AppConfig,
   LlmProvider,
@@ -34,11 +35,19 @@ import type {
   Pipeline,
 } from '../lib/types.js';
 import { getPipelineByName } from './api-data.js';
+import { AdmissionController } from '../lib/admission-controller.js';
 
-export type RunPhase = 'idle' | 'running' | 'done' | 'error';
+export type RunPhase = 'idle' | 'queued' | 'running' | 'done' | 'error';
 
-/** Hard cap on simultaneously-tracked runs — a guard against a runaway client. */
-const MAX_CONCURRENT_RUNS = 24;
+/**
+ * Hard cap on simultaneously-tracked NON-TERMINAL runs (queued + running) — a
+ * guard against a runaway client filling the queue unboundedly.
+ */
+const MAX_CONCURRENT_RUNS = 64;
+/** Max runs ADMITTED (running) at once; the rest wait in `pending` (queued). */
+const MAX_LIVE_RUNS = 8;
+/** Admission poll cadence (ms) — mirrors run-many. */
+const ADMIT_CHECK_MS = 500;
 
 export interface StartRunParams {
   /** Pipeline name to resolve from disk/memory. Ignored when `pipeline` set. */
@@ -76,6 +85,12 @@ export interface StartRunParams {
   runDirectory?: string;
   /** Per-card timeout in minutes (sets both card timeouts, like the TUI). */
   timeoutMinutes?: number;
+  /**
+   * Machine-global RAM budget as a percent of total memory. Configures the
+   * SHARED GlobalScheduler budget (not per-run — one machine, one RAM). Absent →
+   * HUU_RAM_PERCENT/85 via `src/lib/budget.ts`.
+   */
+  ramPercent?: number;
 }
 
 export interface RunSnapshot {
@@ -125,6 +140,13 @@ export class WebRunManager {
   /** One shared budget across every concurrent run. Created+started lazily. */
   private scheduler: GlobalScheduler | null = null;
   private readonly runs = new Map<string, RunEntry>();
+  /**
+   * Real runs constructed but NOT yet admitted (lazy admission). FIFO order =
+   * priority. The admission loop pulls them into `runs` as live capacity frees.
+   */
+  private readonly pending: Array<{ runId: string; orch: Orchestrator; seed: RunSnapshot }> = [];
+  private admissionController: AdmissionController | null = null;
+  private admissionTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly cwd: string,
@@ -149,16 +171,74 @@ export class WebRunManager {
     return [...this.runs.values()].map((e) => e.snapshot);
   }
 
-  /** True while any run is still running. */
+  /** True while any run is still running OR queued (waiting for capacity). */
   isActive(): boolean {
-    for (const e of this.runs.values()) if (e.snapshot.phase === 'running') return true;
+    for (const e of this.runs.values())
+      if (e.snapshot.phase === 'running' || e.snapshot.phase === 'queued') return true;
     return false;
   }
 
+  /** Admitted (running) runs — the live concurrency the admission loop gates. */
   private activeCount(): number {
     let n = 0;
     for (const e of this.runs.values()) if (e.snapshot.phase === 'running') n++;
     return n;
+  }
+
+  /** Non-terminal runs (queued + running) — the cap on total accepted work. */
+  private nonTerminalCount(): number {
+    let n = 0;
+    for (const e of this.runs.values())
+      if (e.snapshot.phase === 'running' || e.snapshot.phase === 'queued') n++;
+    return n;
+  }
+
+  /** True when some admitted run is merging (pool drained → box idle). */
+  private anyIntegrating(): boolean {
+    for (const e of this.runs.values()) if (e.snapshot.state?.status === 'integrating') return true;
+    return false;
+  }
+
+  /** Start the lazy-admission loop (idempotent). Stops itself when `pending` drains. */
+  private ensureAdmissionLoop(): void {
+    if (!this.admissionController) {
+      this.admissionController = new AdmissionController({ maxAdmitted: MAX_LIVE_RUNS });
+    }
+    if (this.admissionTimer) return;
+    this.admissionTimer = setInterval(() => this.tickAdmission(), ADMIT_CHECK_MS);
+    this.admissionTimer.unref?.();
+  }
+
+  /** One admission pass: pull in the next queued run when the budget allows. */
+  private tickAdmission(): void {
+    if (this.pending.length === 0) {
+      if (this.admissionTimer) {
+        clearInterval(this.admissionTimer);
+        this.admissionTimer = null;
+      }
+      return;
+    }
+    const remaining = this.scheduler ? this.scheduler.remaining : Number.POSITIVE_INFINITY;
+    if (
+      this.admissionController!.shouldAdmit({
+        liveAdmitted: this.activeCount(),
+        pendingCount: this.pending.length,
+        schedulerRemaining: remaining,
+        anyIntegrating: this.anyIntegrating(),
+      })
+    ) {
+      this.admitNext();
+    }
+  }
+
+  /** Admit (start) the highest-priority queued run, flipping it to `running`. */
+  private admitNext(): void {
+    const item = this.pending.shift();
+    if (!item) return;
+    const entry = this.runs.get(item.runId);
+    if (!entry) return; // aborted while queued
+    entry.snapshot = { ...entry.snapshot, phase: 'running', startedAt: Date.now() };
+    this.beginRun(entry, item.orch, { orch: item.orch });
   }
 
   private ensureScheduler(): GlobalScheduler {
@@ -176,7 +256,7 @@ export class WebRunManager {
    * endpoint, or too many concurrent runs) so the server returns a 4xx.
    */
   start(params: StartRunParams): RunSnapshot {
-    if (this.activeCount() >= MAX_CONCURRENT_RUNS) {
+    if (this.nonTerminalCount() >= MAX_CONCURRENT_RUNS) {
       throw new Error(`Too many concurrent runs (max ${MAX_CONCURRENT_RUNS}).`);
     }
 
@@ -239,11 +319,15 @@ export class WebRunManager {
 
     const runId = generateRunId();
     const mode = params.mode ?? 'auto';
+    // Apply the machine-global RAM dial to the SHARED budget (latest wins). The
+    // dial governs the GlobalScheduler, not a per-run AutoScaler (one RAM).
+    const scheduler = this.ensureScheduler();
+    scheduler.setBudgetPercent(resolveRamPercent(params.ramPercent));
     const orch = new Orchestrator(config, effectivePipeline, runDir, bundle.agentFactory, {
       conflictResolverFactory: bundle.conflictResolverFactory,
       autoScale: mode !== 'manual',
       initialConcurrency: params.concurrency,
-      scheduler: this.ensureScheduler(),
+      scheduler,
       runId,
       // Hold the run open in `awaiting_retry` when it ends with failed cards so
       // the browser can retry individual failures (a timed-out card with a
@@ -254,7 +338,7 @@ export class WebRunManager {
     if (mode === 'greedy') orch.enableGreedyMode();
 
     const seed: RunSnapshot = {
-      phase: 'running',
+      phase: 'queued',
       runId,
       pipelineName: effectivePipeline.name,
       runDirectory: runDir,
@@ -263,7 +347,18 @@ export class WebRunManager {
       startedAt: Date.now(),
       state: null,
     };
-    return this.launch(runId, orch, seed, { orch });
+    // LAZY ADMISSION: register the run as QUEUED and let the admission loop pull
+    // it in once the shared budget shows sustained spare capacity (or a run is
+    // merging). The FIRST run (nothing live yet) starts immediately. This is the
+    // direct fix for the OOM incident — the whole project queue no longer spawns
+    // at once; the browser keeps POSTing every item, the SERVER paces them.
+    const entry: RunEntry = { snapshot: seed, orch, sim: null };
+    this.runs.set(runId, entry);
+    this.pending.push({ runId, orch, seed });
+    this.ensureAdmissionLoop();
+    if (this.activeCount() === 0) this.admitNext();
+    this.onUpdate(entry.snapshot);
+    return entry.snapshot;
   }
 
   /**
@@ -272,7 +367,7 @@ export class WebRunManager {
    * kanban. Tracked in the same map so several can show in the selector.
    */
   startSimulation(opts: SimulationOptions): RunSnapshot {
-    if (this.activeCount() >= MAX_CONCURRENT_RUNS) {
+    if (this.nonTerminalCount() >= MAX_CONCURRENT_RUNS) {
       throw new Error(`Too many concurrent runs (max ${MAX_CONCURRENT_RUNS}).`);
     }
     const engine = new SimulationEngine(opts);
@@ -290,9 +385,9 @@ export class WebRunManager {
   }
 
   /**
-   * Subscribe a driver to the snapshot + firehose channels and kick it off
-   * fire-and-forget, flipping its phase on settle. Each run owns its own entry
-   * so concurrent runs never clobber each other's snapshot.
+   * Create an entry and start it immediately (the `/simulation` path — sims are
+   * synthetic and lightweight, so they are not lazily admitted). Real runs go
+   * through the pending queue + {@link admitNext} instead.
    */
   private launch(
     runId: string,
@@ -302,6 +397,24 @@ export class WebRunManager {
   ): RunSnapshot {
     const entry: RunEntry = { snapshot: seed, orch: refs.orch ?? null, sim: refs.sim ?? null };
     this.runs.set(runId, entry);
+    this.beginRun(entry, driver, refs);
+    return entry.snapshot;
+  }
+
+  /**
+   * Subscribe a driver to the snapshot + firehose channels and kick it off
+   * fire-and-forget, flipping its phase on settle. Operates on an EXISTING entry
+   * (created by {@link launch} for sims, or pre-registered as 'queued' for
+   * lazily-admitted real runs), so concurrent runs never clobber each other.
+   */
+  private beginRun(
+    entry: RunEntry,
+    driver: RunDriver,
+    refs: { orch?: Orchestrator; sim?: SimulationEngine },
+  ): void {
+    entry.orch = refs.orch ?? entry.orch;
+    entry.sim = refs.sim ?? entry.sim;
+    const runId = entry.snapshot.runId;
 
     const unsubscribe = driver.subscribe((state) => {
       entry.snapshot = { ...entry.snapshot, runId: state.runId || runId, state };
@@ -344,23 +457,49 @@ export class WebRunManager {
       });
 
     this.onUpdate(entry.snapshot);
-    return entry.snapshot;
   }
 
   /** Hard-stop one run, or (no id) every run + tear the shared scheduler down. */
   abort(runId?: string): void {
     if (runId) {
+      // Queued (not yet admitted) → drop from the pending queue and mark it.
+      const qi = this.pending.findIndex((p) => p.runId === runId);
+      if (qi >= 0) {
+        this.pending.splice(qi, 1);
+        this.markAbortedBeforeAdmission(runId);
+        return;
+      }
       const e = this.runs.get(runId);
       e?.orch?.abort();
       e?.sim?.abort();
       return;
     }
+    // Abort everything: stop admission, drop the queue, abort live runs.
+    if (this.admissionTimer) {
+      clearInterval(this.admissionTimer);
+      this.admissionTimer = null;
+    }
+    for (const p of this.pending.splice(0)) this.markAbortedBeforeAdmission(p.runId);
     for (const e of this.runs.values()) {
       e.orch?.abort();
       e.sim?.abort();
     }
     this.scheduler?.stop();
     this.scheduler = null;
+  }
+
+  /** Flip a still-queued run to error (it never consumed budget). */
+  private markAbortedBeforeAdmission(runId: string): void {
+    const e = this.runs.get(runId);
+    if (e && e.snapshot.phase === 'queued') {
+      e.snapshot = {
+        ...e.snapshot,
+        phase: 'error',
+        finishedAt: Date.now(),
+        errorReason: 'aborted before admission',
+      };
+      this.onUpdate(e.snapshot);
+    }
   }
 
   /** Pause/resume a /simulation run (no-op for real runs / unknown id). */

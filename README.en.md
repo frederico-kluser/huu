@@ -218,20 +218,24 @@ terminal TUI back.
   are recorded in History. **Web UI only — the CLI keeps its own rules.**
   (Previously the web could only raise the limit when *retrying* an
   already-timed-out card; setting it up front was TUI-only.)
-- **Project queue, in parallel.** Select **several projects** — each with its
-  own config (directory, provider, model, concurrency) — and run them
-  **concurrently** under one shared RAM/concurrency budget. Earlier projects
-  have priority; later ones **backfill** the idle slots of the earlier ones
-  (e.g. while one is merging) and yield the capacity back when it's needed — and
-  under memory pressure the lowest-priority project's newest agent is killed
-  first. A **project selector** in the header (a dropdown showing
-  **project · pipeline**) lets you switch between the live boards. **With the
-  queue already running you can go back home (← Home) and add more projects** —
-  they start **immediately**, no queue restart, and a *running* banner stays
-  visible while you pick. If one fails,
-  the rest keep going. Every execution is archived to the
-  browser **history** (IndexedDB) with all cards, per-card costs and the
-  per-project total — **exportable as JSON** in one click.
+- **Project queue, in parallel — with smart admission.** Select **several
+  projects** — each with its own config (directory, provider, model,
+  concurrency) — under one shared machine-wide **RAM/concurrency budget**. The
+  server admits the first **right away** and holds the rest **`queued`**, pulling
+  each in only when there is **sustained** spare memory — i.e. it does **not**
+  fire the whole machine at once (exactly what crashed the process with many
+  projects). Earlier projects have priority; later ones **backfill** idle slots
+  (e.g. while one is merging), and under memory pressure the lowest-priority
+  project's newest agent is **paused** first (its work preserved and resumed when
+  headroom returns; `HUU_NO_PAUSE=1` reverts to killing). **How much RAM huu may use is a dial**
+  (Settings → **RAM budget %**, or `HUU_RAM_PERCENT` / `--ram-percent`; default
+  85%, the rest reserved for the OS). A **project selector** in the header
+  (**project · pipeline**) switches between the live boards. **With the queue
+  running you can go back home (← Home) and add more projects** — they **join the
+  queue** and are admitted as capacity frees. If one fails, the rest keep going.
+  Every execution is archived to the browser **history** (IndexedDB) with all
+  cards, per-card costs and the per-project total — **exportable as JSON** in one
+  click.
 - **Truly live log — now an activity console.** The text the agent generates
   lands in the log **as it streams** — not just at tool boundaries. The log
   header is now a **live activity bar**: it sums how many tasks are running
@@ -283,6 +287,8 @@ huu --cli                 # terminal TUI
 | `HUU_WEB_HOST` | Bind address (default `0.0.0.0`; `127.0.0.1` = local only). |
 | `HUU_WEB_TOKEN` | Shared secret required on data/action routes. |
 | `HUU_CLI=1` | Default to the TUI (same as `--cli`). |
+| `HUU_RAM_PERCENT` / `--ram-percent=<n>` | RAM budget as a % of total machine memory (default `85`, range 10–95). Also in the web under Settings → RAM budget %. |
+| `HUU_OOM_SCORE_ADJ` | Adjust the huu process's `oom_score_adj` (conservative default; best-effort, only takes effect with privilege, e.g. in the container). |
 
 ### Simulation mode (`/simulation`)
 
@@ -639,10 +645,14 @@ respects the container's limit, not the host's.
 
 A **memory guard stays always on** (even with manual or MAX concurrency):
 if RAM **or** CPU crosses ~95%, the **newest** agent — the one with the
-least work done (picked by `startedAt`) — is killed, its card **returns
-to the TODO column** with a `↻N` counter, and the task is re-queued at
-the front, restarting from zero once memory frees up. The older agents'
-work is never lost.
+least work done (picked by `startedAt`) — is preempted. By default it is
+**paused**: huu checkpoints the agent's session, frees the RAM, but
+**preserves the worktree + transcript**, and the card enters **PAUSED**
+(`⏸N`) — resuming **where it left off** as soon as headroom returns. If a
+checkpoint isn't possible (or with `HUU_NO_PAUSE=1`) it falls back to the
+previous behaviour: the agent is **killed**, its card **returns to the
+TODO column** with a `↻N` counter, and the task restarts from zero. The
+older agents' work is never lost.
 
 Controls:
 

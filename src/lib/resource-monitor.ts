@@ -26,6 +26,14 @@ export interface SystemMetrics {
   loadAvg1: number;
   /** True when memory values were sourced from a container/cgroup boundary. */
   containerAware: boolean;
+  /**
+   * Linux PSI memory pressure: the `some` line's `avg10` (percent of the last
+   * 10s in which at least one task stalled waiting on memory). Rises BEFORE the
+   * machine exhausts RAM, so it is the front-brake admission signal. `null` when
+   * PSI is unavailable (macOS, kernels without CONFIG_PSI, or no readable
+   * pressure file) — callers must fall back to the RAM-percent gate.
+   */
+  memPressureSome10: number | null;
 }
 
 interface CpuSnapshot {
@@ -88,6 +96,46 @@ function readMemAvailableBytes(): number | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Parse the `some` line's `avg10` from a Linux PSI pressure file body (the
+ * shape of `/proc/pressure/memory` and cgroup `memory.pressure`):
+ *
+ *   some avg10=0.42 avg60=0.10 avg300=0.03 total=12345678
+ *   full avg10=0.00 avg60=0.00 avg300=0.00 total=6789012
+ *
+ * Returns the `some` avg10 as a number, or null when the line/field is absent
+ * or non-numeric. Pure — unit-tested directly.
+ */
+export function parseMemoryPressureSome10(text: string): number | null {
+  const m = /^some\b[^\n]*\bavg10=(\d+(?:\.\d+)?)/m.exec(text);
+  if (!m) return null;
+  const v = Number(m[1]);
+  return Number.isFinite(v) ? v : null;
+}
+
+/**
+ * Read the `some avg10` memory-pressure value. Prefers the per-cgroup
+ * `memory.pressure` when container-aware (PSI is cgroup v2+; v1 containers have
+ * no such file and fall through to the host), then the system-wide
+ * `/proc/pressure/memory`. Returns null when no pressure file is readable —
+ * never throws (mirrors the rest of this module's graceful degradation).
+ */
+function readMemoryPressureSome10(containerAware: boolean): number | null {
+  const paths = containerAware
+    ? ['/sys/fs/cgroup/memory.pressure', '/proc/pressure/memory']
+    : ['/proc/pressure/memory'];
+  for (const p of paths) {
+    if (!existsSync(p)) continue;
+    try {
+      const v = parseMemoryPressureSome10(readFileSync(p, 'utf8'));
+      if (v !== null) return v;
+    } catch {
+      /* try the next source */
+    }
+  }
+  return null;
 }
 
 /**
@@ -277,6 +325,7 @@ export class SystemMetricsSampler {
       typeof process.memoryUsage === 'function' ? process.memoryUsage().rss : 0;
 
     const loadAvg1 = loadavg()[0] ?? 0;
+    const memPressureSome10 = readMemoryPressureSome10(containerAware);
 
     return {
       cpuPercent,
@@ -287,6 +336,7 @@ export class SystemMetricsSampler {
       processRssBytes,
       loadAvg1,
       containerAware,
+      memPressureSome10,
     };
   }
 }

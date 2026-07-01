@@ -1,3 +1,5 @@
+import { existsSync, statSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import {
   createAgentSession,
   SessionManager,
@@ -111,10 +113,27 @@ export const piAgentFactory: AgentFactory = async (
     clampThinkingLevel(model, 'xhigh'),
   );
 
+  // Fase 2.3: persist the session so a memory-guard preemption can PAUSE this
+  // agent (checkpoint → reconstruct later) instead of killing it. The JSONL
+  // transcript MUST live OUTSIDE the agent worktree (`cwd`) — otherwise the
+  // finalize step's `git stageAll` would commit pi's transcript into the user's
+  // repo. `dirname(cwd)` is the run's worktree root (.huu-worktrees/<runId>/),
+  // so `.huu-sessions/<agent-dir>/` is a sibling that the run teardown cleans
+  // along with the worktrees. When `restoreSessionPath` is set (resume), we
+  // OPEN that file instead so the agent continues from its prior transcript;
+  // `cwdOverride = cwd` re-points it at the (reused) worktree. Verified end to
+  // end by the P0 runtime spike (abort mid-task → open → continue, no redo).
+  const sessionDir = join(dirname(cwd), '.huu-sessions', basename(cwd));
+  const restorePath = runtimeContext?.restoreSessionPath;
+  const sessionManager =
+    restorePath && existsSync(restorePath)
+      ? SessionManager.open(restorePath, undefined, cwd)
+      : SessionManager.create(cwd, sessionDir);
+
   const { session } = await createAgentSession({
     model,
     thinkingLevel,
-    sessionManager: SessionManager.inMemory(),
+    sessionManager,
     authStorage,
     modelRegistry,
     cwd,
@@ -148,6 +167,24 @@ export const piAgentFactory: AgentFactory = async (
       } catch {
         /* best-effort — dispose() will still try */
       }
+    },
+    async checkpoint(): Promise<string | null> {
+      // Fase 2.3 pause hook. Return a pointer to the persisted transcript so the
+      // orchestrator can resume this agent later (via restoreSessionPath).
+      // Completed turns are already flushed to the JSONL on each message_end; an
+      // in-flight turn is NOT, and is simply re-attempted on resume. We do NOT
+      // abort or dispose here — the caller disposes immediately after (mirrors
+      // destroyAgent's dispose→reject, so no extra interception is needed). When
+      // nothing durable exists yet, return null so the caller falls back to
+      // kill+requeue (never a regression).
+      if (lifecycle.isDisposed()) return null;
+      try {
+        const file = session.sessionFile;
+        if (file && existsSync(file) && statSync(file).size > 0) return file;
+      } catch {
+        /* unreadable session file → null → caller falls back to destroyAgent */
+      }
+      return null;
     },
     async prompt(message: string): Promise<void> {
       lifecycle.assertLive();

@@ -2,7 +2,7 @@
 name: working-on-orchestrator
 description: Explains huu's run lifecycle and its invariants — stage loop, task decomposition, worker pool, AutoScaler memory math, the memory-guard kill/requeue path with its consumable killedAgentIds Set, the interactive-retry hold (awaiting_retry + retryTask/finish), CheckStep judge execution (reserved agentId 9998) and checkRuns kanban state. Use when changing anything in src/orchestrator/ — scheduling, concurrency, requeue, retry, check execution, run state — or when debugging why agents are killed, requeued or misrouted.
 metadata:
-  version: 0.5.0
+  version: 0.6.0
   type: knowledge
 ---
 
@@ -33,9 +33,12 @@ Changes or investigations in `src/orchestrator/` (index, auto-scaler, port-alloc
 
 ### AutoScaler (`auto-scaler.ts`) — default ON
 
-- Target concurrency = memory headroom ÷ observed per-agent footprint.
-  - headroom = available RAM − margin, margin = max(total × safetyMarginPercent, 512 MiB) (`auto-scaler.ts:43,146`).
-  - footprint = EMA, α = 0.2, seeded 250 MiB, clamped [128, 2048] MiB (`auto-scaler.ts:32,41,15-17`). The EMA sample is (used − baseline) / activeAgents.
+- Target concurrency = **RAM BUDGET** ÷ observed per-agent footprint (the budget is the admission invariant — replaced the old `available − margin` headroom).
+  - budget = `ramBudgetBytes(ramTotalBytes, budgetPercent)` (`lib/budget.ts`: % of TOTAL, floored at `total − 512 MiB` for the OS); admittable = `budget − ramUsedBytes`; additional = `floor(admittable / observedAgentBytes)` — `auto-scaler.ts` private `budgetAdditional()` (used by both `targetConcurrency()` and `headroomCapacity()`). The dial `budgetPercent` is MACHINE-GLOBAL (`HUU_RAM_PERCENT` / `--ram-percent` / web Setting; default 85, clamp 10–95; `OrchestratorOptions.budgetPercent` single-run, `GlobalScheduler.setBudgetPercent()` multi-run; one shared budget AutoScaler).
+  - footprint = EMA, α = 0.2, seeded **PESSIMISTIC 1536 MiB** (`DEFAULT_AGENT_MEMORY_ESTIMATE_MB`; was 250 — the over-admission that OOM-killed the process), clamped [128, 2048] MiB. Sample = (used − baseline) / activeAgents → corrects DOWN, so a cold start under-admits then opens up.
+  - **PSI front brake**: `shouldSpawn()` freezes admission (auto + greedy, NOT manual) when `SystemMetrics.memPressureSome10 ≥ admitPsiThreshold` (0.5%) — pressure rises BEFORE RAM%. PSI = `some avg10` from cgroup `memory.pressure` → `/proc/pressure/memory` (pure `parseMemoryPressureSome10` in `resource-monitor.ts`); `null` (macOS / no CONFIG_PSI) ⇒ falls back to the RAM `stopThreshold` gate (degrade-never-block).
+  - **Fast-ramp**: `executeTaskPool` caps NEW spawns/tick to `max(1, ceil(busy·0.5))` (`ramping = scheduler!=null || mode!=='manual'`) — geometric, no single-tick burst.
+  - `shouldDestroy()` stays RAM/CPU ≥ 95% (PSI-destroy is Fase 2). Process-level `oom_score_adj` is set best-effort at boot (`lib/oom-score.ts`, `HUU_OOM_SCORE_ADJ`, conservative default).
 - `--concurrency=N` or `--no-auto-scale` pins `manual` mode. The MEMORY GUARD runs in EVERY mode.
 - Third mode `greedy` (UI label **MAX**, `M` hotkey): `targetConcurrency()` early-returns `min(active+pending, maxAgents)` — one agent per queued task — and the guard is the sole backstop, so concurrency settles at the destroy threshold. Two non-obvious wiring spots beyond the AutoScaler: `enableGreedyMode()` MUST raise the port cap (`portAllocator.setMaxAgents(AUTO_SCALE_MAX_INSTANCES)`) like `enableAutoScale()`, and the per-tick recompute in `executeTaskPool` must gate on `getMode() === 'auto' || 'greedy'` — miss either and concurrency silently freezes at its seed/manual window. `AutoScaleStatus.enabled` is `enabled && mode === 'auto'` ("auto is DRIVING the target", NOT "scaler on") — branch UI/logic on `mode`, not `enabled`, now that a third mode exists.
 
@@ -75,4 +78,4 @@ A `GlobalScheduler` runs N runs in ONE process under a single shared budget. It 
 - `src/orchestrator/index.ts`, `src/orchestrator/auto-scaler.ts`, `src/orchestrator/requeue.test.ts` (the race spec)
 - Related skills: orchestrating-git-worktrees, isolating-agent-ports, writing-tests
 
-> Facts verified against source on 2026-06-12 (line refs included above); greedy/MAX auto-scaling mode verified against source on 2026-06-25; `simulation/` SimulationEngine demo driver added 2026-06-26; multi-run `GlobalScheduler` + subordinate mode added 2026-06-26; interactive-retry hold (`awaiting_retry`/`retryTask`/`finish`, `interactiveRetry` option) added + promoted from `[task:timeout-error-retry]` 2026-06-29.
+> Facts verified against source on 2026-06-12 (line refs included above); greedy/MAX auto-scaling mode verified against source on 2026-06-25; `simulation/` SimulationEngine demo driver added 2026-06-26; multi-run `GlobalScheduler` + subordinate mode added 2026-06-26; interactive-retry hold (`awaiting_retry`/`retryTask`/`finish`, `interactiveRetry` option) added + promoted from `[task:timeout-error-retry]` 2026-06-29; **RAM-budget % dial + PSI front-brake + pessimistic 1536 MiB seed + fast-ramp** (resource-control Fase 1) added + promoted from `[task:fase1-ram-budget-psi-admission]` 2026-06-30 (remaining Fases 2/3 in repo-root `ROADMAP.md`).

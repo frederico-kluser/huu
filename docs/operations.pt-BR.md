@@ -277,6 +277,8 @@ em `~/.config`.
 | `COPILOT_GITHUB_TOKEN` | sim (quando `--copilot`) | PAT fine-grained do GitHub com escopo "Copilot Requests" (ou `GH_TOKEN`). Obrigatória só quando `--backend=copilot` está ativo. Mesma cadeia de precedência via `COPILOT_GITHUB_TOKEN_FILE` e `/run/secrets/copilot_token`. |
 | `HUU_WORKTREE_BASE` | não | Override do diretório base dos worktrees por execução. Paths absolutos são usados verbatim; paths relativos resolvidos contra a raiz do repo. Padrão: `<repo>/.huu-worktrees`. Usado pelo modo isolated-volume do container. |
 | `HUU_CHECK_PUSH` | não | Quando setada, preflight verifica que o remote configurado está alcançável antes de a execução começar. |
+| `HUU_RAM_PERCENT` | não | Orçamento de RAM como percentual da memória TOTAL da máquina — o dial de admissão que governa a concorrência. Padrão `85`, clampado em `10`–`95`; o orçamento tem piso em `total − 512 MiB` reservados pro SO. Machine-global (uma máquina, uma RAM): em multi-run configura o único budget scaler compartilhado, sem override por-projeto. Também exposto como a flag CLI `--ram-percent=<n>` e o campo "RAM budget" das Settings web. Veja [Concorrência com auto-scaling](#concorrência-com-auto-scaling). |
+| `HUU_OOM_SCORE_ADJ` | não | Ajusta o `/proc/self/oom_score_adj` do processo huu pra que o OOM-killer do kernel evite matar o huu. Padrão conservador (`-100`, um empurrão leve que NÃO imuniza); best-effort — no-op sem privilégio, então só tem efeito onde o huu consegue escrever o arquivo (ex.: como root dentro do container). Só-Linux. |
 | `HUU_IN_CONTAINER` | não | Setada pra `1` automaticamente pela imagem Docker oficial. Usada pelo wrapper pra curto-circuitar o auto-Docker re-exec. |
 | `HUU_IMAGE` | não | Override da imagem de container usada pelo wrapper auto-Docker. Padrão: `ghcr.io/frederico-kluser/huu:latest`. Útil pra pinar uma release ou apontar pra um mirror privado. |
 | `HUU_NO_DOCKER` | não | Quando setada pra `1` ou `true`, pula o auto-Docker re-exec e roda huu nativo. Equivalente à flag `--no-docker` (o alias de grafia neutra do `--yolo`, pensado pra CI). Exige `npm install` local das deps do huu. Útil pro desenvolvimento do huu em si e pra runners de CI — veja [`docs/ci.pt-BR.md`](ci.pt-BR.md). |
@@ -336,15 +338,38 @@ bloquear a seleção.
 
 ## Concorrência com auto-scaling
 
-**O auto-scaling memória-aware é o padrão.** O auto-scaler dimensiona
-a concorrência pelo headroom real de memória: ele mede o consumo de
-verdade de cada agente (média móvel, semeada em 250 MB) e admite novos
-agentes só enquanto couberem na memória disponível menos uma margem de
-segurança — cgroup-aware, então dentro de um container ele respeita o
-limite do container, não o do host. Passe `--concurrency=N` ou
-`--no-auto-scale` pra pinar o **modo manual** (ajustável ao vivo com
-`+`/`-` no dashboard; `A` religa o auto). Em configs headless, setar
-`"concurrency"` pina manual; omita pro auto.
+**O auto-scaling memória-aware é o padrão.** A concorrência é governada
+por um **dial de orçamento de RAM**: um percentual configurável da
+memória TOTAL da máquina (padrão `85`, clampado em `10`–`95`), com piso
+que mantém ao menos 512 MiB reservados pro SO. O auto-scaler admite um
+novo agente só enquanto ele couber nesse orçamento —
+`ramBudgetBytes(total, percent) − ramUsedBytes` dividido pelo footprint
+observado do agente — e a leitura é cgroup-aware, então dentro de um
+container ele respeita o limite do container, não o do host. Ajuste o
+dial com `--ram-percent=<n>`, a env var `HUU_RAM_PERCENT` ou o campo
+"RAM budget" das Settings web; é machine-global (uma máquina, uma RAM —
+sem override por-projeto). Passe `--concurrency=N` ou `--no-auto-scale`
+pra pinar o **modo manual** (ajustável ao vivo com `+`/`-` no dashboard;
+`A` religa o auto). Em configs headless, setar `"concurrency"` pina
+manual; omita pro auto.
+
+Três refinamentos evitam que o orçamento estoure num cold start:
+
+- **Freio dianteiro PSI (Linux).** O scaler lê a Pressure Stall
+  Information de memória — o `memory.pressure` por-cgroup quando
+  containerizado, senão o `/proc/pressure/memory` do sistema — e congela
+  a admissão no instante em que o valor `some avg10` cruza ~0.5%. A
+  pressão sobe *antes* de a RAM saturar, então isso pega um burst que o
+  gate de RAM atrasado perderia. Onde PSI não está disponível (macOS,
+  kernels sem `CONFIG_PSI`) ele cai pro gate de orçamento de RAM acima.
+- **Seed pessimista.** A estimativa por-agente começa em 1536 MiB
+  (clampada em 128–2048) e a média móvel a corrige *pra baixo* a partir
+  de medições reais — um cold start deliberadamente sub-admite e depois
+  abre conforme o footprint real é aprendido.
+- **Fast-ramp.** O worker pool limita novos spawns a
+  `max(1, ceil(busy × 0.5))` por tick (~+50%/tick), então o modo auto
+  nunca inunda o pool inteiro num único tick. O modo manual ainda enche
+  imediatamente.
 
 O auto-scaler observa CPU e RAM via `lib/resource-monitor.ts` e
 transita entre cinco estados, mostrados no header como
@@ -378,10 +403,10 @@ azul `MAX <ESTADO>` com a contagem de kills; o amortecimento por
 cooldown evita thrashing. Pressione `M` de novo (ou `A`) pra voltar ao
 auto, `+`/`-` pra cair pro manual.
 
-Sobrescreva defaults setando `agentMemoryEstimateMb`,
-`stopThresholdPercent`, `destroyThresholdPercent`, `cooldownMs` e
-`maxAgents` no código se você embarca o orchestrator; o CLI expõe
-`--concurrency=N` e `--no-auto-scale`.
+Sobrescreva defaults setando `agentMemoryEstimateMb`, `budgetPercent`,
+`admitPsiThreshold`, `stopThresholdPercent`, `destroyThresholdPercent`,
+`cooldownMs` e `maxAgents` no código se você embarca o orchestrator; o
+CLI expõe `--ram-percent=<n>`, `--concurrency=N` e `--no-auto-scale`.
 
 ---
 

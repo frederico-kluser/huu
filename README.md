@@ -218,18 +218,23 @@ TUI no terminal.
   valor por projeto persistem no navegador e ficam no histórico. **Só na Web UI —
   o CLI mantém as próprias regras.** (Antes só dava para ajustar o tempo **ao
   re-tentar** um card já estourado; configurar no início era só no TUI.)
-- **Fila de projetos, em paralelo.** Selecione **vários projetos** — cada um
-  com sua própria config (diretório, provider, modelo, concorrência) — e
-  rode-os **simultaneamente** sob um único orçamento de RAM/concorrência. Os
-  projetos anteriores têm prioridade; os posteriores fazem **backfill** das
-  vagas ociosas dos anteriores (ex.: enquanto um está em merge) e devolvem a
-  capacidade quando ela é necessária — e sob pressão de memória mata-se primeiro
-  o agente mais novo do projeto de menor prioridade. Um **seletor de projetos**
-  no topo (um dropdown que mostra **projeto · pipeline**) permite alternar entre
-  os boards ao vivo. **Com a fila já rodando, dá para voltar à home (← Home) e
-  adicionar mais projetos** — eles começam a rodar **na hora**, sem reiniciar a
-  fila, e um aviso de *rodando* fica visível enquanto você seleciona. Se um
-  falha, os outros seguem. Cada execução é arquivada no **histórico** do navegador (IndexedDB)
+- **Fila de projetos, em paralelo — com admissão inteligente.** Selecione
+  **vários projetos** — cada um com sua própria config (diretório, provider,
+  modelo, concorrência) — sob um **único orçamento de RAM/concorrência** da
+  máquina. O servidor admite o primeiro **na hora** e segura os demais em
+  **`na fila`**, puxando cada um só quando há folga de memória **sustentada** —
+  ou seja, **não dispara a máquina toda de uma vez** (era exatamente o que
+  derrubava o processo com muitos projetos). Os projetos anteriores têm
+  prioridade; os posteriores fazem **backfill** das vagas ociosas (ex.: enquanto
+  um está em merge), e sob pressão de memória **pausa-se** primeiro o agente mais
+  novo do projeto de menor prioridade (trabalho preservado e retomado com a folga;
+  `HUU_NO_PAUSE=1` volta a matar). **Quanto da RAM o huu pode usar é um dial**
+  (Settings → **RAM budget %**, ou `HUU_RAM_PERCENT` / `--ram-percent`; padrão
+  85%, o resto fica reservado pro sistema). Um **seletor de projetos** no topo
+  (**projeto · pipeline**) alterna entre os boards ao vivo. **Com a fila rodando,
+  dá para voltar à home (← Home) e adicionar mais projetos** — eles **entram na
+  fila** e são admitidos conforme a capacidade libera. Se um falha, os outros
+  seguem. Cada execução é arquivada no **histórico** do navegador (IndexedDB)
   com todos os cards, os custos por card e o total por projeto — **exportável
   em JSON** com um clique.
 - **Log ao vivo, de verdade — agora um console de atividade.** O texto que o
@@ -283,6 +288,8 @@ huu --cli                 # TUI no terminal
 | `HUU_WEB_HOST` | Endereço de bind (default `0.0.0.0`; `127.0.0.1` = só local). |
 | `HUU_WEB_TOKEN` | Segredo compartilhado exigido nas rotas de dados/ações. |
 | `HUU_CLI=1` | Default pra TUI (igual a `--cli`). |
+| `HUU_RAM_PERCENT` / `--ram-percent=<n>` | Orçamento de RAM como % do total da máquina (default `85`, faixa 10–95). Também na Web em Settings → RAM budget %. |
+| `HUU_OOM_SCORE_ADJ` | Ajuste do `oom_score_adj` do processo huu (default conservador; best-effort, só "pega" com privilégio, ex. no container). |
 
 ### Modo simulação (`/simulation`)
 
@@ -644,9 +651,13 @@ container ele respeita o limite do container, não o do host.
 Uma **guarda de memória fica sempre ativa** (mesmo com concorrência
 manual ou MAX): se a RAM **ou** a CPU passam de ~95%, o agente **mais
 novo** — o que tem menos trabalho feito (escolhido por `startedAt`) — é
-morto, seu card **volta para a coluna TODO** com um contador `↻N`, e a
-task é re-enfileirada na frente, recomeçando do zero quando a memória
-liberar. O trabalho dos agentes mais antigos nunca é perdido.
+preemptado. Por padrão ele é **pausado**: o huu faz checkpoint da sessão
+do agente, libera a RAM, mas **preserva a worktree + o transcript**, e o
+card entra em **PAUSED** (`⏸N`) — retomando **de onde parou** assim que
+houver folga. Se não der pra fazer checkpoint (ou com `HUU_NO_PAUSE=1`),
+cai no comportamento anterior: o agente é **morto**, o card **volta para
+a coluna TODO** com um contador `↻N` e a task recomeça do zero. O
+trabalho dos agentes mais antigos nunca é perdido.
 
 Controles:
 

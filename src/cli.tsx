@@ -15,6 +15,7 @@ import { preflightGitOnHost } from './lib/git-preflight.js';
 // Pure, dependency-light: safe to load on the wrapper path without pulling
 // in React/Ink (which we deliberately avoid until after the re-exec gate).
 import { decideInterfaceMode, resolveWebPort } from './web/interface-mode.js';
+import { applyOomScoreAdj } from './lib/oom-score.js';
 
 // `--dir=<path>` chooses WHERE to run — the default is the current directory.
 // Honor it at the very top (before the Docker gate) so every downstream
@@ -70,6 +71,14 @@ if (reexec.shouldReexec) {
   process.exit(code);
 }
 
+// Past the gate we ARE the app process (in-container, --no-docker, or a native
+// subcommand) — never the host docker wrapper. Bias the kernel OOM-killer to
+// prefer other processes over huu. Best-effort + conservative by default (does
+// NOT immunize); configurable via HUU_OOM_SCORE_ADJ. No-op without privilege
+// (so a non-root native user is unaffected; it takes effect in the root
+// container). See lib/oom-score.
+applyOomScoreAdj();
+
 import { execFileSync } from 'node:child_process';
 import React from 'react';
 import { render } from 'ink';
@@ -80,6 +89,7 @@ import { runStatusCli } from './lib/status.js';
 import { runPruneCli } from './lib/prune.js';
 import { loadRunConfig, applyRunConfig } from './lib/run-config.js';
 import { runHeadless } from './lib/headless-run.js';
+import { resolveRamPercent } from './lib/budget.js';
 import { findSpec, resolveApiKey } from './lib/api-key.js';
 import {
   clearActiveRunSentinel,
@@ -185,6 +195,7 @@ Usage:
   huu --web                 Force the web UI (overrides HUU_CLI=1)
   huu --port=<n>            Web UI port (default 4888; or HUU_WEB_PORT)
   huu --concurrency=<n>     Pin manual concurrency at n (disables memory-based auto-scale)
+  huu --ram-percent=<n>     RAM budget as % of total memory (default 85; or HUU_RAM_PERCENT)
   huu --no-auto-scale       Disable memory-based auto-scale (on by default; guard stays on)
   huu --auto-scale          Deprecated: auto-scale is now the default
   huu --help                Show this help
@@ -381,6 +392,19 @@ async function main(): Promise<void> {
       ? args.includes('--auto-scale')
       : true;
 
+  // --ram-percent=N sets the MACHINE-GLOBAL RAM budget dial (the admission
+  // ceiling). Exposed as an env var so every run path — single-run, headless,
+  // web, and the multi-run scheduler — picks it up uniformly via
+  // resolveRamPercent(). See src/lib/budget.ts.
+  const ramPercentArg = args
+    .filter((a) => a.startsWith('--ram-percent='))
+    .map((a) => Number(a.slice('--ram-percent='.length)))
+    .filter((n) => Number.isFinite(n))
+    .pop();
+  if (ramPercentArg !== undefined) {
+    process.env.HUU_RAM_PERCENT = String(resolveRamPercent(ramPercentArg));
+  }
+
   // --provider=<name> picks the LLM provider for pi (openrouter | azure).
   const providerArg = args
     .filter((a) => a.startsWith('--provider='))
@@ -435,6 +459,7 @@ async function main(): Promise<void> {
       !a.startsWith('--provider=') &&
       !a.startsWith('--dir=') &&
       !a.startsWith('--concurrency=') &&
+      !a.startsWith('--ram-percent=') &&
       !a.startsWith('--port='),
   );
 
@@ -584,6 +609,12 @@ async function main(): Promise<void> {
       provider: runConfig.provider ?? (effectiveBackend === 'azure' ? 'azure' : 'openrouter'),
       endpoint,
     };
+
+    // A config-supplied ramPercent feeds the same machine-global env dial; an
+    // explicit --ram-percent flag (already applied above) takes precedence.
+    if (ramPercentArg === undefined && runConfig.ramPercent !== undefined) {
+      process.env.HUU_RAM_PERCENT = String(resolveRamPercent(runConfig.ramPercent));
+    }
 
     const code = await runHeadless({
       pipeline: mergedPipeline,

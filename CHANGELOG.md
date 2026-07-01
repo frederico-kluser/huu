@@ -8,6 +8,55 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+### Added
+
+- **RAM budget dial — "fill the machine, never crash" (resource-control Fase 1).**
+  Concurrency is now governed by a configurable share of TOTAL RAM instead of an
+  opaque safety margin: set it with `HUU_RAM_PERCENT`, the `--ram-percent=<n>`
+  flag, or the new **RAM budget %** field in the web Settings panel (machine-global
+  — one machine, one RAM, no per-project override). Default 85%, clamped 10–95.
+- **Pressure-aware admission (Linux PSI).** The scaler now reads memory
+  Pressure Stall Information (`/proc/pressure/memory`, or the per-cgroup
+  `memory.pressure` in a container) and freezes new agents the moment real
+  pressure appears — *before* RAM saturates. Where PSI is unavailable (macOS,
+  kernels without it) it falls back to the previous RAM-percent gate.
+- **Lazy admission in the web UI.** Launching a queue of projects no longer
+  starts them all at once: the server admits the first immediately and holds the
+  rest in a new **queued** state, pulling each in as the shared budget frees up
+  (the headless `run-many` already did this; the browser now does too). This is
+  the direct fix for the multi-project out-of-memory crash.
+- **Configurable OOM protection.** `huu` nudges its own `oom_score_adj` so the
+  kernel prefers other processes under pressure; tune via `HUU_OOM_SCORE_ADJ`
+  (conservative default, best-effort — takes effect where the process is
+  privileged, e.g. the container).
+- **Pause instead of kill under memory pressure (resource-control Fase 2.3).**
+  When the machine runs low on RAM, `huu` now **pauses** an agent — freezing its
+  work in place (its git worktree *and* the agent's conversation transcript are
+  preserved) and freeing the memory — instead of killing it and restarting from
+  scratch. The agent **resumes exactly where it left off** as soon as headroom
+  returns, so a pressure spike costs at most the current step, not the whole
+  task. Paused cards show a distinct **PAUSED** state with a `⏸` counter (vs the
+  `↻` requeue counter of a kill). On by default, single- and multi-run; set
+  `HUU_NO_PAUSE=1` to keep the previous kill-and-requeue behaviour. If a
+  checkpoint can't be taken for any reason it falls back to that behaviour
+  automatically, so it is never worse than before.
+
+### Changed
+
+- **Adaptive concurrency control (resource-control Fase 2.2).** The pressure
+  brake is now a **closed-loop controller** instead of a single freeze threshold:
+  it continuously ramps concurrency up while the machine is comfortable and eases
+  it down as memory pressure rises, settling at the highest level the machine
+  sustains without thrashing. `huu` therefore uses more of the machine than the
+  earlier conservative freeze, while still backing off *before* RAM saturates.
+
+- The per-agent memory estimate now starts **pessimistic** and corrects downward
+  from real measurements, so a cold start admits cautiously and opens up once it
+  confirms agents fit — the inverse of the old optimistic seed that over-admitted.
+- New agents **ramp up** over a few cycles (geometric, ~+50% per tick) instead of
+  the whole pool spawning in one burst. Manual (`--concurrency`) still fills
+  immediately.
+
 ## [3.1.0] - 2026-06-29
 
 ### Added

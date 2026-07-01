@@ -56,6 +56,12 @@ export const RunConfigSchema = z.object({
   /** Initial worker concurrency. When set (and autoScale is absent), pins manual mode. */
   concurrency: z.number().int().positive().optional(),
   /**
+   * RAM budget as a percent of TOTAL memory — the machine-global admission
+   * dial. Falls back to the `HUU_RAM_PERCENT` env var, then 85. Clamped to
+   * [10, 95] at use. See `src/lib/budget.ts`.
+   */
+  ramPercent: z.number().int().min(1).max(100).optional(),
+  /**
    * Memory-aware dynamic concurrency. Defaults: true when `concurrency`
    * is absent, false when it is set (an explicit concurrency means the
    * user wants that exact pool size). The memory guard runs either way.

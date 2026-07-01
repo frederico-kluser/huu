@@ -14,6 +14,7 @@ function makeMetrics(partial: Partial<SystemMetrics> = {}): SystemMetrics {
     processRssBytes: 123456789,
     loadAvg1: 1.5,
     containerAware: false,
+    memPressureSome10: null,
     ...partial,
   };
 }
@@ -222,20 +223,20 @@ describe('AutoScaler', () => {
     });
   });
 
-  describe('targetConcurrency — memory headroom', () => {
-    // 16 GiB total, 8 GiB available: margin = max(10% of 16 GiB, 512 MiB)
-    // = 1.6 GiB → headroom = 6.4 GiB → floor(6.4 GiB / 250 MiB) = 26.
-    it('admits floor(headroom / observedAgentBytes) on top of active agents', () => {
+  describe('targetConcurrency — RAM budget (% dial)', () => {
+    // 16 GiB total, 8 GiB used, budget 85% → budget = min(13.6, 15.5) = 13.6 GiB
+    // → headroom = 13.6 − 8 = 5.6 GiB → floor(5.6 GiB / 250 MiB) = 22.
+    it('admits floor(budget headroom / observedAgentBytes) on top of active agents', () => {
       const scaler = createScaler(
         makeMetrics({ ramTotalBytes: 16 * 1024 ** 3, ramUsedBytes: 8 * 1024 ** 3 }),
         { agentMemoryEstimateMb: 250 },
       );
       scaler.start();
-      expect(scaler.targetConcurrency()).toBe(26);
+      expect(scaler.targetConcurrency()).toBe(22);
       scaler.stop();
     });
 
-    it('adds the headroom admission on top of currently active agents', () => {
+    it('adds the budget admission on top of currently active agents', () => {
       const scaler = createScaler(
         makeMetrics({ ramTotalBytes: 16 * 1024 ** 3, ramUsedBytes: 8 * 1024 ** 3 }),
         { agentMemoryEstimateMb: 250 },
@@ -243,7 +244,7 @@ describe('AutoScaler', () => {
       scaler.start();
       scaler.notifyAgentSpawned();
       scaler.notifyAgentSpawned();
-      expect(scaler.targetConcurrency()).toBe(28);
+      expect(scaler.targetConcurrency()).toBe(24);
       scaler.stop();
     });
 
@@ -278,9 +279,10 @@ describe('AutoScaler', () => {
       scaler.stop();
     });
 
-    it('keeps at least the 512 MiB margin floor on small machines', () => {
-      // 2 GiB total, fully available: percent margin would be 204 MiB but the
-      // 512 MiB floor wins → headroom = 1.5 GiB → floor(1536 / 250) = 6.
+    it('keeps the OS-reserve floor on small machines', () => {
+      // 2 GiB total, 0 used, budget 85% → byPercent 1.7 GiB but the OS-reserve
+      // ceiling (total − 512 MiB) = 1.5 GiB wins → headroom = 1.5 GiB →
+      // floor(1536 / 250) = 6.
       const scaler = createScaler(
         makeMetrics({ ramTotalBytes: 2 * 1024 ** 3, ramUsedBytes: 0 }),
         { agentMemoryEstimateMb: 250 },
@@ -291,15 +293,157 @@ describe('AutoScaler', () => {
     });
   });
 
+  describe('PSI admission brake (shouldSpawn)', () => {
+    it('freezes admission at/above the cut band (2x setpoint = 1.0, controller on)', () => {
+      const scaler = createScaler(
+        makeMetrics({ cpuPercent: 10, ramPercent: 10, memPressureSome10: 1.0 }),
+      );
+      scaler.start();
+      expect(scaler.shouldSpawn()).toBe(false);
+      scaler.stop();
+    });
+
+    it('admits AT the setpoint (controller operates there; no hard freeze below the cut band)', () => {
+      // 0.5 is the controller setpoint — the hard freeze sits at the cut band
+      // (1.0), so the controller can run the machine AT ~0.5 without the binary
+      // gate fighting it (that is the point of the closed loop).
+      const scaler = createScaler(
+        makeMetrics({ cpuPercent: 10, ramPercent: 10, memPressureSome10: 0.5 }),
+      );
+      scaler.start();
+      expect(scaler.shouldSpawn()).toBe(true);
+      scaler.stop();
+    });
+
+    it('falls back to the RAM gate when PSI is unavailable (null)', () => {
+      const ok = createScaler(
+        makeMetrics({ cpuPercent: 10, ramPercent: 10, memPressureSome10: null }),
+      );
+      ok.start();
+      expect(ok.shouldSpawn()).toBe(true);
+      ok.stop();
+
+      const blocked = createScaler(
+        makeMetrics({ cpuPercent: 10, ramPercent: 95, memPressureSome10: null }),
+      );
+      blocked.start();
+      expect(blocked.shouldSpawn()).toBe(false);
+      blocked.stop();
+    });
+
+    it('does NOT PSI-gate manual mode (user-pinned pool)', () => {
+      const scaler = createScaler(
+        makeMetrics({ cpuPercent: 10, ramPercent: 10, memPressureSome10: 5 }),
+      );
+      scaler.setMode('manual');
+      scaler.start();
+      expect(scaler.shouldSpawn()).toBe(true);
+      scaler.stop();
+    });
+  });
+
+  describe('PSI controller (closed-loop, Fase 2.2)', () => {
+    const GiB = 1024 ** 3;
+    // Big machine so the budget ceiling = maxAgents (200): isolates the controller.
+    const big = (psi: number | null) =>
+      makeMetrics({
+        ramTotalBytes: 256 * GiB,
+        ramUsedBytes: 16 * GiB,
+        cpuPercent: 10,
+        ramPercent: 10,
+        memPressureSome10: psi,
+      });
+
+    it('cuts the limit ×0.5 when PSI crosses the cut band (2× setpoint = 1.0)', () => {
+      const m = { current: big(0) };
+      const scaler = new AutoScaler({ resourceMonitor: () => m.current, agentMemoryEstimateMb: 250 });
+      scaler.start(); // first poll seeds controlledLimit to the budget ceiling (200)
+      expect(scaler.getStatus().controlledLimit).toBe(200);
+      m.current = big(2.0); // pressure above the cut band
+      vi.advanceTimersByTime(1000); // one poll → multiplicative decrease
+      expect(scaler.getStatus().controlledLimit).toBe(100);
+      scaler.stop();
+    });
+
+    it('re-ramps additively under low PSI after a cut (bounded by the ceiling)', () => {
+      const m = { current: big(2.0) };
+      const scaler = new AutoScaler({ resourceMonitor: () => m.current, agentMemoryEstimateMb: 250 });
+      scaler.start(); // seed 200 then cut to 100 on the same poll (PSI 2.0)
+      expect(scaler.getStatus().controlledLimit).toBe(100);
+      m.current = big(0); // pressure gone
+      vi.advanceTimersByTime(8000); // past the 5s hold → several additive increases
+      const limit = scaler.getStatus().controlledLimit!;
+      expect(limit).toBeGreaterThan(100); // re-ramped
+      expect(limit).toBeLessThanOrEqual(200); // never above the RAM-budget ceiling
+      scaler.stop();
+    });
+
+    it('holds in the hysteresis band (setpoint ≤ PSI < cut band)', () => {
+      const m = { current: big(2.0) };
+      const scaler = new AutoScaler({ resourceMonitor: () => m.current, agentMemoryEstimateMb: 250 });
+      scaler.start(); // → cut to 100
+      m.current = big(0.7); // between setpoint (0.5) and cut band (1.0)
+      vi.advanceTimersByTime(8000);
+      expect(scaler.getStatus().controlledLimit).toBe(100); // neither grows nor cuts
+      scaler.stop();
+    });
+
+    it('never exceeds the RAM budget ceiling even under sustained zero PSI', () => {
+      // 16 GiB, seed 250 → budget ceiling ≈ 22; the controller cannot ramp past it.
+      const scaler = createScaler(
+        makeMetrics({ ramTotalBytes: 16 * GiB, ramUsedBytes: 8 * GiB, memPressureSome10: 0 }),
+        { agentMemoryEstimateMb: 250 },
+      );
+      scaler.start();
+      vi.advanceTimersByTime(30000);
+      expect(scaler.getStatus().controlledLimit).toBeLessThanOrEqual(22);
+      scaler.stop();
+    });
+
+    it('PSI null → open-loop: controlledLimit tracks the live budget ceiling', () => {
+      const scaler = createScaler(
+        makeMetrics({ ramTotalBytes: 16 * GiB, ramUsedBytes: 8 * GiB, memPressureSome10: null }),
+        { agentMemoryEstimateMb: 250 },
+      );
+      scaler.start();
+      // budget headroom = 22; open-loop limit == Fase 1 budget target.
+      expect(scaler.getStatus().controlledLimit).toBe(22);
+      expect(scaler.targetConcurrency()).toBe(22);
+      scaler.stop();
+    });
+
+    it('controllerEnabled:false → open-loop even with PSI present', () => {
+      const m = { current: big(0) }; // PSI 0 would otherwise ramp
+      const scaler = new AutoScaler({
+        resourceMonitor: () => m.current,
+        agentMemoryEstimateMb: 250,
+        controllerEnabled: false,
+      });
+      scaler.start();
+      vi.advanceTimersByTime(8000);
+      // No closed loop: limit stays at the budget ceiling (200), not driven by PSI.
+      expect(scaler.getStatus().controlledLimit).toBe(200);
+      scaler.stop();
+    });
+  });
+
   describe('observed agent memory (EMA)', () => {
     it('seeds the estimate from agentMemoryEstimateMb', () => {
       const scaler = createScaler(makeMetrics(), { agentMemoryEstimateMb: 250 });
       expect(scaler.observedAgentMemoryMb()).toBe(250);
     });
 
+    it('defaults the seed to the pessimistic 1536 MiB', () => {
+      const scaler = createScaler(makeMetrics());
+      expect(scaler.observedAgentMemoryMb()).toBe(1536);
+    });
+
     it('converges toward (used − baseline) / activeAgents', () => {
       const metricsRef = { current: makeMetrics({ ramUsedBytes: 4 * 1024 ** 3 }) };
-      const scaler = new AutoScaler({ resourceMonitor: () => metricsRef.current });
+      const scaler = new AutoScaler({
+        resourceMonitor: () => metricsRef.current,
+        agentMemoryEstimateMb: 250,
+      });
       scaler.start(); // baseline re-captured at 4 GiB (0 active agents)
       scaler.notifyAgentSpawned();
       scaler.notifyAgentSpawned();
@@ -334,7 +478,10 @@ describe('AutoScaler', () => {
 
     it('ignores negative samples and re-baselines when the pool drains', () => {
       const metricsRef = { current: makeMetrics({ ramUsedBytes: 6 * 1024 ** 3 }) };
-      const scaler = new AutoScaler({ resourceMonitor: () => metricsRef.current });
+      const scaler = new AutoScaler({
+        resourceMonitor: () => metricsRef.current,
+        agentMemoryEstimateMb: 250,
+      });
       scaler.start();
       scaler.notifyAgentSpawned();
 
@@ -522,14 +669,18 @@ describe('AutoScaler', () => {
 
   describe('notifyTaskQueued', () => {
     it('updates internal pending count', () => {
-      const scaler = createScaler(makeMetrics({ ramTotalBytes: 16 * 1024 ** 3 }));
+      const scaler = createScaler(makeMetrics({ ramTotalBytes: 16 * 1024 ** 3 }), {
+        agentMemoryEstimateMb: 250,
+      });
       scaler.start();
-      expect(scaler.targetConcurrency()).toBe(26);
+      expect(scaler.targetConcurrency()).toBe(22);
       scaler.stop();
     });
 
     it('uses latest queued count', () => {
-      const scaler = createScaler(makeMetrics({ ramTotalBytes: 16 * 1024 ** 3 }));
+      const scaler = createScaler(makeMetrics({ ramTotalBytes: 16 * 1024 ** 3 }), {
+        agentMemoryEstimateMb: 250,
+      });
       scaler.start();
       scaler.notifyTaskQueued(10);
       expect(scaler.targetConcurrency()).toBe(10);
@@ -541,12 +692,12 @@ describe('AutoScaler', () => {
     it('overwrites active + pending counts and bounds targetConcurrency by pending', () => {
       const scaler = createScaler(makeMetrics({ ramTotalBytes: 16 * 1024 ** 3 }));
       scaler.start();
-      // 8 GiB available → ~26 additional slots by headroom, but pending caps it.
+      // 16 GiB total, 8 GiB used, budget 85%, seed 1536 MiB → ~3 budget slots.
       scaler.syncCounts(0, 3);
       expect(scaler.targetConcurrency()).toBe(3);
-      // active=5, pending=10 → ceiling min(15, 200)=15, capped below headroom.
+      // active=5, pending=10 → ceiling 15, but the budget (active 5 + 3) caps to 8.
       scaler.syncCounts(5, 10);
-      expect(scaler.targetConcurrency()).toBe(15);
+      expect(scaler.targetConcurrency()).toBe(8);
       scaler.stop();
     });
 
@@ -576,8 +727,8 @@ describe('AutoScaler', () => {
       const scaler = createScaler(makeMetrics({ ramTotalBytes: 16 * 1024 ** 3 }));
       scaler.syncCounts(0, 2); // pending 2 → targetConcurrency caps at 2...
       expect(scaler.targetConcurrency()).toBe(2);
-      // ...but capacity reflects RAM headroom only: 8 GiB avail → ~26 slots.
-      expect(scaler.headroomCapacity()).toBe(26);
+      // ...but capacity reflects the RAM budget only: ~3 slots (seed 1536 MiB).
+      expect(scaler.headroomCapacity()).toBe(3);
     });
   });
 

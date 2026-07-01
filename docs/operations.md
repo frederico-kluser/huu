@@ -279,6 +279,8 @@ sent with each run, never written to `~/.config`.
 | `COPILOT_GITHUB_TOKEN` | yes (when `--copilot`) | GitHub fine-grained PAT with "Copilot Requests" scope (or `GH_TOKEN`). Required only when `--backend=copilot` is active. Same precedence chain via `COPILOT_GITHUB_TOKEN_FILE` and `/run/secrets/copilot_token`. |
 | `HUU_WORKTREE_BASE` | no | Override the base directory for per-run worktrees. Absolute paths are used verbatim; relative paths are resolved against the repo root. Default: `<repo>/.huu-worktrees`. Used by the isolated-volume container mode. |
 | `HUU_CHECK_PUSH` | no | When set, preflight verifies the configured remote is reachable before the run starts. |
+| `HUU_RAM_PERCENT` | no | RAM budget as a percent of TOTAL machine memory — the admission dial that governs concurrency. Default `85`, clamped `10`–`95`; the budget is floored at `total − 512 MiB` reserved for the OS. Machine-global (one machine, one RAM): in multi-run it configures the single shared budget scaler, with no per-project override. Also exposed as the CLI flag `--ram-percent=<n>` and the web Settings field "RAM budget %". See [Auto-scaling concurrency](#auto-scaling-concurrency). |
+| `HUU_OOM_SCORE_ADJ` | no | Adjusts the huu process's `/proc/self/oom_score_adj` so the kernel's OOM-killer biases away from huu. Conservative default (`-100`, a mild nudge that does NOT immunize); best-effort — a no-op without privilege, so it only takes effect where huu can write the file (e.g. as root inside the container). Linux-only. |
 | `HUU_IN_CONTAINER` | no | Set to `1` automatically by the official Docker image. Used by the wrapper to short-circuit the auto-Docker re-exec (so the same binary runs the TUI directly inside the container). |
 | `HUU_IMAGE` | no | Override the container image used by the auto-Docker wrapper. Default: `ghcr.io/frederico-kluser/huu:latest`. Useful for pinning a release or pointing at a private mirror. |
 | `HUU_NO_DOCKER` | no | When set to `1` or `true`, skip the auto-Docker re-exec and run huu natively. Equivalent to the `--no-docker` flag (the CI-neutral alias of `--yolo`). Requires the local `npm install` of huu's deps. Useful for huu development itself and for CI runners — see [`docs/ci.md`](ci.md). |
@@ -337,15 +339,37 @@ the key, columns degrade to `—` placeholders without blocking selection.
 
 ## Auto-scaling concurrency
 
-**Memory-aware auto-scaling is on by default.** The auto-scaler sizes
-concurrency to the real memory headroom: it tracks each agent's actual
-footprint (moving average, seeded at 250 MB) and admits new agents only
-while they fit in the available memory minus a safety margin —
-cgroup-aware, so inside a container it respects the container's limit,
-not the host's. Pass `--concurrency=N` or `--no-auto-scale` to pin
-**manual mode** instead (live-tunable with `+`/`-` on the run
-dashboard; `A` re-enables auto). In headless configs, setting
-`"concurrency"` pins manual; omit it for auto.
+**Memory-aware auto-scaling is on by default.** Concurrency is governed
+by a **RAM budget dial**: a configurable percent of TOTAL machine memory
+(default `85`, clamped `10`–`95`), floored so at least 512 MiB stays
+reserved for the OS. The auto-scaler admits a new agent only while it
+fits inside that budget — `ramBudgetBytes(total, percent) − ramUsedBytes`
+divided by the agent's observed footprint — and the read is cgroup-aware,
+so inside a container it respects the container's limit, not the host's.
+Set the dial with `--ram-percent=<n>`, the `HUU_RAM_PERCENT` env var, or
+the web Settings field "RAM budget %"; it is machine-global (one machine,
+one RAM — no per-project override). Pass `--concurrency=N` or
+`--no-auto-scale` to pin **manual mode** instead (live-tunable with
+`+`/`-` on the run dashboard; `A` re-enables auto). In headless configs,
+setting `"concurrency"` pins manual; omit it for auto.
+
+Three refinements keep the budget from overshooting on a cold start:
+
+- **PSI front brake (Linux).** The scaler reads memory Pressure Stall
+  Information — the per-cgroup `memory.pressure` when containerized, else
+  system-wide `/proc/pressure/memory` — and freezes admission the moment
+  the `some avg10` value crosses ~0.5%. Pressure rises *before* RAM
+  saturates, so this catches a burst the lagging RAM gate would miss.
+  Where PSI is unavailable (macOS, kernels without `CONFIG_PSI`) it falls
+  back to the RAM-budget gate above.
+- **Pessimistic seed.** The per-agent estimate starts at 1536 MiB
+  (clamped 128–2048) and the moving average corrects it *down* from real
+  measurements — a cold start deliberately under-admits, then opens up as
+  the true footprint is learned.
+- **Fast-ramp.** The worker pool caps new spawns to
+  `max(1, ceil(busy × 0.5))` per tick (~+50%/tick), so auto mode never
+  floods the whole pool in a single tick. Manual mode still fills
+  immediately.
 
 The auto-scaler watches CPU and RAM via `lib/resource-monitor.ts` and
 moves between five states, surfaced in the header as
@@ -378,10 +402,10 @@ destroy threshold. The header shows a blue `MAX <STATE>` chip with the
 kill count; cooldown damping keeps it from thrashing. Press `M` again
 (or `A`) to return to auto, `+`/`-` to drop to manual.
 
-Override defaults by setting `agentMemoryEstimateMb`,
-`stopThresholdPercent`, `destroyThresholdPercent`, `cooldownMs`, and
-`maxAgents` in code if you embed the orchestrator; the CLI exposes
-`--concurrency=N` and `--no-auto-scale`.
+Override defaults by setting `agentMemoryEstimateMb`, `budgetPercent`,
+`admitPsiThreshold`, `stopThresholdPercent`, `destroyThresholdPercent`,
+`cooldownMs`, and `maxAgents` in code if you embed the orchestrator; the
+CLI exposes `--ram-percent=<n>`, `--concurrency=N`, and `--no-auto-scale`.
 
 ---
 

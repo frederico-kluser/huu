@@ -1,6 +1,23 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { WebRunManager, applyResolverModel, applyTimeout, type RunSnapshot } from './run-manager.js';
 import type { Pipeline } from '../lib/types.js';
+
+function setupRepo(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'huu-rm-'));
+  execSync('git init --initial-branch=main', { cwd: dir, encoding: 'utf8' });
+  execSync('git config user.email "t@t.com" && git config user.name "t"', {
+    cwd: dir,
+    shell: '/bin/bash',
+  });
+  writeFileSync(join(dir, 'README.md'), '# init\n', 'utf8');
+  writeFileSync(join(dir, '.gitignore'), '.huu-worktrees/\n', 'utf8');
+  execSync('git add -A && git commit -m init', { cwd: dir, encoding: 'utf8' });
+  return dir;
+}
 
 function waitFor(pred: () => boolean, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -168,4 +185,58 @@ describe('WebRunManager — multi-run', () => {
     mgr.abort('sim-c');
     expect(await waitFor(() => !mgr.isActive(), 2000)).toBe(true);
   });
+});
+
+describe('WebRunManager — lazy admission (real stub runs)', () => {
+  const repos: string[] = [];
+  afterEach(() => {
+    for (const d of repos.splice(0)) {
+      try {
+        rmSync(d, { recursive: true, force: true });
+      } catch {
+        /* best-effort temp cleanup */
+      }
+    }
+  });
+
+  const trivial: Pipeline = { name: 'p', steps: [{ name: 's', prompt: 'x', files: [] }] };
+
+  it('admits the first run immediately and QUEUES the rest (server-paced, not all-at-once)', async () => {
+    const dirA = setupRepo();
+    const dirB = setupRepo();
+    repos.push(dirA, dirB);
+
+    const mgr = new WebRunManager(process.cwd(), () => {});
+
+    // Two runs dispatched back-to-back (as the web client does for a queue).
+    const r1 = mgr.start({
+      pipeline: trivial,
+      backend: 'stub',
+      modelId: 'stub-model',
+      runDirectory: dirA,
+    });
+    const r2 = mgr.start({
+      pipeline: trivial,
+      backend: 'stub',
+      modelId: 'stub-model',
+      runDirectory: dirB,
+    });
+
+    // The FIRST is admitted immediately; the SECOND waits in the queue — the
+    // server paces them instead of spawning both at once (the OOM fix).
+    expect(r1.phase).toBe('running');
+    expect(r2.phase).toBe('queued');
+
+    // Both still drain to a terminal phase (the queue never deadlocks).
+    expect(
+      await waitFor(() => {
+        const s1 = mgr.getSnapshot(r1.runId).phase;
+        const s2 = mgr.getSnapshot(r2.runId).phase;
+        return (s1 === 'done' || s1 === 'error') && (s2 === 'done' || s2 === 'error');
+      }, 30000),
+    ).toBe(true);
+
+    mgr.abort();
+    expect(await waitFor(() => !mgr.isActive(), 5000)).toBe(true);
+  }, 30000);
 });

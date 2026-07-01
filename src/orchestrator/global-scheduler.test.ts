@@ -3,10 +3,15 @@ import { GlobalScheduler, distributeBudget, type RunDriver } from './global-sche
 import { AutoScaler } from './auto-scaler.js';
 import type { SystemMetrics } from '../lib/resource-monitor.js';
 
-/** Plentiful RAM by default → global budget B = min(totalDemand, maxAgents=200). */
+/**
+ * Plentiful RAM by default → global budget B = min(totalDemand, maxAgents=200).
+ * Sized comfortably above maxAgents × the pessimistic per-agent seed (1.5 GiB ×
+ * 200 = 300 GiB) so the budget headroom never becomes the binding constraint in
+ * these distribution tests.
+ */
 function metrics(partial: Partial<SystemMetrics> = {}): SystemMetrics {
-  const ramTotalBytes = partial.ramTotalBytes ?? 256 * 1024 ** 3;
-  const ramAvailableBytes = partial.ramAvailableBytes ?? 240 * 1024 ** 3;
+  const ramTotalBytes = partial.ramTotalBytes ?? 512 * 1024 ** 3;
+  const ramAvailableBytes = partial.ramAvailableBytes ?? 504 * 1024 ** 3;
   const ramUsedBytes = partial.ramUsedBytes ?? ramTotalBytes - ramAvailableBytes;
   return {
     cpuPercent: partial.cpuPercent ?? 20,
@@ -17,6 +22,7 @@ function metrics(partial: Partial<SystemMetrics> = {}): SystemMetrics {
     processRssBytes: 1,
     loadAvg1: 0,
     containerAware: false,
+    memPressureSome10: partial.memPressureSome10 ?? null,
   };
 }
 

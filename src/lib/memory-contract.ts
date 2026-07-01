@@ -11,7 +11,7 @@
 // AND by UI surfaces that want to preview the injected text.
 
 import type { Pipeline } from './types.js';
-import { DEFAULT_MEMORY_MAX_FILES } from './types.js';
+import { DEFAULT_MEMORY_HINT_MAX_CHARS, DEFAULT_MEMORY_MAX_FILES } from './types.js';
 
 /**
  * The deterministic contract block appended to a producer step's prompt.
@@ -24,6 +24,7 @@ Before finishing, write \`${path}\` EXACTLY in this format:
 { "_format": "huu-memory-v1", "files": [ { "path": "<repo-relative path>", "hint": "<one line of context for the agent that will work on this file>", "priority": <number, higher runs first — optional> } ] }
 - List at most ${cap} files. Entries beyond the cap are dropped at run time.
 - Every entry MUST carry a hint — it becomes the next step's $hint and is the single most valuable thing you hand over.
+- Keep each hint to ONE short line (at most ${DEFAULT_MEMORY_HINT_MAX_CHARS} characters). A longer hint is truncated at run time, never rejected — but a tight hint is a better hint.
 - Only list files that genuinely qualify. An empty "files" array is valid and means "nothing found" (the next step then runs zero tasks).
 - Paths are relative to the repo root; absolute paths and ".." are rejected.`;
 }

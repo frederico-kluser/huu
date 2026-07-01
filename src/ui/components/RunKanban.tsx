@@ -74,6 +74,9 @@ function lifecycleStatus(s: AgentStatus): CardStatus {
     return { label: s.phase.toUpperCase(), color: 'cyan' };
   }
   if (s.phase === 'no_changes') return { label: 'NO CHANGES', color: 'yellow' };
+  // Fase 2.3: memory-guard pause — a parked state (amber, like a soft hold).
+  // Not magenta (reserved for AI-driven UI); yellow matches TIMEOUT/NO CHANGES.
+  if (s.phase === 'paused') return { label: 'PAUSED', color: 'yellow' };
   return { label: 'PENDING', color: 'gray' };
 }
 
@@ -81,6 +84,9 @@ function pickColumn(s: AgentStatus): 'todo' | 'doing' | 'done' {
   if (s.state === 'error') return 'done';
   if (s.state === 'done' && s.phase === 'done') return 'done';
   if (s.phase === 'no_changes') return 'done';
+  // A paused card is parked (work preserved, waiting to resume) — show it in
+  // the DONE area rather than blinking back to TODO each pause.
+  if (s.phase === 'paused') return 'done';
   if (s.phase === 'pending') return 'todo';
   return 'doing';
 }
@@ -235,11 +241,14 @@ function buildCard(
   const requeueBadge = agent.requeues && agent.requeues > 0 ? ` ↻${agent.requeues}` : '';
   const manualRetryBadge =
     agent.manualRetries && agent.manualRetries > 0 ? ` ⟳${agent.manualRetries}` : '';
+  // Fase 2.3: memory-guard PAUSES (work preserved + resumed) — distinct from
+  // requeues (kills). Also in the title row, so cardHeight() stays in sync.
+  const pauseBadge = agent.pauses && agent.pauses > 0 ? ` ⏸${agent.pauses}` : '';
   return {
     key: String(agent.agentId),
     title: `#${agent.agentId} ${truncate(displayStage, 24)}${
       isOverride ? ' (step)' : ''
-    }${retryBadge}${requeueBadge}${manualRetryBadge}`,
+    }${retryBadge}${requeueBadge}${manualRetryBadge}${pauseBadge}`,
     subtitle,
     status,
     branchShort,
