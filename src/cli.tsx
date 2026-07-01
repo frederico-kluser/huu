@@ -89,6 +89,7 @@ import { runStatusCli } from './lib/status.js';
 import { runPruneCli } from './lib/prune.js';
 import { loadRunConfig, applyRunConfig } from './lib/run-config.js';
 import { runHeadless } from './lib/headless-run.js';
+import { installCrashGuard } from './lib/crash-guard.js';
 import { resolveRamPercent } from './lib/budget.js';
 import { findSpec, resolveApiKey } from './lib/api-key.js';
 import {
@@ -278,18 +279,14 @@ process.on('SIGHUP', () => {
   restoreTerminal();
   process.exit(129);
 });
-process.on('uncaughtException', (err) => {
-  restoreTerminal();
-  // Bypass any console patch: fatal errors must reach the terminal even
-  // after installLogCaptures() has redirected console.* into the LogArea.
-  process.stderr.write(`uncaughtException: ${err?.stack ?? String(err)}\n`);
-  process.exit(1);
-});
-process.on('unhandledRejection', (reason) => {
-  restoreTerminal();
-  process.stderr.write(`unhandledRejection: ${String(reason)}\n`);
-  process.exit(1);
-});
+// The SINGLE authoritative uncaught/unhandled handler. Default is FATAL — a
+// one-shot `huu auto` and the TUI want to fail loud (and a TUI in a corrupted
+// state isn't worth resuming). The web server flips this to RESILIENT once it is
+// listening (see web/serve.ts), so a detached-timer / library error inside one
+// agent can no longer take down the whole multi-run fleet + the server. This
+// REPLACES the old blanket `process.exit(1)` on any uncaught error, and is the
+// only exit-on-uncaught handler (safe-terminal + debug-logger only LOG now).
+installCrashGuard({ onFatalCleanup: restoreTerminal });
 
 // Installed exactly once. Idempotent so accidental re-entry is harmless.
 let logCapturesInstalled = false;

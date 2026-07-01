@@ -8,6 +8,7 @@
 import { networkInterfaces } from 'node:os';
 import { createWebServer } from './server.js';
 import { resolveWebHost, resolveWebPort } from './interface-mode.js';
+import { setResilient } from '../lib/crash-guard.js';
 import type { AgentBackendKind } from '../orchestrator/backends/registry.js';
 import type { Pipeline } from '../lib/types.js';
 
@@ -106,6 +107,14 @@ export async function startWebServer(opts: StartWebServerArgs): Promise<void> {
   });
 
   printBanner(host, port, token, inContainer);
+
+  // The server is now LISTENING and about to host N concurrent runs. Flip the
+  // process crash guard into resilient mode: from here on an uncaught error
+  // (e.g. a detached agent-library timer) is contained + logged instead of
+  // killing the process and every run with it. Startup errors above stay fatal
+  // (a server that never bound should exit). A genuine meltdown still bails via
+  // the guard's storm detector.
+  setResilient(true);
 
   // Stay up until the process is signalled (cli.tsx owns SIGINT/SIGTERM and
   // calls process.exit). Resolving on 'close' lets a test shut it down too.

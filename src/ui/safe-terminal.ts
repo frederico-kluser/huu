@@ -70,28 +70,11 @@ export function installSafeTerminal(): void {
     });
   }
 
-  process.on('uncaughtException', (err) => {
-    dlog('error', 'safe_uncaught', {
-      msg: err.message,
-      stack: err.stack,
-      ...snapshotProcess(),
-    });
-    restoreTerminal();
-    // Surface the failure once the terminal is sane again so the message is
-    // actually readable.
-    // eslint-disable-next-line no-console
-    console.error('uncaughtException:', err);
-    process.exit(1);
-  });
-
-  process.on('unhandledRejection', (reason) => {
-    dlog('error', 'safe_unhandled', {
-      reason: String(reason),
-      ...snapshotProcess(),
-    });
-    restoreTerminal();
-    // eslint-disable-next-line no-console
-    console.error('unhandledRejection:', reason);
-    process.exit(1);
-  });
+  // uncaughtException / unhandledRejection are OWNED by the process-level crash
+  // guard (src/lib/crash-guard.ts), which decides exit-vs-survive by mode (fatal
+  // for the one-shot/TUI, resilient for the long-lived web server). This module
+  // must NOT also exit on them — a sibling `process.exit` here would pre-empt the
+  // guard's survive decision and re-introduce the "one agent's error kills the
+  // whole fleet" crash. Terminal restore on those paths runs via the guard's
+  // onFatalCleanup and the 'exit' handler registered above.
 }
