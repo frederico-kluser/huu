@@ -10,3 +10,6 @@ dist/
 
 # huu runtime cache (native shim compiled on host smoke runs)
 .huu-cache/
+
+# Local refactor fixtures (teste_1 / teste_2) — their own git repos
+/projects/

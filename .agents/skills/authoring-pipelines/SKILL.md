@@ -2,7 +2,7 @@
 name: authoring-pipelines
 description: Guides writing huu pipeline JSON (huu-pipeline-v2) — WorkStep/CheckStep fields, scope semantics including the memory scope (filesFrom fan-out driven by a huu-memory-v1 file an earlier step writes, with $hint), outcome routing with exactly one default, the numeric safety caps and validateTopology rules, plus how to dry-run with the stub backend. Use when creating or editing any *.pipeline.json, designing pipeline stages, or deciding which step shape fits a job.
 metadata:
-  version: 0.4.0
+  version: 0.5.0
   type: task
 ---
 
@@ -33,6 +33,7 @@ Creating or editing `*.pipeline.json` (user pipelines under `pipelines/`, exampl
 - The integration worktree never rewinds: a check loop re-runs its target steps ON TOP of previous commits. Steps revisited in loops must be idempotent-ish (re-running adds, not corrupts).
 - Judge verdict = last JSON block of the judge's output; the judge runs with shell access in the integration worktree. Keep `condition` objectively checkable ("file X exists and section Y non-empty"), not vibes ("code is good").
 - Per-file prompts should open with an auto-skip rule for `node_modules/`, `dist/`, `vendor/`, generated/lock files — the bundled pipelines all do this.
+- **A CheckStep judge is only as strong as its model.** A low-capability judge model (e.g. `openai/gpt-4o-mini`) often emits NO parseable verdict JSON → huu logs "judge produced no parseable verdict; using default outcome" and takes the `default: true` outcome. With the recommended `default: approved`, that SILENTLY RUBBER-STAMPS — the gate never fires and real defects pass (seen: empty `package.json` deps, a missing entry `<script>`, invalid hex all sailed through a green judge). So: give judge steps a capable model, keep the `condition` mechanically checkable (shell-verifiable clauses) so even a weak judge can comply, and treat a green judge as a loop-breaker safety valve — NOT proof the work is correct. Inspect the diff yourself.
 
 ## Procedure
 
@@ -48,7 +49,7 @@ Creating or editing `*.pipeline.json` (user pipelines under `pipelines/`, exampl
 - `docs/pipeline-json-guide.md` (full spec; `#conditional-steps-check-nodes` for checks). Live examples to copy from (sources in `src/lib/default-pipelines/`): **huu Security Audit** (check step + `dependsOn` waves), **huu Knowledge System** (memory-scope fan-out + check loops), **huu Test Suite** (recon→memory fan-out + cleanup loop)
 - Related skills: editing-default-pipelines, authoring-agent-prompts (step-prompt techniques), running-in-docker (run flags), working-on-orchestrator (execution semantics)
 
-> Facts verified against source on 2026-06-12.
+> Facts verified against source on 2026-06-12; weak-judge-defaults caveat (a low-capability judge model emits no parseable verdict → the `default: true` outcome silently fires, so a report/refactor gate rubber-stamps) added from `[task:dogfood-angular-react-multirun]` 2026-07-01.
 
 ## <evolution>
 
