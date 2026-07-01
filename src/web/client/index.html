@@ -88,24 +88,51 @@
           <button type="button" class="btn btn--ghost btn--sm" id="launchViewBoard">View board →</button>
         </div>
 
-        <div class="launch-grid">
+        <!-- Guided launch (cart): pick a pipeline → mark one or more project
+             folders → configure this pipeline → it fans out over every marked
+             project into the queue. Add another pipeline, or run everything
+             concurrently. The step panels below are toggled by goStep() in app.js. -->
+        <ol class="stepper" id="stepper" role="list" aria-label="Launch steps">
+          <li class="step-chip is-current" data-step="1"><span class="step-chip__n">1</span><span class="step-chip__t">Pipeline</span></li>
+          <li class="step-chip" data-step="2"><span class="step-chip__n">2</span><span class="step-chip__t">Projects</span></li>
+          <li class="step-chip" data-step="3"><span class="step-chip__n">3</span><span class="step-chip__t">Config</span></li>
+          <li class="step-chip" data-step="4"><span class="step-chip__n">4</span><span class="step-chip__t">Queue</span></li>
+        </ol>
+
+        <!-- STEP 1 — pick a pipeline -->
+        <section class="wizard-step" id="step1">
           <div class="panel glass panel--pipelines">
-            <div class="panel__title"><span>Pipelines</span><span class="count" id="pipeCount"></span></div>
+            <div class="panel__title"><span>Pick a pipeline</span><span class="count" id="pipeCount"></span></div>
             <div class="pipeline-gallery" id="pipelineGallery">
               <div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div>
             </div>
           </div>
+        </section>
 
-          <aside class="panel glass panel--config" id="configPanel">
-            <div class="panel__title"><span>Launch</span></div>
-            <div class="config-empty" id="configEmpty">
-              <div class="config-empty__art" aria-hidden="true">
-                <span class="blob blob--goo blob--md"><span class="blob__i"></span></span>
-              </div>
-              <p class="muted">Select a pipeline to configure the run.</p>
+        <!-- STEP 2 — mark one or more project folders (checkbox multi-select) -->
+        <section class="wizard-step" id="step2" hidden>
+          <div class="panel glass panel--folder">
+            <div class="panel__title"><span>Mark project folders</span><span class="count" id="markedCount"></span></div>
+            <p class="muted wizard-hint">Navigate the filesystem and tick every project this pipeline should run on — each marked folder becomes its own run. Marks persist as you browse.</p>
+            <div class="folder-nav">
+              <button type="button" class="btn btn--ghost btn--sm" id="folderUp">↑ Parent</button>
+              <code class="dir-path" id="folderPath" title="">—</code>
+              <span class="folder-modal__git" id="folderGit"></span>
             </div>
+            <div class="folder-list" id="folderList"></div>
+            <div class="marked-chips" id="markedChips"></div>
+            <div class="wizard-foot">
+              <button type="button" class="btn btn--ghost" id="step2Back">← Back</button>
+              <button type="button" class="btn btn--primary" id="folderUse" disabled>Use <span id="markedUseN">0</span> selected →</button>
+            </div>
+          </div>
+        </section>
 
-            <form class="config-form" id="configForm" hidden>
+        <!-- STEP 3 — configure this pipeline (shared by all its marked projects) -->
+        <section class="wizard-step" id="step3" hidden>
+          <aside class="panel glass panel--config" id="configPanel">
+            <div class="panel__title"><span>Configure this pipeline</span></div>
+            <form class="config-form" id="configForm">
               <div class="field">
                 <label>Pipeline</label>
                 <div class="selected-pipe" id="selectedPipe">—</div>
@@ -113,11 +140,8 @@
               </div>
 
               <div class="field">
-                <label>Run directory</label>
-                <div class="dir-row">
-                  <code class="dir-path" id="dirPath" title="">—</code>
-                  <button type="button" class="btn btn--ghost btn--sm" id="dirBrowse">Browse…</button>
-                </div>
+                <label>Projects <span class="count" id="cfgProjCount"></span></label>
+                <div class="cfg-projects" id="cfgProjects"></div>
               </div>
 
               <div class="field">
@@ -177,30 +201,40 @@
                 <div class="config-hint muted" id="timeoutHint">Time limit for each agent, applied to the whole pipeline. Empty = the global default from Settings (⚙), or the pipeline default if that's unset too.</div>
               </div>
 
-              <button type="submit" class="btn btn--primary btn--lg" id="addBtn">
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                <span id="addBtnLabel">Add to queue</span>
-              </button>
-              <div class="config-hint muted" id="addHint">Queue projects and run them concurrently — add more anytime, even while the queue is running.</div>
+              <div class="wizard-foot">
+                <button type="button" class="btn btn--ghost" id="step3Back">← Back</button>
+                <button type="submit" class="btn btn--primary btn--lg" id="addBtn">
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  <span id="addBtnLabel">Add to queue</span>
+                </button>
+              </div>
+              <div class="config-hint muted" id="addHint">This pipeline runs on every project you marked — add more pipelines next, or run the queue.</div>
               <div class="run-error" id="runError" hidden></div>
             </form>
           </aside>
-        </div>
+        </section>
 
-        <!-- QUEUE: projects run sequentially, each with its own config. -->
-        <section class="panel glass panel--queue" id="queuePanel" hidden>
-          <div class="panel__title">
-            <span>Queue</span>
-            <span class="count" id="queueCount"></span>
-          </div>
-          <div class="queue-list" id="queueList"></div>
-          <div class="queue-foot">
-            <button type="button" class="btn btn--ghost btn--sm" id="queueClear">Clear all</button>
-            <button type="button" class="btn btn--primary" id="queueRun">
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
-              <span id="queueRunLabel">Run queue</span>
-            </button>
-          </div>
+        <!-- STEP 4 — the accumulated queue: add another pipeline, or run all -->
+        <section class="wizard-step" id="step4" hidden>
+          <section class="panel glass panel--queue" id="queuePanel">
+            <div class="panel__title">
+              <span>Queue</span>
+              <span class="count" id="queueCount"></span>
+            </div>
+            <div class="queue-empty muted" id="queueEmpty" hidden>Queue is empty — add a pipeline to get started.</div>
+            <div class="queue-list" id="queueList"></div>
+            <div class="queue-foot">
+              <button type="button" class="btn btn--ghost btn--sm" id="queueClear">Clear all</button>
+              <button type="button" class="btn btn--ghost" id="addAnotherBtn">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                Add another pipeline
+              </button>
+              <button type="button" class="btn btn--primary" id="queueRun">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+                <span id="queueRunLabel">Run queue</span>
+              </button>
+            </div>
+          </section>
         </section>
       </section>
 
@@ -333,23 +367,6 @@
       <div class="drawer__logs-head">Logs</div>
       <pre class="drawer__logs" id="drawerLogs"></pre>
     </aside>
-
-    <!-- Folder picker modal (choose the run directory) -->
-    <div class="modal-scrim" id="folderScrim" hidden></div>
-    <div class="folder-modal glass" id="folderModal" hidden role="dialog" aria-label="Choose run directory">
-      <div class="folder-modal__head">
-        <div class="folder-modal__title">Choose run directory</div>
-        <button class="iconbtn" id="folderClose" aria-label="Close">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        </button>
-      </div>
-      <div class="folder-modal__path"><code id="folderPath">—</code><span class="folder-modal__git" id="folderGit"></span></div>
-      <div class="folder-modal__list" id="folderList"></div>
-      <div class="folder-modal__foot">
-        <button class="btn btn--ghost btn--sm" id="folderUp">↑ Parent</button>
-        <button class="btn btn--primary btn--sm" id="folderUse">Run here</button>
-      </div>
-    </div>
 
     <!-- Run history modal (per-project executions saved in IndexedDB) -->
     <div class="modal-scrim" id="historyScrim" hidden></div>

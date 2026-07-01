@@ -7,7 +7,7 @@
  */
 
 import { basename, dirname, join, parse } from 'node:path';
-import { readdirSync, existsSync } from 'node:fs';
+import { readdirSync, existsSync, statSync } from 'node:fs';
 import {
   ALL_BACKENDS,
   selectBackend,
@@ -434,7 +434,15 @@ export function listDirs(target: string): DirListing {
   let entries: DirEntryInfo[] = [];
   try {
     entries = readdirSync(path, { withFileTypes: true })
-      .filter((e) => (e.isDirectory() || e.isSymbolicLink()) && !e.name.startsWith('.'))
+      .filter((e) => {
+        if (e.name.startsWith('.')) return false;
+        if (e.isDirectory()) return true;
+        // Follow symlinks: include only those resolving to a DIRECTORY, so a
+        // symlinked file (e.g. CLAUDE.md -> AGENTS.md) never shows as a folder
+        // the picker could navigate into or mark as a project. Broken links skip.
+        if (!e.isSymbolicLink()) return false;
+        try { return statSync(join(path, e.name)).isDirectory(); } catch { return false; }
+      })
       .map((e) => ({ name: e.name, path: join(path, e.name) }))
       .sort((a, b) => a.name.localeCompare(b.name));
   } catch {

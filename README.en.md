@@ -209,33 +209,41 @@ terminal TUI back.
   integration HEAD and, on success, its branch is merged in — no need to re-run
   the whole pipeline. A **Finish** button leaves the review hold. (Single-run
   TUI: `R` retries the focused card, `D` finishes.)
-- **Max time per agent — global and per project.** A **Settings** panel (⚙ in the
+- **Max time per agent — global and per pipeline.** A **Settings** panel (⚙ in the
   topbar) holds a global **Max time per agent** (minutes) that caps **every
   agent's** run time across the whole pipeline for **every run started from this
-  browser**; each project's launch field **overrides** it (blank inherits the
+  browser**; the **per-pipeline** launch field **overrides** it (blank inherits the
   global). Blank everywhere keeps the pipeline's default (10 min · 5 min for
-  single-file tasks). The global and per-project values persist in the browser and
+  single-file tasks). The global and per-pipeline values persist in the browser and
   are recorded in History. **Web UI only — the CLI keeps its own rules.**
   (Previously the web could only raise the limit when *retrying* an
   already-timed-out card; setting it up front was TUI-only.)
-- **Project queue, in parallel — with smart admission.** Select **several
-  projects** — each with its own config (directory, provider, model,
-  concurrency) — under one shared machine-wide **RAM/concurrency budget**. The
-  server admits the first **right away** and holds the rest **`queued`**, pulling
-  each in only when there is **sustained** spare memory — i.e. it does **not**
-  fire the whole machine at once (exactly what crashed the process with many
-  projects). Earlier projects have priority; later ones **backfill** idle slots
-  (e.g. while one is merging), and under memory pressure the lowest-priority
-  project's newest agent is **paused** first (its work preserved and resumed when
-  headroom returns; `HUU_NO_PAUSE=1` reverts to killing). **How much RAM huu may use is a dial**
+- **Guided launch (pipeline → projects → queue) — in parallel, with smart
+  admission.** Build the queue in steps: **pick a pipeline** → **mark one or more
+  projects** by browsing the filesystem (every folder has a **checkbox** — mark as
+  many as you like; marks persist as you navigate) → **configure that pipeline**
+  (provider, model, concurrency, time — **shared by all its marked projects**) and
+  it **fans out into one run per project** in the queue. Then **add another
+  pipeline** (with its own projects and config) or **run the queue**. The queue
+  shows everything **grouped by pipeline**. It all runs in parallel under one
+  shared machine-wide **RAM/concurrency budget**: the server admits the first
+  **right away** and holds the rest **`queued`**, pulling each in only when there
+  is **sustained** spare memory — i.e. it does **not** fire the whole machine at
+  once (exactly what crashed the process with many projects). Earlier projects
+  have priority; later ones **backfill** idle slots (e.g. while one is merging),
+  and under memory pressure the lowest-priority project's newest agent is
+  **paused** first (its work preserved and resumed when headroom returns;
+  `HUU_NO_PAUSE=1` reverts to killing). Running the **same pipeline over many
+  projects** — or **many projects on the same repo** — is safe: each run isolates
+  its worktrees/branches by `runId`. **How much RAM huu may use is a dial**
   (Settings → **RAM budget %**, or `HUU_RAM_PERCENT` / `--ram-percent`; default
   85%, the rest reserved for the OS). A **project selector** in the header
   (**project · pipeline**) switches between the live boards. **With the queue
-  running you can go back home (← Home) and add more projects** — they **join the
-  queue** and are admitted as capacity frees. If one fails, the rest keep going.
-  Every execution is archived to the browser **history** (IndexedDB) with all
-  cards, per-card costs and the per-project total — **exportable as JSON** in one
-  click.
+  running you can go back home (← Home) and add more pipelines/projects** — they
+  **join the queue** and are admitted as capacity frees. If one fails, the rest
+  keep going. Every execution is archived to the browser **history** (IndexedDB)
+  with all cards, per-card costs and the per-project total — **exportable as JSON**
+  in one click.
 - **Truly live log — now an activity console.** The text the agent generates
   lands in the log **as it streams** — not just at tool boundaries. The log
   header is now a **live activity bar**: it sums how many tasks are running

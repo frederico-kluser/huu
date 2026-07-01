@@ -6,7 +6,7 @@ import {
   buildRunRecord, buildSyntheticRecord, exportRunsJson, downloadText, uid,
 } from './db.js';
 import { createBoardOrder } from './board-order.js';
-import { parseTimeoutMinutes, settleQueue, summarizeQueue } from './queue-util.js';
+import { parseTimeoutMinutes, settleQueue, summarizeQueue, fanOutBatch, groupQueueItems, queueGroupKey } from './queue-util.js';
 import { substituteFileInTitle } from './title-util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -81,6 +81,12 @@ const S = {
   // during a LIVE queue (to add more projects). It suppresses the auto-switch
   // back to the board on every SSE frame, so you can keep selecting in peace.
   homePinned: false,
+  // Guided-launch wizard: pick a pipeline → mark projects → configure → queue.
+  // `markedDirs` is the set of absolute project paths ticked in step 2; it
+  // persists as the user navigates the filesystem and is fanned out (one run per
+  // dir) into the queue on "Add to queue".
+  wizard: { step: 1 },
+  markedDirs: new Set(),
   // --- /simulation mode (synthetic demo run; no branches, no key) ---
   sim: false,
   simModels: [],
@@ -99,13 +105,12 @@ const S = {
      runs are archived to IndexedDB (see db.js). The queue config (no keys) is
      mirrored to localStorage so a half-built queue survives a reload. */
   queue: {
-    items: [],          // [{ id, pipelineName, provider, backend, modelId, modelLabel, providerLabel, mode, concurrency, timeoutMinutes, runDirectory, status, runId }]
+    items: [],          // [{ id, groupId, pipelineName, provider, backend, modelId, modelLabel, providerLabel, mode, concurrency, timeoutMinutes, runDirectory, status, runId }] — groupId ties one pipeline's fanned-out projects together for grouped rendering
     running: false,
     live: null,         // Map<runId, item> — runs still in flight
     settled: 0,         // how many items have reached a terminal state
     processed: null,    // Set<runId> already archived (guards SSE replay)
     stopping: false,    // a Stop-queue is in progress
-    editingId: null,    // item being edited back in the form
     id: '',             // id shared by all runs of one queue execution
   },
 };
@@ -171,6 +176,7 @@ async function boot() {
   S.provider = b.lockedProvider || pickDefaultProvider(b.providers);
   S.backend = providerBackend(S.provider);
   renderGallery();
+  goStep(1);                       // start the guided launch at step 1
   if (b.initialPipeline) selectPipelineByName(b.initialPipeline);
   for (const r of b.runs || []) ingestRun(r);
   connectSse();
@@ -190,6 +196,55 @@ function pickDefaultProvider(providers) {
   if (ready) return ready.id;
   return (providers && providers[0] && providers[0].id) || 'openrouter';
 }
+
+/* ---------------- Guided-launch wizard (steps) ----------------
+   Four steps toggled by goStep(): 1 pick pipeline · 2 mark projects ·
+   3 configure · 4 queue. The stepper chips double as navigation (gated). */
+function canGoStep(n) {
+  if (n === 1) return true;
+  if (n === 2) return !!S.selectedPipe;                             // a pipeline is picked
+  if (n === 3) return !!S.selectedPipe && S.markedDirs.size >= 1;   // …and ≥1 project marked
+  if (n === 4) return S.queue.items.length >= 1;                    // something to review/run
+  return false;
+}
+
+function renderStepper() {
+  const step = S.wizard.step;
+  for (const chip of $('stepper').children) {
+    const n = +chip.dataset.step;
+    chip.classList.toggle('is-current', n === step);
+    chip.classList.toggle('is-done', n < step);
+    chip.classList.toggle('is-disabled', !canGoStep(n));
+  }
+}
+
+function goStep(n) {
+  S.wizard.step = n;
+  for (let i = 1; i <= 4; i++) { const el = $('step' + i); if (el) el.hidden = i !== n; }
+  renderStepper();
+  if (n === 1) renderGallery();
+  else if (n === 2) renderFolderStep();
+  else if (n === 3) renderConfigStep();
+  else if (n === 4) renderQueue();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Stepper chips are clickable shortcuts back/forward through completed steps.
+$('stepper').addEventListener('click', (e) => {
+  const chip = e.target.closest('.step-chip');
+  if (!chip) return;
+  const n = +chip.dataset.step;
+  if (canGoStep(n)) goStep(n);
+});
+$('step2Back').addEventListener('click', () => goStep(1));
+$('step3Back').addEventListener('click', () => goStep(2));
+$('addAnotherBtn').addEventListener('click', () => {
+  // Commit is already done (we're on step 4). Reset the batch and pick another
+  // pipeline; the accumulated queue persists and stays reachable via the chips.
+  S.selectedPipe = null;
+  S.markedDirs.clear();
+  goStep(1);
+});
 
 /* ---------------- Launch: pipeline gallery ---------------- */
 function renderGallery() {
@@ -225,12 +280,9 @@ function selectPipelineByName(name) {
 async function selectPipeline(p) {
   S.selectedPipe = p;
   renderGallery();
-  $('configEmpty').hidden = true;
-  $('configForm').hidden = false;
-  $('selectedPipe').textContent = p.name;
-  $('selectedPipeDesc').textContent = p.description || '';
-  $('dirPath').textContent = S.runDir;
-  $('dirPath').title = S.runDir;
+  goStep(2);                       // picking a pipeline advances to project marking
+  // Prepare the config controls in the background so step 3 is ready. These
+  // render into the (hidden) step-3 form; refreshModelsAndKeys is async/network.
   renderProviderSeg();
   await refreshModelsAndKeys();
   renderModeSeg();
@@ -688,34 +740,62 @@ function captureFormConfig() {
   };
 }
 
-// Form submit → add (or update when editing) a queued project.
-$('configForm').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const cfg = captureFormConfig();
-  if (!cfg) return;
+/* ---------------- Wizard step 3: configure + fan out to the queue ---------------- */
+/** Populate the step-3 panel: pipeline label, marked-projects summary, combos. */
+function renderConfigStep() {
+  if (!S.selectedPipe) { goStep(1); return; }
+  $('selectedPipe').textContent = S.selectedPipe.name;
+  $('selectedPipeDesc').textContent = S.selectedPipe.description || '';
+  const dirs = [...S.markedDirs];
+  $('cfgProjCount').textContent = dirs.length ? String(dirs.length) : '';
+  $('cfgProjects').innerHTML = dirs.length
+    ? dirs.map((p) => `<span class="cfg-proj" title="${esc(p)}">${esc(projectName(p))}</span>`).join('')
+    : '<span class="muted">No projects marked</span>';
+  mainCombo.syncInput();
+  resolverCombo.syncInput();
+  renderModeSeg();
+  syncTimeoutField();
+  $('timeoutInput').value = S.timeoutMin || '';
+  setAddBtnLabel(addLabel());
+  updateRunBtn();
+}
+
+/** Fan the current form config out over the marked project folders → N items. */
+function buildBatchItems() {
+  const base = captureFormConfig();
+  if (!base) return [];
+  const dirs = [...S.markedDirs];
+  if (!dirs.length) return [];
+  return fanOutBatch(base, dirs, uid(), uid);
+}
+
+/** Commit the current (pipeline + projects + config) batch into the queue. */
+function commitBatch() {
+  const items = buildBatchItems();
+  if (!items.length) { toast('Pick a pipeline and mark at least one project', true); return; }
   $('runError').hidden = true;
-  if (S.queue.editingId) {
-    const i = S.queue.items.findIndex((x) => x.id === S.queue.editingId);
-    if (i >= 0) { cfg.id = S.queue.editingId; S.queue.items[i] = cfg; }
-    S.queue.editingId = null;
-    setAddBtnLabel(addLabel());
-    toast('Project updated');
+  const startIdx = S.queue.items.length;
+  S.queue.items.push(...items);
+  if (S.queue.running) {
+    // The queue is LIVE — dispatch the new items right away; they join the
+    // running set under the shared scheduler and you can keep adding more.
+    for (let k = 0; k < items.length; k++) dispatchQueueItem(startIdx + k);
+    toast(`Added ${items.length} — starting now`);
   } else {
-    S.queue.items.push(cfg);
-    if (S.queue.running) {
-      // The queue is LIVE — start this project right away (no second click, no
-      // prompt). It joins the running set and the server schedules it under the
-      // shared budget; you stay on home, free to keep adding more.
-      dispatchQueueItem(S.queue.items.length - 1);
-      toast('Added — starting now');
-    } else {
-      toast('Added to queue');
-    }
+    toast(`Added ${items.length} project${items.length === 1 ? '' : 's'} to the queue`);
   }
   persistQueue();
-  renderQueue();
+  // The batch is committed → "spend" it so a step chip can't re-add the same
+  // projects. Chips 2/3 disable (no selected pipeline); "Pipeline"/"Add another"
+  // start a fresh batch. The queue itself persists.
+  S.selectedPipe = null;
+  S.markedDirs.clear();
   renderLaunchRunning();
-});
+  goStep(4);
+}
+
+// Step-3 form submit → fan this pipeline out over its marked projects.
+$('configForm').addEventListener('submit', (e) => { e.preventDefault(); commitBatch(); });
 
 function setAddBtnLabel(t) { $('addBtnLabel').textContent = t; }
 /** The add-button's default label — reflects that adds dispatch live mid-queue. */
@@ -734,102 +814,84 @@ function statusBadge(s) {
 
 function renderQueue() {
   const q = S.queue;
-  $('queuePanel').hidden = q.items.length === 0;
-  $('queueCount').textContent = q.items.length ? String(q.items.length) : '';
+  const empty = q.items.length === 0;
+  $('queueCount').textContent = empty ? '' : String(q.items.length);
+  const emptyEl = $('queueEmpty'); if (emptyEl) emptyEl.hidden = !empty;
   const list = $('queueList');
   list.innerHTML = '';
-  q.items.forEach((it, i) => {
-    const ready = itemReady(it);
-    const el = document.createElement('div');
-    el.className = 'queue-item ' + (it.status || 'pending');
-    el.innerHTML = `
-      <div class="queue-item__idx">${i + 1}</div>
-      <div class="queue-item__main">
-        <div class="queue-item__name"><span class="ico">${pipeIcon(it.pipelineName)}</span><span class="txt">${esc(it.pipelineName)}</span></div>
-        <div class="queue-item__meta">${esc(shortDir(it.runDirectory))}<span class="sep">·</span>${esc(it.modelLabel || 'default')}<span class="sep">·</span>${esc(it.providerLabel || it.provider)}${(it.timeoutMinutes || globalTimeoutMinutes()) ? '<span class="sep">·</span>⏱ ' + (it.timeoutMinutes || globalTimeoutMinutes()) + 'm' : ''}${ready ? '' : '<span class="sep">·</span><span class="warn">key needed</span>'}</div>
-      </div>
-      <div class="queue-item__actions">
-        ${statusBadge(it.status)}
-        <button class="qbtn" data-act="up" data-id="${it.id}" title="Move up" ${i === 0 || q.running ? 'disabled' : ''}>↑</button>
-        <button class="qbtn" data-act="down" data-id="${it.id}" title="Move down" ${i === q.items.length - 1 || q.running ? 'disabled' : ''}>↓</button>
-        <button class="qbtn" data-act="edit" data-id="${it.id}" title="Edit" ${q.running ? 'disabled' : ''}>✎</button>
-        <button class="qbtn qbtn--danger" data-act="remove" data-id="${it.id}" title="Remove" ${q.running ? 'disabled' : ''}>✕</button>
-      </div>`;
-    list.appendChild(el);
-  });
-  $('queueRun').disabled = q.running || q.items.length === 0;
-  $('queueRunLabel').textContent = q.running ? 'Running…' : `Run queue${q.items.length ? ` (${q.items.length})` : ''}`;
-  $('queueClear').disabled = q.running || q.items.length === 0;
-  // Reflect "adds dispatch immediately" in the button while a queue is live.
-  if (!q.editingId) setAddBtnLabel(addLabel());
+  // Render grouped by batch (one group per pipeline commit). Groups appear in
+  // dispatch order; the flat q.items order is untouched, so `priority: index`
+  // at dispatch is unchanged — grouping is purely presentational.
+  for (const g of groupQueueItems(q.items)) {
+    const head = document.createElement('div');
+    head.className = 'queue-group__head';
+    head.innerHTML = `<span class="ico" aria-hidden="true">${pipeIcon(g.pipelineName)}</span>`
+      + `<span class="queue-group__name">${esc(g.pipelineName)}</span>`
+      + `<span class="queue-group__count">${g.items.length} project${g.items.length === 1 ? '' : 's'}</span>`
+      + `<button class="qbtn qbtn--danger" data-act="remove-group" data-group="${esc(g.groupId)}" title="Remove pipeline" ${q.running ? 'disabled' : ''}>✕</button>`;
+    list.appendChild(head);
+    for (const it of g.items) list.appendChild(queueItemRow(it, q.items.indexOf(it)));
+  }
+  $('queueRun').disabled = q.running || empty;
+  $('queueRunLabel').textContent = q.running ? 'Running…' : `Run queue${empty ? '' : ` (${q.items.length})`}`;
+  $('queueClear').disabled = q.running || empty;
+  setAddBtnLabel(addLabel());
+  renderStepper();   // the "Queue" chip enables/disables with the item count
 }
 
-// Delegated queue-item actions (remove / edit / reorder).
+/** One project row inside a pipeline group. Pipeline identity lives in the group
+    header, so the row leads with the PROJECT name. */
+function queueItemRow(it, i) {
+  const q = S.queue;
+  const ready = itemReady(it);
+  const t = it.timeoutMinutes || globalTimeoutMinutes();
+  const el = document.createElement('div');
+  el.className = 'queue-item ' + (it.status || 'pending');
+  el.innerHTML = `
+    <div class="queue-item__idx">${i + 1}</div>
+    <div class="queue-item__main">
+      <div class="queue-item__name"><span class="txt">${esc(projectName(it.runDirectory))}</span></div>
+      <div class="queue-item__meta">${esc(shortDir(it.runDirectory))}<span class="sep">·</span>${esc(it.modelLabel || 'default')}<span class="sep">·</span>${esc(it.providerLabel || it.provider)}${t ? '<span class="sep">·</span>⏱ ' + t + 'm' : ''}${ready ? '' : '<span class="sep">·</span><span class="warn">key needed</span>'}</div>
+    </div>
+    <div class="queue-item__actions">
+      ${statusBadge(it.status)}
+      <button class="qbtn qbtn--danger" data-act="remove" data-id="${it.id}" title="Remove" ${q.running ? 'disabled' : ''}>✕</button>
+    </div>`;
+  return el;
+}
+
+// Delegated queue actions (remove one project / remove a whole pipeline group).
 $('queueList').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-act]');
   if (!btn) return;
-  const id = btn.getAttribute('data-id');
-  switch (btn.getAttribute('data-act')) {
-    case 'remove': removeQueueItem(id); break;
-    case 'edit': editQueueItem(id); break;
-    case 'up': moveQueueItem(id, -1); break;
-    case 'down': moveQueueItem(id, 1); break;
-  }
+  const act = btn.getAttribute('data-act');
+  if (act === 'remove') removeQueueItem(btn.getAttribute('data-id'));
+  else if (act === 'remove-group') removeQueueGroup(btn.getAttribute('data-group'));
 });
 
 function removeQueueItem(id) {
   if (S.queue.running) return;
   S.queue.items = S.queue.items.filter((x) => x.id !== id);
-  if (S.queue.editingId === id) { S.queue.editingId = null; setAddBtnLabel('Add to queue'); }
   persistQueue();
-  renderQueue();
+  afterQueueEdit();
 }
-function moveQueueItem(id, dir) {
+function removeQueueGroup(groupId) {
   if (S.queue.running) return;
-  const items = S.queue.items;
-  const i = items.findIndex((x) => x.id === id);
-  const j = i + dir;
-  if (i < 0 || j < 0 || j >= items.length) return;
-  [items[i], items[j]] = [items[j], items[i]];
+  S.queue.items = S.queue.items.filter((x) => queueGroupKey(x) !== groupId);
   persistQueue();
+  afterQueueEdit();
+}
+/** After a step-4 queue edit: re-render, and drop back to step 1 once empty. */
+function afterQueueEdit() {
   renderQueue();
+  if (!S.queue.items.length && S.wizard.step === 4) goStep(1);
 }
 $('queueClear').addEventListener('click', () => {
   if (S.queue.running) return;
   S.queue.items = [];
-  S.queue.editingId = null;
-  setAddBtnLabel('Add to queue');
   persistQueue();
-  renderQueue();
+  afterQueueEdit();
 });
-
-// Load a queued project back into the form to tweak + re-save.
-async function editQueueItem(id) {
-  if (S.queue.running) return;
-  const it = S.queue.items.find((x) => x.id === id);
-  if (!it) return;
-  const pipe = S.pipelines.find((p) => p.name === it.pipelineName);
-  if (!pipe) { toast('Pipeline no longer available', true); return; }
-  S.runDir = it.runDirectory;
-  S.provider = it.provider;
-  S.backend = providerBackend(it.provider);
-  await selectPipeline(pipe);            // renders provider seg + models + keys for S.provider
-  // Restore the saved model id (catalog OR custom) into the combobox. The old
-  // code read a #modelSelect <select> that no longer exists — it would crash.
-  S.modelId = it.modelId || S.modelId;
-  S.conflictResolverModelId = it.conflictResolverModelId || '';
-  mainCombo.refresh();
-  resolverCombo.refresh();
-  S.mode = it.mode || 'auto';
-  S.manualN = it.concurrency || S.manualN;
-  S.timeoutMin = it.timeoutMinutes ? String(it.timeoutMinutes) : '';
-  $('timeoutInput').value = S.timeoutMin;
-  renderModeSeg();
-  S.queue.editingId = id;
-  setAddBtnLabel('Update project');
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-  toast('Editing project — change config, then Update');
-}
 
 /* ---------------- Queue persistence (localStorage; no keys) ---------------- */
 function persistQueue() {
@@ -993,7 +1055,6 @@ function finishQueue() {
   // queue empties; anything that somehow never ran stays for a later run.
   const { keep, error } = settleQueue(q.items);
   q.items = keep;
-  q.editingId = null;
   setAddBtnLabel('Add to queue');
   persistQueue();
   renderQueue();
@@ -1259,45 +1320,119 @@ function projectName(p) {
   return parts[parts.length - 1] || String(p);
 }
 
-/* ---------------- Folder picker (run directory) ---------------- */
-const folderState = { path: '' };
-$('dirBrowse').addEventListener('click', () => openFolder(S.runDir || S.cwd));
-$('folderClose').addEventListener('click', closeFolder);
-$('folderScrim').addEventListener('click', closeFolder);
-$('folderUp').addEventListener('click', () => { if (folderState.parent) loadFolder(folderState.parent); });
-$('folderUse').addEventListener('click', () => {
-  S.runDir = folderState.path;
-  $('dirPath').textContent = S.runDir;
-  $('dirPath').title = S.runDir;
-  closeFolder();
-  toast('Run directory set');
-});
+/* ---------------- Wizard step 2: mark project folders ----------------
+   A multi-select filesystem browser. Ticking a folder adds its ABSOLUTE path to
+   S.markedDirs (which persists across navigation); clicking a sub-folder's name
+   navigates into it. Each marked folder becomes its own run at fan-out. */
+const folderState = { path: '', parent: null, listing: null };
 
-function openFolder(start) { $('folderScrim').hidden = false; $('folderModal').hidden = false; loadFolder(start); }
-function closeFolder() { $('folderScrim').hidden = true; $('folderModal').hidden = true; }
+$('folderUp').addEventListener('click', () => { if (folderState.parent) loadFolder(folderState.parent); });
+$('folderUse').addEventListener('click', () => { if (S.markedDirs.size >= 1) goStep(3); });
+
+/** Enter step 2 → (re)load the last-visited folder (or the server cwd). */
+function renderFolderStep() { loadFolder(folderState.path || S.runDir || S.cwd); }
 
 async function loadFolder(path) {
   try {
     const d = await api('/api/folders?path=' + encodeURIComponent(path || ''));
     folderState.path = d.path;
     folderState.parent = d.parent;
+    folderState.listing = d;
     $('folderPath').textContent = d.path;
     $('folderPath').title = d.path;
     const git = $('folderGit');
     git.textContent = d.isGitRepo ? '✓ git repo' : '⚠ not a git repo';
     git.className = 'folder-modal__git ' + (d.isGitRepo ? 'ok' : 'no');
     $('folderUp').disabled = !d.parent;
-    const list = $('folderList');
-    if (!d.entries.length) { list.innerHTML = '<div class="folder-empty">No sub-directories</div>'; return; }
-    list.innerHTML = '';
-    for (const ent of d.entries) {
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'folder-item';
-      b.innerHTML = `<span class="folder-item__icon">📁</span><span>${esc(ent.name)}</span>`;
-      b.addEventListener('click', () => loadFolder(ent.path));
-      list.appendChild(b);
-    }
+    renderFolderStepUi();
   } catch (err) { toast(err.message, true); }
+}
+
+/** Re-render list + chips + footer from the cached listing (no refetch). */
+function renderFolderStepUi() {
+  if (folderState.listing) renderFolderList(folderState.listing);
+  renderMarkedChips();
+  updateUseBtn();
+}
+
+function renderFolderList(d) {
+  const list = $('folderList');
+  list.innerHTML = '';
+  // Row to mark the CURRENT directory itself (its git status is known here; the
+  // /api/folders listing only reports isGitRepo for the path being browsed).
+  list.appendChild(folderRow(d.path, projectName(d.path) || d.path, { isSelf: true, isGit: d.isGitRepo }));
+  if (!d.entries.length) {
+    const empty = document.createElement('div');
+    empty.className = 'folder-empty';
+    empty.textContent = 'No sub-directories';
+    list.appendChild(empty);
+  }
+  for (const ent of d.entries) list.appendChild(folderRow(ent.path, ent.name, { isSelf: false }));
+}
+
+function folderRow(path, label, opts) {
+  const marked = S.markedDirs.has(path);
+  const row = document.createElement('div');
+  row.className = 'folder-item' + (opts.isSelf ? ' folder-item--self' : '') + (marked ? ' on' : '');
+  // Checkbox — mark/unmark this folder as a project target.
+  const box = document.createElement('button');
+  box.type = 'button';
+  box.className = 'folder-check';
+  box.setAttribute('aria-pressed', marked ? 'true' : 'false');
+  box.title = marked ? 'Unmark project' : 'Mark as project';
+  box.textContent = marked ? '✓' : '';
+  box.addEventListener('click', (e) => { e.stopPropagation(); toggleMarked(path); });
+  row.appendChild(box);
+  // Label — navigate INTO sub-folders; for the self row, tick it instead.
+  const name = document.createElement('button');
+  name.type = 'button';
+  name.className = 'folder-item__label';
+  const icon = opts.isSelf ? '📍' : '📁';
+  const tail = opts.isSelf
+    ? `<span class="folder-item__git ${opts.isGit ? 'ok' : 'no'}">${opts.isGit ? '✓ git' : '⚠ not git'}</span>`
+    : '<span class="folder-item__go" aria-hidden="true">›</span>';
+  name.innerHTML = `<span class="folder-item__icon" aria-hidden="true">${icon}</span>`
+    + `<span class="folder-item__name">${esc(label)}${opts.isSelf ? ' <span class="muted">· this folder</span>' : ''}</span>`
+    + tail;
+  name.addEventListener('click', () => { if (opts.isSelf) toggleMarked(path); else loadFolder(path); });
+  row.appendChild(name);
+  return row;
+}
+
+function toggleMarked(path) {
+  if (S.markedDirs.has(path)) S.markedDirs.delete(path);
+  else S.markedDirs.add(path);
+  renderFolderStepUi();
+}
+
+function renderMarkedChips() {
+  const wrap = $('markedChips');
+  if (!wrap) return;
+  const dirs = [...S.markedDirs];
+  const cnt = $('markedCount');
+  if (cnt) cnt.textContent = dirs.length ? String(dirs.length) : '';
+  if (!dirs.length) {
+    wrap.innerHTML = '<span class="muted">No folders marked yet — tick the ones you want.</span>';
+    return;
+  }
+  wrap.innerHTML = '';
+  for (const p of dirs) {
+    const chip = document.createElement('span');
+    chip.className = 'marked-chip';
+    chip.innerHTML = `<span class="marked-chip__name" title="${esc(p)}">${esc(projectName(p))}</span>`
+      + `<button type="button" class="marked-chip__x" aria-label="remove">×</button>`;
+    chip.querySelector('button').addEventListener('click', () => toggleMarked(p));
+    wrap.appendChild(chip);
+  }
+}
+
+function updateUseBtn() {
+  const n = S.markedDirs.size;
+  const nEl = $('markedUseN');
+  if (nEl) nEl.textContent = String(n);
+  const btn = $('folderUse');
+  if (btn) btn.disabled = n === 0;
+  renderStepper();   // the step-3 chip enables once ≥1 folder is marked
 }
 
 /* ---------------- Views ---------------- */
@@ -1311,7 +1446,13 @@ $('backToLaunch').addEventListener('click', () => {
   // Leaving the board while the queue is live → pin home so the per-frame
   // auto-switch doesn't drag us back; the runs keep streaming in the background.
   if (S.queue.running) S.homePinned = true;
-  showView('launch'); renderGallery(); renderLaunchRunning();
+  showView('launch');
+  // Fresh batch back at step 1; any running/queued items stay reachable via the
+  // "Queue" step chip (enabled while items exist).
+  S.selectedPipe = null;
+  S.markedDirs.clear();
+  goStep(1);
+  renderLaunchRunning();
 });
 // "View board →" on the launch running-banner: unpin and jump to the board.
 $('launchViewBoard').addEventListener('click', () => {

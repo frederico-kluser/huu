@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { findSpec } from '../lib/api-key.js';
-import { listBackendsInfo, listModelsForBackend, validateKeyValue } from './api-data.js';
+import { listBackendsInfo, listDirs, listModelsForBackend, validateKeyValue } from './api-data.js';
 import { resetCapabilitiesCache } from '../lib/openrouter.js';
 
 afterEach(() => {
@@ -130,5 +133,38 @@ describe('validateKeyValue', () => {
     const r = await validateKeyValue(findSpec('azureApiKey')!, 'az-key');
     expect(r).toEqual({ status: 'unverifiable', reason: 'endpoint required to validate' });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('listDirs', () => {
+  it('lists sub-directories, follows directory symlinks, and excludes files, file-symlinks and dotfolders', () => {
+    // Real filesystem (the repo convention — no fs mocks). The web folder picker
+    // marks project FOLDERS, so a symlinked file (e.g. CLAUDE.md -> AGENTS.md)
+    // must not appear as a navigable/markable entry.
+    const root = mkdtempSync(join(tmpdir(), 'huu-folders-'));
+    mkdirSync(join(root, 'alpha'));
+    mkdirSync(join(root, 'beta'));
+    mkdirSync(join(root, '.hidden'));                                 // dotfolder → excluded
+    writeFileSync(join(root, 'file.txt'), 'x');                       // plain file → excluded
+    symlinkSync(join(root, 'alpha'), join(root, 'link-dir'));         // → dir → included
+    symlinkSync(join(root, 'file.txt'), join(root, 'link-file'));     // → file → excluded
+    symlinkSync(join(root, 'does-not-exist'), join(root, 'broken'));  // broken → excluded
+
+    const d = listDirs(root);
+    expect(d.path).toBe(root);
+    expect(d.entries.map((e) => e.name)).toEqual(['alpha', 'beta', 'link-dir']);
+    expect(d.entries.every((e) => e.path === join(root, e.name))).toBe(true);
+    expect(d.isGitRepo).toBe(false);
+    expect(d.parent).toBeTruthy();   // has a parent (not at filesystem root)
+  });
+
+  it('flags a directory as a git repo when it holds a .git entry', () => {
+    const root = mkdtempSync(join(tmpdir(), 'huu-folders-'));
+    mkdirSync(join(root, '.git'));
+    expect(listDirs(root).isGitRepo).toBe(true);
+  });
+
+  it('falls back to the process cwd for a non-existent path', () => {
+    expect(listDirs(join(tmpdir(), 'huu-nope-' + 'zzz', 'missing')).path).toBe(process.cwd());
   });
 });

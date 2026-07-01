@@ -8,6 +8,28 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+### Changed
+
+- **Guided web launch — pipeline → projects → queue (a "cart" flow).** The web
+  launch view is now a 4-step wizard: **pick a pipeline**, **mark one or more
+  project folders** (the folder picker gained a **checkbox** — navigate the
+  filesystem and tick every target; marks persist across navigation), **configure
+  that pipeline once** (provider/model/concurrency/time, shared by all its marked
+  projects), then **add another pipeline** or **run the queue**. Each pipeline
+  **fans out into one run per marked project**, and the queue renders **grouped by
+  pipeline**. Replaces the old one-folder-per-item form where targeting N folders
+  meant re-filling the whole config N times. The scheduler/admission path is
+  unchanged — running the same pipeline over many projects, or many projects on
+  one repo, is safe (runs isolate worktrees/branches by `runId`). Web UI only; the
+  Ink TUI launch flow is unchanged.
+
+### Fixed
+
+- **Web folder picker no longer lists symlinked files as folders.** `listDirs`
+  now follows directory symlinks but excludes symlinks that resolve to a file
+  (e.g. `CLAUDE.md -> AGENTS.md`), so only real navigable/markable directories
+  appear in the project picker.
+
 ## [4.0.0] - 2026-06-30
 
 ### Added

@@ -76,3 +76,63 @@ export function parseTimeoutMinutes(raw) {
   const n = Math.floor(Number(String(raw).trim()));
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
+
+/**
+ * The queue grouping key for one item. Items that were fanned out from the same
+ * (pipeline + config) batch share a `groupId`; legacy items persisted before the
+ * cart flow carry none, so they fall back to a per-item key (each becomes its own
+ * singleton group — never merged with unrelated items).
+ *
+ * @param {{ groupId?: string, id?: string }|null|undefined} item
+ * @returns {string}
+ */
+export function queueGroupKey(item) {
+  if (!item) return '';
+  if (item.groupId) return item.groupId;
+  return 'item:' + (item.id != null ? item.id : '');
+}
+
+/**
+ * Fan ONE captured config out over N marked project directories → N queue items.
+ * The base config (pipeline name, model, provider, concurrency, timeout) is
+ * shared; only `runDirectory` varies, and each item gets a fresh id + the shared
+ * `groupId` so the queue can render them grouped under their pipeline. Pure +
+ * DOM-free (id generation is injected) so it unit-tests in Node.
+ *
+ * @param {object} base the per-pipeline config snapshot (from captureFormConfig)
+ * @param {string[]} dirs absolute project paths to target
+ * @param {string} groupId the shared batch id stamped on every produced item
+ * @param {() => string} mkId a fresh-id factory called once per item
+ * @returns {Array<object>} one item per dir: { ...base, id, runDirectory, groupId, status:'pending' }
+ */
+export function fanOutBatch(base, dirs, groupId, mkId) {
+  const list = Array.isArray(dirs) ? dirs : [];
+  const make = typeof mkId === 'function' ? mkId : () => undefined;
+  return list.map((dir) => ({ ...base, id: make(), runDirectory: dir, groupId, status: 'pending' }));
+}
+
+/**
+ * Group a flat queue into ordered per-batch groups for rendering. Groups appear
+ * in the order their FIRST item appears (which is dispatch order = priority), and
+ * item order within a group is preserved. Purely presentational — the underlying
+ * flat array order (and thus `priority: index` at dispatch) is untouched.
+ *
+ * @param {Array<{ groupId?: string, id?: string, pipelineName?: string }>} items
+ * @returns {Array<{ groupId: string, pipelineName: string, items: Array }>}
+ */
+export function groupQueueItems(items) {
+  const list = Array.isArray(items) ? items : [];
+  const order = [];
+  const byKey = new Map();
+  for (const it of list) {
+    const key = queueGroupKey(it);
+    let g = byKey.get(key);
+    if (!g) {
+      g = { groupId: key, pipelineName: (it && it.pipelineName) || '', items: [] };
+      byKey.set(key, g);
+      order.push(g);
+    }
+    g.items.push(it);
+  }
+  return order;
+}

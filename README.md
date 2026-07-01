@@ -213,30 +213,38 @@ TUI no terminal.
 - **Tempo máximo por agente — global e por projeto.** Um painel de **Settings**
   (⚙ no topo) guarda um **Max time per agent** global (minutos) que limita o tempo
   de **cada agente** em toda a pipeline, para **todo run iniciado neste navegador**;
-  o campo de cada projeto no launch **sobrescreve** o global (vazio = herda). Vazio
+  o campo **por pipeline** no launch **sobrescreve** o global (vazio = herda). Vazio
   em tudo usa o padrão da pipeline (10 min · 5 min em single-file). O global e o
-  valor por projeto persistem no navegador e ficam no histórico. **Só na Web UI —
+  valor por pipeline persistem no navegador e ficam no histórico. **Só na Web UI —
   o CLI mantém as próprias regras.** (Antes só dava para ajustar o tempo **ao
   re-tentar** um card já estourado; configurar no início era só no TUI.)
-- **Fila de projetos, em paralelo — com admissão inteligente.** Selecione
-  **vários projetos** — cada um com sua própria config (diretório, provider,
-  modelo, concorrência) — sob um **único orçamento de RAM/concorrência** da
-  máquina. O servidor admite o primeiro **na hora** e segura os demais em
-  **`na fila`**, puxando cada um só quando há folga de memória **sustentada** —
-  ou seja, **não dispara a máquina toda de uma vez** (era exatamente o que
-  derrubava o processo com muitos projetos). Os projetos anteriores têm
-  prioridade; os posteriores fazem **backfill** das vagas ociosas (ex.: enquanto
-  um está em merge), e sob pressão de memória **pausa-se** primeiro o agente mais
-  novo do projeto de menor prioridade (trabalho preservado e retomado com a folga;
-  `HUU_NO_PAUSE=1` volta a matar). **Quanto da RAM o huu pode usar é um dial**
-  (Settings → **RAM budget %**, ou `HUU_RAM_PERCENT` / `--ram-percent`; padrão
-  85%, o resto fica reservado pro sistema). Um **seletor de projetos** no topo
-  (**projeto · pipeline**) alterna entre os boards ao vivo. **Com a fila rodando,
-  dá para voltar à home (← Home) e adicionar mais projetos** — eles **entram na
-  fila** e são admitidos conforme a capacidade libera. Se um falha, os outros
-  seguem. Cada execução é arquivada no **histórico** do navegador (IndexedDB)
-  com todos os cards, os custos por card e o total por projeto — **exportável
-  em JSON** com um clique.
+- **Launch guiado (pipeline → projetos → fila) — em paralelo, com admissão
+  inteligente.** Monte a fila em passos: **escolha uma pipeline** → **marque um
+  ou mais projetos** navegando pelo sistema de arquivos (cada pasta tem um
+  **checkbox** — marque quantas quiser; as marcas persistem enquanto você
+  navega) → **configure aquela pipeline** (provider, modelo, concorrência, tempo
+  — **compartilhados por todos os projetos marcados**) e ela **se expande em uma
+  execução por projeto** na fila. Então **adicione outra pipeline** (com seus
+  próprios projetos e config) ou **rode a fila**. A fila mostra tudo **agrupado
+  por pipeline**. Tudo roda em paralelo sob um **único orçamento de
+  RAM/concorrência** da máquina: o servidor admite o primeiro **na hora** e
+  segura os demais em **`na fila`**, puxando cada um só quando há folga de
+  memória **sustentada** — ou seja, **não dispara a máquina toda de uma vez**
+  (era exatamente o que derrubava o processo com muitos projetos). Os projetos
+  anteriores têm prioridade; os posteriores fazem **backfill** das vagas ociosas
+  (ex.: enquanto um está em merge), e sob pressão de memória **pausa-se** primeiro
+  o agente mais novo do projeto de menor prioridade (trabalho preservado e
+  retomado com a folga; `HUU_NO_PAUSE=1` volta a matar). Rodar a **mesma pipeline
+  em vários projetos** — ou **vários projetos no mesmo repo** — é seguro: cada
+  execução isola worktrees/branches por `runId`. **Quanto da RAM o huu pode usar
+  é um dial** (Settings → **RAM budget %**, ou `HUU_RAM_PERCENT` /
+  `--ram-percent`; padrão 85%, o resto fica reservado pro sistema). Um **seletor
+  de projetos** no topo (**projeto · pipeline**) alterna entre os boards ao vivo.
+  **Com a fila rodando, dá para voltar à home (← Home) e adicionar mais
+  pipelines/projetos** — eles **entram na fila** e são admitidos conforme a
+  capacidade libera. Se um falha, os outros seguem. Cada execução é arquivada no
+  **histórico** do navegador (IndexedDB) com todos os cards, os custos por card e
+  o total por projeto — **exportável em JSON** com um clique.
 - **Log ao vivo, de verdade — agora um console de atividade.** O texto que o
   agente vai gerando entra no log **conforme sai** — não só nas trocas de
   ferramenta. O cabeçalho do log virou uma **barra de atividade ao vivo**: soma
