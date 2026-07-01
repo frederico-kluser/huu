@@ -8,6 +8,8 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-06-30
+
 ### Added
 
 - **RAM budget dial — "fill the machine, never crash" (resource-control Fase 1).**
@@ -886,7 +888,8 @@ Initial public release. Available on npm as `huu-pipe`
 - `safe.directory '*'` set system-wide in the image.
 
 
-[Unreleased]: https://github.com/frederico-kluser/huu/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/frederico-kluser/huu/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/frederico-kluser/huu/compare/v3.1.0...v4.0.0
 [3.1.0]: https://github.com/frederico-kluser/huu/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/frederico-kluser/huu/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/frederico-kluser/huu/compare/v2.0.0...v2.1.0
