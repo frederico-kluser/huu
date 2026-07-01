@@ -211,3 +211,46 @@ describe('GlobalScheduler register / unregister', () => {
     expect(sched.grantFor('r1')).toBe(10);
   });
 });
+
+describe('GlobalScheduler — explicit priority (list order is authoritative)', () => {
+  // The multi-run front-ends start their runs CONCURRENTLY, so the order
+  // register() is called is a race (each run registers only after its own async
+  // preflight). These pin that an explicit priority — the project's position in
+  // the user's list — decides rank instead: the first project is always served
+  // first, and the last is always the kill victim, regardless of who registered
+  // first. This is the guarantee behind "pull cards from the first project on."
+
+  it('serves the explicitly-highest-priority run first even when it registered LAST', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    // Registration order is the REVERSE of priority: the LOW-priority run
+    // registers first (seq 0), the HIGH-priority run second (seq 1).
+    sched.register(new StubDriver('low', 150), 5);
+    sched.register(new StubDriver('high', 150), 0);
+    sched.recomputeGrants();
+    // B = min(300, 200) = 200. Priority 0 ('high') saturates 150; 'low' backfills
+    // the remaining 50 — NOT the reverse (which a registration-order sort gives).
+    expect(sched.currentBudget).toBe(200);
+    expect(sched.grantFor('high')).toBe(150);
+    expect(sched.grantFor('low')).toBe(50);
+  });
+
+  it('kills the explicitly-lowest-priority run first even when it registered FIRST', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    // 'lowest' registers FIRST (seq 0) but is priority 9 (lowest); 'top'
+    // registers second but is priority 0 (highest).
+    sched.register(new StubDriver('lowest', 0, [{ agentId: 7, startedAt: 500 }]), 9);
+    sched.register(new StubDriver('top', 0, [{ agentId: 1, startedAt: 100 }]), 0);
+    const v = sched.selectGlobalVictim();
+    expect(v?.runId).toBe('lowest');
+    expect(v?.agentId).toBe(7);
+  });
+
+  it('falls back to registration order when no explicit priority is given', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    sched.register(new StubDriver('r1', 150)); // seq 0 → priority 0
+    sched.register(new StubDriver('r2', 150)); // seq 1 → priority 1
+    sched.recomputeGrants();
+    expect(sched.grantFor('r1')).toBe(150);
+    expect(sched.grantFor('r2')).toBe(50);
+  });
+});

@@ -77,13 +77,28 @@ export interface RunDriver {
 /** Returned to a run on register(); pass back to unregister(). */
 export interface RunDriverHandle {
   readonly runId: string;
-  /** Priority key: lower = higher priority (assigned in registration order). */
+  /**
+   * Registration counter (monotonic). Historically this WAS the priority key;
+   * the EFFECTIVE priority is now `RunSlot.priority` (an explicit caller value
+   * when given, else this seq). Still returned for stable identity / tie-break.
+   */
   readonly seq: number;
 }
 
 interface RunSlot {
   driver: RunDriver;
+  /** Registration counter — stable tie-break, and the default priority. */
   seq: number;
+  /**
+   * Authoritative priority (lower = higher priority). Defaults to `seq`, so the
+   * single-run and legacy paths are byte-identical; the multi-run front-ends
+   * pass an explicit value (web queue index, TUI selection index, run-many spec
+   * index) so the FIRST project in the user's list is always highest priority —
+   * independent of the order these concurrently-started runs happen to reach
+   * register(). That call order is a RACE (each run registers only AFTER its own
+   * async preflight), which is exactly why priority must be caller-authoritative.
+   */
+  priority: number;
 }
 
 /**
@@ -180,10 +195,18 @@ export class GlobalScheduler {
     this.budget.setBudgetPercent(pct);
   }
 
-  /** Admit a run. Returns a handle for later unregister(). Re-grants at once. */
-  register(driver: RunDriver): RunDriverHandle {
+  /**
+   * Admit a run. Returns a handle for later unregister(). Re-grants at once.
+   *
+   * `priority` (lower = higher priority) makes this run's rank AUTHORITATIVE to
+   * the caller's list order rather than the order register() is called — the
+   * multi-run front-ends start their runs concurrently, so register-call order
+   * is a race. Omit it and priority falls back to registration order (single-run
+   * / legacy path: unchanged).
+   */
+  register(driver: RunDriver, priority?: number): RunDriverHandle {
     const seq = this.seqCounter++;
-    this.slots.push({ driver, seq });
+    this.slots.push({ driver, seq, priority: priority ?? seq });
     this.recomputeGrants();
     return { runId: driver.runId, seq };
   }
@@ -234,7 +257,9 @@ export class GlobalScheduler {
    * counts, then distributes top-down by priority.
    */
   recomputeGrants(): void {
-    const ordered = [...this.slots].sort((a, b) => a.seq - b.seq);
+    // Order by authoritative priority (lower first); seq breaks ties so the
+    // ordering is total and stable across recomputes.
+    const ordered = [...this.slots].sort((a, b) => a.priority - b.priority || a.seq - b.seq);
 
     let activeTotal = 0;
     let pendingTotal = 0;
@@ -277,7 +302,8 @@ export class GlobalScheduler {
    * lower-priority run still has one alive.
    */
   selectGlobalVictim(): { runId: string; agentId: number; driver: RunDriver } | null {
-    const ordered = [...this.slots].sort((a, b) => b.seq - a.seq); // lowest priority first
+    // Lowest priority first (highest priority NUMBER); seq breaks ties.
+    const ordered = [...this.slots].sort((a, b) => b.priority - a.priority || b.seq - a.seq);
     for (const s of ordered) {
       const ages = s.driver
         .activeAgentAges()

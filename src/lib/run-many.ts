@@ -105,6 +105,9 @@ export async function runMany(
     const orch = new Orchestrator(spec.config, spec.pipeline, spec.cwd, spec.agentFactory, {
       conflictResolverFactory: spec.conflictResolverFactory,
       scheduler,
+      // Spec order IS priority (index 0 = highest). Admission is already
+      // sequential, but passing it explicitly hardens the guarantee.
+      priority: i,
     });
     unsubscribes.push(
       orch.subscribe((state) => {

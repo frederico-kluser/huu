@@ -400,6 +400,9 @@ export function createWebServer(opts: WebServerOptions): {
       // GlobalScheduler budget; absent → HUU_RAM_PERCENT/85 default.
       ramPercent:
         typeof body.ramPercent === 'number' ? body.ramPercent : undefined,
+      // Authoritative priority = the project's index in the client's queue list,
+      // so the first project is served first regardless of POST arrival order.
+      priority: typeof body.priority === 'number' ? body.priority : undefined,
     };
     try {
       const snap = manager.start(params);

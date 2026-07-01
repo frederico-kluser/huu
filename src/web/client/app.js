@@ -850,7 +850,7 @@ function restoreQueue() {
 /* ---------------- Sequential runner ---------------- */
 $('queueRun').addEventListener('click', startQueue);
 
-function startQueue() {
+async function startQueue() {
   const q = S.queue;
   if (q.running || !q.items.length) return;
   for (const it of q.items) { it.status = 'pending'; it.runId = null; }
@@ -865,10 +865,15 @@ function startQueue() {
   renderQueue();
   showView('run');                 // jump to the board now (was per-item in postRun)
   updateQueueChrome();
-  // Dispatch ALL items at once — the server runs them concurrently under one
-  // shared scheduler (priority = dispatch order; later items backfill earlier
-  // ones). The project selector lets you switch between the live boards.
-  q.items.forEach((_it, i) => dispatchQueueItem(i));
+  // Dispatch SEQUENTIALLY — await each POST before firing the next so the server
+  // receives the projects in list order → priority = list order (the server
+  // enqueues each run BEFORE responding, so awaiting the response guarantees the
+  // ordering). It still paces admission under one shared scheduler (later items
+  // backfill earlier ones). Each postRun swallows its own errors, so one bad
+  // project can't stall the rest. `priority: i` in the body is the belt to this
+  // suspenders — the server stays authoritative even if a POST is reordered.
+  const n = q.items.length;
+  for (let i = 0; i < n; i++) await dispatchQueueItem(i);
 }
 
 function dispatchQueueItem(i) {
@@ -877,10 +882,11 @@ function dispatchQueueItem(i) {
   if (!item) return;
   // The server lazily admits runs (it may hold this one as 'queued' until there
   // is RAM headroom). Reflect that here; onRunFrame() flips it to 'running' once
-  // the server admits it.
+  // the server admits it. Returns postRun's promise so startQueue can await it
+  // for in-order dispatch; the mid-run "add & start" caller ignores it.
   item.status = 'queued';
   renderQueue();
-  postRun(i);
+  return postRun(i);
 }
 
 async function postRun(i) {
@@ -904,6 +910,10 @@ async function postRun(i) {
         apiKey: apiKey || undefined,
         endpoint: endpoint || undefined,
         runDirectory: item.runDirectory || undefined,
+        // Authoritative priority = this project's position in the queue list, so
+        // the server serves the first project first regardless of the order the
+        // POSTs happen to arrive. Lower = higher priority.
+        priority: i,
       }),
     });
     const runId = r && r.run && r.run.runId;

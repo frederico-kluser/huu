@@ -79,13 +79,17 @@ export function MultiRunDashboard({
   // subordinate to the shared scheduler and gets a stable runId.
   const [{ scheduler, runs }] = useState<{ scheduler: GlobalScheduler; runs: RunSlot[] }>(() => {
     const sched = new GlobalScheduler();
-    const slots: RunSlot[] = pipelines.map((pipeline) => {
+    const slots: RunSlot[] = pipelines.map((pipeline, i) => {
       const runId = generateRunId();
       const orch = new Orchestrator(config, pipeline, cwd, agentFactory, {
         conflictResolverFactory,
         autoScale,
         initialConcurrency,
         scheduler: sched,
+        // Selection order IS priority: the first selected pipeline is served
+        // first. Explicit so the racy concurrent orch.start() registration order
+        // can't invert it.
+        priority: i,
         runId,
       });
       return { runId, pipeline, orch };
