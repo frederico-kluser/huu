@@ -119,11 +119,18 @@ concurrency target is the **RAM BUDGET dial** — a configurable % of TOTAL RAM
 PESSIMISTIC at 1536MiB so a cold start under-admits then opens up as the EMA
 corrects DOWN; clamped 128MiB–2GiB). The dial is **machine-global**: in
 multi-run it configures the one shared budget `AutoScaler` via
-`GlobalScheduler.setBudgetPercent`. The **front brake is Linux PSI**:
-`shouldSpawn()` freezes admission when `SystemMetrics.memPressureSome10`
-(cgroup `memory.pressure` → `/proc/pressure/memory`; `null` off-Linux → falls
-back to the RAM stop-gate) crosses `admitPsiThreshold` (0.5%) — pressure rises
-BEFORE RAM saturates. Spawns FAST-RAMP geometrically (`executeTaskPool` caps new
+`GlobalScheduler.setBudgetPercent`. The **front brake is Linux PSI**, run as a
+CLOSED-LOOP controller (Fase 2.2, `updateController()`, senpai/TMO + Netflix
+AIMD/Vegas): a `controlledLimit` ramps up additively while
+`SystemMetrics.memPressureSome10` (cgroup `memory.pressure` →
+`/proc/pressure/memory`; `null` off-Linux → falls back to the RAM stop-gate)
+stays under the `targetPsi` setpoint (0.5%), cuts ×0.5 above the cut band
+(2× setpoint = 1.0%) with a 5 s hold, and holds in the hysteresis band —
+always clamped within the RAM budget ceiling (`effectiveLimit()` uses the live
+ceiling in open-loop so the scheduler's synchronous read never lags). The binary
+`shouldSpawn()` freeze moved to the cut band, so the controller can run the
+machine AT the setpoint without the gate fighting it — pressure rises BEFORE RAM
+saturates. Spawns FAST-RAMP geometrically (`executeTaskPool` caps new
 spawns/tick to `max(1, ceil(busy·0.5))`, manual mode excepted) so no single tick
 bursts the pool. `huu` also nudges its own `oom_score_adj` (best-effort,
 configurable via `HUU_OOM_SCORE_ADJ`, conservative default; `src/lib/oom-score.ts`).
@@ -131,12 +138,24 @@ configurable via `HUU_OOM_SCORE_ADJ`, conservative default; `src/lib/oom-score.t
 pins `manual` mode. A third mode, `greedy` (TUI label **MAX**, the `M` hotkey),
 floods one agent per queued task up to the hard ceiling and lets the guard be the
 sole backstop, so concurrency settles at the destroy threshold. The MEMORY
-GUARD runs in ALL THREE modes: at ≥95% RAM/CPU it kills the
-NEWEST agent (least work done — picked by `startedAt`), resets its card to
-`pending` with a `requeues` counter (TODO column, `↻N` badge), and requeues
-the task at the front of the queue. The killed-attempt marker is the
-consumable `killedAgentIds` Set in `orchestrator/index.ts` — never a status
-flag (see `requeue.test.ts` for the race + stale-flag regression).
+GUARD runs in ALL THREE modes: at ≥95% RAM/CPU it preempts the NEWEST agent
+(least work done — picked by `startedAt`). By default (Fase 2.3) it PAUSES it
+instead of killing: `pauseAgent()` takes a checkpoint (`SpawnedAgent.checkpoint()`
+→ the pi session-file path), disposes the agent to free RAM, PRESERVES its
+worktree + branch + transcript, and requeues the task in a `paused` phase (DONE
+column, amber `PAUSED`, `⏸N` badge, `pauses` counter) — the existing
+`shouldSpawn` gate then RESUMES it IN PLACE (reuses the worktree, threads
+`AgentRuntimeContext.restoreSessionPath` so the pi agent continues without
+redoing tool calls) once headroom returns. `HUU_NO_PAUSE=1`, or any backend that
+can't checkpoint (returns `null`/omits the method — azure, stub-less mocks),
+falls back to the legacy KILL: `destroyAgent()` deletes the worktree+branch and
+resets the card to `pending` with a `requeues` counter (TODO column, `↻N` badge).
+The consumable preempt markers are the sibling `pausedAgentIds` / `killedAgentIds`
+Sets in `orchestrator/index.ts` — never status flags (see `requeue.test.ts` for
+both paths + the race/stale-flag regression). pi sessions persist to a
+run-scoped `.huu-sessions/` dir OUTSIDE the worktree (else finalize would commit
+the transcript); a paused task in `pendingTasks` keeps the pool alive so the
+stage can't merge under it, making base-staleness structurally impossible.
 CheckStep judges surface as kanban cards via `OrchestratorState.checkRuns`
 (persisted to `RunManifest.checkRuns`). Each agent card also tracks
 `AgentStatus.actionCounts` (keyed `stream`/`tool`/`file`/`log`/`usage`/`done`/
@@ -186,10 +205,13 @@ registration order (= priority). Earlier runs are served first, later runs
 backfill the remainder, and a bottlenecked run (mid-merge, demand ≈ 0) cascades
 its slots onward. A lower-priority run whose grant drops below its busy count
 DRAINS (stops spawning) — no wasted work. The memory guard is now CROSS-RUN:
-`selectGlobalVictim()` kills the LOWEST-priority run's newest agent first
-(reusing each run's `destroyAgent`/`killedAgentIds`/requeue), never a
+`selectGlobalVictim()` preempts the LOWEST-priority run's newest agent first
+(reusing each run's guard machinery — `pauseAgent` by default, `destroyAgent`
+under `HUU_NO_PAUSE=1` or when the driver omits `pauseAgent`), never a
 higher-priority run's agent while a lower one has a live agent — pinned by
-`multi-run-priority.test.ts`. `B` is demand-capped, so the admission signal is
+`multi-run-priority.test.ts` (both the paused-victim and forced-kill paths). The
+`RunDriver` the scheduler holds is an EXPLICIT wrapper (not the Orchestrator
+itself), so `pauseAgent` had to be added to that literal too, not just the class. `B` is demand-capped, so the admission signal is
 `headroomCapacity − demand` (`GlobalScheduler.remaining`), NOT `B − grants`.
 `src/lib/run-many.ts` is the headless driver (lazy, monotonic admission:
 admit the top run, pull in the next only on sustained spare capacity or while a

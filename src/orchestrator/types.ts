@@ -88,6 +88,19 @@ export interface SpawnedAgent {
   abort(): Promise<void>;
   /** Releases resources (LLM session, listeners). */
   dispose(): Promise<void>;
+  /**
+   * OPTIONAL pause hook (Fase 2.3). Capture a resumable pointer to the agent's
+   * persisted session and return a path the orchestrator can later hand back as
+   * {@link AgentRuntimeContext.restoreSessionPath} to reconstruct it — so a
+   * memory-guard preemption can PAUSE the agent (free its RAM, keep its
+   * worktree + transcript) instead of killing it. Returns `null` when no
+   * durable checkpoint exists yet (nothing written, backend can't persist):
+   * the caller then falls back to the proven kill+requeue (`destroyAgent`), so
+   * a missing/failed checkpoint NEVER regresses below today's behavior. Does
+   * NOT dispose — the caller disposes immediately after. Backends without
+   * persistent sessions omit this method entirely (⇒ always kill+requeue).
+   */
+  checkpoint?(): Promise<string | null>;
 }
 
 /**
@@ -113,6 +126,16 @@ export interface AgentRuntimeContext {
    * model. Ignored by models without reasoning support and by the stub.
    */
   maxThinking?: boolean;
+  /**
+   * Fase 2.3 resume. When set, the factory RECONSTRUCTS the agent's prior
+   * session from this path (a checkpoint earlier returned by
+   * {@link SpawnedAgent.checkpoint}) instead of starting fresh — the resumed
+   * agent sees its earlier transcript and won't redo completed tool calls. Set
+   * by the orchestrator's pause→resume path when respawning a paused task into
+   * its preserved worktree. Ignored by backends without persistent sessions
+   * (they start fresh, idempotently).
+   */
+  restoreSessionPath?: string;
 }
 
 export type AgentFactory = (

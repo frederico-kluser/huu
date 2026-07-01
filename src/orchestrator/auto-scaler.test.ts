@@ -294,18 +294,21 @@ describe('AutoScaler', () => {
   });
 
   describe('PSI admission brake (shouldSpawn)', () => {
-    it('freezes admission when some-avg10 >= the PSI threshold (auto)', () => {
+    it('freezes admission at/above the cut band (2x setpoint = 1.0, controller on)', () => {
       const scaler = createScaler(
-        makeMetrics({ cpuPercent: 10, ramPercent: 10, memPressureSome10: 0.5 }),
+        makeMetrics({ cpuPercent: 10, ramPercent: 10, memPressureSome10: 1.0 }),
       );
       scaler.start();
       expect(scaler.shouldSpawn()).toBe(false);
       scaler.stop();
     });
 
-    it('admits when PSI is below the threshold', () => {
+    it('admits AT the setpoint (controller operates there; no hard freeze below the cut band)', () => {
+      // 0.5 is the controller setpoint — the hard freeze sits at the cut band
+      // (1.0), so the controller can run the machine AT ~0.5 without the binary
+      // gate fighting it (that is the point of the closed loop).
       const scaler = createScaler(
-        makeMetrics({ cpuPercent: 10, ramPercent: 10, memPressureSome10: 0.1 }),
+        makeMetrics({ cpuPercent: 10, ramPercent: 10, memPressureSome10: 0.5 }),
       );
       scaler.start();
       expect(scaler.shouldSpawn()).toBe(true);
@@ -335,6 +338,91 @@ describe('AutoScaler', () => {
       scaler.setMode('manual');
       scaler.start();
       expect(scaler.shouldSpawn()).toBe(true);
+      scaler.stop();
+    });
+  });
+
+  describe('PSI controller (closed-loop, Fase 2.2)', () => {
+    const GiB = 1024 ** 3;
+    // Big machine so the budget ceiling = maxAgents (200): isolates the controller.
+    const big = (psi: number | null) =>
+      makeMetrics({
+        ramTotalBytes: 256 * GiB,
+        ramUsedBytes: 16 * GiB,
+        cpuPercent: 10,
+        ramPercent: 10,
+        memPressureSome10: psi,
+      });
+
+    it('cuts the limit ×0.5 when PSI crosses the cut band (2× setpoint = 1.0)', () => {
+      const m = { current: big(0) };
+      const scaler = new AutoScaler({ resourceMonitor: () => m.current, agentMemoryEstimateMb: 250 });
+      scaler.start(); // first poll seeds controlledLimit to the budget ceiling (200)
+      expect(scaler.getStatus().controlledLimit).toBe(200);
+      m.current = big(2.0); // pressure above the cut band
+      vi.advanceTimersByTime(1000); // one poll → multiplicative decrease
+      expect(scaler.getStatus().controlledLimit).toBe(100);
+      scaler.stop();
+    });
+
+    it('re-ramps additively under low PSI after a cut (bounded by the ceiling)', () => {
+      const m = { current: big(2.0) };
+      const scaler = new AutoScaler({ resourceMonitor: () => m.current, agentMemoryEstimateMb: 250 });
+      scaler.start(); // seed 200 then cut to 100 on the same poll (PSI 2.0)
+      expect(scaler.getStatus().controlledLimit).toBe(100);
+      m.current = big(0); // pressure gone
+      vi.advanceTimersByTime(8000); // past the 5s hold → several additive increases
+      const limit = scaler.getStatus().controlledLimit!;
+      expect(limit).toBeGreaterThan(100); // re-ramped
+      expect(limit).toBeLessThanOrEqual(200); // never above the RAM-budget ceiling
+      scaler.stop();
+    });
+
+    it('holds in the hysteresis band (setpoint ≤ PSI < cut band)', () => {
+      const m = { current: big(2.0) };
+      const scaler = new AutoScaler({ resourceMonitor: () => m.current, agentMemoryEstimateMb: 250 });
+      scaler.start(); // → cut to 100
+      m.current = big(0.7); // between setpoint (0.5) and cut band (1.0)
+      vi.advanceTimersByTime(8000);
+      expect(scaler.getStatus().controlledLimit).toBe(100); // neither grows nor cuts
+      scaler.stop();
+    });
+
+    it('never exceeds the RAM budget ceiling even under sustained zero PSI', () => {
+      // 16 GiB, seed 250 → budget ceiling ≈ 22; the controller cannot ramp past it.
+      const scaler = createScaler(
+        makeMetrics({ ramTotalBytes: 16 * GiB, ramUsedBytes: 8 * GiB, memPressureSome10: 0 }),
+        { agentMemoryEstimateMb: 250 },
+      );
+      scaler.start();
+      vi.advanceTimersByTime(30000);
+      expect(scaler.getStatus().controlledLimit).toBeLessThanOrEqual(22);
+      scaler.stop();
+    });
+
+    it('PSI null → open-loop: controlledLimit tracks the live budget ceiling', () => {
+      const scaler = createScaler(
+        makeMetrics({ ramTotalBytes: 16 * GiB, ramUsedBytes: 8 * GiB, memPressureSome10: null }),
+        { agentMemoryEstimateMb: 250 },
+      );
+      scaler.start();
+      // budget headroom = 22; open-loop limit == Fase 1 budget target.
+      expect(scaler.getStatus().controlledLimit).toBe(22);
+      expect(scaler.targetConcurrency()).toBe(22);
+      scaler.stop();
+    });
+
+    it('controllerEnabled:false → open-loop even with PSI present', () => {
+      const m = { current: big(0) }; // PSI 0 would otherwise ramp
+      const scaler = new AutoScaler({
+        resourceMonitor: () => m.current,
+        agentMemoryEstimateMb: 250,
+        controllerEnabled: false,
+      });
+      scaler.start();
+      vi.advanceTimersByTime(8000);
+      // No closed loop: limit stays at the budget ceiling (200), not driven by PSI.
+      expect(scaler.getStatus().controlledLimit).toBe(200);
       scaler.stop();
     });
   });

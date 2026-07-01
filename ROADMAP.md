@@ -18,7 +18,7 @@
 | Fase | Estado | O que muda | Ganho | Risco |
 |---|---|---|---|---|
 | **1 — dias** | ✅ **Entregue** | Dial por % (`budget.ts`), PSI como freio, seed pessimista, lazy-admission na web, `oom_score_adj`, fast-ramp | Enche até o teto sem quebrar; fim da admissão cega da UI | Medição in-process imprecisa (mitigada por folga) |
-| **2 — semanas** | ⏳ Planejado | cgroup-pai `memory.high/max` por %, controlador senpai+AIMD com histerese, sessão pi persistente, fila SQLite WAL, zram | OOM **global impossível** via kernel; degrada/retoma em vez de morrer | Thrash invisível; oscilação; CPU do zram |
+| **2 — semanas** | 🔨 **Parcial** (2.2 + 2.3 ✅ entregues; 2.1/2.4/2.5 pendentes) | cgroup-pai `memory.high/max` por %, controlador senpai+AIMD com histerese, sessão pi persistente, fila SQLite WAL, zram | OOM **global impossível** via kernel; degrada/retoma em vez de morrer | Thrash invisível; oscilação; CPU do zram |
 | **3 — estrutural** | ⏳ Planejado | Agentes em subprocessos, cgroup+`oom_score` por-agente, PSS honesto, hierarquia completa de degradação, container-por-run, multi-host | Vítima legítima de OOM; medição exata = margens menores = mais agentes; escala >1 host | Complexidade de IPC, órfãos, determinismo do resume |
 
 ---
@@ -82,7 +82,15 @@ Para 85% de 32 GiB: `memory.high ≈ 27.2 GiB`, `memory.max ≈ 29.4 GiB` (gap d
 **Critério de pronto:** induzir um pico além do teto → observar `memory.high`
 throttlando + reclaim, e o huu parando de admitir, **em vez de** qualquer kill.
 
-### 2.2 Controlador adaptativo (estilo senpai/TMO + Netflix concurrency-limits)
+### 2.2 Controlador adaptativo (estilo senpai/TMO + Netflix concurrency-limits) — ✅ ENTREGUE
+
+> **Entregue** em `auto-scaler.ts` (`updateController()`): `controlledLimit` com
+> incremento aditivo Vegas `+max(3, ⌈0.1·limit⌉)` sob `PSI < targetPsi` (0.5%), corte
+> AIMD `×0.5` acima da banda de corte (2× = 1.0%) com hold de 5 s, e histerese no meio;
+> clampado no teto do budget de RAM. O freeze binário do `shouldSpawn` migrou pra banda
+> de corte, então o controlador roda a máquina NO setpoint sem o gate brigar. Máquina-global
+> (dirige o `B` do único budget do `GlobalScheduler`). Verificado em runtime (sweep PSI
+> 0→3→0→0.7→5). Pinado por `auto-scaler.test.ts`.
 
 Trocar o "alvo por folga" estático por um controlador com **feedback de PSI**:
 
@@ -103,7 +111,22 @@ Trocar o "alvo por folga" estático por um controlador com **feedback de PSI**:
 **Critério de pronto:** sob carga, `PSI some avg10` estabiliza perto do alvo sem
 oscilar; nenhum OOM-kill; throughput maior que o teto estático da Fase 1.
 
-### 2.3 Sessão pi persistente (pausar em vez de matar)
+### 2.3 Sessão pi persistente (pausar em vez de matar) — ✅ ENTREGUE
+
+> **Entregue.** O guard (single-run em `index.ts` + cross-run no `GlobalScheduler`) agora
+> chama `pauseAgent()` por padrão: checkpoint da sessão pi (`SpawnedAgent.checkpoint()` →
+> caminho do arquivo de sessão) → dispose (libera RAM) → PRESERVA worktree + branch +
+> transcript → requeue em fase `paused`. O `shouldSpawn` retoma a task IN-PLACE (reusa a
+> worktree + `restoreSessionPath`) quando a folga volta. Fallback garantido pra
+> kill+requeue quando não dá pra fazer checkpoint (ausente/null/erro) e via `HUU_NO_PAUSE=1`
+> ⇒ **zero regressão por construção**. pi factory: `inMemory()` → `SessionManager.create/open`,
+> com o `.jsonl` num dir `.huu-sessions/` FORA da worktree (senão o finalize commitava o
+> transcript). Provado por uma spike de runtime contra o SDK pi real (abort no meio →
+> resume não refaz tool calls) + `requeue.test.ts` / `multi-run-priority.test.ts`. UI:
+> fase `paused` (coluna DONE, `PAUSED` âmbar, badge `⏸N`) no Ink e na web.
+>
+> **Nota (Fase 3):** a restrição in-process abaixo continua valendo — o pause libera RAM
+> via dispose+GC (mesmo mecanismo do kill de hoje), não via SIGSTOP/cgroup por-agente.
 
 Hoje, sob pressão, o guard **mata** o agente e re-enfileira a task do zero — perde o
 contexto de raciocínio (tokens já gastos) **e** o trabalho parcial na worktree. O

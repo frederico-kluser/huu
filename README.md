@@ -226,8 +226,9 @@ TUI no terminal.
   ou seja, **não dispara a máquina toda de uma vez** (era exatamente o que
   derrubava o processo com muitos projetos). Os projetos anteriores têm
   prioridade; os posteriores fazem **backfill** das vagas ociosas (ex.: enquanto
-  um está em merge), e sob pressão de memória mata-se primeiro o agente mais novo
-  do projeto de menor prioridade. **Quanto da RAM o huu pode usar é um dial**
+  um está em merge), e sob pressão de memória **pausa-se** primeiro o agente mais
+  novo do projeto de menor prioridade (trabalho preservado e retomado com a folga;
+  `HUU_NO_PAUSE=1` volta a matar). **Quanto da RAM o huu pode usar é um dial**
   (Settings → **RAM budget %**, ou `HUU_RAM_PERCENT` / `--ram-percent`; padrão
   85%, o resto fica reservado pro sistema). Um **seletor de projetos** no topo
   (**projeto · pipeline**) alterna entre os boards ao vivo. **Com a fila rodando,
@@ -650,9 +651,13 @@ container ele respeita o limite do container, não o do host.
 Uma **guarda de memória fica sempre ativa** (mesmo com concorrência
 manual ou MAX): se a RAM **ou** a CPU passam de ~95%, o agente **mais
 novo** — o que tem menos trabalho feito (escolhido por `startedAt`) — é
-morto, seu card **volta para a coluna TODO** com um contador `↻N`, e a
-task é re-enfileirada na frente, recomeçando do zero quando a memória
-liberar. O trabalho dos agentes mais antigos nunca é perdido.
+preemptado. Por padrão ele é **pausado**: o huu faz checkpoint da sessão
+do agente, libera a RAM, mas **preserva a worktree + o transcript**, e o
+card entra em **PAUSED** (`⏸N`) — retomando **de onde parou** assim que
+houver folga. Se não der pra fazer checkpoint (ou com `HUU_NO_PAUSE=1`),
+cai no comportamento anterior: o agente é **morto**, o card **volta para
+a coluna TODO** com um contador `↻N` e a task recomeça do zero. O
+trabalho dos agentes mais antigos nunca é perdido.
 
 Controles:
 

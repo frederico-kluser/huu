@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { writeFileSync, mkdtempSync } from 'node:fs';
+import { writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Orchestrator } from './index.js';
 import { GlobalScheduler } from './global-scheduler.js';
@@ -91,6 +91,44 @@ function blockingFactory(): AgentFactory {
       async abort(): Promise<void> {},
       async dispose(): Promise<void> {
         onDispose?.();
+      },
+    };
+  };
+}
+
+/**
+ * Like {@link blockingFactory} but its agents CAN checkpoint (Fase 2.3): each
+ * writes a real session file outside the worktree and returns the path, so a
+ * scheduler-driven preemption PAUSES (preserve + resume) instead of killing.
+ */
+function pausableBlockingFactory(): AgentFactory {
+  return async (task, _config, _hint, cwd, onEvent) => {
+    let onDispose: (() => void) | null = null;
+    const disposed = new Promise<never>((_, reject) => {
+      onDispose = () => reject(new Error('disposed'));
+    });
+    disposed.catch(() => {});
+    return {
+      agentId: task.agentId,
+      task,
+      async prompt(): Promise<void> {
+        onEvent({ type: 'state_change', state: 'streaming' });
+        await Promise.race([new Promise((r) => setTimeout(r, 5_000)), disposed]);
+        const f = `a${task.agentId}.txt`;
+        writeFileSync(join(cwd, f), 'x\n', 'utf8');
+        onEvent({ type: 'file_write', file: f });
+        onEvent({ type: 'done' });
+      },
+      async abort(): Promise<void> {},
+      async dispose(): Promise<void> {
+        onDispose?.();
+      },
+      async checkpoint(): Promise<string | null> {
+        const sdir = join(dirname(cwd), '.huu-sessions', basename(cwd));
+        mkdirSync(sdir, { recursive: true });
+        const f = join(sdir, 'session.jsonl');
+        writeFileSync(f, '{"type":"session"}\n', 'utf8');
+        return f;
       },
     };
   };
@@ -257,6 +295,141 @@ describe('multi-run priority scheduling', () => {
       orchB.abort();
       await Promise.allSettled([pA, pB]);
       budget.stop();
+    },
+    30_000,
+  );
+
+  it(
+    'Fase 2.3: under pressure the lowest-priority run is PAUSED (work preserved), not killed',
+    async () => {
+      const prev = process.env.HUU_NO_PAUSE;
+      delete process.env.HUU_NO_PAUSE; // default = pause on
+      try {
+        let ram = metrics(40, 200);
+        const budget = new AutoScaler({ resourceMonitor: () => ram });
+        budget.setMode('auto');
+        budget.start();
+        const scheduler = new GlobalScheduler({ budget });
+
+        const orchA = new Orchestrator(
+          CONFIG,
+          twoFileStage('A', ['a1.ts', 'a2.ts']),
+          freshRepo(),
+          pausableBlockingFactory(),
+          { scheduler },
+        );
+        const orchB = new Orchestrator(
+          CONFIG,
+          twoFileStage('B', ['b1.ts', 'b2.ts']),
+          freshRepo(),
+          pausableBlockingFactory(),
+          { scheduler },
+        );
+
+        let aPauses = 0, bPauses = 0, aRequeues = 0, bRequeues = 0, aStreaming = 0, bStreaming = 0;
+        orchA.subscribe((s) => {
+          aPauses = s.agents.reduce((n, ag) => n + (ag.pauses ?? 0), 0);
+          aRequeues = s.agents.reduce((n, ag) => n + (ag.requeues ?? 0), 0);
+          aStreaming = s.agents.filter((ag) => ag.state === 'streaming').length;
+        });
+        orchB.subscribe((s) => {
+          bPauses = s.agents.reduce((n, ag) => n + (ag.pauses ?? 0), 0);
+          bRequeues = s.agents.reduce((n, ag) => n + (ag.requeues ?? 0), 0);
+          bStreaming = s.agents.filter((ag) => ag.state === 'streaming').length;
+        });
+
+        const pA = orchA.start();
+        await waitFor(() => aStreaming > 0);
+        const pB = orchB.start();
+        await waitFor(() => bStreaming > 0);
+
+        ram = metrics(98, 1);
+        budget.acceptMetrics(ram);
+        await scheduler.tick();
+
+        // Lowest-priority run's newest agent was PAUSED (preserved), not requeued;
+        // the higher-priority run is untouched.
+        expect(bPauses).toBe(1);
+        expect(bRequeues).toBe(0);
+        expect(aPauses).toBe(0);
+        expect(aRequeues).toBe(0);
+
+        ram = metrics(40, 200);
+        budget.acceptMetrics(ram);
+        orchA.abort();
+        orchB.abort();
+        await Promise.allSettled([pA, pB]);
+        budget.stop();
+      } finally {
+        if (prev === undefined) delete process.env.HUU_NO_PAUSE;
+        else process.env.HUU_NO_PAUSE = prev;
+      }
+    },
+    30_000,
+  );
+
+  it(
+    'HUU_NO_PAUSE=1 forces the multi-run guard back to kill+requeue even when checkpoints exist',
+    async () => {
+      const prev = process.env.HUU_NO_PAUSE;
+      process.env.HUU_NO_PAUSE = '1';
+      try {
+        let ram = metrics(40, 200);
+        const budget = new AutoScaler({ resourceMonitor: () => ram });
+        budget.setMode('auto');
+        budget.start();
+        // Reads HUU_NO_PAUSE at construction → kill path.
+        const scheduler = new GlobalScheduler({ budget });
+
+        const orchA = new Orchestrator(
+          CONFIG,
+          twoFileStage('A', ['a1.ts', 'a2.ts']),
+          freshRepo(),
+          pausableBlockingFactory(),
+          { scheduler },
+        );
+        const orchB = new Orchestrator(
+          CONFIG,
+          twoFileStage('B', ['b1.ts', 'b2.ts']),
+          freshRepo(),
+          pausableBlockingFactory(),
+          { scheduler },
+        );
+
+        let bPauses = 0, bRequeues = 0, aStreaming = 0, bStreaming = 0;
+        orchA.subscribe((s) => {
+          aStreaming = s.agents.filter((ag) => ag.state === 'streaming').length;
+        });
+        orchB.subscribe((s) => {
+          bPauses = s.agents.reduce((n, ag) => n + (ag.pauses ?? 0), 0);
+          bRequeues = s.agents.reduce((n, ag) => n + (ag.requeues ?? 0), 0);
+          bStreaming = s.agents.filter((ag) => ag.state === 'streaming').length;
+        });
+
+        const pA = orchA.start();
+        await waitFor(() => aStreaming > 0);
+        const pB = orchB.start();
+        await waitFor(() => bStreaming > 0);
+
+        ram = metrics(98, 1);
+        budget.acceptMetrics(ram);
+        await scheduler.tick();
+
+        // Flag off → KILLED (requeue), not paused, despite checkpoints being
+        // available — byte-identical to pre-2.3.
+        expect(bRequeues).toBe(1);
+        expect(bPauses).toBe(0);
+
+        ram = metrics(40, 200);
+        budget.acceptMetrics(ram);
+        orchA.abort();
+        orchB.abort();
+        await Promise.allSettled([pA, pB]);
+        budget.stop();
+      } finally {
+        if (prev === undefined) delete process.env.HUU_NO_PAUSE;
+        else process.env.HUU_NO_PAUSE = prev;
+      }
     },
     30_000,
   );

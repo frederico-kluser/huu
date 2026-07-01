@@ -226,7 +226,8 @@ terminal TUI back.
   fire the whole machine at once (exactly what crashed the process with many
   projects). Earlier projects have priority; later ones **backfill** idle slots
   (e.g. while one is merging), and under memory pressure the lowest-priority
-  project's newest agent is killed first. **How much RAM huu may use is a dial**
+  project's newest agent is **paused** first (its work preserved and resumed when
+  headroom returns; `HUU_NO_PAUSE=1` reverts to killing). **How much RAM huu may use is a dial**
   (Settings → **RAM budget %**, or `HUU_RAM_PERCENT` / `--ram-percent`; default
   85%, the rest reserved for the OS). A **project selector** in the header
   (**project · pipeline**) switches between the live boards. **With the queue
@@ -644,10 +645,14 @@ respects the container's limit, not the host's.
 
 A **memory guard stays always on** (even with manual or MAX concurrency):
 if RAM **or** CPU crosses ~95%, the **newest** agent — the one with the
-least work done (picked by `startedAt`) — is killed, its card **returns
-to the TODO column** with a `↻N` counter, and the task is re-queued at
-the front, restarting from zero once memory frees up. The older agents'
-work is never lost.
+least work done (picked by `startedAt`) — is preempted. By default it is
+**paused**: huu checkpoints the agent's session, frees the RAM, but
+**preserves the worktree + transcript**, and the card enters **PAUSED**
+(`⏸N`) — resuming **where it left off** as soon as headroom returns. If a
+checkpoint isn't possible (or with `HUU_NO_PAUSE=1`) it falls back to the
+previous behaviour: the agent is **killed**, its card **returns to the
+TODO column** with a `↻N` counter, and the task restarts from zero. The
+older agents' work is never lost.
 
 Controls:
 

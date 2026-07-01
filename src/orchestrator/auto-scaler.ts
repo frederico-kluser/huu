@@ -13,10 +13,19 @@ export interface AutoScalerConfig {
    */
   budgetPercent?: number;
   /**
-   * PSI `some avg10` (%) at/above which admission freezes (front brake). Default
-   * 0.5. Ignored when PSI is unavailable (memPressureSome10 === null).
+   * Closed-loop controller SETPOINT: the target PSI `some avg10` (%) the adaptive
+   * controller drives the machine toward (fill until ~this pressure, no thrash).
+   * Default 0.5. The hard spawn freeze sits at `targetPsi × 2` (the cut band);
+   * the controller cuts concurrency ×0.5 above the cut band and grows additively
+   * below the setpoint. Ignored when PSI is unavailable (memPressureSome10 null).
    */
-  admitPsiThreshold?: number;
+  targetPsi?: number;
+  /**
+   * Enable the closed-loop PSI controller (auto mode). Default true. When false,
+   * the scaler is open-loop (Fase 1): the concurrency target IS the RAM budget
+   * ceiling and the spawn freeze sits at `targetPsi` directly.
+   */
+  controllerEnabled?: boolean;
   stopThresholdPercent?: number;
   destroyThresholdPercent?: number;
   cooldownMs?: number;
@@ -63,12 +72,18 @@ const DEFAULT_MIN_AGENT_MEMORY_MB = 128;
 const DEFAULT_MAX_AGENT_MEMORY_MB = 2048;
 const DEFAULT_EMA_ALPHA = 0.2;
 /**
- * PSI `some avg10` (%) at/above which admission FREEZES (the front brake). PSI
- * rises before RAM% saturates, so this catches a burst the lagging RAM gate
- * misses. Deliberately low — the goal is to fill the machine to the budget, not
- * to run pressure-free.
+ * Closed-loop PSI controller (Fase 2.2 — senpai/TMO + Netflix AIMD/Vegas). The
+ * controller drives a `controlledLimit` toward the RAM budget ceiling using PSI
+ * as feedback: grow additively while pressure is below the setpoint, cut
+ * multiplicatively above the cut band, hold in between. PSI rises BEFORE RAM%
+ * saturates, so this fills the machine to ~the setpoint without thrash.
  */
-const DEFAULT_ADMIT_PSI = 0.5;
+const DEFAULT_TARGET_PSI = 0.5; // setpoint: target `some avg10` (%)
+const PSI_CUT_BAND_MULT = 2; // cut + hard-freeze at targetPsi × this (= 1%)
+const VEGAS_ALPHA_MIN = 3; // additive-increase floor (Vegas alpha)
+const VEGAS_ALPHA_FRAC = 0.1; // additive increase = 10% of the current limit
+const AIMD_CUT = 0.5; // multiplicative decrease on a pressure cut
+const CONTROLLER_HOLD_MS = 5_000; // suppress re-ramp for ~5 ticks after a cut
 const POLL_INTERVAL_MS = 1_000;
 const MIB = 1024 * 1024;
 
@@ -92,13 +107,21 @@ export class AutoScaler {
   /** EMA of the observed per-agent memory footprint, in bytes. */
   private observedAgentBytes: number;
   private guardKillCount = 0;
+  /**
+   * Closed-loop controller state (Fase 2.2). The PSI-driven concurrency target,
+   * bounded by the RAM budget ceiling. 0 = not yet seeded (first poll seeds it to
+   * the budget ceiling). `controllerHoldUntil` suppresses re-ramp after a cut.
+   */
+  private controlledLimit = 0;
+  private controllerHoldUntil = 0;
 
   constructor(config: AutoScalerConfig) {
     this.config = {
       resourceMonitor: config.resourceMonitor,
       agentMemoryEstimateMb: config.agentMemoryEstimateMb ?? DEFAULT_AGENT_MEMORY_ESTIMATE_MB,
       budgetPercent: config.budgetPercent ?? DEFAULT_RAM_PERCENT,
-      admitPsiThreshold: config.admitPsiThreshold ?? DEFAULT_ADMIT_PSI,
+      targetPsi: config.targetPsi ?? DEFAULT_TARGET_PSI,
+      controllerEnabled: config.controllerEnabled ?? true,
       stopThresholdPercent: config.stopThresholdPercent ?? DEFAULT_STOP_THRESHOLD,
       destroyThresholdPercent: config.destroyThresholdPercent ?? DEFAULT_DESTROY_THRESHOLD,
       cooldownMs: config.cooldownMs ?? DEFAULT_COOLDOWN_MS,
@@ -150,6 +173,17 @@ export class AutoScaler {
     return this.mode;
   }
 
+  /**
+   * Hard spawn-freeze PSI threshold. With the controller ON, it sits at the cut
+   * band (`targetPsi × 2`) so the controller can operate AT its setpoint without
+   * the binary gate fighting it; OFF (open-loop / Fase 1) it sits at the setpoint.
+   */
+  private psiFreezeThreshold(): number {
+    return this.config.controllerEnabled
+      ? this.config.targetPsi * PSI_CUT_BAND_MULT
+      : this.config.targetPsi;
+  }
+
   shouldSpawn(): boolean {
     if (!this.enabled) return true; // not polling — never gate the pool
     const { cpuPercent, ramPercent, memPressureSome10 } = this.currentMetrics;
@@ -164,7 +198,7 @@ export class AutoScaler {
     // burst the lagging RAM gate would miss. Null PSI (macOS / no CONFIG_PSI /
     // unreadable) → skip and fall back to the RAM gate below.
     const psiBlocked =
-      memPressureSome10 !== null && memPressureSome10 >= this.config.admitPsiThreshold;
+      memPressureSome10 !== null && memPressureSome10 >= this.psiFreezeThreshold();
     if (this.mode === 'greedy') {
       // Flood up to the destroy threshold, then let the guard reclaim. Gate on
       // both CPU and RAM so the spawn line matches shouldDestroy()'s (CPU OR
@@ -211,6 +245,69 @@ export class AutoScaler {
   }
 
   /**
+   * active + how many more fit under the RAM budget, capped at maxAgents — the
+   * HARD RAM ceiling the closed-loop controller operates strictly within.
+   */
+  private budgetCeiling(): number {
+    return Math.max(
+      1,
+      Math.min(this.activeAgentCount + this.budgetAdditional(), this.config.maxAgents),
+    );
+  }
+
+  /**
+   * The concurrency limit to admit up to. When the closed-loop controller is
+   * actively driving (auto + enabled + PSI available), this is the poll-managed
+   * `controlledLimit`. Otherwise it is the RAM budget ceiling computed LIVE — so
+   * the open-loop path (PSI unavailable / controller off, and the multi-run
+   * scheduler that calls syncCounts()+targetConcurrency() synchronously each
+   * tick) reflects the current counts immediately, exactly like Fase 1.
+   */
+  private effectiveLimit(): number {
+    const controllerActive =
+      this.config.controllerEnabled &&
+      this.mode === 'auto' &&
+      this.currentMetrics.memPressureSome10 !== null;
+    if (controllerActive && this.controlledLimit >= 1) return this.controlledLimit;
+    return this.budgetCeiling();
+  }
+
+  /**
+   * Closed-loop PSI controller (Fase 2.2 — senpai/TMO + Netflix AIMD/Vegas).
+   * Drives `controlledLimit` toward the RAM budget ceiling: ADDITIVE increase
+   * below the setpoint, MULTIPLICATIVE cut above the cut band, HOLD in the
+   * hysteresis band between. The RAM budget is the hard ceiling — the controller
+   * never exceeds it. Open-loop fallback (Fase 1: target = budget ceiling) when
+   * the controller is off, the mode isn't auto, or PSI is unavailable.
+   */
+  private updateController(): void {
+    const ceiling = this.budgetCeiling();
+    const psi = this.currentMetrics.memPressureSome10;
+    if (!this.config.controllerEnabled || this.mode !== 'auto' || psi === null) {
+      this.controlledLimit = ceiling;
+      return;
+    }
+    if (this.controlledLimit < 1) this.controlledLimit = ceiling; // first-poll seed
+    const cutBand = this.config.targetPsi * PSI_CUT_BAND_MULT;
+    if (psi >= cutBand) {
+      // Multiplicative decrease + brief no-ramp hold (anti-oscillation).
+      this.controlledLimit = Math.max(1, Math.floor(this.controlledLimit * AIMD_CUT));
+      this.controllerHoldUntil = Date.now() + CONTROLLER_HOLD_MS;
+    } else if (
+      psi < this.config.targetPsi &&
+      this.state !== 'COOLDOWN' &&
+      Date.now() >= this.controllerHoldUntil
+    ) {
+      // Additive increase (Vegas alpha) while there's headroom and no recent cut.
+      const alpha = Math.max(VEGAS_ALPHA_MIN, Math.ceil(VEGAS_ALPHA_FRAC * this.controlledLimit));
+      this.controlledLimit += alpha;
+    }
+    // else: hysteresis band (targetPsi ≤ psi < cutBand) → hold.
+    // The RAM budget is the hard ceiling; PSI controls strictly WITHIN it.
+    this.controlledLimit = Math.max(1, Math.min(this.controlledLimit, ceiling));
+  }
+
+  /**
    * Admission target: active agents plus how many more fit under the RAM budget,
    * capped by pending work (never over-provision idle slots) and maxAgents;
    * never below 1 so the run always makes progress.
@@ -227,11 +324,10 @@ export class AutoScaler {
         : maxAgents;
       return Math.max(1, ceiling);
     }
-    const additional = this.budgetAdditional();
-    const ceiling = this.pendingTaskCount > 0
+    const demandCeiling = this.pendingTaskCount > 0
       ? Math.min(this.activeAgentCount + this.pendingTaskCount, maxAgents)
       : maxAgents;
-    return Math.max(1, Math.min(this.activeAgentCount + additional, ceiling));
+    return Math.max(1, Math.min(this.effectiveLimit(), demandCeiling));
   }
 
   /**
@@ -244,8 +340,7 @@ export class AutoScaler {
   headroomCapacity(): number {
     const { maxAgents } = this.config;
     if (this.mode === 'greedy') return maxAgents;
-    const additional = this.budgetAdditional();
-    return Math.max(1, Math.min(this.activeAgentCount + additional, maxAgents));
+    return Math.max(1, Math.min(this.effectiveLimit(), maxAgents));
   }
 
   /** Observed per-agent memory footprint in MiB (EMA, clamped). */
@@ -330,6 +425,8 @@ export class AutoScaler {
       observedAgentMemoryMb: this.observedAgentMemoryMb(),
       ramAvailableMb: Math.round(this.currentMetrics.ramAvailableBytes / MIB),
       guardKillCount: this.guardKillCount,
+      controlledLimit: this.effectiveLimit(),
+      targetPsi: this.config.targetPsi,
     };
   }
 
@@ -345,16 +442,17 @@ export class AutoScaler {
       } else if (Date.now() >= this.cooldownEndAt) {
         this.state = 'NORMAL';
       }
-      return;
-    }
-
-    if (cpuPercent >= destroyThresholdPercent || ramPercent >= destroyThresholdPercent) {
+      // No early return: the closed-loop PSI controller still updates below (it
+      // may cut on pressure, but won't re-ramp while state === 'COOLDOWN').
+    } else if (cpuPercent >= destroyThresholdPercent || ramPercent >= destroyThresholdPercent) {
       this.state = 'DESTROYING';
     } else if (cpuPercent >= stopThresholdPercent || ramPercent >= stopThresholdPercent) {
       this.state = 'BACKING_OFF';
     } else {
       this.state = 'NORMAL';
     }
+
+    this.updateController();
   }
 
   /**

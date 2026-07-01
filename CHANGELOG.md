@@ -29,8 +29,26 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
   kernel prefers other processes under pressure; tune via `HUU_OOM_SCORE_ADJ`
   (conservative default, best-effort — takes effect where the process is
   privileged, e.g. the container).
+- **Pause instead of kill under memory pressure (resource-control Fase 2.3).**
+  When the machine runs low on RAM, `huu` now **pauses** an agent — freezing its
+  work in place (its git worktree *and* the agent's conversation transcript are
+  preserved) and freeing the memory — instead of killing it and restarting from
+  scratch. The agent **resumes exactly where it left off** as soon as headroom
+  returns, so a pressure spike costs at most the current step, not the whole
+  task. Paused cards show a distinct **PAUSED** state with a `⏸` counter (vs the
+  `↻` requeue counter of a kill). On by default, single- and multi-run; set
+  `HUU_NO_PAUSE=1` to keep the previous kill-and-requeue behaviour. If a
+  checkpoint can't be taken for any reason it falls back to that behaviour
+  automatically, so it is never worse than before.
 
 ### Changed
+
+- **Adaptive concurrency control (resource-control Fase 2.2).** The pressure
+  brake is now a **closed-loop controller** instead of a single freeze threshold:
+  it continuously ramps concurrency up while the machine is comfortable and eases
+  it down as memory pressure rises, settling at the highest level the machine
+  sustains without thrashing. `huu` therefore uses more of the machine than the
+  earlier conservative freeze, while still backing off *before* RAM saturates.
 
 - The per-agent memory estimate now starts **pessimistic** and corrects downward
   from real measurements, so a cold start admits cautiously and opens up once it

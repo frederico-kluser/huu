@@ -1,4 +1,5 @@
 import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentFactory } from '../../types.js';
 import { createDisposableState } from '../_shared/lifecycle.js';
@@ -24,6 +25,23 @@ export const stubAgentFactory: AgentFactory = async (
       // Disposing flips the flag the prompt loop polls every step.
       // No real cancellation channel exists for the stub.
       await lifecycle.dispose();
+    },
+    async checkpoint(): Promise<string | null> {
+      // The stub has no real session, but the orchestrator's pause path needs a
+      // real, non-empty file path (existence + size check, teardown unlink). So
+      // write a tiny marker OUTSIDE the worktree (mirrors pi keeping the
+      // transcript out of the committed tree). Resume ignores it and re-runs
+      // idempotently. Returns null on write failure ⇒ caller falls back to kill.
+      try {
+        const marker = join(
+          tmpdir(),
+          `huu-stub-session-${task.agentId}-${task.stageIndex}.jsonl`,
+        );
+        writeFileSync(marker, `stub session: agent ${task.agentId}\n`, 'utf8');
+        return marker;
+      } catch {
+        return null;
+      }
     },
     async prompt(message: string): Promise<void> {
       const target = task.files.length === 0 ? 'whole project' : task.files[0];

@@ -1,5 +1,5 @@
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, rmSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { GitClient } from './git-client.js';
 import {
   agentBranchName,
@@ -91,6 +91,39 @@ export class WorktreeManager {
     const wtPath = agentWorktreePath(this.repoRoot, this.runId, agentId, attempt);
     await this.withLock(() => this.git.removeWorktree(wtPath));
     this.createdWorktrees.delete(wtPath);
+    // Fase 2.3: remove the agent's persistent pi-session dir (a sibling of the
+    // worktree, written by the pi backend so a paused agent can resume — see
+    // pi/factory.ts). pauseAgent deliberately does NOT call this (it preserves
+    // the session); every other worktree removal does, so sessions never leak.
+    this.removeSessionDir(wtPath);
+  }
+
+  /**
+   * Best-effort removal of the pi-session dir co-located with a worktree.
+   * Mirrors the factory's `join(dirname(cwd), '.huu-sessions', basename(cwd))`.
+   * Swallows ENOENT etc. — a missing dir (no pi session, e.g. the stub) is fine.
+   */
+  private removeSessionDir(wtPath: string): void {
+    try {
+      rmSync(join(dirname(wtPath), '.huu-sessions', basename(wtPath)), {
+        recursive: true,
+        force: true,
+      });
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  /** Best-effort removal of the whole run's `.huu-sessions` tree (prune path). */
+  private removeAllSessionDirs(): void {
+    try {
+      rmSync(join(worktreeBaseDir(this.repoRoot, this.runId), '.huu-sessions'), {
+        recursive: true,
+        force: true,
+      });
+    } catch {
+      /* best-effort */
+    }
   }
 
   async removeIntegrationWorktree(): Promise<void> {
@@ -116,6 +149,7 @@ export class WorktreeManager {
       }
       this.createdWorktrees.clear();
       await this.git.pruneWorktrees();
+      this.removeAllSessionDirs();
       return { removed, failures };
     });
   }
@@ -183,6 +217,7 @@ export class WorktreeManager {
 
       await this.git.pruneWorktrees();
       this.createdWorktrees.clear();
+      this.removeAllSessionDirs();
 
       return { worktreesRemoved, localBranchesDeleted, remoteBranchesDeleted };
     });

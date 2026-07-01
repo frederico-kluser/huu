@@ -587,6 +587,9 @@ input[type='range'] { flex: 1; accent-color: var(--accent); }
 /* Timeout reads as amber (recoverable: retry with a longer limit), distinct
    from the red of a generic failure. */
 .phase.tmo { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 16%, transparent); }
+/* Fase 2.3 memory-guard pause: parked, work preserved — amber like a soft hold
+   (NOT magenta, which is reserved for AI-driven UI). */
+.phase.paused { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 16%, transparent); }
 .phase.idle { color: var(--text-3); }
 @keyframes pulse-sm { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 .metriclet { font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }

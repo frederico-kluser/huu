@@ -59,6 +59,14 @@ export interface RunDriver {
    */
   destroyAgent(agentId: number): Promise<void>;
   /**
+   * Optional (Fase 2.3): PAUSE + requeue one task agent instead of killing it —
+   * preserve its worktree + pi session so it resumes from where it left off
+   * when headroom returns. Same cross-run victim as a kill; the run falls back
+   * to destroyAgent internally when no checkpoint is possible, so the scheduler
+   * always has a working preemption. A driver without it ⇒ kill (legacy).
+   */
+  pauseAgent?(agentId: number): Promise<void>;
+  /**
    * Optional: receive the scheduler's single metrics read so the run's dormant
    * AutoScaler can surface live RAM%/CPU% in the UI without polling the machine
    * itself (which would corrupt the shared CPU delta). Display-only.
@@ -122,6 +130,12 @@ export class GlobalScheduler {
    * physical port window. See PortAllocatorOptions.sharedReservedPorts.
    */
   readonly sharedReservedPorts = new Set<number>();
+  /**
+   * Fase 2.3: prefer pausing the cross-run victim (preserve its work) over
+   * killing it. On by default; HUU_NO_PAUSE=1 reverts to kill+requeue. The
+   * driver still falls back to a kill when no checkpoint is possible.
+   */
+  private readonly pauseInsteadOfKill = process.env.HUU_NO_PAUSE !== '1';
 
   constructor(
     opts: {
@@ -302,10 +316,12 @@ export class GlobalScheduler {
   }
 
   /**
-   * RAM/CPU backstop: at ≥ the destroy threshold, kill the global victim
-   * (lowest-priority newest) and arm the budget's cooldown so we don't re-kill
-   * before the freed RAM is observed. One kill per tick — the tick cadence +
-   * cooldown are the damping (mirrors the single-run guard).
+   * RAM/CPU backstop: at ≥ the destroy threshold, preempt the global victim
+   * (lowest-priority newest) and arm the budget's cooldown so we don't re-preempt
+   * before the freed RAM is observed. One preemption per tick — the tick cadence
+   * + cooldown are the damping (mirrors the single-run guard). Fase 2.3: PAUSE
+   * the victim (preserve its worktree + session, resume on headroom) by default;
+   * HUU_NO_PAUSE=1 or a driver without pauseAgent ⇒ legacy kill+requeue.
    */
   private async enforceMemoryGuard(): Promise<void> {
     if (!this.budget.shouldDestroy()) return;
@@ -314,7 +330,11 @@ export class GlobalScheduler {
     const key = `${victim.runId}#${victim.agentId}`;
     this.preempting.add(key);
     try {
-      await victim.driver.destroyAgent(victim.agentId);
+      if (this.pauseInsteadOfKill && victim.driver.pauseAgent) {
+        await victim.driver.pauseAgent(victim.agentId);
+      } else {
+        await victim.driver.destroyAgent(victim.agentId);
+      }
       this.budget.notifyAgentDestroyed();
     } finally {
       this.preempting.delete(key);

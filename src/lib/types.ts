@@ -365,6 +365,13 @@ export type AgentLifecyclePhase =
   | 'no_changes'
   | 'error'
   /**
+   * Fase 2.3: the memory guard PAUSED this agent (preserved its worktree +
+   * session, freed its RAM) instead of killing it. A parked, non-active state
+   * (the task waits in the queue and resumes when headroom returns). Rendered
+   * in the kanban's DONE area as an amber `PAUSED` card with a `⏸N` badge.
+   */
+  | 'paused'
+  /**
    * @deprecated No longer produced — guard-killed agents reset to 'pending'
    * (see AgentStatus.requeues). Kept so old manifests still parse.
    */
@@ -426,6 +433,16 @@ export interface AgentStatus {
    */
   manualRetries?: number;
   /**
+   * Fase 2.3: times the memory guard PAUSED this agent's task (checkpoint +
+   * resume) rather than killing it. Distinct from `requeues` (kills, work
+   * discarded): a pause preserves the worktree + transcript, so the resumed
+   * attempt continues instead of restarting. Accumulates across pauses; drives
+   * the kanban `⏸N` badge.
+   */
+  pauses?: number;
+  /** Epoch ms of the most recent pause (set by pauseAgent; cleared on resume). */
+  pausedAt?: number;
+  /**
    * Per-action occurrence counts, keyed by a short action name
    * (`stream`, `tool`, `file`, `log`, `usage`, `done`, `error`). Bumped once
    * per AgentEvent in `handleAgentEvent`; drives the kanban "actions" label.
@@ -457,12 +474,19 @@ export interface AutoScaleStatus {
   cooldownRemainingMs: number;
   cpuPercent: number;
   ramPercent: number;
-  /** EMA-observed per-agent memory footprint, in MiB (seeded at 250). */
+  /** EMA-observed per-agent memory footprint, in MiB (pessimistic seed 1536). */
   observedAgentMemoryMb: number;
   /** Memory still claimable before the limit, in MiB (cgroup/MemAvailable-aware). */
   ramAvailableMb: number;
   /** Agents killed by the memory guard so far in this run. */
   guardKillCount: number;
+  /**
+   * Closed-loop PSI controller (Fase 2.2): the current PSI-driven concurrency
+   * limit, and the controller setpoint (target `some avg10` %). Absent when the
+   * scaler predates the controller (e.g. the simulation engine).
+   */
+  controlledLimit?: number;
+  targetPsi?: number;
 }
 
 export interface OrchestratorState {

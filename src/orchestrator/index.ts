@@ -325,6 +325,35 @@ export class Orchestrator {
    */
   private killedAgentIds: Set<number> = new Set();
   /**
+   * Fase 2.3 pause: agent ids whose in-flight attempt was DISPOSED by
+   * {@link pauseAgent} (a memory-guard preemption that PRESERVES the agent's
+   * worktree + transcript instead of deleting them). Consumed (checked +
+   * deleted) by spawnAndRun's prompt interception so the disposed attempt skips
+   * retry/finalize accounting — the exact sibling of {@link killedAgentIds},
+   * kept separate so a paused requeue (work preserved, `pauses++`) is never
+   * conflated with a kill (work discarded, `requeues++`).
+   */
+  private pausedAgentIds: Set<number> = new Set();
+  /**
+   * Fase 2.3 resume: agentId → the checkpoint path of its paused pi session.
+   * Read + consumed by spawnAndRun's FIRST attempt to (a) reuse the preserved
+   * worktree (skip createAgentWorktree) and (b) reconstruct the session via
+   * {@link AgentRuntimeContext.restoreSessionPath} so the resumed agent
+   * continues without redoing completed tool calls. A one-shot per pause: a
+   * failed resume falls back to a fresh attempt. Resume itself needs no
+   * scheduler — the task sits in `pendingTasks` and the normal spawn-gating
+   * (`shouldSpawn`: PSI + budget) admits it when headroom returns.
+   */
+  private restoreSessionPaths: Map<number, string> = new Map();
+  /**
+   * True when the memory guard should PAUSE its victim (Fase 2.3) rather than
+   * kill it. On by default; `HUU_NO_PAUSE=1` forces the legacy kill+requeue
+   * (byte-identical to pre-2.3). pauseAgent itself still falls back to kill
+   * whenever a checkpoint is impossible, so this only flips the DEFAULT
+   * disposition, never removes the safety net.
+   */
+  private readonly pauseInsteadOfKill = process.env.HUU_NO_PAUSE !== '1';
+  /**
    * True when an interactive front-end asked us to hold the run open in
    * `awaiting_retry` after a step walk that left failed cards (see
    * OrchestratorOptions.interactiveRetry). False on every headless path.
@@ -677,6 +706,85 @@ export class Orchestrator {
     this.poolWakeup?.();
   }
 
+  /**
+   * Fase 2.3 — PAUSE the agent instead of killing it (memory-guard victim).
+   * Like {@link destroyAgent} it frees the agent's RAM (dispose → GC) and
+   * requeues the task, BUT it preserves the agent's worktree + branch + pi
+   * session transcript so the next spawn RESUMES from where it left off rather
+   * than restarting from zero. Pause is a strict OPTIMIZATION layered on the
+   * proven kill+requeue: if a durable checkpoint can't be taken (backend lacks
+   * `checkpoint`, nothing written yet, or it throws), this falls back to
+   * `destroyAgent` — so the worst case is exactly today's behavior. The caller
+   * (the guard) invokes `notifyAgentDestroyed()` afterwards, same as for a kill.
+   */
+  async pauseAgent(agentId: number): Promise<void> {
+    const agent = this.activeAgents.get(agentId);
+    if (!agent) return;
+
+    // Try to capture a resumable checkpoint. ANY failure → kill+requeue.
+    let sessionPath: string | null = null;
+    try {
+      sessionPath = (await agent.checkpoint?.()) ?? null;
+    } catch (err) {
+      this.dlog('orch', 'checkpoint_failed', {
+        agentId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      sessionPath = null;
+    }
+    if (!sessionPath) {
+      await this.destroyAgent(agentId);
+      return;
+    }
+
+    // Mark BEFORE dispose so spawnAndRun's prompt interception skips the
+    // disposed attempt's retry/finalize accounting (mirrors killedAgentIds;
+    // dispose makes the in-flight prompt() reject — or resolve, both covered).
+    this.pausedAgentIds.add(agentId);
+    try {
+      await agent.dispose();
+    } catch {
+      /* best-effort — the session file is already flushed on disk */
+    }
+
+    this.activeAgents.delete(agentId);
+    this.spawningIds.delete(agentId);
+    this.portAllocator.release(agentId);
+
+    // PRESERVE worktree + branch (do NOT remove) — they hold the agent's file
+    // writes; the session file holds its transcript. Record the restore pointer
+    // so the next spawn reconstructs the session in that same worktree.
+    this.restoreSessionPaths.set(agentId, sessionPath);
+
+    const task = agent.task;
+    const prev = this.agents.get(agentId);
+    this.updateAgentStatus(agentId, {
+      state: 'idle',
+      phase: 'paused',
+      currentFile: task.files.length > 0 ? task.files[0]! : null,
+      // filesModified intentionally NOT reset — the work is preserved on disk.
+      commitSha: undefined,
+      error: undefined,
+      errorKind: undefined,
+      attempt: undefined,
+      startedAt: undefined,
+      finishedAt: undefined,
+      pauses: (prev?.pauses ?? 0) + 1,
+      pausedAt: Date.now(),
+    });
+    const ramPercent = Math.round(this.autoScaler.getStatus().ramPercent);
+    this.log({
+      level: 'warn',
+      message: `agent ${agentId} paused by memory guard (RAM ${ramPercent}%); worktree + session preserved, task requeued — resumes when headroom returns`,
+      agentId,
+    });
+
+    // Back to the queue. The normal spawn-gating (shouldSpawn: PSI + budget)
+    // resumes it automatically once RAM frees — no separate resume path.
+    this.pendingTasks.unshift(task);
+    this.poolWakeup?.();
+  }
+
   // --- Interactive retry surface (held-open `awaiting_retry`) ---
 
   /** True if any task card is currently in the terminal `error` state. */
@@ -1007,6 +1115,10 @@ export class Orchestrator {
           getDemand: () => this.getDemand(),
           activeAgentAges: () => this.activeAgentAges(),
           destroyAgent: (id) => this.destroyAgent(id),
+          // Fase 2.3: lets the cross-run guard PAUSE (preserve + resume) this
+          // run's victim instead of killing it. Falls back to destroyAgent
+          // internally when no checkpoint is possible.
+          pauseAgent: (id) => this.pauseAgent(id),
           acceptMetrics: (m) => this.autoScaler.acceptMetrics(m),
         });
       } else {
@@ -1331,9 +1443,12 @@ export class Orchestrator {
           this.instanceCount = this.autoScaler.targetConcurrency();
         }
 
-        // Memory guard (both modes): at the destroy threshold, kill the
-        // NEWEST agent — the one with the least work done — and requeue its
-        // task to TODO so older agents' progress is never lost.
+        // Memory guard (both modes): at the destroy threshold, preempt the
+        // NEWEST agent — the one with the least work done — so older agents'
+        // progress is never lost. Fase 2.3: PAUSE it (preserve worktree +
+        // session, requeue to resume on headroom) by default; HUU_NO_PAUSE=1
+        // reverts to the legacy kill+requeue. pauseAgent itself falls back to a
+        // kill when no checkpoint is possible, so this never loses the backstop.
         if (this.autoScaler.shouldDestroy() && this.activeAgents.size > 0) {
           let newestId = -1;
           let newestTime = 0;
@@ -1346,7 +1461,11 @@ export class Orchestrator {
             }
           }
           if (newestId >= 0) {
-            await this.destroyAgent(newestId);
+            if (this.pauseInsteadOfKill) {
+              await this.pauseAgent(newestId);
+            } else {
+              await this.destroyAgent(newestId);
+            }
             this.autoScaler.notifyAgentDestroyed();
             // Re-evaluation: next poll cycle will check shouldDestroy() again
           }
@@ -1447,18 +1566,45 @@ export class Orchestrator {
           ...(isRetry ? { error: undefined, errorKind: undefined } : {}),
         });
         const wtStartedAt = Date.now();
-        const wt = await this.worktreeManager!.createAgentWorktree(
-          task.agentId,
-          this.stageBaseRef,
-          attempt,
-        );
-        this.dlog('orch', 'worktree_ready', {
-          agentId: task.agentId,
-          attempt,
-          durationMs: Date.now() - wtStartedAt,
-          path: wt.worktreePath,
-          branch: wt.branchName,
-        });
+        // Fase 2.3 resume: if this task was PAUSED (a restore record exists) and
+        // its preserved worktree is still on disk, REUSE it (createAgentWorktree
+        // would fail — branch + worktree already exist) and reconstruct the pi
+        // session from the checkpoint. Only on the first attempt; a failed
+        // resume degrades to a fresh attempt. Reuse-worktree and restore-session
+        // go together: if the worktree vanished, drop the record and start
+        // fresh (a dangling session in a fresh tree would be inconsistent).
+        const canResume =
+          attempt === 1 &&
+          this.restoreSessionPaths.has(task.agentId) &&
+          !!task.worktreePath &&
+          !!task.branchName &&
+          existsSync(task.worktreePath);
+        const restoreSessionPath = canResume
+          ? this.restoreSessionPaths.get(task.agentId)
+          : undefined;
+        this.restoreSessionPaths.delete(task.agentId); // one-shot, both paths
+        let wt: { worktreePath: string; branchName: string };
+        if (canResume) {
+          wt = { worktreePath: task.worktreePath, branchName: task.branchName };
+          this.dlog('orch', 'worktree_resumed', {
+            agentId: task.agentId,
+            path: wt.worktreePath,
+            branch: wt.branchName,
+          });
+        } else {
+          wt = await this.worktreeManager!.createAgentWorktree(
+            task.agentId,
+            this.stageBaseRef,
+            attempt,
+          );
+          this.dlog('orch', 'worktree_ready', {
+            agentId: task.agentId,
+            attempt,
+            durationMs: Date.now() - wtStartedAt,
+            path: wt.worktreePath,
+            branch: wt.branchName,
+          });
+        }
         attemptBranchName = wt.branchName;
         // Keep task in sync so the agent prompt header receives the right
         // branch/worktree on retry.
@@ -1506,15 +1652,22 @@ export class Orchestrator {
         const stepConfig = step.modelId
           ? { ...this.config, modelId: step.modelId }
           : this.config;
+        const baseCtx = portBundle
+          ? { ports: portBundle, shimAvailable: this.nativeShim !== null }
+          : undefined;
+        // Thread the resume pointer (Fase 2.3) so the pi factory reconstructs
+        // the paused session in the reused worktree instead of starting fresh.
+        const runtimeCtx =
+          restoreSessionPath !== undefined
+            ? { ...(baseCtx ?? {}), restoreSessionPath }
+            : baseCtx;
         agent = await this.agentFactory(
           task,
           stepConfig,
           this.buildSystemPromptHint(step, task),
           wt.worktreePath,
           (event) => this.handleAgentEvent(task.agentId, event),
-          portBundle
-            ? { ports: portBundle, shimAvailable: this.nativeShim !== null }
-            : undefined,
+          runtimeCtx,
         );
         this.activeAgents.set(task.agentId, agent);
         this.spawningIds.delete(task.agentId);
@@ -1525,6 +1678,14 @@ export class Orchestrator {
 
         try {
           await withTimeout(agent.prompt(renderedPrompt), timeoutMs);
+          // Fase 2.3: a concurrent pauseAgent() disposed this agent mid-prompt.
+          // If that made prompt() RESOLVE (rather than reject), bail before
+          // finalize — pauseAgent already owns the card state + requeue. (The
+          // reject case is handled symmetrically in the catch below.)
+          if (this.pausedAgentIds.delete(task.agentId)) {
+            this.spawningIds.delete(task.agentId);
+            return;
+          }
           // If agent didn't emit `done`/`error` itself, we treat resolve as done.
           const status = this.agents.get(task.agentId);
           if (status && status.state !== 'done' && status.state !== 'error') {
@@ -1536,9 +1697,9 @@ export class Orchestrator {
           // back to spawningIds BEFORE the awaits below so the pool's poll
           // loop doesn't observe all queues empty and exit while we're still
           // in flight (would silently drop the retry).
-          if (this.killedAgentIds.delete(task.agentId)) {
-            // Memory guard killed this attempt; destroyAgent already reset
-            // the card to TODO and requeued the task. Do NOT retry here, do
+          if (this.killedAgentIds.delete(task.agentId) || this.pausedAgentIds.delete(task.agentId)) {
+            // Memory guard killed OR paused this attempt; destroyAgent/pauseAgent
+            // already reset the card and requeued the task. Do NOT retry here, do
             // NOT mark as error, do NOT count as completed.
             this.spawningIds.delete(task.agentId);
             return;

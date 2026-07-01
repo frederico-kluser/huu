@@ -1876,6 +1876,8 @@ function agentCard(a) {
   if (a.phase === 'pending') { lane = 'todo'; cls = 'idle'; plabel = a.requeues ? 'requeued' : 'queued'; }
   else if (a.phase === 'done') { lane = 'done'; cls = 'done'; }
   else if (a.phase === 'no_changes') { lane = 'done'; cls = 'done'; plabel = 'no changes'; }
+  // Fase 2.3: memory-guard pause — work preserved, parked until headroom returns.
+  else if (a.phase === 'paused') { lane = 'done'; cls = 'paused'; plabel = 'paused'; }
   else if (a.phase === 'error') {
     // Signal a TIMEOUT distinctly from a generic failure (amber vs red) so the
     // user knows a longer-timeout retry is the right move.
@@ -1896,6 +1898,7 @@ function agentCard(a) {
       a.tokensOut ? `${fmtNum(a.tokensIn + a.tokensOut)} tok` : '',
       a.cost ? `$${a.cost.toFixed(3)}` : '',
       a.requeues ? `↻${a.requeues}` : '',
+      a.pauses ? `⏸${a.pauses}` : '',
       a.manualRetries ? `retry ${a.manualRetries}` : '',
     ], a.requeues),
     raw: a,
