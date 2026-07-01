@@ -91,6 +91,13 @@ export interface StartRunParams {
    * HUU_RAM_PERCENT/85 via `src/lib/budget.ts`.
    */
   ramPercent?: number;
+  /**
+   * Authoritative priority among concurrent runs (lower = higher). The web
+   * client sends the project's queue index so the FIRST project in the list is
+   * always highest priority, independent of the order the concurrent POSTs
+   * happen to reach the server. Absent → arrival order (a monotonic fallback).
+   */
+  priority?: number;
 }
 
 export interface RunSnapshot {
@@ -144,7 +151,14 @@ export class WebRunManager {
    * Real runs constructed but NOT yet admitted (lazy admission). FIFO order =
    * priority. The admission loop pulls them into `runs` as live capacity frees.
    */
-  private readonly pending: Array<{ runId: string; orch: Orchestrator; seed: RunSnapshot }> = [];
+  private readonly pending: Array<{
+    runId: string;
+    orch: Orchestrator;
+    seed: RunSnapshot;
+    priority: number;
+  }> = [];
+  /** Monotonic fallback priority for runs started without an explicit one. */
+  private enqueueSeq = 0;
   private admissionController: AdmissionController | null = null;
   private admissionTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -319,6 +333,11 @@ export class WebRunManager {
 
     const runId = generateRunId();
     const mode = params.mode ?? 'auto';
+    // Authoritative priority = the project's position in the client's queue list
+    // (lower = higher). Falls back to arrival order for callers that don't send
+    // one. This — NOT the racy POST arrival order — keeps the first project in
+    // the list served first.
+    const priority = params.priority ?? this.enqueueSeq++;
     // Apply the machine-global RAM dial to the SHARED budget (latest wins). The
     // dial governs the GlobalScheduler, not a per-run AutoScaler (one RAM).
     const scheduler = this.ensureScheduler();
@@ -328,6 +347,7 @@ export class WebRunManager {
       autoScale: mode !== 'manual',
       initialConcurrency: params.concurrency,
       scheduler,
+      priority,
       runId,
       // Hold the run open in `awaiting_retry` when it ends with failed cards so
       // the browser can retry individual failures (a timed-out card with a
@@ -354,7 +374,11 @@ export class WebRunManager {
     // at once; the browser keeps POSTing every item, the SERVER paces them.
     const entry: RunEntry = { snapshot: seed, orch, sim: null };
     this.runs.set(runId, entry);
-    this.pending.push({ runId, orch, seed });
+    // Keep `pending` ordered by priority (lower first) so admitNext() always
+    // pulls the earliest-in-the-list project next, even if two POSTs arrived out
+    // of order. JS sort is stable → equal priorities keep insertion order.
+    this.pending.push({ runId, orch, seed, priority });
+    this.pending.sort((a, b) => a.priority - b.priority);
     this.ensureAdmissionLoop();
     if (this.activeCount() === 0) this.admitNext();
     this.onUpdate(entry.snapshot);

@@ -198,6 +198,15 @@ export interface OrchestratorOptions {
    */
   scheduler?: GlobalScheduler;
   /**
+   * Multi-run only: this run's AUTHORITATIVE priority among the runs sharing the
+   * scheduler (lower = higher priority). Set from the caller's list order (web
+   * queue index / TUI selection index / run-many spec index) so the first
+   * project in the list is always served first, regardless of the racy order in
+   * which concurrently-started runs reach `scheduler.register()`. Omit → the
+   * scheduler falls back to registration order.
+   */
+  priority?: number;
+  /**
    * Externally-assigned run id. When set, start() uses it instead of generating
    * one — letting a multi-run manager key its Map<runId, …> and return the id
    * to the browser BEFORE start() resolves (so concurrent runs never collide on
@@ -305,6 +314,8 @@ export class Orchestrator {
   private scheduler: GlobalScheduler | null = null;
   /** Handle for unregistering from the scheduler in the finally block. */
   private schedulerHandle: RunDriverHandle | null = null;
+  /** Authoritative multi-run priority (see OrchestratorOptions.priority). */
+  private schedulerPriority?: number;
   /** Externally-assigned run id (multi-run manager); start() prefers it. */
   private externalRunId?: string;
   /**
@@ -439,6 +450,7 @@ export class Orchestrator {
     // pool at initialConcurrency but keeps the always-on memory guard.
     const autoMode = options.autoScale !== false;
     this.scheduler = options.scheduler ?? null;
+    this.schedulerPriority = options.priority;
     this.externalRunId = options.runId;
     this.interactiveRetry = options.interactiveRetry ?? false;
     this.portAllocator = new PortAllocator({
@@ -1110,17 +1122,22 @@ export class Orchestrator {
       // as before (auto = drives the target, manual = the memory guard). The
       // port-allocator cap was set per-mode in the constructor.
       if (this.scheduler) {
-        this.schedulerHandle = this.scheduler.register({
-          runId,
-          getDemand: () => this.getDemand(),
-          activeAgentAges: () => this.activeAgentAges(),
-          destroyAgent: (id) => this.destroyAgent(id),
-          // Fase 2.3: lets the cross-run guard PAUSE (preserve + resume) this
-          // run's victim instead of killing it. Falls back to destroyAgent
-          // internally when no checkpoint is possible.
-          pauseAgent: (id) => this.pauseAgent(id),
-          acceptMetrics: (m) => this.autoScaler.acceptMetrics(m),
-        });
+        this.schedulerHandle = this.scheduler.register(
+          {
+            runId,
+            getDemand: () => this.getDemand(),
+            activeAgentAges: () => this.activeAgentAges(),
+            destroyAgent: (id) => this.destroyAgent(id),
+            // Fase 2.3: lets the cross-run guard PAUSE (preserve + resume) this
+            // run's victim instead of killing it. Falls back to destroyAgent
+            // internally when no checkpoint is possible.
+            pauseAgent: (id) => this.pauseAgent(id),
+            acceptMetrics: (m) => this.autoScaler.acceptMetrics(m),
+          },
+          // Authoritative priority from the caller's list order (racy
+          // register-call order would otherwise decide it).
+          this.schedulerPriority,
+        );
       } else {
         this.autoScaler.start();
       }
