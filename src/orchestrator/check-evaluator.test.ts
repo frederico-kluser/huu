@@ -64,6 +64,41 @@ describe('check-evaluator', () => {
     expect(result.resolvedCondition).toContain('attempt 1');
   });
 
+  it('captures a verdict STREAMED as assistant deltas (real pi backend), ignoring the thinking channel', async () => {
+    // The pi backend surfaces the judge's answer as `stream`/assistant deltas,
+    // NOT `log` events. Regression for the bug where every CheckStep silently
+    // fell back to its default outcome because the verdict was never collected.
+    const streaming: AgentFactory = async (task, _config, _hint, _cwd, onEvent) => ({
+      agentId: task.agentId,
+      task,
+      async prompt(_message: string): Promise<void> {
+        onEvent({ type: 'log', message: 'tool: read → coverage.json' });
+        // A red herring on the THINKING channel must be ignored (only the
+        // assistant answer carries the real verdict).
+        onEvent({ type: 'stream', channel: 'thinking', delta: '{"label":"ok"}' });
+        for (const delta of ['Looks low.\n', '```json\n', '{"label": "low", ', '"reason": "42%"}\n', '```']) {
+          onEvent({ type: 'stream', channel: 'assistant', delta });
+        }
+        onEvent({ type: 'done' });
+      },
+      async abort(): Promise<void> {},
+      async dispose(): Promise<void> {},
+    });
+    const result = await evaluateCheckStep({
+      step: STEP,
+      runs: 1,
+      repoRoot: '/tmp',
+      integrationWorktreePath: '/tmp',
+      integrationBranch: 'b',
+      runId: 'r',
+      config: { apiKey: 'stub', modelId: 'stub' },
+      factory: streaming,
+      onEvent: () => {},
+    });
+    expect(result.label).toBe('low');
+    expect(result.fromJudge).toBe(true);
+  });
+
   it('falls back to default when verdict is invalid', async () => {
     const result = await evaluateCheckStep({
       step: STEP,

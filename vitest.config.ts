@@ -10,6 +10,9 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       '**/.git/**',
+      // Sandbox fixtures live in their OWN git repos under projects/ and carry
+      // their own React/Vitest test suites — never run them as part of huu's.
+      '**/projects/**',
     ],
   },
 });

@@ -87,6 +87,14 @@ export async function evaluateCheckStep(
     ctx.onEvent(CHECK_AGENT_ID, event);
     if (event.type === 'log') {
       collectedText.push(event.message);
+    } else if (event.type === 'stream' && event.channel === 'assistant') {
+      // The judge emits its `{ "label", "reason" }` verdict in its ASSISTANT
+      // ANSWER, which the pi backend surfaces as streamed `stream`/assistant
+      // deltas — NOT as `log` events. Without capturing them here the verdict is
+      // never seen and EVERY CheckStep silently falls back to its default
+      // outcome. This stayed hidden because the stub backend (and the tests)
+      // emit the verdict as a `log`; only the real pi backend streams it.
+      collectedText.push(event.delta);
     } else if (event.type === 'error') {
       judgeError = event.message;
     }
