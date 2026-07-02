@@ -8,6 +8,8 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-07-02
+
 ### Added
 
 - **Folder picker reaches the whole workspace.** Now that huu is docker-only,
@@ -1063,7 +1065,8 @@ Initial public release. Available on npm as `huu-pipe`
 - `safe.directory '*'` set system-wide in the image.
 
 
-[Unreleased]: https://github.com/frederico-kluser/huu/compare/v5.0.0...HEAD
+[Unreleased]: https://github.com/frederico-kluser/huu/compare/v5.1.0...HEAD
+[5.1.0]: https://github.com/frederico-kluser/huu/compare/v5.0.0...v5.1.0
 [5.0.0]: https://github.com/frederico-kluser/huu/compare/v4.0.0...v5.0.0
 [4.0.0]: https://github.com/frederico-kluser/huu/compare/v3.1.0...v4.0.0
 [3.1.0]: https://github.com/frederico-kluser/huu/compare/v3.0.0...v3.1.0
