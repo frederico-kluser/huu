@@ -1880,9 +1880,31 @@ function setStatus(phase, innerStatus) {
     $('statusPill').dataset.s = 'awaiting';
     return;
   }
+  // Grant-starved run: still 'running' but all its agents were paused/withheld
+  // by the pressure guard (0 active, work pending, machine under pressure).
+  // Worktrees + sessions are preserved; it resumes IN PLACE when RAM frees up.
+  // Derived here — no new server state machine.
+  if (phase === 'running' && isPressurePaused(S.run)) {
+    $('statusText').textContent = 'paused (RAM)';
+    $('statusPill').dataset.s = 'paused';
+    return;
+  }
   const label = { idle: 'idle', queued: 'queued', running: 'running', done: 'done', error: 'error' }[phase] || phase;
   $('statusText').textContent = label;
   $('statusPill').dataset.s = phase;
+}
+
+/** True when a running run is fully withheld by the memory guard right now. */
+function isPressurePaused(run) {
+  const st = run && run.state;
+  if (!st) return false;
+  const pressure = S.lastBudget ? Number(S.lastBudget.pressureLevel) || 0 : 0;
+  return (
+    pressure >= 1 &&
+    (st.activeAgentCount || 0) === 0 &&
+    (st.pendingTaskCount || 0) > 0 &&
+    st.status === 'running'
+  );
 }
 
 // Local 1s tick so elapsed advances smoothly between SSE frames.

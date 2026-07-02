@@ -264,6 +264,10 @@ body {
 .status-pill[data-s='awaiting'] { background: color-mix(in srgb, var(--yellow) 16%, transparent); }
 .status-pill[data-s='queued'] .dot { background: var(--yellow); }
 .status-pill[data-s='queued'] { background: color-mix(in srgb, var(--yellow) 16%, transparent); }
+/* Run withheld by the memory guard (all agents paused under pressure; resumes
+   in place when RAM frees up) — amber like queued, but pulsing: it's alive. */
+.status-pill[data-s='paused'] .dot { background: var(--yellow); box-shadow: 0 0 0 0 var(--yellow); animation: pulse 1.4s infinite; }
+.status-pill[data-s='paused'] { background: color-mix(in srgb, var(--yellow) 16%, transparent); }
 
 /* Machine-global budget chip — dial in force · used/total RAM · pressure
    level (fed by the 1 Hz budget SSE frame). Escalates through the semantic
