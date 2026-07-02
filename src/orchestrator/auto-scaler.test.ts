@@ -785,4 +785,50 @@ describe('AutoScaler', () => {
       scaler.stop();
     });
   });
+
+  describe('injected memory-model config (the HUU_AGENT_MEM_* env knobs land here)', () => {
+    it('honors an injected agentMemoryEstimateMb seed (status reports it before any EMA sample)', () => {
+      const scaler = createScaler(makeMetrics(), { agentMemoryEstimateMb: 512 });
+      expect(scaler.getStatus().observedAgentMemoryMb).toBe(512);
+      expect(scaler.observedAgentMemoryMb()).toBe(512);
+    });
+
+    it('keeps the pessimistic 1536MiB default when nothing is injected', () => {
+      const scaler = createScaler(makeMetrics());
+      expect(scaler.getStatus().observedAgentMemoryMb).toBe(1536);
+    });
+
+    it('a faster injected emaAlpha converges the observation faster than the default', () => {
+      // Two scalers see the SAME single observation: baseline 8GiB, then one
+      // agent pushes usage to 9GiB → sample = 1024MiB (below the 1536 seed).
+      // alpha=1 must jump straight to the sample; the 0.2 default only part-way.
+      const mkDynamic = () => {
+        const m = makeMetrics();
+        return {
+          metrics: m,
+          read: () => m,
+          bump: (usedGiB: number) => {
+            m.ramUsedBytes = usedGiB * 1024 ** 3;
+          },
+        };
+      };
+      const fast = mkDynamic();
+      const slow = mkDynamic();
+      const fastScaler = new AutoScaler({ resourceMonitor: fast.read, emaAlpha: 1 });
+      const slowScaler = new AutoScaler({ resourceMonitor: slow.read });
+      fastScaler.start();
+      slowScaler.start();
+      fastScaler.notifyAgentSpawned();
+      slowScaler.notifyAgentSpawned();
+      fast.bump(9);
+      slow.bump(9);
+      vi.advanceTimersByTime(1_000); // one poll tick → one EMA sample each
+      expect(fastScaler.observedAgentMemoryMb()).toBe(1024);
+      const slowMb = slowScaler.observedAgentMemoryMb();
+      expect(slowMb).toBeGreaterThan(1024);
+      expect(slowMb).toBeLessThan(1536);
+      fastScaler.stop();
+      slowScaler.stop();
+    });
+  });
 });

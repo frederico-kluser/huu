@@ -1,6 +1,7 @@
 import type { SystemMetrics } from '../lib/resource-monitor.js';
 import type { AutoScaleStatus } from '../lib/types.js';
 import { DEFAULT_RAM_PERCENT, clampPercent, ramBudgetBytes } from '../lib/budget.js';
+import { log as dlog } from '../lib/debug-logger.js';
 
 export interface AutoScalerConfig {
   resourceMonitor: () => SystemMetrics;
@@ -140,6 +141,16 @@ export class AutoScaler {
     if (this.enabled) return;
     this.enabled = true;
     this.baselineUsedBytes = this.currentMetrics.ramUsedBytes;
+    // One structured line per scaler start so RAM-tuning sessions can see the
+    // EFFECTIVE memory model (seed/alpha/clamps/budget) a run began with.
+    dlog('scaler', 'config', {
+      seedMb: this.config.agentMemoryEstimateMb,
+      emaAlpha: this.config.emaAlpha,
+      minMb: this.config.minAgentMemoryMb,
+      maxMb: this.config.maxAgentMemoryMb,
+      budgetPercent: this.config.budgetPercent,
+      targetPsi: this.config.targetPsi,
+    });
     this.pollMetrics();
     this.pollTimer = setInterval(() => this.pollMetrics(), POLL_INTERVAL_MS);
   }
@@ -473,10 +484,21 @@ export class AutoScaler {
     const sample = (ramUsedBytes - this.baselineUsedBytes) / this.activeAgentCount;
     if (sample <= 0) return;
     const { emaAlpha, minAgentMemoryMb, maxAgentMemoryMb } = this.config;
+    const prev = this.observedAgentBytes;
     const next = emaAlpha * sample + (1 - emaAlpha) * this.observedAgentBytes;
     this.observedAgentBytes = Math.min(
       maxAgentMemoryMb * MIB,
       Math.max(minAgentMemoryMb * MIB, next),
     );
+    // Observability for seed calibration: log SIGNIFICANT footprint moves only
+    // (≥64MiB or ≥10% of the prior estimate) so the 1 Hz poll stays quiet.
+    const deltaBytes = Math.abs(this.observedAgentBytes - prev);
+    if (deltaBytes >= 64 * MIB || deltaBytes >= prev * 0.1) {
+      dlog('scaler', 'ema_move', {
+        fromMb: Math.round(prev / MIB),
+        toMb: Math.round(this.observedAgentBytes / MIB),
+        activeAgents: this.activeAgentCount,
+      });
+    }
   }
 }

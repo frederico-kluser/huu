@@ -60,6 +60,7 @@ import { AutoScaler } from './auto-scaler.js';
 import type { GlobalScheduler, RunDriverHandle } from './global-scheduler.js';
 import { getSystemMetrics } from '../lib/resource-monitor.js';
 import { resolveRamPercent } from '../lib/budget.js';
+import { resolveRamTuning } from '../lib/ram-tuning.js';
 import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname, isAbsolute } from 'node:path';
@@ -465,6 +466,9 @@ export class Orchestrator {
     this.autoScaler = new AutoScaler({
       resourceMonitor: getSystemMetrics,
       budgetPercent: resolveRamPercent(options.budgetPercent),
+      // Evidence-based env knobs (HUU_AGENT_MEM_SEED_MB / _EMA_ALPHA); omitted
+      // keys keep the scaler's own pessimistic OOM-safe defaults.
+      ...resolveRamTuning(),
     });
     this.autoScaler.setMode(autoMode ? 'auto' : 'manual');
     this.autoScaleDisabledByUser = !autoMode;

@@ -1,6 +1,7 @@
 import { AutoScaler } from './auto-scaler.js';
 import { SystemMetricsSampler, type SystemMetrics } from '../lib/resource-monitor.js';
 import { resolveRamPercent } from '../lib/budget.js';
+import { resolveRamTuning } from '../lib/ram-tuning.js';
 
 /**
  * GlobalScheduler — the single owner of the machine for MULTI-RUN scheduling.
@@ -163,7 +164,14 @@ export class GlobalScheduler {
     this.sampler = opts.sampler ?? new SystemMetricsSampler();
     const monitor = opts.resourceMonitor ?? (() => this.sampler.sample());
     this.budget =
-      opts.budget ?? new AutoScaler({ resourceMonitor: monitor, budgetPercent: resolveRamPercent() });
+      opts.budget ??
+      new AutoScaler({
+        resourceMonitor: monitor,
+        budgetPercent: resolveRamPercent(),
+        // Evidence-based env knobs (HUU_AGENT_MEM_SEED_MB / _EMA_ALPHA);
+        // omitted keys keep the pessimistic OOM-safe defaults.
+        ...resolveRamTuning(),
+      });
     this.budget.setMode('auto');
   }
 
