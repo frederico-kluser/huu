@@ -133,15 +133,19 @@ export function buildSystemdRunArgv(
 }
 
 /**
- * Cheap definitive probe: can this user start a transient scope right now?
- * (systemd-run exists AND a user session bus is reachable.) Runs `true` in a
- * throwaway scope — ~tens of ms, once per boot, native path only.
+ * Cheap definitive probe: can this user start a transient scope WITH OUR
+ * EXACT PROPERTY SET right now? Runs `true` in a throwaway scope carrying the
+ * same -p properties as the real wrap — ~tens of ms, once per boot, native
+ * path only. Probing with the full set matters: on older systemd,
+ * `MemorySwapMax` is an UNKNOWN property and systemd-run errors out entirely
+ * (systemd#7505) — a bare probe would pass while the real wrap died, turning
+ * a should-degrade situation into a hard startup failure.
  */
-export function probeSystemdRun(): boolean {
+export function probeSystemdRun(limits: CgroupLimits = computeCgroupLimits()): boolean {
   try {
     const r = spawnSync(
       'systemd-run',
-      ['--user', '--scope', '--quiet', '--collect', '--', 'true'],
+      buildSystemdRunArgv(limits, `huu-probe-${process.pid}`, ['true']),
       { stdio: 'ignore', timeout: 5_000 },
     );
     return r.status === 0;
@@ -157,8 +161,8 @@ export function probeSystemdRun(): boolean {
  * short-circuits on the second pass.
  */
 export async function reexecInCgroupScope(): Promise<number | null> {
-  if (!probeSystemdRun()) return null;
   const limits = computeCgroupLimits();
+  if (!probeSystemdRun(limits)) return null;
   const unitName = `huu-${process.pid}`;
   // execPath + execArgv reproduce loader flags (tsx dev runs, --import hooks).
   const command = [process.execPath, ...process.execArgv, ...process.argv.slice(1)];
