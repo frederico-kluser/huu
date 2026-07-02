@@ -134,13 +134,27 @@ export function resolveGuardThresholds(
 
 export interface PressureVerdict {
   level: PressureLevel;
+  /**
+   * What tripped the level — drives how the guards react:
+   *   'budget' — L1 dial enforcement (auto/greedy only; spawn floor-of-one).
+   *   'cpu'    — the legacy CPU ≥ 95% line, damped like L1 (CPU saturation is
+   *              NORMAL during test/build stages — never accelerate the tick,
+   *              never freeze admission for it).
+   *   'host'   — genuine memory danger (L2/L3): full freeze + fast tick.
+   */
+  kind: 'none' | 'budget' | 'cpu' | 'host';
   /** Human-readable trigger, for logs/UI (empty at level 0). */
   reason: string;
   /** Bytes over the budget dial (0 when under). */
   overshootBytes: number;
 }
 
-export const HEALTHY_VERDICT: PressureVerdict = { level: 0, reason: '', overshootBytes: 0 };
+export const HEALTHY_VERDICT: PressureVerdict = {
+  level: 0,
+  kind: 'none',
+  reason: '',
+  overshootBytes: 0,
+};
 
 export class PressureLadder {
   private overBudgetSince: number | null = null;
@@ -155,9 +169,20 @@ export class PressureLadder {
    */
   evaluate(m: SystemMetrics, budgetBytes: number, now: number = Date.now()): PressureVerdict {
     const availPct = m.ramTotalBytes > 0 ? (m.ramAvailableBytes / m.ramTotalBytes) * 100 : 100;
-    // No swap configured → the swap side of the joint condition is trivially
-    // satisfied (earlyoom semantics): the machine has no spill room at all.
-    const swapFreePct = m.swapTotalBytes > 0 ? (m.swapFreeBytes / m.swapTotalBytes) * 100 : 0;
+    // Swap semantics — three distinct states:
+    //   known, has swap → real free ratio;
+    //   known, no swap (Linux, SwapTotal=0) → trivially exhausted (earlyoom
+    //     semantics: zero spill room), collapses the joint condition;
+    //   UNKNOWN (null — macOS/Windows/unreadable /proc) → treat as NOT
+    //     exhausted, so the avail-only side can never fire L2/L3 alone.
+    //     Conflating unknown with none used to turn "9% available on a Mac"
+    //     into a drain-to-zero L2 — tighter than the legacy 95% line.
+    const swapFreePct =
+      m.swapTotalBytes === null
+        ? 100
+        : m.swapTotalBytes > 0
+          ? ((m.swapFreeBytes ?? 0) / m.swapTotalBytes) * 100
+          : 0;
     const full10 = m.memPressureFull10;
     const overshootBytes =
       budgetBytes > 0 ? Math.max(0, m.ramUsedBytes - budgetBytes) : 0;
@@ -182,6 +207,7 @@ export class PressureLadder {
     ) {
       return {
         level: 3,
+        kind: 'host',
         reason:
           full10 !== null && full10 >= this.t.psiFullEmergency
             ? `PSI full avg10 ${full10.toFixed(1)}% ≥ ${this.t.psiFullEmergency}% (thrashing)`
@@ -196,18 +222,31 @@ export class PressureLadder {
       (availPct < this.t.availPct && swapFreePct < this.t.swapFreePct) ||
       (full10 !== null && full10 >= this.t.psiFullHigh) ||
       swapInSustained ||
-      m.ramPercent >= this.t.destroyPercent ||
-      m.cpuPercent >= this.t.destroyPercent
+      m.ramPercent >= this.t.destroyPercent
     ) {
       const reason =
-        m.ramPercent >= this.t.destroyPercent || m.cpuPercent >= this.t.destroyPercent
-          ? `RAM/CPU ≥ ${this.t.destroyPercent}%`
+        m.ramPercent >= this.t.destroyPercent
+          ? `RAM ≥ ${this.t.destroyPercent}%`
           : full10 !== null && full10 >= this.t.psiFullHigh
             ? `PSI full avg10 ${full10.toFixed(1)}% ≥ ${this.t.psiFullHigh}%`
             : swapInSustained
               ? `sustained swap-in ≥ ${this.t.swapInPagesPerSec} pages/s`
               : `avail ${availPct.toFixed(1)}% + swap free ${swapFreePct.toFixed(1)}% low`;
-      return { level: 2, reason, overshootBytes };
+      return { level: 2, kind: 'host', reason, overshootBytes };
+    }
+
+    // Pure CPU saturation (memory healthy) is NORMAL during parallel
+    // test/build stages — it gets the DAMPED L1 treatment (one preemption per
+    // repreempt window, normal tick, admission untouched), never the L2
+    // drain-to-zero + machine-wide freeze the legacy ≥95% OR-condition used
+    // to escalate into.
+    if (m.cpuPercent >= this.t.destroyPercent) {
+      return {
+        level: 1,
+        kind: 'cpu',
+        reason: `CPU ≥ ${this.t.destroyPercent}%`,
+        overshootBytes,
+      };
     }
 
     if (
@@ -216,6 +255,7 @@ export class PressureLadder {
     ) {
       return {
         level: 1,
+        kind: 'budget',
         reason: `used over the RAM budget for ${Math.round((now - this.overBudgetSince) / 1000)}s`,
         overshootBytes,
       };

@@ -117,7 +117,7 @@ concurrency target is the **RAM BUDGET dial** — a configurable % of TOTAL RAM
 `src/lib/budget.ts`, floored at `total − 512MiB` for the OS) minus
 `ramUsedBytes`, divided by an EMA-observed per-agent footprint (seeded
 PESSIMISTIC at 1536MiB so a cold start under-admits then opens up as the EMA
-corrects DOWN; clamped 128MiB–2GiB). The dial is **machine-global**: in
+corrects DOWN on MATURE cohorts only, with reservation charges for in-flight spawns; clamped 128MiB–4GiB). The dial is **machine-global**: in
 multi-run it configures the one shared budget `AutoScaler` via
 `GlobalScheduler.setBudgetPercent`. The **front brake is Linux PSI**, run as a
 CLOSED-LOOP controller (Fase 2.2, `updateController()`, senpai/TMO + Netflix

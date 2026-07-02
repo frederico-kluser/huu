@@ -170,3 +170,54 @@ describe('resolveGuardThresholds', () => {
     expect(t.destroyPercent).toBe(50);
   });
 });
+
+describe('PressureLadder — review regressions', () => {
+  const BUDGET = 16 * GiB;
+
+  it('UNKNOWN swap (null) never collapses the joint condition (macOS false-L2)', () => {
+    const ladder = new PressureLadder();
+    // 9% available with swap metrics UNAVAILABLE — a warmed-up Mac's normal
+    // state. Must stay healthy (legacy behavior: guard only at ≥95%).
+    const v = ladder.evaluate(
+      m({
+        ramUsedBytes: 29.2 * GiB,
+        swapTotalBytes: null,
+        swapFreeBytes: null,
+      }),
+      32 * GiB,
+      0,
+    );
+    expect(v.level).toBe(0);
+  });
+
+  it('pure CPU saturation is damped L1 (kind cpu), never the L2 drain-to-zero', () => {
+    const ladder = new PressureLadder();
+    const v = ladder.evaluate(m({ cpuPercent: 97 }), BUDGET, 0);
+    expect(v.level).toBe(1);
+    expect(v.kind).toBe('cpu');
+    // Damped like budget-L1: one preemption per repreempt window.
+    expect(ladder.preemptAllowed(1, 0)).toBe(true);
+    ladder.notePreempt(1, 0);
+    expect(ladder.preemptAllowed(1, 1_000)).toBe(false);
+  });
+
+  it('RAM ≥ 95% alone still escalates to L2 (host kind)', () => {
+    const ladder = new PressureLadder();
+    const v = ladder.evaluate(
+      m({ ramUsedBytes: 31 * GiB, swapFreeBytes: 12 * GiB }),
+      32 * GiB,
+      0,
+    );
+    expect(v.level).toBe(2);
+    expect(v.kind).toBe('host');
+  });
+
+  it('budget-L1 carries kind budget', () => {
+    const ladder = new PressureLadder();
+    const over = m({ ramUsedBytes: 18 * GiB });
+    ladder.evaluate(over, BUDGET, 0);
+    const v = ladder.evaluate(over, BUDGET, 3_000);
+    expect(v.level).toBe(1);
+    expect(v.kind).toBe('budget');
+  });
+});

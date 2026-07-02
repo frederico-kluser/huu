@@ -158,6 +158,8 @@ export class GlobalScheduler {
   private stopped = true;
   private lastBudget = 0;
   private lastRemaining = 0;
+  /** Live agents + in-flight spawns across all runs (last recompute). */
+  private lastBusyTotal = 0;
   /** Graded pressure verdicts (swap/PSI-full/budget-aware) — see PressureLadder. */
   private readonly ladder = new PressureLadder();
   private lastPressure: PressureVerdict = HEALTHY_VERDICT;
@@ -275,10 +277,17 @@ export class GlobalScheduler {
 
   /** Global RAM/CPU spawn gate (the budget's headroom check + pressure freeze). */
   shouldSpawn(): boolean {
-    // Any ladder level ≥ 1 means usage is already past the dial (or the host is
-    // pressured) — growing the fleet is wrong regardless of what the budget
-    // math says this instant.
-    if (this.lastPressure.level >= 1) return false;
+    // Host pressure (L2/L3): the machine is genuinely at risk — full freeze.
+    if (this.lastPressure.level >= 2) return false;
+    // Budget enforcement (L1): freeze growth, but with a FLOOR OF ONE — when
+    // the overshoot comes from OUTSIDE huu (browser/IDE holding RAM past a low
+    // dial), zero live agents would mean zero progress FOREVER. One agent is
+    // the degrade-to-sequential guarantee, mirrored by the guard's L1
+    // min-survivor rule. 'cpu'-kind L1 defers to the budget gate below (which
+    // already handles CPU per mode).
+    if (this.lastPressure.level === 1 && this.lastPressure.kind === 'budget' && this.lastBusyTotal > 0) {
+      return false;
+    }
     return this.budget.shouldSpawn();
   }
 
@@ -309,8 +318,8 @@ export class GlobalScheduler {
     ramPercent: number;
     psiSome10: number | null;
     psiFull10: number | null;
-    swapTotalBytes: number;
-    swapFreeBytes: number;
+    swapTotalBytes: number | null;
+    swapFreeBytes: number | null;
     observedAgentMemoryMb: number;
     pressureLevel: number;
     pressureReason: string;
@@ -393,6 +402,7 @@ export class GlobalScheduler {
     // reservation charge for spawns/young agents whose RAM `used` can't see yet.
     this.budget.syncCounts(activeTotal, pendingTotal);
     this.budget.syncReservations(spawningTotal, youngTotal);
+    this.lastBusyTotal = activeTotal + spawningTotal;
     const B = this.budget.targetConcurrency();
     this.lastBudget = B;
 

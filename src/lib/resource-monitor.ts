@@ -43,13 +43,15 @@ export interface SystemMetrics {
    */
   memPressureFull10: number | null;
   /**
-   * Host swap size in bytes (0 when the host has no swap or /proc/meminfo is
-   * unreadable). Swap is a HOST-level resource even inside a container, so this
-   * is always the host figure — the thrash the guard must prevent is host-wide.
+   * Host swap size in bytes. 0 = KNOWN to have no swap (Linux, SwapTotal=0);
+   * null = UNKNOWN (macOS/Windows/unreadable /proc/meminfo) — consumers must
+   * NOT conflate the two: "no swap" collapses the earlyoom joint condition,
+   * "unknown" must never. Swap is a HOST-level resource even inside a
+   * container, so this is always the host figure.
    */
-  swapTotalBytes: number;
-  /** Host free swap in bytes (0 when no swap). */
-  swapFreeBytes: number;
+  swapTotalBytes: number | null;
+  /** Host free swap in bytes (null when swapTotalBytes is null). */
+  swapFreeBytes: number | null;
   /**
    * Swap-in rate in pages/sec (delta of /proc/vmstat `pswpin` between this
    * sampler's consecutive samples). Sustained swap-IN means the working set no
@@ -105,8 +107,8 @@ function readCgroupUsedBytes(): number | null {
 
 interface MeminfoRead {
   memAvailableBytes: number | null;
-  swapTotalBytes: number;
-  swapFreeBytes: number;
+  swapTotalBytes: number | null;
+  swapFreeBytes: number | null;
 }
 
 /**
@@ -118,9 +120,14 @@ interface MeminfoRead {
  * (macOS, Windows, sandboxed fs) → nulls/zeros, never throws.
  */
 function readMeminfo(): MeminfoRead {
-  const none: MeminfoRead = { memAvailableBytes: null, swapTotalBytes: 0, swapFreeBytes: 0 };
+  // UNKNOWN (not "no swap"): off-Linux / unreadable — nulls, never zeros.
+  const unknown: MeminfoRead = {
+    memAvailableBytes: null,
+    swapTotalBytes: null,
+    swapFreeBytes: null,
+  };
   const path = '/proc/meminfo';
-  if (!existsSync(path)) return none;
+  if (!existsSync(path)) return unknown;
   try {
     const text = readFileSync(path, 'utf8');
     const kb = (label: string): number | null => {
@@ -131,11 +138,11 @@ function readMeminfo(): MeminfoRead {
     };
     return {
       memAvailableBytes: kb('MemAvailable'),
-      swapTotalBytes: kb('SwapTotal') ?? 0,
-      swapFreeBytes: kb('SwapFree') ?? 0,
+      swapTotalBytes: kb('SwapTotal'),
+      swapFreeBytes: kb('SwapFree'),
     };
   } catch {
-    return none;
+    return unknown;
   }
 }
 

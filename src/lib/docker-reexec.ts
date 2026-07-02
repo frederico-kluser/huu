@@ -156,6 +156,25 @@ export function buildMemoryLimitArgs(
   ];
 }
 
+/**
+ * Can this daemon/kernel enforce memory limits? Rootless Docker without
+ * memory-controller delegation and old kernels reject `--memory` outright —
+ * for those, run unlimited like before (degrade, never block). Best-effort:
+ * an unreadable probe assumes support (the common case).
+ */
+export function probeDockerMemoryLimitSupport(): boolean {
+  try {
+    const r = spawnSync('docker', ['info', '--format', '{{.MemoryLimit}}'], {
+      encoding: 'utf8',
+      timeout: 5_000,
+    });
+    if (r.status !== 0) return true;
+    return r.stdout.trim() !== 'false';
+  } catch {
+    return true;
+  }
+}
+
 /** Subcommands that run native — no docker pull, no bind mount needed. */
 const NATIVE_ONLY_SUBCOMMANDS = new Set(['init-docker', 'status', 'prune']);
 
@@ -250,6 +269,14 @@ export interface DockerCommandOptions {
    * set). Empty/omitted for the TUI (CLI) path.
    */
   publishPorts?: number[];
+  /**
+   * Whether the daemon/kernel can enforce memory limits (probed via
+   * `docker info {{.MemoryLimit}}`). false → the --memory flags are omitted so
+   * `docker run` doesn't REJECT the container outright (rootless without
+   * memory delegation, kernels without memcg limits) — degrade to the old
+   * unlimited behavior, never block. Default true.
+   */
+  memoryLimitSupported?: boolean;
 }
 
 /**
@@ -269,8 +296,12 @@ export function buildDockerArgv(opts: DockerCommandOptions): string[] {
   // minus the adaptive OS reserve, plus a bounded swap allowance. Worst case
   // becomes "the container dies with 137" instead of "the host dies".
   // HUU_DOCKER_MEMORY_MB overrides; HUU_NO_MEM_LIMIT=1 restores the old
-  // unlimited behavior. --pids-limit is the runaway-fork backstop.
-  for (const flag of buildMemoryLimitArgs(process.env)) argv.push(flag);
+  // unlimited behavior; a daemon without memory-limit support (probed by the
+  // caller) skips the flags entirely — degrade, never block.
+  // --pids-limit is the runaway-fork backstop.
+  if (opts.memoryLimitSupported !== false) {
+    for (const flag of buildMemoryLimitArgs(process.env)) argv.push(flag);
+  }
   // Publish the web-UI port(s) so the host browser can reach the in-container
   // server. Bound to the same number inside (HUU_WEB_PORT) and out.
   for (const port of opts.publishPorts ?? []) {
@@ -655,6 +686,7 @@ export async function reexecInDocker(
     extraMounts: [...(opts.extraMounts ?? []), ...hostHomeMounts],
     network: pickDockerNetwork(),
     publishPorts: opts.publishPorts,
+    memoryLimitSupported: probeDockerMemoryLimitSupport(),
   });
 
   const child = spawn('docker', argv, { stdio: 'inherit' });

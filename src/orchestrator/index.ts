@@ -1515,9 +1515,19 @@ export class Orchestrator {
         );
         poolPressureLevel = verdict.level;
         const budgetEnforced = scaleMode !== 'manual';
-        pressureBlocked = verdict.level >= 2 || (verdict.level === 1 && budgetEnforced);
+        const poolBusy = this.activeAgents.size + this.spawningIds.size;
+        // Spawn freeze: full at L2/L3 (host pressure); at L1/budget only while
+        // something is already running — FLOOR OF ONE, or an overshoot caused
+        // by OTHER processes (browser/IDE past a low dial) would freeze the
+        // run at zero agents forever. 'cpu'-kind L1 defers to the scaler's own
+        // per-mode CPU gates (CPU saturation is normal during test stages).
+        pressureBlocked =
+          verdict.level >= 2 ||
+          (verdict.level === 1 && verdict.kind === 'budget' && budgetEnforced && poolBusy > 0);
         const guardFires =
-          verdict.level >= 2 || (verdict.level === 1 && budgetEnforced);
+          verdict.level >= 2 ||
+          (verdict.level === 1 &&
+            (verdict.kind === 'cpu' || (verdict.kind === 'budget' && budgetEnforced)));
         // L1 progress guarantee: budget enforcement never preempts the last
         // live agent — degrade to sequential, never to zero. L2/L3 may drain
         // fully; the pool self-resumes once pressure clears.

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   collectDescendantPids,
+  isProtectedComm,
   parsePpidFromStat,
   resolveChildOomScoreAdj,
   sweepOnce,
@@ -89,6 +90,34 @@ describe.skipIf(process.platform !== 'linux')('sweepOnce (real /proc)', () => {
       expect(readFileSync(`/proc/${child.pid}/oom_score_adj`, 'utf8').trim()).toBe('500');
     } finally {
       child.kill('SIGKILL');
+    }
+  });
+});
+
+describe('protected comms (review regression: git must never be a preferred victim)', () => {
+  it('isProtectedComm matches git and its helpers only', () => {
+    expect(isProtectedComm('git')).toBe(true);
+    expect(isProtectedComm('git-remote-http')).toBe(true);
+    expect(isProtectedComm('node')).toBe(false);
+    expect(isProtectedComm('vitest')).toBe(false);
+    expect(isProtectedComm(null)).toBe(false);
+  });
+
+  it('sweepOnce skips git descendants (fake /proc)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'huu-proc-'));
+    try {
+      mkdirSync(join(dir, '200'));
+      writeFileSync(join(dir, '200', 'stat'), '200 (git) S 100 200 0 0', 'utf8');
+      writeFileSync(join(dir, '200', 'oom_score_adj'), '0\n', 'utf8');
+      mkdirSync(join(dir, '201'));
+      writeFileSync(join(dir, '201', 'stat'), '201 (vitest) S 100 201 0 0', 'utf8');
+      writeFileSync(join(dir, '201', 'oom_score_adj'), '0\n', 'utf8');
+      const adjusted = new Set<number>();
+      sweepOnce(100, adjusted, 500, dir);
+      expect(readFileSync(join(dir, '200', 'oom_score_adj'), 'utf8')).toBe('0\n'); // git untouched
+      expect(readFileSync(join(dir, '201', 'oom_score_adj'), 'utf8')).toBe('500\n');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

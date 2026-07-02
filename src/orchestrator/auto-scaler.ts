@@ -115,6 +115,17 @@ const POLL_INTERVAL_MS = 1_000;
  * window must shrink faster than the burst can grow.
  */
 const PRESSURE_POLL_INTERVAL_MS = 250;
+/**
+ * Relief valve for the mature-cohort EMA gate: pipelines whose tasks finish in
+ * under MATURE_AGE_MS never present a mature cohort, which would pin the
+ * estimate at the pessimistic seed FOREVER (permanent under-admission for
+ * fast/stub workloads). Accept one young-cohort sample per this window — at
+ * the slow DOWN alpha that drifts ≤5% per window, far too slow to re-open the
+ * over-admission spiral — and trust the estimate (drop the seed floor) after
+ * EMA_RELIEF_TRUST_SAMPLES consecutive windows of evidence.
+ */
+const EMA_RELIEF_MS = 120_000;
+const EMA_RELIEF_TRUST_SAMPLES = 5;
 const MIB = 1024 * 1024;
 
 export class AutoScaler {
@@ -136,6 +147,13 @@ export class AutoScaler {
   private youngCount = 0;
   /** True once the EMA has accepted at least one mature-cohort sample. */
   private emaHasMatureSample = false;
+  /** Last accepted EMA sample (any kind) — paces the young-cohort relief valve. */
+  private lastEmaSampleAt = 0;
+  /** Consecutive relief-valve samples — trust the EMA after enough evidence. */
+  private reliefSampleCount = 0;
+  /** Last 1 Hz control tick — the fast pressure poll must not speed up the
+      controller/EMA, whose constants are tuned per-second. */
+  private lastSlowTickAt = 0;
   /** Whether the caller pinned emaAlpha (legacy symmetric smoothing). */
   private readonly emaAlphaExplicit: boolean;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -184,6 +202,9 @@ export class AutoScaler {
     if (this.enabled) return;
     this.enabled = true;
     this.baselineUsedBytes = this.currentMetrics.ramUsedBytes;
+    // The young-cohort relief valve opens only after a FULL window of runtime
+    // — the cold start (the over-admission spiral's window) stays protected.
+    this.lastEmaSampleAt = Date.now();
     // One structured line per scaler start so RAM-tuning sessions can see the
     // EFFECTIVE memory model (seed/alpha/clamps/budget) a run began with.
     dlog('scaler', 'config', {
@@ -578,7 +599,17 @@ export class AutoScaler {
 
   private pollMetrics(): void {
     this.currentMetrics = this.config.resourceMonitor();
-    this.sampleObservedAgentMemory();
+    // The adaptive 250 ms cadence exists so the GATES see fresh data near the
+    // edge — the controller's additive step and the EMA alphas are tuned for
+    // 1 Hz, so those run on a SLOW tick regardless of the poll rate (4× the
+    // Vegas increase per second would overshoot into the cut band exactly
+    // when the machine is near the budget).
+    const now = Date.now();
+    const slowTick = now - this.lastSlowTickAt >= POLL_INTERVAL_MS;
+    if (slowTick) {
+      this.lastSlowTickAt = now;
+      this.sampleObservedAgentMemory();
+    }
     const { cpuPercent, ramPercent } = this.currentMetrics;
     const { stopThresholdPercent, destroyThresholdPercent } = this.config;
 
@@ -598,7 +629,7 @@ export class AutoScaler {
       this.state = 'NORMAL';
     }
 
-    this.updateController();
+    if (slowTick) this.updateController();
   }
 
   /**
@@ -626,7 +657,12 @@ export class AutoScaler {
       this.baselineUsedBytes = ramUsedBytes;
       return;
     }
-    if (this.spawningCount > 0 || this.youngCount > 0) return;
+    const youngCohort = this.spawningCount > 0 || this.youngCount > 0;
+    if (youngCohort) {
+      // Relief valve: fast tasks never present a mature cohort — without it
+      // the estimate would pin at the seed forever. One sample per window.
+      if (Date.now() - this.lastEmaSampleAt < EMA_RELIEF_MS) return;
+    }
     const sample = (ramUsedBytes - this.baselineUsedBytes) / this.activeAgentCount;
     if (sample <= 0) return;
     const { minAgentMemoryMb, maxAgentMemoryMb } = this.config;
@@ -641,7 +677,16 @@ export class AutoScaler {
       maxAgentMemoryMb * MIB,
       Math.max(minAgentMemoryMb * MIB, next),
     );
-    this.emaHasMatureSample = true;
+    this.lastEmaSampleAt = Date.now();
+    if (!youngCohort) {
+      this.emaHasMatureSample = true;
+      this.reliefSampleCount = 0;
+    } else if (!this.emaHasMatureSample) {
+      // Enough consecutive relief windows = the young cohort IS the steady
+      // state (fast tasks) — trust the estimate, drop the seed floor.
+      this.reliefSampleCount++;
+      if (this.reliefSampleCount >= EMA_RELIEF_TRUST_SAMPLES) this.emaHasMatureSample = true;
+    }
     // Observability for seed calibration: log SIGNIFICANT footprint moves only
     // (≥64MiB or ≥10% of the prior estimate) so the 1 Hz poll stays quiet.
     const deltaBytes = Math.abs(this.observedAgentBytes - prev);

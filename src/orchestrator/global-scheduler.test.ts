@@ -331,3 +331,54 @@ describe('GlobalScheduler pressure ladder (L1 budget enforcement)', () => {
     budget.stop();
   });
 });
+
+describe('GlobalScheduler L1 floor-of-one (review regression)', () => {
+  const GiB = 1024 ** 3;
+  const savedEnv: Record<string, string | undefined> = {};
+  const ENV_KEYS = ['HUU_GUARD_OVER_BUDGET_MS'];
+
+  beforeEach(() => {
+    for (const k of ENV_KEYS) savedEnv[k] = process.env[k];
+    process.env.HUU_GUARD_OVER_BUDGET_MS = '0';
+  });
+
+  afterEach(() => {
+    for (const k of ENV_KEYS) {
+      if (savedEnv[k] === undefined) delete process.env[k];
+      else process.env[k] = savedEnv[k];
+    }
+  });
+
+  it('allows the FIRST spawn even while used > dial (external overshoot must not freeze runs at zero)', async () => {
+    // The incident-review scenario: 19 of 32 GiB held by OTHER processes
+    // (desktop + browser), dial at 50% (16 GiB) → over budget, but RAM% (59)
+    // is far below every legacy gate. Zero agents must still bootstrap.
+    const overBudget = metrics({
+      ramTotalBytes: 32 * GiB,
+      ramUsedBytes: 19 * GiB,
+      ramAvailableBytes: 13 * GiB,
+      ramPercent: 59.4,
+      swapTotalBytes: 16 * GiB,
+      swapFreeBytes: 16 * GiB,
+    });
+    const budget = new AutoScaler({ resourceMonitor: () => overBudget, budgetPercent: 50 });
+    budget.setMode('auto');
+    budget.start();
+    const sched = new GlobalScheduler({ budget });
+    const idle = new StubDriver('idle', 3, []); // demand but ZERO live agents
+    sched.register(idle, 0);
+
+    await sched.tick();
+    expect(sched.pressure.level).toBe(1);
+    // Floor of one: with nothing running, the bootstrap spawn must pass.
+    expect(sched.shouldSpawn()).toBe(true);
+
+    // With something already running, L1 freezes growth as designed.
+    const busy = new StubDriver('busy', 0, [{ agentId: 1, startedAt: 100 }]);
+    sched.register(busy, 1);
+    await sched.tick();
+    expect(sched.pressure.level).toBe(1);
+    expect(sched.shouldSpawn()).toBe(false);
+    budget.stop();
+  });
+});

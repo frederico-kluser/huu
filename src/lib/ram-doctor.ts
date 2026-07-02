@@ -34,8 +34,8 @@ export interface RamDoctorReport {
   cgroupMemoryHighBytes: number | null;
   cgroupMemoryMaxBytes: number | null;
   wrapped: boolean;
-  swapTotalBytes: number;
-  swapFreeBytes: number;
+  swapTotalBytes: number | null;
+  swapFreeBytes: number | null;
   psiSome10: number | null;
   psiFull10: number | null;
   /** RAM-safety HUU_* knobs currently set (names only). */
@@ -48,8 +48,8 @@ export interface RamDoctorInputs {
   webSettingsRamPercent: number | undefined;
   cgroupMemoryHighBytes: number | null;
   cgroupMemoryMaxBytes: number | null;
-  swapTotalBytes: number;
-  swapFreeBytes: number;
+  swapTotalBytes: number | null;
+  swapFreeBytes: number | null;
   psiSome10: number | null;
   psiFull10: number | null;
 }
@@ -179,9 +179,11 @@ export function renderRamDoctorText(r: RamDoctorReport): string[] {
     r.psiSome10 === null
       ? 'unavailable'
       : `some ${r.psiSome10.toFixed(2)}% / full ${r.psiFull10?.toFixed(2) ?? '0.00'}%`;
-  lines.push(
-    `    pressure:    PSI ${psi} · swap free ${gib(r.swapFreeBytes)} of ${gib(r.swapTotalBytes)}`,
-  );
+  const swap =
+    r.swapTotalBytes === null
+      ? 'swap unknown'
+      : `swap free ${gib(r.swapFreeBytes ?? 0)} of ${gib(r.swapTotalBytes)}`;
+  lines.push(`    pressure:    PSI ${psi} · ${swap}`);
   if (r.activeKnobs.length > 0) {
     lines.push(`    knobs:       ${r.activeKnobs.join(', ')}`);
   }

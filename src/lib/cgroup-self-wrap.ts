@@ -28,7 +28,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { totalmem } from 'node:os';
+import { constants as osConstants, totalmem } from 'node:os';
 import { osReserveBytes } from './budget.js';
 
 const MIB = 1024 * 1024;
@@ -179,9 +179,37 @@ export async function reexecInCgroupScope(): Promise<number | null> {
       stdio: 'inherit',
       env: { ...process.env, HUU_CGROUP_WRAPPED: '1' },
     });
-    child.on('error', () => resolve(null));
+    // Forward termination signals to the scoped child (mirrors the docker
+    // wrapper): `kill <huu-pid>` targets THIS thin wrapper — without the
+    // forward, Node's default handler kills the wrapper and orphans the real
+    // app inside the scope. Interactive Ctrl+C already reaches the whole
+    // foreground process group; this covers the kill-by-pid/service case.
+    const forward = (sig: NodeJS.Signals) => {
+      const handler = (): void => {
+        try {
+          child.kill(sig);
+        } catch {
+          /* child already gone */
+        }
+      };
+      process.on(sig, handler);
+      return { sig, handler };
+    };
+    const handlers = (['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map(forward);
+    const cleanup = (): void => {
+      for (const { sig, handler } of handlers) process.removeListener(sig, handler);
+    };
+    child.on('error', () => {
+      cleanup();
+      resolve(null);
+    });
     child.on('exit', (code, signal) => {
-      resolve(signal ? 128 + 15 : (code ?? 0));
+      cleanup();
+      // Faithful exit-code mapping: the scenario this feature CREATES is the
+      // kernel OOM-killing huu inside its scope (SIGKILL → 137). Reporting
+      // every signal as 143 would misdiagnose exactly that case.
+      const signals = osConstants.signals as Record<string, number>;
+      resolve(signal ? 128 + (signals[signal] ?? 15) : (code ?? 0));
     });
   });
 }

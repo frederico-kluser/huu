@@ -37,9 +37,34 @@ export function parsePpidFromStat(stat: string): number | null {
   return Number.isInteger(ppid) && ppid >= 0 ? ppid : null;
 }
 
-/** All transitive descendants of `rootPid` per one /proc sweep. */
-export function collectDescendantPids(rootPid: number, procDir = '/proc'): number[] {
-  const byParent = new Map<number, number[]>();
+/** Parse the comm (executable name) out of a /proc/<pid>/stat line. */
+export function parseCommFromStat(stat: string): string | null {
+  const open = stat.indexOf('(');
+  const close = stat.lastIndexOf(')');
+  if (open < 0 || close <= open) return null;
+  return stat.slice(open + 1, close);
+}
+
+/**
+ * Processes whose death is WORSE than a task retry — never make them
+ * preferred OOM victims. git runs the orchestrator's own worktree/merge
+ * operations: an OOM-killed `git merge` in the integration worktree fails the
+ * whole stage (or leaves a half-applied merge), whereas the intended victims
+ * are tool children (test runners, installs) whose death degrades to a retry.
+ */
+const PROTECTED_COMMS = ['git'];
+
+export function isProtectedComm(comm: string | null): boolean {
+  if (!comm) return false;
+  return PROTECTED_COMMS.some((p) => comm === p || comm.startsWith(`${p}-`) || comm.startsWith(`${p} `));
+}
+
+/** All transitive descendants of `rootPid` (with comm) per one /proc sweep. */
+export function collectDescendants(
+  rootPid: number,
+  procDir = '/proc',
+): Array<{ pid: number; comm: string | null }> {
+  const byParent = new Map<number, Array<{ pid: number; comm: string | null }>>();
   let entries: string[];
   try {
     entries = readdirSync(procDir);
@@ -51,25 +76,32 @@ export function collectDescendantPids(rootPid: number, procDir = '/proc'): numbe
     const pid = Number(name);
     if (pid === rootPid) continue;
     try {
-      const ppid = parsePpidFromStat(readFileSync(join(procDir, name, 'stat'), 'utf8'));
+      const stat = readFileSync(join(procDir, name, 'stat'), 'utf8');
+      const ppid = parsePpidFromStat(stat);
       if (ppid === null) continue;
+      const node = { pid, comm: parseCommFromStat(stat) };
       const kids = byParent.get(ppid);
-      if (kids) kids.push(pid);
-      else byParent.set(ppid, [pid]);
+      if (kids) kids.push(node);
+      else byParent.set(ppid, [node]);
     } catch {
       /* process vanished mid-sweep — normal */
     }
   }
-  const out: number[] = [];
+  const out: Array<{ pid: number; comm: string | null }> = [];
   const queue = [rootPid];
   while (queue.length > 0) {
     const kids = byParent.get(queue.shift()!) ?? [];
     for (const kid of kids) {
       out.push(kid);
-      queue.push(kid);
+      queue.push(kid.pid);
     }
   }
   return out;
+}
+
+/** Back-compat helper: descendant pids only. */
+export function collectDescendantPids(rootPid: number, procDir = '/proc'): number[] {
+  return collectDescendants(rootPid, procDir).map((d) => d.pid);
 }
 
 /** Resolve the child score from HUU_CHILD_OOM_SCORE_ADJ (0 disables). */
@@ -93,11 +125,12 @@ export function sweepOnce(
   scoreAdj: number,
   procDir = '/proc',
 ): void {
-  const descendants = collectDescendantPids(rootPid, procDir);
-  const live = new Set(descendants);
+  const descendants = collectDescendants(rootPid, procDir);
+  const live = new Set(descendants.map((d) => d.pid));
   for (const pid of [...adjusted]) if (!live.has(pid)) adjusted.delete(pid);
-  for (const pid of descendants) {
+  for (const { pid, comm } of descendants) {
     if (adjusted.has(pid)) continue;
+    if (isProtectedComm(comm)) continue; // git etc. — see PROTECTED_COMMS
     try {
       writeFileSync(join(procDir, String(pid), 'oom_score_adj'), `${scoreAdj}\n`);
       adjusted.add(pid);

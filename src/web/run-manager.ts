@@ -146,16 +146,20 @@ export interface RunSnapshot {
 }
 
 /**
- * Slim a TERMINAL run's retained state: cap the log tails (the browser
- * archived the full final frame already; IndexedDB owns history) while keeping
- * every card/merge/judge so a late-connecting tab still renders the board.
+ * Slim a TERMINAL run's retained state — applied AFTER the full terminal frame
+ * is broadcast (the browser archives from that frame; IndexedDB owns history).
+ * Caps mirror what the orchestrator itself already bounds (getState slices run
+ * logs to 200 and per-agent logs accumulate to ≤200), so a late-connecting
+ * tab's replay and post-settle /api/agent-logs see the SAME data as before the
+ * retention work — the win is the terminal-run retention cap, not lossier
+ * logs.
  */
 function slimTerminalState(state: OrchestratorState | null): OrchestratorState | null {
   if (!state) return null;
   return {
     ...state,
-    logs: state.logs.slice(-100),
-    agents: state.agents.map((a) => ({ ...a, logs: a.logs.slice(-40) })),
+    logs: state.logs.slice(-200),
+    agents: state.agents.map((a) => ({ ...a, logs: a.logs.slice(-200) })),
   };
 }
 
@@ -590,13 +594,14 @@ export class WebRunManager {
         unsubscribeOutput?.();
         entry.orch = null;
         entry.sim = null;
-        // Memory hygiene: a terminal run's full untrimmed OrchestratorState
-        // used to be retained for the server's lifetime — 33 finished runs of
-        // per-agent logs add up. Keep a slim snapshot (enough for SSE replay /
-        // bootstrap) and cap how many terminal runs stay tracked at all.
+        // Broadcast the FULL terminal frame FIRST — the browser archives run
+        // history (IndexedDB / export) from this frame, so it must precede any
+        // trimming. Only THEN slim the retained copy (memory hygiene: a
+        // terminal run's state used to live untrimmed for the server's
+        // lifetime) and cap how many terminal runs stay tracked at all.
+        this.onUpdate(entry.snapshot);
         entry.snapshot = { ...entry.snapshot, state: slimTerminalState(entry.snapshot.state) };
         this.pruneTerminalRuns();
-        this.onUpdate(entry.snapshot);
       });
 
     this.onUpdate(entry.snapshot);
