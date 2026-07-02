@@ -1,5 +1,10 @@
 import { openSync, closeSync, fstatSync, readSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  gatherPiRuntimeInputs,
+  renderPiRuntimeText,
+  resolvePiRuntimeReport,
+} from './pi-doctor.js';
 
 /**
  * Headless status reporter for huu runs. Parses the NDJSON debug log
@@ -365,10 +370,16 @@ export function runStatusCli(opts: RunStatusCliOptions): number {
     return report.phase === 'stalled' || report.phase === 'crashed' ? 1 : 0;
   }
 
+  // Doctor section for the embedded pi runtime. Gathered ONLY on the
+  // human-facing paths — never on --liveness, which must stay cheap for the
+  // Docker HEALTHCHECK (gathering shells `npm root -g`).
+  const piRuntime = resolvePiRuntimeReport({ env: process.env, ...gatherPiRuntimeInputs() });
+
   if (json) {
-    stdout(JSON.stringify(report, null, 2));
+    stdout(JSON.stringify({ ...report, piRuntime }, null, 2));
   } else {
     stdout(renderStatusText(report, now, opts.cwd));
+    for (const line of renderPiRuntimeText(piRuntime)) stdout(line);
   }
 
   if (!report.logPath) return 2;
