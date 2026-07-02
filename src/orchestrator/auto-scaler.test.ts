@@ -645,10 +645,25 @@ describe('AutoScaler', () => {
 
     it('spawns above the stop threshold (where auto would back off)', () => {
       // 92% is ≥ the stop threshold (auto stops) but < the destroy threshold.
+      // ramUsedBytes stays at the default 8 GiB of 16 (under the dial), so the
+      // budget-greedy byte gate keeps the tap open.
       const scaler = createScaler(makeMetrics({ cpuPercent: 92, ramPercent: 92 }));
       scaler.setMode('greedy');
       scaler.start();
       expect(scaler.shouldSpawn()).toBe(true);
+      scaler.stop();
+    });
+
+    it('BUDGET-greedy: stops spawning once used bytes cross the dial, even below 95%', () => {
+      // 14 GiB used of 16 (87.5% < 95) but the 85% dial = 13.6 GiB → no
+      // headroom. Old MAX flooded to the 95% destroy line; the dial is now a
+      // contract in every mode.
+      const scaler = createScaler(
+        makeMetrics({ ramTotalBytes: 16 * 1024 ** 3, ramUsedBytes: 14 * 1024 ** 3, ramPercent: 87.5 }),
+      );
+      scaler.setMode('greedy');
+      scaler.start();
+      expect(scaler.shouldSpawn()).toBe(false);
       scaler.stop();
     });
 
