@@ -23,11 +23,43 @@ export const DEFAULT_RAM_PERCENT = 85;
 export const MIN_RAM_PERCENT = 10;
 export const MAX_RAM_PERCENT = 95;
 /**
- * Absolute floor of RAM the budget will never claim, regardless of the percent —
- * the non-negotiable OS reserve. 512 MiB. (Larger turbo-mode reserves are a
- * Fase 2 cgroup concern.)
+ * Legacy absolute floor of the OS reserve (512 MiB) — kept as the minimum the
+ * adaptive reserve can ever shrink to. On a desktop 512 MiB proved far too
+ * thin (browser + compositor + 33 SSE streams), so the effective reserve is
+ * now computed by {@link osReserveBytes}.
  */
 export const MIN_OS_RESERVE_BYTES = 512 * 1024 * 1024;
+const GIB = 1024 * 1024 * 1024;
+const MIB = 1024 * 1024;
+
+/**
+ * RAM kept untouchable for the OS regardless of the dial:
+ *
+ *   reserve = max( min(2 GiB, 25% of total),  8% of total,  512 MiB )
+ *
+ * — 2 GiB on any desktop-sized machine (browser + desktop survive), scaling
+ * down on small boxes (a 2 GiB host reserves 512 MiB, not everything) and up
+ * on very large ones (8%). `HUU_OS_RESERVE_MB` overrides (clamped to at most
+ * 90% of total so a typo can't zero the budget — degrade, never block).
+ */
+export function osReserveBytes(
+  totalBytes: number,
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  if (!Number.isFinite(totalBytes) || totalBytes <= 0) return MIN_OS_RESERVE_BYTES;
+  const raw = env.HUU_OS_RESERVE_MB?.trim();
+  if (raw) {
+    const mb = Number(raw);
+    if (Number.isFinite(mb) && mb > 0) {
+      return Math.min(Math.floor(mb * MIB), Math.floor(totalBytes * 0.9));
+    }
+  }
+  return Math.max(
+    Math.min(2 * GIB, totalBytes * 0.25),
+    totalBytes * 0.08,
+    MIN_OS_RESERVE_BYTES,
+  );
+}
 
 /**
  * Clamp an arbitrary percent into [MIN_RAM_PERCENT, MAX_RAM_PERCENT], rounding
@@ -54,11 +86,12 @@ export function resolveRamPercent(explicit?: number): number {
 
 /**
  * Bytes the budget may claim: `pct` of total, but never above `total − the OS
- * reserve floor`. Always >= 0. `pct` is clamped defensively.
+ * reserve` (adaptive — see {@link osReserveBytes}). Always >= 0. `pct` is
+ * clamped defensively.
  */
 export function ramBudgetBytes(totalBytes: number, pct: number): number {
   if (!Number.isFinite(totalBytes) || totalBytes <= 0) return 0;
   const byPercent = totalBytes * (clampPercent(pct) / 100);
-  const ceiling = Math.max(0, totalBytes - MIN_OS_RESERVE_BYTES);
+  const ceiling = Math.max(0, totalBytes - osReserveBytes(totalBytes));
   return Math.max(0, Math.min(byPercent, ceiling));
 }

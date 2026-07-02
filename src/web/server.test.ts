@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { execSync } from 'node:child_process';
-import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -381,5 +381,101 @@ describe('web server token gate', () => {
       headers: { 'x-huu-token': 'sekret' },
     });
     expect(viaHeader.status).toBe(200);
+  });
+});
+
+describe('web server — machine-global settings (/api/settings)', () => {
+  let repo: string;
+  let cfgHome: string;
+  let server: Server;
+  let base: string;
+  let savedXdg: string | undefined;
+
+  beforeEach(async () => {
+    // Hermetic settings location: webSettingsPath() honors XDG_CONFIG_HOME, so
+    // the test never touches the user's real ~/.config/huu.
+    savedXdg = process.env.XDG_CONFIG_HOME;
+    cfgHome = mkdtempSync(join(tmpdir(), 'huu-web-cfg-'));
+    process.env.XDG_CONFIG_HOME = cfgHome;
+    repo = mkdtempSync(join(tmpdir(), 'huu-web-'));
+    setupRepo(repo);
+    ({ server } = createWebServer({
+      cwd: repo,
+      defaultAutoScale: true,
+      initialPipeline: PIPELINE,
+    }));
+    base = await listenEphemeral(server);
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(cfgHome, { recursive: true, force: true });
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = savedXdg;
+  });
+
+  it('POST /api/settings applies + persists the dial and echoes the effective value', async () => {
+    const res = await fetch(base + '/api/settings', {
+      method: 'POST',
+      body: JSON.stringify({ ramPercent: 50 }),
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { ok: boolean; ramPercent: number };
+    expect(json.ok).toBe(true);
+    expect(json.ramPercent).toBe(50);
+
+    // Persisted server-side…
+    const onDisk = JSON.parse(
+      readFileSync(join(cfgHome, 'huu', 'web-settings.json'), 'utf8'),
+    ) as { ramPercent: number };
+    expect(onDisk.ramPercent).toBe(50);
+
+    // …and read back by bootstrap (the ⚙ modal's source of truth).
+    const boot = (await (await fetch(base + '/api/bootstrap')).json()) as {
+      settings: { ramPercent: number };
+    };
+    expect(boot.settings.ramPercent).toBe(50);
+  });
+
+  it('clamps out-of-range dials and clears the override on null', async () => {
+    const over = (await (
+      await fetch(base + '/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({ ramPercent: 999 }),
+      })
+    ).json()) as { ramPercent: number };
+    expect(over.ramPercent).toBe(95);
+
+    const cleared = (await (
+      await fetch(base + '/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({ ramPercent: null }),
+      })
+    ).json()) as { ramPercent: number };
+    expect(cleared.ramPercent).toBe(85); // env unset in tests → default
+  });
+
+  it('POST /api/run no longer honors a body ramPercent (settings own the dial)', async () => {
+    // Regression for the silent-85% hole: a run POST carrying ramPercent must
+    // not change the effective setting.
+    await fetch(base + '/api/settings', {
+      method: 'POST',
+      body: JSON.stringify({ ramPercent: 40 }),
+    });
+    await fetch(base + '/api/run', {
+      method: 'POST',
+      body: JSON.stringify({
+        backend: 'stub',
+        pipelineName: 'web-test-pipe',
+        modelId: 'stub',
+        ramPercent: 90,
+        runDirectory: repo,
+      }),
+    }).then((r) => r.json());
+    const boot = (await (await fetch(base + '/api/bootstrap')).json()) as {
+      settings: { ramPercent: number };
+    };
+    expect(boot.settings.ramPercent).toBe(40);
   });
 });

@@ -282,12 +282,16 @@ export class AutoScaler {
     const psiBlocked =
       memPressureSome10 !== null && memPressureSome10 >= this.psiFreezeThreshold();
     if (this.mode === 'greedy') {
-      // Flood up to the destroy threshold, then let the guard reclaim. Gate on
-      // both CPU and RAM so the spawn line matches shouldDestroy()'s (CPU OR
-      // RAM ≥ threshold) — otherwise we'd respawn into a CPU-driven kill.
+      // BUDGET-GREEDY: flood one agent per queued task, but only while the RAM
+      // BUDGET (the dial) still has headroom — MAX means "fill the ceiling I
+      // configured aggressively", not "ignore the ceiling". The old greedy
+      // flooded to the 95% destroy line, which a swapping host reaches only
+      // after it is already thrashing (the 33-run freeze). Reservations for
+      // in-flight spawns are charged, so a burst can't overshoot the dial.
       // Damped: hold off while cooling down from the last guard kill.
       if (this.state === 'COOLDOWN') return false;
       if (psiBlocked) return false;
+      if (this.budgetAdditional() <= 0) return false;
       const { destroyThresholdPercent } = this.config;
       return cpuPercent < destroyThresholdPercent && ramPercent < destroyThresholdPercent;
     }
@@ -463,6 +467,18 @@ export class AutoScaler {
   /** The per-agent planning charge in bytes (EMA, seed-floored until mature). */
   plannedChargeBytes(): number {
     return this.chargeBytes();
+  }
+
+  /**
+   * RAM bytes still free under the budget dial with reservations charged —
+   * the byte-denominated admission signal (slots = this ÷ charge).
+   */
+  headroomBytesRemaining(): number {
+    const { ramTotalBytes, ramUsedBytes } = this.currentMetrics;
+    const budgetBytes = ramBudgetBytes(ramTotalBytes, this.config.budgetPercent);
+    const charge = this.chargeBytes();
+    const reserved = this.spawningCount * charge + Math.ceil((this.youngCount * charge) / 2);
+    return Math.max(0, budgetBytes - ramUsedBytes - reserved);
   }
 
   notifyAgentDestroyed(): void {

@@ -47,10 +47,15 @@
         </div>
       </div>
 
+      <!-- Machine-global budget chip: dial in force · used/total RAM · pressure
+           level. Fed by the 1 Hz {type:'budget'} SSE frame — the feedback loop
+           that confirms the ⚙ RAM setting actually took. -->
+      <div class="budget-chip" id="budgetChip" hidden></div>
+
       <div class="topbar__actions">
         <div class="conc" id="concControl" hidden>
           <button class="conc__btn" id="concDown" title="Fewer agents">−</button>
-          <button class="conc__mode" id="concMode" title="Concurrency mode — click to cycle Auto · Manual · MAX">
+          <button class="conc__mode" id="concMode" title="Concurrency mode — click to toggle Auto · Manual (machine throughput lives in ⚙ RAM budget)">
             <span id="concVal">—</span><span class="conc__tag" id="concTag">auto</span>
           </button>
           <button class="conc__btn" id="concUp" title="More agents">+</button>
@@ -180,10 +185,12 @@
 
               <div class="field">
                 <label>Concurrency</label>
+                <!-- MAX (greedy) removed: web runs are scheduler-subordinate, where a
+                     per-run greedy flag never drove anything. Machine throughput is
+                     the ⚙ RAM budget dial. -->
                 <div class="segmented segmented--sm" id="modeSeg">
                   <button type="button" data-mode="auto" class="on">Auto</button>
                   <button type="button" data-mode="manual">Manual</button>
-                  <button type="button" data-mode="greedy">MAX</button>
                 </div>
                 <div class="manual-row" id="manualRow" hidden>
                   <input type="range" id="concRange" min="1" max="32" value="10" />
@@ -412,7 +419,7 @@
                    inputmode="numeric" placeholder="85" aria-describedby="globalRamPercentHint" />
             <span class="timeout-unit">%</span>
           </div>
-          <div class="config-hint muted" id="globalRamPercentHint">Share of total RAM huu may use across ALL concurrent runs on this machine (10–95). Higher = more parallelism, thinner safety margin; the rest is reserved for the OS. Empty = 85%. Machine-global — there is no per-project override. Web UI only.</div>
+          <div class="config-hint muted" id="globalRamPercentHint">Share of total RAM huu may use across ALL concurrent runs on this machine (10–95). Applied IMMEDIATELY to running and queued runs, persisted on the server, and enforced by the pressure guard (the topbar chip shows the live value). Higher = more parallelism, thinner safety margin; the rest is reserved for the OS. Empty = 85%.</div>
         </div>
       </div>
     </div>

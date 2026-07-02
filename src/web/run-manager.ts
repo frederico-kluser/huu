@@ -36,18 +36,54 @@ import type {
 } from '../lib/types.js';
 import { getPipelineByName } from './api-data.js';
 import { AdmissionController } from '../lib/admission-controller.js';
+import { loadWebSettings, saveWebSettings, type WebSettings } from '../lib/web-settings.js';
+import { clampPercent } from '../lib/budget.js';
 
 export type RunPhase = 'idle' | 'queued' | 'running' | 'done' | 'error';
 
 /**
- * Hard cap on simultaneously-tracked NON-TERMINAL runs (queued + running) — a
- * guard against a runaway client filling the queue unboundedly.
+ * Default cap on simultaneously-tracked NON-TERMINAL runs (queued + running).
+ * Queued runs are cheap (an unstarted Orchestrator consumes no budget), so the
+ * cap exists only against a runaway client — "queue every project I have" is a
+ * supported workflow. `HUU_MAX_QUEUED_RUNS` overrides.
  */
-const MAX_CONCURRENT_RUNS = 64;
-/** Max runs ADMITTED (running) at once; the rest wait in `pending` (queued). */
-const MAX_LIVE_RUNS = 8;
+const DEFAULT_MAX_QUEUED_RUNS = 256;
+/**
+ * Default cap on runs ADMITTED (running) at once; the rest wait in `pending`
+ * (queued). The EFFECTIVE cap each tick is the smaller of this and what the
+ * RAM budget can hold (baseline + one agent per run). `HUU_MAX_LIVE_RUNS`
+ * overrides the ceiling.
+ */
+const DEFAULT_MAX_LIVE_RUNS = 8;
+/**
+ * RAM a run costs before its first agent is counted (Node structures, repo
+ * scan, worktree creation, SSE buffers). Charged at admission time.
+ * `HUU_RUN_BASELINE_MB` overrides.
+ */
+const DEFAULT_RUN_BASELINE_MB = 384;
 /** Admission poll cadence (ms) — mirrors run-many. */
 const ADMIT_CHECK_MS = 500;
+
+/** Positive-int env knob with clamp; unset/garbage → fallback (never throws). */
+function envInt(name: string, fallback: number, min: number, max: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function maxQueuedRuns(): number {
+  return envInt('HUU_MAX_QUEUED_RUNS', DEFAULT_MAX_QUEUED_RUNS, 1, 4096);
+}
+
+function maxLiveRuns(): number {
+  return envInt('HUU_MAX_LIVE_RUNS', DEFAULT_MAX_LIVE_RUNS, 1, 64);
+}
+
+function runBaselineBytes(): number {
+  return envInt('HUU_RUN_BASELINE_MB', DEFAULT_RUN_BASELINE_MB, 32, 16_384) * 1024 * 1024;
+}
 
 export interface StartRunParams {
   /** Pipeline name to resolve from disk/memory. Ignored when `pipeline` set. */
@@ -85,12 +121,6 @@ export interface StartRunParams {
   runDirectory?: string;
   /** Per-card timeout in minutes (sets both card timeouts, like the TUI). */
   timeoutMinutes?: number;
-  /**
-   * Machine-global RAM budget as a percent of total memory. Configures the
-   * SHARED GlobalScheduler budget (not per-run — one machine, one RAM). Absent →
-   * HUU_RAM_PERCENT/85 via `src/lib/budget.ts`.
-   */
-  ramPercent?: number;
   /**
    * Authoritative priority among concurrent runs (lower = higher). The web
    * client sends the project's queue index so the FIRST project in the list is
@@ -161,6 +191,12 @@ export class WebRunManager {
   private enqueueSeq = 0;
   private admissionController: AdmissionController | null = null;
   private admissionTimer: ReturnType<typeof setInterval> | null = null;
+  /**
+   * Machine-global settings, persisted server-side (~/.config/huu/
+   * web-settings.json) — the browser's localStorage is only a display cache.
+   * Loaded once at construction; `setRamPercent()` applies + persists changes.
+   */
+  private settings: WebSettings = loadWebSettings();
 
   constructor(
     private readonly cwd: string,
@@ -216,14 +252,20 @@ export class WebRunManager {
   /** Start the lazy-admission loop (idempotent). Stops itself when `pending` drains. */
   private ensureAdmissionLoop(): void {
     if (!this.admissionController) {
-      this.admissionController = new AdmissionController({ maxAdmitted: MAX_LIVE_RUNS });
+      this.admissionController = new AdmissionController({ maxAdmitted: maxLiveRuns() });
     }
     if (this.admissionTimer) return;
     this.admissionTimer = setInterval(() => this.tickAdmission(), ADMIT_CHECK_MS);
     this.admissionTimer.unref?.();
   }
 
-  /** One admission pass: pull in the next queued run when the budget allows. */
+  /**
+   * One admission pass: pull in the next queued run when the budget allows.
+   * Beyond the scheduler's slot signal, admission now charges a run's fixed
+   * BASELINE cost (Node structures, repo scan, worktrees) against the byte
+   * headroom, and the live cap adapts to the machine: a small box admits fewer
+   * concurrent runs than the HUU_MAX_LIVE_RUNS ceiling.
+   */
   private tickAdmission(): void {
     if (this.pending.length === 0) {
       if (this.admissionTimer) {
@@ -233,12 +275,23 @@ export class WebRunManager {
       return;
     }
     const remaining = this.scheduler ? this.scheduler.remaining : Number.POSITIVE_INFINITY;
+    const baseline = runBaselineBytes();
+    let headroomBytes: number | undefined;
+    let liveCap: number | undefined;
+    if (this.scheduler) {
+      headroomBytes = this.scheduler.headroomBytes();
+      const perRunBytes = baseline + this.scheduler.agentChargeBytes();
+      liveCap = Math.max(1, Math.floor(this.scheduler.budgetTelemetry().budgetBytes / perRunBytes));
+    }
     if (
       this.admissionController!.shouldAdmit({
         liveAdmitted: this.activeCount(),
         pendingCount: this.pending.length,
         schedulerRemaining: remaining,
         anyIntegrating: this.anyIntegrating(),
+        headroomBytes,
+        liveCap,
+        runBaselineBytes: baseline,
       })
     ) {
       this.admitNext();
@@ -258,9 +311,52 @@ export class WebRunManager {
   private ensureScheduler(): GlobalScheduler {
     if (!this.scheduler) {
       this.scheduler = new GlobalScheduler();
+      // Persisted web dial (server-side settings) wins over env/default.
+      this.scheduler.setBudgetPercent(this.effectiveRamPercent());
       this.scheduler.start();
     }
     return this.scheduler;
+  }
+
+  /** The dial in effect: persisted web setting, else HUU_RAM_PERCENT, else 85. */
+  effectiveRamPercent(): number {
+    return resolveRamPercent(this.settings.ramPercent);
+  }
+
+  /**
+   * Apply + persist the machine-global RAM dial NOW (the `POST /api/settings`
+   * handler). A non-finite/absent value clears the web override (falls back to
+   * env/default). Returns the effective percent so the client can read back
+   * what actually took — the old dial only traveled piggybacked on run POSTs,
+   * so changing it mid-run silently did nothing.
+   */
+  setRamPercent(pct?: number): number {
+    if (typeof pct === 'number' && Number.isFinite(pct)) {
+      this.settings = { ...this.settings, ramPercent: clampPercent(pct) };
+    } else {
+      const { ramPercent: _cleared, ...rest } = this.settings;
+      this.settings = rest;
+    }
+    saveWebSettings(this.settings);
+    const effective = this.effectiveRamPercent();
+    this.scheduler?.setBudgetPercent(effective);
+    return effective;
+  }
+
+  /**
+   * Machine-global budget telemetry for the `{type:'budget'}` SSE frame — the
+   * scheduler's snapshot plus the manager's run counts. Null until the first
+   * real run constructs the scheduler.
+   */
+  budgetTelemetry(): (Record<string, unknown> & { budgetPercent: number }) | null {
+    if (!this.scheduler) return null;
+    let queued = 0;
+    let running = 0;
+    for (const e of this.runs.values()) {
+      if (e.snapshot.phase === 'queued') queued++;
+      else if (e.snapshot.phase === 'running') running++;
+    }
+    return { ...this.scheduler.budgetTelemetry(), queuedRuns: queued, runningRuns: running };
   }
 
   /**
@@ -270,8 +366,9 @@ export class WebRunManager {
    * endpoint, or too many concurrent runs) so the server returns a 4xx.
    */
   start(params: StartRunParams): RunSnapshot {
-    if (this.nonTerminalCount() >= MAX_CONCURRENT_RUNS) {
-      throw new Error(`Too many concurrent runs (max ${MAX_CONCURRENT_RUNS}).`);
+    const cap = maxQueuedRuns();
+    if (this.nonTerminalCount() >= cap) {
+      throw new Error(`Too many concurrent runs (max ${cap}).`);
     }
 
     const pipeline =
@@ -332,16 +429,19 @@ export class WebRunManager {
     };
 
     const runId = generateRunId();
-    const mode = params.mode ?? 'auto';
+    // 'greedy' (MAX) is coerced to 'auto': every web run is subordinate to the
+    // GlobalScheduler, whose shared budget scaler is always 'auto' — a per-run
+    // greedy mode changed nothing but the UI label, and pretending otherwise is
+    // how the 33-run incident was launched. The dial (settings) is the lever.
+    const mode = params.mode === 'greedy' ? 'auto' : (params.mode ?? 'auto');
     // Authoritative priority = the project's position in the client's queue list
     // (lower = higher). Falls back to arrival order for callers that don't send
     // one. This — NOT the racy POST arrival order — keeps the first project in
     // the list served first.
     const priority = params.priority ?? this.enqueueSeq++;
-    // Apply the machine-global RAM dial to the SHARED budget (latest wins). The
-    // dial governs the GlobalScheduler, not a per-run AutoScaler (one RAM).
+    // The shared scheduler carries the machine-global RAM dial (persisted web
+    // setting via setRamPercent / POST /api/settings — no longer per-run).
     const scheduler = this.ensureScheduler();
-    scheduler.setBudgetPercent(resolveRamPercent(params.ramPercent));
     const orch = new Orchestrator(config, effectivePipeline, runDir, bundle.agentFactory, {
       conflictResolverFactory: bundle.conflictResolverFactory,
       autoScale: mode !== 'manual',
@@ -354,8 +454,6 @@ export class WebRunManager {
       // longer limit) before the run tears down. See server `/api/run/retry`.
       interactiveRetry: true,
     });
-
-    if (mode === 'greedy') orch.enableGreedyMode();
 
     const seed: RunSnapshot = {
       phase: 'queued',
@@ -391,8 +489,9 @@ export class WebRunManager {
    * kanban. Tracked in the same map so several can show in the selector.
    */
   startSimulation(opts: SimulationOptions): RunSnapshot {
-    if (this.nonTerminalCount() >= MAX_CONCURRENT_RUNS) {
-      throw new Error(`Too many concurrent runs (max ${MAX_CONCURRENT_RUNS}).`);
+    const cap = maxQueuedRuns();
+    if (this.nonTerminalCount() >= cap) {
+      throw new Error(`Too many concurrent runs (max ${cap}).`);
     }
     const engine = new SimulationEngine(opts);
     const seed: RunSnapshot = {
@@ -547,14 +646,17 @@ export class WebRunManager {
     else if (delta < 0) driver.decreaseConcurrency();
   }
 
-  /** Switch one run's concurrency strategy mid-run. */
+  /**
+   * Switch one run's concurrency strategy mid-run. 'greedy' coerces to 'auto':
+   * a scheduler-subordinate run's greedy flag never drove anything (grants
+   * govern it), so the web no longer offers or honors MAX.
+   */
   setMode(runId: string, mode: 'auto' | 'manual' | 'greedy'): void {
     const e = this.runs.get(runId);
     const driver = e?.orch ?? e?.sim;
     if (!driver) return;
-    if (mode === 'auto') driver.enableAutoScale();
-    else if (mode === 'manual') driver.disableAutoScale();
-    else driver.enableGreedyMode();
+    if (mode === 'manual') driver.disableAutoScale();
+    else driver.enableAutoScale();
   }
 
   /**

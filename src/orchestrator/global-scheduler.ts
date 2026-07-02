@@ -287,6 +287,57 @@ export class GlobalScheduler {
     return this.lastPressure;
   }
 
+  /** RAM bytes still free under the dial (reservations charged) — admission input. */
+  headroomBytes(): number {
+    return this.budget.headroomBytesRemaining();
+  }
+
+  /** Per-agent planning charge in bytes (EMA, seed-floored until mature). */
+  agentChargeBytes(): number {
+    return this.budget.plannedChargeBytes();
+  }
+
+  /**
+   * Machine-global budget snapshot for observability surfaces (the web
+   * `{type:'budget'}` SSE frame, `huu status`). Derived, read-only.
+   */
+  budgetTelemetry(): {
+    budgetPercent: number;
+    budgetBytes: number;
+    usedBytes: number;
+    totalBytes: number;
+    ramPercent: number;
+    psiSome10: number | null;
+    psiFull10: number | null;
+    swapTotalBytes: number;
+    swapFreeBytes: number;
+    observedAgentMemoryMb: number;
+    pressureLevel: number;
+    pressureReason: string;
+    budgetB: number;
+    remaining: number;
+    liveRuns: number;
+  } {
+    const m = this.budget.metrics();
+    return {
+      budgetPercent: this.budget.budgetPercent(),
+      budgetBytes: this.budget.budgetBytes(),
+      usedBytes: m.ramUsedBytes,
+      totalBytes: m.ramTotalBytes,
+      ramPercent: m.ramPercent,
+      psiSome10: m.memPressureSome10,
+      psiFull10: m.memPressureFull10,
+      swapTotalBytes: m.swapTotalBytes,
+      swapFreeBytes: m.swapFreeBytes,
+      observedAgentMemoryMb: this.budget.observedAgentMemoryMb(),
+      pressureLevel: this.lastPressure.level,
+      pressureReason: this.lastPressure.reason,
+      budgetB: this.lastBudget,
+      remaining: this.remaining,
+      liveRuns: this.slots.length,
+    };
+  }
+
   /** Number of admitted runs. A selector/UI shows only when this is > 1. */
   get size(): number {
     return this.slots.length;

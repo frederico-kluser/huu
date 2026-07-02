@@ -5,6 +5,7 @@ import {
   MIN_OS_RESERVE_BYTES,
   MIN_RAM_PERCENT,
   clampPercent,
+  osReserveBytes,
   ramBudgetBytes,
   resolveRamPercent,
 } from './budget.js';
@@ -75,10 +76,37 @@ describe('ramBudgetBytes', () => {
     expect(ramBudgetBytes(-1, 85)).toBe(0);
     expect(ramBudgetBytes(NaN, 85)).toBe(0);
   });
-  it('clamps the percent defensively', () => {
+  it('clamps the percent defensively (ceiling = total − ADAPTIVE reserve)', () => {
     const total = 32 * GiB;
+    // On a 32 GiB desktop the adaptive reserve is 8% (2.56 GiB) — larger than
+    // the legacy 512 MiB floor that proved far too thin for a desktop.
     expect(ramBudgetBytes(total, 999)).toBe(
-      Math.min(total * (MAX_RAM_PERCENT / 100), total - MIN_OS_RESERVE_BYTES),
+      Math.min(total * (MAX_RAM_PERCENT / 100), total - osReserveBytes(total)),
     );
+  });
+});
+
+describe('osReserveBytes', () => {
+  const savedReserve = process.env.HUU_OS_RESERVE_MB;
+  afterEach(() => {
+    if (savedReserve === undefined) delete process.env.HUU_OS_RESERVE_MB;
+    else process.env.HUU_OS_RESERVE_MB = savedReserve;
+  });
+
+  it('reserves max(min(2GiB, 25%), 8%, 512MiB)', () => {
+    delete process.env.HUU_OS_RESERVE_MB;
+    expect(osReserveBytes(32 * GiB)).toBeCloseTo(32 * GiB * 0.08, -6); // 2.56 GiB (8% wins)
+    expect(osReserveBytes(16 * GiB)).toBe(2 * GiB); // 2 GiB cap wins
+    expect(osReserveBytes(4 * GiB)).toBe(1 * GiB); // 25% of a small box
+    expect(osReserveBytes(1 * GiB)).toBe(MIN_OS_RESERVE_BYTES); // 512 MiB floor
+  });
+
+  it('HUU_OS_RESERVE_MB overrides, capped at 90% of total', () => {
+    process.env.HUU_OS_RESERVE_MB = '4096';
+    expect(osReserveBytes(32 * GiB)).toBe(4096 * 1024 * 1024);
+    process.env.HUU_OS_RESERVE_MB = '999999';
+    expect(osReserveBytes(4 * GiB)).toBe(Math.floor(4 * GiB * 0.9));
+    process.env.HUU_OS_RESERVE_MB = 'garbage';
+    expect(osReserveBytes(32 * GiB)).toBeCloseTo(32 * GiB * 0.08, -6);
   });
 });

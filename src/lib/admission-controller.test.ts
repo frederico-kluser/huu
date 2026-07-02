@@ -32,6 +32,32 @@ describe('AdmissionController', () => {
     expect(c.shouldAdmit(ctx({ anyIntegrating: true }))).toBe(true);
   });
 
+  it('anyIntegrating never overrides zero capacity (the 33-run over-admission hole)', () => {
+    const c = new AdmissionController({ hysteresisChecks: 3 });
+    // A merging run used to admit REGARDLESS of headroom — with a deep queue
+    // and frequent merges that pulled runs in while the machine was shedding.
+    expect(c.shouldAdmit(ctx({ anyIntegrating: true, schedulerRemaining: 0 }))).toBe(false);
+  });
+
+  it('charges the per-run baseline against byte headroom when provided', () => {
+    const c = new AdmissionController({ hysteresisChecks: 1 });
+    const baseline = 384 * 1024 * 1024;
+    // Slots say yes, but the bytes can't fit one more run's fixed cost.
+    expect(
+      c.shouldAdmit(ctx({ headroomBytes: baseline - 1, runBaselineBytes: baseline })),
+    ).toBe(false);
+    expect(
+      c.shouldAdmit(ctx({ headroomBytes: baseline, runBaselineBytes: baseline })),
+    ).toBe(true);
+  });
+
+  it('respects a per-tick dynamic live cap below maxAdmitted', () => {
+    const c = new AdmissionController({ maxAdmitted: 8, hysteresisChecks: 1 });
+    // The machine only fits 2 runs this tick (budget ÷ (baseline + charge)).
+    expect(c.shouldAdmit(ctx({ liveAdmitted: 2, liveCap: 2 }))).toBe(false);
+    expect(c.shouldAdmit(ctx({ liveAdmitted: 1, liveCap: 2 }))).toBe(true);
+  });
+
   it('blocks (and resets) at the live cap', () => {
     const c = new AdmissionController({ maxAdmitted: 2, hysteresisChecks: 1 });
     expect(c.shouldAdmit(ctx({ liveAdmitted: 2 }))).toBe(false);

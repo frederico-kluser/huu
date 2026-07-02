@@ -184,6 +184,14 @@ async function boot() {
   // reflect the saved-history count on the topbar.
   restoreQueue();
   loadSettings();
+  // The SERVER is the source of truth for the machine-global RAM dial (it
+  // persists + applies it); localStorage is only a display cache. Sync it so
+  // the ⚙ modal always shows the value actually in force.
+  if (b.settings && typeof b.settings.ramPercent === 'number') {
+    S.settings.ramPercent = parseRamPercent(b.settings.ramPercent);
+    saveSettings();
+  }
+  if (b.budget) renderBudget(b.budget);
   renderQueue();
   syncTimeoutField();
   refreshHistoryBadge();
@@ -968,7 +976,8 @@ async function postRun(i) {
         mode: item.mode,
         concurrency: item.mode === 'manual' ? item.concurrency : undefined,
         timeoutMinutes: item.timeoutMinutes || globalTimeoutMinutes() || undefined,
-        ramPercent: globalRamPercent() || undefined,
+        // RAM dial no longer piggybacks here — it's a server setting applied
+        // LIVE via POST /api/settings (see the ⚙ modal handler).
         apiKey: apiKey || undefined,
         endpoint: endpoint || undefined,
         runDirectory: item.runDirectory || undefined,
@@ -1174,8 +1183,6 @@ function parseRamPercent(v) {
   if (!Number.isFinite(n) || n <= 0) return undefined;
   return Math.max(10, Math.min(95, n));
 }
-/** The machine-global RAM budget percent, or undefined = the 85% default. */
-function globalRamPercent() { return S.settings.ramPercent; }
 /** Reflect the global default into the per-project field's placeholder (blank inherits it). */
 function syncTimeoutField() {
   const g = S.settings.maxAgentMinutes;
@@ -1201,7 +1208,29 @@ $('globalTimeoutInput').addEventListener('input', (e) => {
 });
 $('globalRamPercentInput').addEventListener('input', (e) => {
   S.settings.ramPercent = parseRamPercent(e.target.value);
-  saveSettings();       // machine-global; applied to the shared budget on the next run
+  saveSettings();       // local cache only — the server is the source of truth
+});
+// Commit (blur/Enter) → POST to the server, which applies the dial to the
+// shared budget IMMEDIATELY (current AND future runs) and persists it across
+// restarts. The response echoes the EFFECTIVE value — no more "did 50% take?".
+$('globalRamPercentInput').addEventListener('change', async (e) => {
+  const pct = parseRamPercent(e.target.value);
+  try {
+    const r = await api('/api/settings', {
+      method: 'POST',
+      body: JSON.stringify({ ramPercent: pct ?? null }),
+    });
+    if (pct) {
+      S.settings.ramPercent = r.ramPercent;
+      e.target.value = String(r.ramPercent);
+    } else {
+      S.settings.ramPercent = undefined; // cleared → server default (placeholder shows it)
+    }
+    saveSettings();
+    toast(`RAM budget: ${r.ramPercent}% — applied to all runs now`);
+  } catch (err) {
+    toast(err.message, true);
+  }
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('settingsModal').hidden) closeSettings(); });
 
@@ -1571,6 +1600,7 @@ function connectSse() {
     if (!frame) return;
     if (frame.type === 'run') ingestRun(frame.run);
     else if (frame.type === 'agent-stream') logAgentStream(frame);
+    else if (frame.type === 'budget') renderBudget(frame.budget);
   };
   es.onerror = () => { /* EventSource auto-reconnects; nothing to do */ };
 }
@@ -1864,15 +1894,43 @@ setInterval(() => {
   }
 }, 1000);
 
+/* ---------------- Machine budget chip (topbar) ----------------
+   Fed by the 1 Hz `{type:'budget'}` SSE frame (+ bootstrap). Shows the dial
+   actually in force, live usage and the guard's pressure level — the feedback
+   loop the RAM gear never had. */
+const PRESSURE_LABELS = ['', 'over budget', 'pressure', 'thrash'];
+function renderBudget(b) {
+  const el = $('budgetChip');
+  if (!el || !b) return;
+  S.lastBudget = b;
+  const gib = (n) => (n / (1024 ** 3)).toFixed(1);
+  const psi = b.psiSome10 == null ? 'n/a' : `${Number(b.psiSome10).toFixed(1)}%`;
+  const level = Number(b.pressureLevel) || 0;
+  el.hidden = false;
+  el.dataset.level = String(level);
+  el.title =
+    `huu may use up to ${b.budgetPercent}% of RAM (${gib(b.budgetBytes)} GiB) across all runs. ` +
+    `Used ${gib(b.usedBytes)} of ${gib(b.totalBytes)} GiB · PSI some ${psi}` +
+    (b.pressureReason ? ` · guard: ${b.pressureReason}` : '') +
+    ` · footprint/agent ≈ ${b.observedAgentMemoryMb} MiB`;
+  el.innerHTML =
+    `<span class="budget-chip__pct">RAM ${esc(String(b.budgetPercent))}%</span>` +
+    `<span class="budget-chip__use">${esc(gib(b.usedBytes))}/${esc(gib(b.totalBytes))}G</span>` +
+    (level > 0 ? `<span class="budget-chip__lvl">${esc(PRESSURE_LABELS[level] || '')}</span>` : '');
+}
+
 /* ---------------- Concurrency control (topbar) ---------------- */
 function updateConc(st) {
   $('concVal').textContent = st.concurrency;
   const mode = st.autoScale ? st.autoScale.mode : 'manual';
-  $('concTag').textContent = mode === 'greedy' ? 'MAX' : mode;
+  // 'greedy' only reaches here from legacy state — web runs are scheduler-
+  // subordinate, where MAX never drove anything; the toggle now offers
+  // auto ⇄ manual only (the RAM dial in ⚙ Settings is the machine lever).
+  $('concTag').textContent = mode === 'greedy' ? 'auto' : mode;
 }
 $('concMode').addEventListener('click', async () => {
   const cur = S.run.state && S.run.state.autoScale ? S.run.state.autoScale.mode : 'manual';
-  const next = cur === 'auto' ? 'manual' : cur === 'manual' ? 'greedy' : 'auto';
+  const next = cur === 'manual' ? 'auto' : 'manual';
   try { await api('/api/run/concurrency', { method: 'POST', body: JSON.stringify({ mode: next, runId: S.activeRunId }) }); } catch (e) { toast(e.message, true); }
 });
 $('concUp').addEventListener('click', () => adjustConc(1));

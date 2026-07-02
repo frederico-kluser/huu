@@ -138,6 +138,20 @@ export function createWebServer(opts: WebServerOptions): {
 
   const manager = new WebRunManager(opts.cwd, scheduleBroadcast, broadcastAgentStream);
 
+  // Machine-global budget telemetry: one `{type:'budget'}` frame per second to
+  // every client while runs are tracked. Low-frequency by design — it rides its
+  // own frame type (never inflates the throttled `run` snapshot) and carries
+  // the dial, used/total RAM, PSI and the pressure level so the user can SEE
+  // that the gear took effect and when the guard engages.
+  const budgetTimer = setInterval(() => {
+    if (sseClients.size === 0) return;
+    const budget = manager.budgetTelemetry();
+    if (!budget) return;
+    const frame = JSON.stringify({ type: 'budget', budget });
+    for (const client of sseClients) writeSse(client.res, 'message', frame);
+  }, 1_000);
+  budgetTimer.unref?.();
+
   const requireToken = (req: IncomingMessage, res: ServerResponse): boolean => {
     if (!opts.token) return true;
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -272,6 +286,19 @@ export function createWebServer(opts: WebServerOptions): {
       const agent = snap.state?.agents.find((a) => a.agentId === id);
       return sendJson(res, 200, { logs: agent?.logs ?? [] });
     }
+    if (method === 'POST' && path === '/api/settings') {
+      // Machine-global settings. `ramPercent` applies to the shared scheduler
+      // IMMEDIATELY (all current + future runs) and persists server-side; a
+      // null/absent value clears the web override (back to env/default). The
+      // response echoes the EFFECTIVE value so the client can display what
+      // actually took — the old dial had no feedback loop at all.
+      const body = await readJsonBody(req);
+      const raw = body.ramPercent;
+      const pct =
+        typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined;
+      const effective = manager.setRamPercent(pct);
+      return sendJson(res, 200, { ok: true, ramPercent: effective });
+    }
     if (method === 'POST' && path === '/api/run') {
       return startRun(req, res);
     }
@@ -396,10 +423,8 @@ export function createWebServer(opts: WebServerOptions): {
         typeof body.timeoutMinutes === 'number'
           ? body.timeoutMinutes
           : undefined,
-      // Machine-global RAM budget dial (% of total). Configures the shared
-      // GlobalScheduler budget; absent → HUU_RAM_PERCENT/85 default.
-      ramPercent:
-        typeof body.ramPercent === 'number' ? body.ramPercent : undefined,
+      // NOTE: the RAM dial no longer piggybacks on run POSTs — it is a server
+      // setting (`POST /api/settings`) applied to the shared scheduler LIVE.
       // Authoritative priority = the project's index in the client's queue list,
       // so the first project is served first regardless of POST arrival order.
       priority: typeof body.priority === 'number' ? body.priority : undefined,
@@ -463,12 +488,18 @@ export function createWebServer(opts: WebServerOptions): {
       pipelines: listPipelinesInfo(opts.cwd),
       initialPipeline: opts.initialPipeline?.name ?? null,
       runs: manager.getSnapshots().map(serializeSnapshot),
+      // Server-persisted machine-global settings (source of truth for the ⚙
+      // modal — localStorage is only a cache) + the budget the scheduler is
+      // actually enforcing right now.
+      settings: { ramPercent: manager.effectiveRamPercent() },
+      budget: manager.budgetTelemetry(),
     };
   }
 
   // Abort any in-flight run when the server is torn down.
   server.on('close', () => {
     if (timer) clearTimeout(timer);
+    clearInterval(budgetTimer);
     manager.abort();
     for (const client of sseClients) client.res.end();
     sseClients.clear();

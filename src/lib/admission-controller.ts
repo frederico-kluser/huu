@@ -24,6 +24,21 @@ export interface AdmissionContext {
   schedulerRemaining: number;
   /** True when some admitted run is merging (its pool is drained → box idle). */
   anyIntegrating: boolean;
+  /**
+   * Optional: RAM bytes still free under the budget dial (reservations already
+   * charged). When provided, an admission also requires it to cover one run's
+   * fixed baseline + one agent — a run costs memory before its first agent is
+   * ever counted (Node structures, repo scans, worktree creation).
+   */
+  headroomBytes?: number;
+  /**
+   * Optional: this tick's effective live-run cap (e.g. budget ÷ (baseline +
+   * per-agent charge), so a small machine admits fewer runs). Clamped to
+   * `maxAdmitted`; absent → `maxAdmitted` alone (legacy).
+   */
+  liveCap?: number;
+  /** Bytes a run costs before its first agent (used with headroomBytes). */
+  runBaselineBytes?: number;
 }
 
 export interface AdmissionControllerOptions {
@@ -50,16 +65,28 @@ export class AdmissionController {
    * Decide whether to admit ONE more run this tick. Maintains the hysteresis
    * streak internally and resets it whenever it returns true (an admission
    * consumes the accumulated headroom) or when at the live cap.
+   *
+   * `anyIntegrating` only SHORT-CIRCUITS the hysteresis (a merging run's box is
+   * genuinely idle) — it never overrides a zero/negative capacity signal. The
+   * old behavior admitted on any merge regardless of headroom, which under a
+   * many-run queue pulled runs in while the machine was already shedding
+   * agents.
    */
   shouldAdmit(ctx: AdmissionContext): boolean {
     if (ctx.pendingCount <= 0) return false;
-    if (ctx.liveAdmitted >= this.maxAdmitted) {
+    const liveCap = Math.min(this.maxAdmitted, Math.max(1, ctx.liveCap ?? this.maxAdmitted));
+    if (ctx.liveAdmitted >= liveCap) {
       // At the cap — require fresh sustained headroom before the next admit.
       this.headroomStreak = 0;
       return false;
     }
-    this.headroomStreak = ctx.schedulerRemaining > 0 ? this.headroomStreak + 1 : 0;
-    if (ctx.anyIntegrating || this.headroomStreak >= this.hysteresisChecks) {
+    const hasCapacity =
+      ctx.schedulerRemaining > 0 &&
+      (ctx.headroomBytes === undefined ||
+        ctx.runBaselineBytes === undefined ||
+        ctx.headroomBytes >= ctx.runBaselineBytes);
+    this.headroomStreak = hasCapacity ? this.headroomStreak + 1 : 0;
+    if (hasCapacity && (ctx.anyIntegrating || this.headroomStreak >= this.hysteresisChecks)) {
       this.headroomStreak = 0;
       return true;
     }

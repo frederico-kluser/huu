@@ -265,6 +265,27 @@ body {
 .status-pill[data-s='queued'] .dot { background: var(--yellow); }
 .status-pill[data-s='queued'] { background: color-mix(in srgb, var(--yellow) 16%, transparent); }
 
+/* Machine-global budget chip — dial in force · used/total RAM · pressure
+   level (fed by the 1 Hz budget SSE frame). Escalates through the semantic
+   tokens as the guard climbs its ladder. */
+.budget-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 11px; border-radius: 999px;
+  background: var(--accent-soft); border: 1px solid var(--separator);
+  font-size: 12px; font-weight: 600; letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums; white-space: nowrap; flex: 0 0 auto;
+}
+.budget-chip__use { color: var(--text-2); font-weight: 500; }
+.budget-chip__lvl {
+  text-transform: uppercase; font-size: 10px; letter-spacing: 0.07em;
+  padding: 1px 7px; border-radius: 999px;
+  background: color-mix(in srgb, var(--yellow) 22%, transparent); color: var(--text);
+}
+.budget-chip[data-level='2'] { background: color-mix(in srgb, var(--yellow) 16%, transparent); }
+.budget-chip[data-level='2'] .budget-chip__lvl,
+.budget-chip[data-level='3'] .budget-chip__lvl { background: color-mix(in srgb, var(--red) 24%, transparent); }
+.budget-chip[data-level='3'] { background: color-mix(in srgb, var(--red) 16%, transparent); }
+
 /* Project selector — a dropdown (project · pipeline) to switch between
    concurrent runs (shown only when >1). */
 .run-selector {
