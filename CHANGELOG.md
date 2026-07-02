@@ -8,7 +8,49 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+### Added
+
+- **Hermetic pi runtime (default ON).** Every pi session huu composes —
+  openrouter AND azure backends, task agents and conflict resolvers alike — is
+  now hermetic: in-memory auth/settings/model-registry fed by the run's key,
+  ZERO reads of the host's `~/.pi`, ZERO global npm `pi-*` extension discovery
+  (`npm root -g` is never consulted), no skill/prompt/theme auto-discovery, and
+  a huu-owned agent dir (`~/.huu/pi-agent`, with `PI_CODING_AGENT_DIR` exported
+  only-when-unset as defense in depth). This closes the door a host-global
+  `pi-animations` extension once walked through to crash an entire multi-run
+  fleet from a detached timer. Debug escape hatch: `HUU_PI_HERMETIC=0` restores
+  the legacy host-global behavior byte-for-byte.
+- **`huu status` pi-runtime doctor.** The status report (text and `--json`) now
+  shows the installed pi version, whether hermetic mode is on, the effective
+  agent dir (and where it came from: env override / huu-owned / host), and the
+  host-global `pi-*` packages found-and-ignored. Never runs on `--liveness`
+  (the Docker HEALTHCHECK path stays cheap).
+- **RAM-tuning env knobs + footprint observability.** New
+  `HUU_AGENT_MEM_SEED_MB` (per-agent memory seed, clamped 128–2048 MiB) and
+  `HUU_AGENT_MEM_EMA_ALPHA` (EMA factor, 0.01–1) let a user who has MEASURED
+  their real per-agent footprint tune the AutoScaler's admission model —
+  defaults are unchanged (the pessimistic 1536 MiB seed remains the OOM guard).
+  The scaler now logs its effective memory model on start (`scaler`/`config`)
+  and significant observed-footprint moves (`scaler`/`ema_move`) to the debug
+  NDJSON for evidence-based calibration.
+
 ### Changed
+
+- **pi dependency pinned exactly** (`@mariozechner/pi-coding-agent` and
+  `@mariozechner/pi-ai` at `0.73.1`, no caret): the hermetic composition relies
+  on SDK option names, so version drift is now an explicit, reviewed choice
+  (the hermetic canary tests fail loudly on a regressing bump).
+- **Agent context files are now SCOPED.** pi sessions no longer auto-inject
+  AGENTS.md/CLAUDE.md from every ancestor directory (which reached `$HOME` and
+  `~/.pi/agent`); huu injects only the target repo root's AGENTS.md/CLAUDE.md
+  (deduped by realpath). Pipelines that relied on `$HOME`-level context files
+  must move that guidance into the repo or the pipeline prompt.
+- **`huu Test Suite` fan-out widened (12 → 24 files).** The per-file test-writing
+  step is this pipeline's only parallel stage, so its width is what actually
+  exercises the machine-wide RAM budget; at 12 the aggregate demand rarely
+  reached the admission ceiling (the RAM dial went unused). Existing users keep
+  their materialized `pipelines/huu-test-suite.pipeline.json` (bootstrap never
+  overwrites) — delete it to pick up the new width.
 
 - **Guided web launch — pipeline → projects → queue (a "cart" flow).** The web
   launch view is now a 4-step wizard: **pick a pipeline**, **mark one or more

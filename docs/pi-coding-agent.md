@@ -60,13 +60,42 @@ Pontos-chave:
 
 | Pacote                          | Versão    | Papel                                            |
 | ------------------------------- | --------- | ------------------------------------------------ |
-| `@mariozechner/pi-coding-agent` | `^0.73.1` | Sessão de agente: tools read/edit/write/bash     |
-| `@mariozechner/pi-ai`           | `^0.73.1` | Registry de modelos + provider OpenRouter        |
+| `@mariozechner/pi-coding-agent` | `0.73.1` (pin exato) | Sessão de agente: tools read/edit/write/bash |
+| `@mariozechner/pi-ai`           | `0.73.1` (pin exato) | Registry de modelos + provider OpenRouter    |
 | `@langchain/openai`             | `^1.4.5`  | `ChatOpenAI` (assistant/recon — **não** Pi)      |
 | `zod`                           | `^3.23.0` | Schema do pipeline JSON                          |
 
-> Versões verificadas em `package.json` (o doc original citava `^0.70.6`,
-> hoje desatualizado).
+> Versões verificadas em `package.json`. O pin é EXATO (sem caret) de
+> propósito: o runtime hermético (§2.1) depende dos option-names do SDK, e um
+> patch-bump silencioso poderia regredi-lo — os testes-canário de
+> `hermetic.test.ts` falham alto se isso acontecer.
+
+### 2.1 Runtime hermético (default)
+
+O huu compõe TODA sessão pi (openrouter E azure — os dois factories passam por
+`src/orchestrator/backends/pi/hermetic.ts`) de forma **hermética**: a sessão
+carrega SÓ o que o huu injeta, nunca o estado do SO. Sem isso, os defaults de
+`createAgentSession` leem `~/.pi/agent/settings.json` do host, resolvem a lista
+`packages` via `npm root -g` e carregam **extensões `pi-*` globais** dentro dos
+agentes headless do huu (foi exatamente assim que um timer solto da extensão
+global `pi-animations` derrubou um fleet multi-run inteiro), além de ler
+`auth.json`/`models.json` do host e auto-injetar AGENTS.md/CLAUDE.md de todos os
+diretórios ancestrais até `/`.
+
+Composição hermética (`buildPiSessionEnvironment`):
+
+| Superfície | Hermético (default) | Legacy (`HUU_PI_HERMETIC=0`) |
+| --- | --- | --- |
+| Auth | `AuthStorage.inMemory()` + key da run | `~/.pi/agent/auth.json` |
+| Modelos | `ModelRegistry.inMemory()` | `~/.pi/agent/models.json` |
+| Settings | `SettingsManager.inMemory({})` (packages=[]) | settings.json global + do projeto |
+| Extensões/skills/prompts/temas | desligados (`no*` flags) | auto-descoberta (`npm root -g`, `~/.pi`, ancestrais) |
+| Contexto (AGENTS.md/CLAUDE.md) | SÓ a raiz do repo-alvo (escopado, dedupe por realpath) | todos os ancestrais até `/` + `~/.pi/agent` |
+| Agent dir | `~/.huu/pi-agent` (+ `PI_CODING_AGENT_DIR` exportada só-se-unset) | `~/.pi/agent` |
+
+O flip do contexto escopado é o default `includeRepoContext: true` no seam.
+Diagnóstico: `huu status` imprime `pi runtime: <versão> · hermetic=on ·
+agentDir=… ` e lista os pacotes `pi-*` globais encontrados-e-ignorados.
 
 **Pi >= 0.70 não expõe mais `setSystemPrompt()`.** Por isso o `huu`
 embute o "system prompt" como **header do user message** (ver §6). Tudo

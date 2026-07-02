@@ -298,6 +298,9 @@ huu --cli                 # TUI no terminal
 | `HUU_CLI=1` | Default pra TUI (igual a `--cli`). |
 | `HUU_RAM_PERCENT` / `--ram-percent=<n>` | Orçamento de RAM como % do total da máquina (default `85`, faixa 10–95). Também na Web em Settings → RAM budget %. |
 | `HUU_OOM_SCORE_ADJ` | Ajuste do `oom_score_adj` do processo huu (default conservador; best-effort, só "pega" com privilégio, ex. no container). |
+| `HUU_PI_HERMETIC=0` | Escape de debug: desliga o **runtime pi hermético** (por padrão as sessões pi do huu NUNCA leem `~/.pi` nem carregam extensões `pi-*` globais do npm — só os prompts do huu + AGENTS.md/CLAUDE.md da raiz do repo-alvo). `huu status` mostra o estado. |
+| `HUU_AGENT_MEM_SEED_MB` | Seed do footprint por-agente do AutoScaler (MiB, clamp 128–2048; default pessimista `1536`). Baixe SÓ com medição — veja `scaler`/`ema_move` no debug log. |
+| `HUU_AGENT_MEM_EMA_ALPHA` | Fator da EMA do footprint observado (0.01–1; default `0.2`). Maior = converge mais rápido do seed pro valor real. |
 
 ### Modo simulação (`/simulation`)
 
