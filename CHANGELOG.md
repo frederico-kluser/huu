@@ -10,6 +10,64 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ### Added
 
+- **The RAM dial is now a contract, enforced at every layer** (born from the
+  33-concurrent-runs incident that froze a 32 GiB host at both 85% and 50%):
+  - **Pressure ladder** (`src/orchestrator/pressure-ladder.ts`): the memory
+    guard's single RAM/CPU ≥ 95% trigger — which a swapping host never crosses
+    (it thrash-freezes first) — is replaced by graded levels: **L1** usage
+    sustained over the budget dial → spawn freeze + shed newest agents until
+    back under (never below one live agent: degrade to sequential, not zero);
+    **L2** host pressure (earlyoom-style available-RAM + free-swap floors, PSI
+    `full avg10` ≥ 5%, sustained swap-in, or the legacy 95% line) → shed every
+    tick with the guard tick accelerated 500 ms → 150 ms, queued-run admission
+    frozen; **L3** emergency floors / PSI full ≥ 20%. All thresholds have
+    `HUU_GUARD_*` env knobs.
+  - **Reservation accounting**: admission charges in-flight spawns (full
+    footprint) and young agents (half) against the budget, closing the 1–2 s
+    stale-metrics window in which N runs could over-admit in a burst. The
+    footprint EMA samples only MATURE cohorts (young agents looked cheap and
+    dragged the estimate down — the over-admission spiral) with asymmetric
+    smoothing (tracks up fast, down slowly); its clamp rose 2048 → 4096 MiB.
+  - **Swap/PSI-full awareness**: the sampler now reads SwapTotal/SwapFree, PSI
+    `full avg10` (the canonical thrash signal) and the `/proc/vmstat` swap-in
+    rate, and polls at 250 ms (instead of 1 s) near the budget edge.
+- **Kernel memory ceilings** (ROADMAP Fase 2.1 delivered): on native Linux huu
+  re-execs itself into a transient **systemd user scope** with `MemoryHigh` =
+  total − OS reserve (the kernel throttles huu's whole tree before the host
+  thrashes; the desktop stays alive), `MemoryMax` = total − reserve/2 (worst
+  case: huu dies inside its scope, never the host), `MemorySwapMax`
+  (`HUU_SWAP_MAX_MB`, default 4 GiB) and `TasksMax`. Degrades to unwrapped with
+  a one-line note when systemd isn't usable; `HUU_NO_CGROUP=1` opts out. The
+  Docker wrapper applies the same ceiling to the container (`--memory`,
+  `--memory-swap`, `--pids-limit`; `HUU_DOCKER_MEMORY_MB` / `HUU_NO_MEM_LIMIT`
+  overrides) — an unlimited container could consume 100% of host RAM.
+- **OOM victim shaping for tool subprocesses**: a 2 s `/proc` sweep raises
+  agent tool children (vitest workers, npm installs, builds) to
+  `oom_score_adj +500` (`HUU_CHILD_OOM_SCORE_ADJ`), so a kernel OOM kills a
+  test runner — surfacing as a task retry — instead of the orchestrator or the
+  user's session. They previously inherited huu's protective −100.
+- **Web settings are now server-owned and live**: the ⚙ RAM-budget dial POSTs
+  to the new `POST /api/settings`, which applies it to the shared scheduler
+  IMMEDIATELY (current + queued runs), persists it in
+  `~/.config/huu/web-settings.json` and echoes the effective value;
+  `/api/bootstrap` reads it back. Previously the dial only traveled
+  piggybacked on each run POST — changing it mid-run silently did nothing and
+  a blank field silently meant 85%.
+- **Budget telemetry**: a 1 Hz `{type:'budget'}` SSE frame + topbar chip show
+  the dial in force, used/total RAM, PSI and the guard's pressure level; a
+  running run whose agents were all withheld by the guard shows an amber
+  pulsing **paused (RAM)** pill and resumes in place when RAM frees up.
+  `huu status` gains a **ram containment** doctor section: dial + source,
+  budget bytes, detected kernel ceiling (or "NONE — software guard only"),
+  live PSI/swap and every active `HUU_*` safety knob.
+- **Queue as many projects as you want**: the web accept cap is now
+  `HUU_MAX_QUEUED_RUNS` (default 256, was a hardcoded 64); queued runs cost no
+  budget. Admission charges each run's fixed baseline
+  (`HUU_RUN_BASELINE_MB`, 384 MiB) against byte headroom, adapts the live-run
+  cap to the machine (budget ÷ (baseline + agent footprint), ceiling
+  `HUU_MAX_LIVE_RUNS` = 8), and a merging run no longer bypasses a
+  zero-capacity signal (the hole that pulled runs in while the machine was
+  shedding).
 - **Hermetic pi runtime (default ON).** Every pi session huu composes —
   openrouter AND azure backends, task agents and conflict resolvers alike — is
   now hermetic: in-memory auth/settings/model-registry fed by the run's key,
@@ -36,6 +94,24 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ### Changed
 
+- **MAX (greedy) removed from the web UI**: every web run is subordinate to
+  the shared scheduler, where the per-run greedy flag never drove anything —
+  the button was lying (the 33-run incident was launched with it "on"). Legacy
+  `greedy` POSTs coerce to `auto`; the topbar toggle cycles Auto ⇄ Manual. The
+  single-run TUI MAX became **budget-greedy**: it floods one agent per queued
+  task only while the RAM dial has headroom, instead of up to the 95% destroy
+  line — the dial holds in every mode.
+- **OS reserve**: the budget's untouchable floor grew from a flat 512 MiB to
+  an adaptive `max(min(2 GiB, 25%), 8%, 512 MiB)` of total RAM
+  (`HUU_OS_RESERVE_MB` overrides) — 512 MiB was far too thin for a desktop
+  running a browser next to 33 runs.
+- The RAM-safety env knobs (`HUU_RAM_PERCENT`, `HUU_GUARD_*`,
+  `HUU_OS_RESERVE_MB`, run caps) now pass through the Docker wrapper into the
+  container; a host `HUU_RAM_PERCENT` was previously ignored inside.
+- `HUU_AGENT_MEM_SEED_MB` clamp widened to 128–4096 MiB (was 2048), matching
+  the raised footprint-estimate ceiling.
+- Terminal web runs no longer retain their full untrimmed state for the
+  server's lifetime (slim snapshot + retention cap of 100 terminal runs).
 - **pi dependency pinned exactly** (`@mariozechner/pi-coding-agent` and
   `@mariozechner/pi-ai` at `0.73.1`, no caret): the hermetic composition relies
   on SDK option names, so version drift is now an explicit, reviewed choice
@@ -67,6 +143,11 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ### Fixed
 
+- **The memory guard now fires on a swapping host.** It previously keyed only
+  on RAM/CPU ≥ 95%, which swap keeps below the line while the machine
+  livelocks — the "guard never fired" signature of both the 9-run and the
+  33-run freezes. The pressure ladder's earlyoom-style (avail + free-swap) and
+  PSI-full triggers catch exactly that state.
 - **Web folder picker no longer lists symlinked files as folders.** `listDirs`
   now follows directory symlinks but excludes symlinks that resolve to a file
   (e.g. `CLAUDE.md -> AGENTS.md`), so only real navigable/markable directories

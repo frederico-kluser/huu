@@ -22,6 +22,8 @@ auto-scaling, cost control, port isolation, FAQ, roadmap.
   - [Files written by the tool](#files-written-by-the-tool)
   - [Recommended models](#recommended-models)
 - [Auto-scaling concurrency](#auto-scaling-concurrency)
+  - [Memory guard: the pressure ladder](#memory-guard-the-pressure-ladder)
+  - [Kernel memory ceilings](#kernel-memory-ceilings)
 - [Cost predictability](#cost-predictability)
 - [Port isolation (overview)](#port-isolation-overview)
 - [Visual conventions](#visual-conventions)
@@ -279,16 +281,26 @@ sent with each run, never written to `~/.config`.
 | `COPILOT_GITHUB_TOKEN` | yes (when `--copilot`) | GitHub fine-grained PAT with "Copilot Requests" scope (or `GH_TOKEN`). Required only when `--backend=copilot` is active. Same precedence chain via `COPILOT_GITHUB_TOKEN_FILE` and `/run/secrets/copilot_token`. |
 | `HUU_WORKTREE_BASE` | no | Override the base directory for per-run worktrees. Absolute paths are used verbatim; relative paths are resolved against the repo root. Default: `<repo>/.huu-worktrees`. Used by the isolated-volume container mode. |
 | `HUU_CHECK_PUSH` | no | When set, preflight verifies the configured remote is reachable before the run starts. |
-| `HUU_RAM_PERCENT` | no | RAM budget as a percent of TOTAL machine memory — the admission dial that governs concurrency. Default `85`, clamped `10`–`95`; the budget is floored at `total − 512 MiB` reserved for the OS. Machine-global (one machine, one RAM): in multi-run it configures the single shared budget scaler, with no per-project override. Also exposed as the CLI flag `--ram-percent=<n>` and the web Settings field "RAM budget %". See [Auto-scaling concurrency](#auto-scaling-concurrency). |
-| `HUU_OOM_SCORE_ADJ` | no | Adjusts the huu process's `/proc/self/oom_score_adj` so the kernel's OOM-killer biases away from huu. Conservative default (`-100`, a mild nudge that does NOT immunize); best-effort — a no-op without privilege, so it only takes effect where huu can write the file (e.g. as root inside the container). Linux-only. |
+| `HUU_RAM_PERCENT` | no | RAM budget as a percent of TOTAL machine memory — the admission dial that governs concurrency. Default `85`, clamped `10`–`95`; the budget is floored so the adaptive OS reserve (see `HUU_OS_RESERVE_MB`) stays untouchable. Machine-global (one machine, one RAM): in multi-run it configures the single shared budget scaler, with no per-project override. Also exposed as the CLI flag `--ram-percent=<n>` and the web Settings field "RAM budget %" — the web field now applies LIVE (`POST /api/settings` reconfigures current + queued runs immediately) and persists server-side in `~/.config/huu/web-settings.json`. See [Auto-scaling concurrency](#auto-scaling-concurrency). |
+| `HUU_OS_RESERVE_MB` | no | Overrides the OS reserve — the slice of total RAM the budget (and the kernel ceilings) never touch. The default is now ADAPTIVE: `max(min(2 GiB, 25% of total), 8% of total, 512 MiB)` — the old flat 512 MiB was far too thin for a desktop. Value in MiB, capped at 90% of total. |
+| `HUU_GUARD_*` | no | Threshold family for the graded **pressure ladder** that replaced the single ≥ 95% memory-guard trigger — available-RAM + free-swap floors, PSI `full` lines, swap-in rate/sustain, over-budget sustain, re-preempt spacing. All have safe defaults; the full table lives in [Memory guard: the pressure ladder](#memory-guard-the-pressure-ladder). |
+| `HUU_OOM_SCORE_ADJ` | no | Adjusts the huu process's `/proc/self/oom_score_adj` so the kernel's OOM-killer biases away from huu. Conservative default (`-100`, a mild nudge that does NOT immunize); best-effort — a NEGATIVE value only sticks with `CAP_SYS_RESOURCE`, which neither a plain user process nor the container (it runs `--user <uid>:<gid>`, non-root) has, so the nudge usually no-ops. The effective lever is `HUU_CHILD_OOM_SCORE_ADJ` below — RAISING a score needs no privilege. Linux-only. |
+| `HUU_CHILD_OOM_SCORE_ADJ` | no | OOM bias for huu's DESCENDANT processes: a watcher sweeps `/proc` every 2 s and raises agent tool children (vitest workers, npm installs, builds…) to `oom_score_adj` `+500` (the default), so a kernel OOM kills a test runner — surfacing as a plain task retry — instead of the orchestrator or your desktop session. Set `0` to disable the watcher. Linux-only. |
+| `HUU_NO_CGROUP` | no | Set `1` to skip the transient systemd user scope huu re-execs itself into on native Linux (the kernel memory ceiling — see [Kernel memory ceilings](#kernel-memory-ceilings)). Without the flag huu already degrades to unwrapped, with a one-line stderr note, when systemd isn't usable. |
+| `HUU_SWAP_MAX_MB` | no | Swap ceiling for huu's process tree, in MiB (default `4096`; `0` = no swap at all). Applied as `MemorySwapMax` on the native systemd scope and as the `--memory-swap` delta on the Docker container. |
+| `HUU_DOCKER_MEMORY_MB` | no | Overrides the container's memory ceiling, in MiB. Default: host total − OS reserve, passed by the wrapper as `docker run --memory`. |
+| `HUU_NO_MEM_LIMIT` | no | Set `1` to launch the container with NO memory ceiling (the legacy behavior — an unlimited container can consume 100% of host RAM). |
+| `HUU_MAX_LIVE_RUNS` | no | Ceiling on multi-run executions live at once (default `8`). The effective cap ADAPTS DOWN to what the budget actually fits: `budget ÷ (HUU_RUN_BASELINE_MB + per-agent footprint)`. |
+| `HUU_MAX_QUEUED_RUNS` | no | Total runs the web server accepts (default `256`; was a hardcoded 64). Queued runs cost no budget — queue as many projects as you want. |
+| `HUU_RUN_BASELINE_MB` | no | Fixed per-run baseline (MiB, default `384`) charged against byte headroom when admitting a queued run, on top of the per-agent footprint. |
 | `HUU_PI_HERMETIC` | no | Debug escape hatch for the **hermetic pi runtime**. By default (`on`) every pi session huu composes is hermetic: in-memory auth/settings/model-registry, NO `~/.pi` reads, NO global npm `pi-*` extension discovery (`npm root -g` is never consulted), no skill/prompt/theme auto-discovery — only huu's prompts plus AGENTS.md/CLAUDE.md read from the TARGET REPO ROOT (scoped; never `$HOME` or ancestors). Set `0`/`false` to reproduce the legacy host-global behavior when debugging. `huu status` prints the effective state and lists host-global `pi-*` packages found-and-ignored. |
-| `HUU_AGENT_MEM_SEED_MB` | no | Cold-start seed for the AutoScaler's per-agent memory estimate, in MiB (clamped `128`–`2048`). The pessimistic default `1536` is a deliberate OOM guard — it under-admits until the EMA observes the real footprint. Lower it ONLY from evidence: watch `scaler`/`config` and `scaler`/`ema_move` in the debug NDJSON (or `AutoScaleStatus.observedAgentMemoryMb` in the UIs) across a few runs, then seed near the observed p95. |
+| `HUU_AGENT_MEM_SEED_MB` | no | Cold-start seed for the AutoScaler's per-agent memory estimate, in MiB (clamped `128`–`4096`). The pessimistic default `1536` is a deliberate OOM guard — it under-admits until the EMA observes the real footprint. Lower it ONLY from evidence: watch `scaler`/`config` and `scaler`/`ema_move` in the debug NDJSON (or `AutoScaleStatus.observedAgentMemoryMb` in the UIs) across a few runs, then seed near the observed p95. |
 | `HUU_AGENT_MEM_EMA_ALPHA` | no | Smoothing factor of the observed per-agent footprint EMA (clamped `0.01`–`1`; default `0.2` ≈ 5 s time constant at the 1 Hz poll). Raise it to converge faster from the seed to the measured footprint (more reactive, noisier); lower it for stability. |
 | `HUU_IN_CONTAINER` | no | Set to `1` automatically by the official Docker image. Used by the wrapper to short-circuit the auto-Docker re-exec (so the same binary runs the TUI directly inside the container). |
 | `HUU_IMAGE` | no | Override the container image used by the auto-Docker wrapper. Default: `ghcr.io/frederico-kluser/huu:latest`. Useful for pinning a release or pointing at a private mirror. |
 | `HUU_NO_DOCKER` | no | When set to `1` or `true`, skip the auto-Docker re-exec and run huu natively. Equivalent to the `--no-docker` flag (the CI-neutral alias of `--yolo`). Requires the local `npm install` of huu's deps. Useful for huu development itself and for CI runners — see [`docs/ci.md`](ci.md). |
 | `HUU_DOCKER_NETWORK` | no | Pass-through value for `docker run --network=<value>`. By default huu auto-creates `huu-net-mtu<N>` when on a VPN (default-route MTU < 1500); set this to override (e.g., `host`, or the name of a pre-existing user-managed network). |
-| `HUU_DOCKER_PASS_ENV` | no | Whitespace-separated list of additional env var names to forward into the container. The wrapper always forwards `OPENROUTER_API_KEY`, `OPENROUTER_API_KEY_FILE`, `HUU_CHECK_PUSH`, `HUU_WORKTREE_BASE`, `HUU_HOST_HOME`, and `TERM` — use this to add custom names. |
+| `HUU_DOCKER_PASS_ENV` | no | Whitespace-separated list of additional env var names to forward into the container. The wrapper always forwards `OPENROUTER_API_KEY`, `OPENROUTER_API_KEY_FILE`, `HUU_CHECK_PUSH`, `HUU_WORKTREE_BASE`, `HUU_HOST_HOME`, `TERM`, and every RAM-safety knob (`HUU_RAM_PERCENT`, the `HUU_GUARD_*` family, `HUU_OS_RESERVE_MB`, `HUU_MAX_LIVE_RUNS`, `HUU_MAX_QUEUED_RUNS`, `HUU_RUN_BASELINE_MB`, `HUU_OOM_SCORE_ADJ`, `HUU_NO_PAUSE`) — a host `HUU_RAM_PERCENT` was previously ignored inside the container. Use this to add custom names. |
 | `HUU_HOST_HOME` | no | Set automatically by the wrapper to the host's home directory. Inside the container, `getHuuHome()` reads it so writes to `~/.huu/` and the default `~/Downloads/` export target land on the host's bind-mounted filesystem. Unset outside Docker. |
 | `HUU_UID` | no | Container UID for `docker compose` runs. Default: `1000`. Override with `HUU_UID=$(id -u)` if your host UID isn't 1000, or use the `scripts/huu-compose` wrapper which sets it automatically. |
 | `HUU_GID` | no | Container GID for `docker compose` runs. Same defaulting rules as `HUU_UID`. |
@@ -344,19 +356,25 @@ the key, columns degrade to `—` placeholders without blocking selection.
 
 **Memory-aware auto-scaling is on by default.** Concurrency is governed
 by a **RAM budget dial**: a configurable percent of TOTAL machine memory
-(default `85`, clamped `10`–`95`), floored so at least 512 MiB stays
-reserved for the OS. The auto-scaler admits a new agent only while it
-fits inside that budget — `ramBudgetBytes(total, percent) − ramUsedBytes`
-divided by the agent's observed footprint — and the read is cgroup-aware,
-so inside a container it respects the container's limit, not the host's.
-Set the dial with `--ram-percent=<n>`, the `HUU_RAM_PERCENT` env var, or
-the web Settings field "RAM budget %"; it is machine-global (one machine,
-one RAM — no per-project override). Pass `--concurrency=N` or
-`--no-auto-scale` to pin **manual mode** instead (live-tunable with
-`+`/`-` on the run dashboard; `A` re-enables auto). In headless configs,
-setting `"concurrency"` pins manual; omit it for auto.
+(default `85`, clamped `10`–`95`), floored so an **adaptive OS reserve**
+stays untouchable — `max(min(2 GiB, 25% of total), 8% of total, 512 MiB)`,
+overridable with `HUU_OS_RESERVE_MB` (the old flat 512 MiB was far too
+thin for a desktop running a browser next to a big run). The auto-scaler
+admits a new agent only while it fits inside that budget —
+`ramBudgetBytes(total, percent) − ramUsedBytes` divided by the agent's
+observed footprint — and the read is cgroup-aware, so inside a container
+it respects the container's limit, not the host's. Set the dial with
+`--ram-percent=<n>`, the `HUU_RAM_PERCENT` env var, or the web Settings
+field "RAM budget %" — the web dial applies LIVE to current and queued
+runs and persists server-side (`~/.config/huu/web-settings.json`); it is
+machine-global (one machine, one RAM — no per-project override). Pass
+`--concurrency=N` or `--no-auto-scale` to pin **manual mode** instead
+(live-tunable with `+`/`-` on the run dashboard; `A` re-enables auto).
+In headless configs, setting `"concurrency"` pins manual; omit it for
+auto.
 
-Three refinements keep the budget from overshooting on a cold start:
+Four refinements keep the budget from overshooting on cold starts and
+bursts:
 
 - **PSI front brake (Linux).** The scaler reads memory Pressure Stall
   Information — the per-cgroup `memory.pressure` when containerized, else
@@ -365,10 +383,21 @@ Three refinements keep the budget from overshooting on a cold start:
   saturates, so this catches a burst the lagging RAM gate would miss.
   Where PSI is unavailable (macOS, kernels without `CONFIG_PSI`) it falls
   back to the RAM-budget gate above.
-- **Pessimistic seed.** The per-agent estimate starts at 1536 MiB
-  (clamped 128–2048) and the moving average corrects it *down* from real
-  measurements — a cold start deliberately under-admits, then opens up as
-  the true footprint is learned.
+- **Pessimistic seed, mature-cohort EMA.** The per-agent estimate starts
+  at 1536 MiB (clamped 128–4096) and a moving average corrects it from
+  real measurements — but it samples only MATURE agents (≈ 45 s old):
+  young agents haven't faulted in their full working set yet, and letting
+  them into the average once dragged the estimate down into an
+  over-admission spiral. The EMA is also asymmetric — it tracks up fast
+  and down slowly — so a cold start deliberately under-admits and a
+  scare is remembered.
+- **Reservation accounting.** Admission charges in-flight spawns at the
+  FULL footprint and young agents (< 45 s) at HALF, so a burst of
+  admissions can't overshoot inside the 1–2 s window where metrics are
+  stale. Near the budget edge the metrics poll accelerates 1 s → 250 ms,
+  and the sampler also reads SwapTotal/SwapFree, PSI `full avg10` and
+  the `/proc/vmstat` swap-in rate — the signals the pressure ladder
+  below consumes.
 - **Fast-ramp.** The worker pool caps new spawns to
   `max(1, ceil(busy × 0.5))` per tick (~+50%/tick), so auto mode never
   floods the whole pool in a single tick. Manual mode still fills
@@ -383,10 +412,12 @@ moves between five states, surfaced in the header as
 - **SCALING_UP** — actively granting spawn slots.
 - **BACKING_OFF** — usage above the stop threshold (default 90%);
   refuses new spawns but leaves running agents alone.
-- **DESTROYING** — usage above the destroy threshold (default 95%);
-  kills the **newest** agent (`killed_by_autoscaler` phase) to recover
-  headroom. The killed card returns to the TODO column with a `↻N`
-  requeue counter and the task restarts from zero later — older agents'
+- **DESTROYING** — the pressure ladder (below) demands shedding; the
+  **newest** agent is preempted to recover headroom. By default it is
+  **paused** — worktree, branch and session preserved, amber `PAUSED`
+  card with a `⏸N` badge, resumed in place once headroom returns; it is
+  killed and requeued (`↻N`, task restarts from zero) only when a
+  checkpoint isn't possible or under `HUU_NO_PAUSE=1`. Older agents'
   work is never lost.
 - **COOLDOWN** — 30s pause after a destroy or backoff event so the
   system doesn't oscillate.
@@ -394,21 +425,94 @@ moves between five states, surfaced in the header as
 Manual `+`/`-` on the dashboard automatically disables auto-scale —
 press `A` to turn it back on. The **memory guard stays active in manual
 mode** (the header swaps the `AUTO` chip for a `GUARD` chip with the
-kill count). The status block also shows live `CPU%` and `RAM%`,
+preempt count). The status block also shows live `CPU%` and `RAM%`,
 mirroring the `SystemMetricsBar` so you don't have to correlate two
 readouts.
 
-**MAX mode (`M`)** is a third, greedy mode: it floods the pool with one
-agent per queued task (up to the hard ceiling) and lets the always-on
-memory guard be the sole backstop, so concurrency settles right at the
-destroy threshold. The header shows a blue `MAX <STATE>` chip with the
-kill count; cooldown damping keeps it from thrashing. Press `M` again
-(or `A`) to return to auto, `+`/`-` to drop to manual.
+**MAX mode (`M`, single-run TUI only)** is a third, **budget-greedy**
+mode: it floods the pool with one agent per queued task — but only while
+the RAM-budget dial still has headroom (the PSI brake and the legacy 95%
+line also hold), instead of flooding up to the 95% destroy line as it
+used to. The dial holds in every mode. The header shows a blue `MAX
+<STATE>` chip with the preempt count; cooldown damping keeps it from
+thrashing. Press `M` again (or `A`) to return to auto, `+`/`-` to drop
+to manual. The **web UI no longer offers MAX**: every web run is
+subordinate to the shared multi-run scheduler, where a per-run greedy
+flag never drove anything — the topbar toggle cycles Auto ⇄ Manual, and
+legacy `greedy` POSTs coerce to `auto`.
 
 Override defaults by setting `agentMemoryEstimateMb`, `budgetPercent`,
 `admitPsiThreshold`, `stopThresholdPercent`, `destroyThresholdPercent`,
 `cooldownMs`, and `maxAgents` in code if you embed the orchestrator; the
 CLI exposes `--ram-percent=<n>`, `--concurrency=N`, and `--no-auto-scale`.
+
+### Memory guard: the pressure ladder
+
+The memory guard used to have a single trigger — RAM or CPU ≥ 95% —
+which a swapping host never crosses: it thrash-freezes first. It is
+replaced by a graded **pressure ladder**, evaluated on every guard tick
+in every concurrency mode (auto, manual and MAX):
+
+- **L1 — over budget.** Usage sustained over the RAM-budget dial for
+  ~3 s (`HUU_GUARD_OVER_BUDGET_MS`) → spawns freeze and the guard pauses
+  the newest agents (one per tick, spaced by `HUU_GUARD_L1_REPREEMPT_MS`)
+  until usage is back under the dial. L1 never drains below ONE live
+  agent — the run degrades to sequential, never to zero.
+- **L2 — host pressure** (earlyoom-style). Available RAM < 10% AND free
+  swap < 10% (a host with no swap counts as swap-exhausted), OR PSI
+  `full avg10` ≥ 5%, OR sustained swap-in (≥ 1000 pages/s for 2 s), OR
+  the legacy RAM/CPU ≥ 95% line → shed one victim EVERY tick, with the
+  guard tick accelerated 500 ms → 150 ms and admission of queued runs
+  frozen.
+- **L3 — emergency.** Available < 5% AND free swap < 5%, OR PSI `full`
+  ≥ 20% — the same shedding, at the highest urgency.
+
+The victim is always the **newest** agent (least work done, picked by
+`startedAt`; in multi-run, the lowest-priority run's newest agent
+first). Pausing is the default preemption — checkpoint the session,
+dispose the agent to free RAM, keep the worktree + branch + transcript,
+resume in place once headroom returns; `HUU_NO_PAUSE=1`, or a backend
+that can't checkpoint, falls back to kill + requeue (`↻N`).
+
+Every threshold has an env knob:
+
+| Knob | Default | Level | Meaning |
+|---|---|---|---|
+| `HUU_GUARD_OVER_BUDGET_MS` | `3000` | L1 | How long usage must stay over the RAM-budget dial before spawns freeze and pausing starts. |
+| `HUU_GUARD_L1_REPREEMPT_MS` | `2500` | L1 | Minimum spacing between successive L1 pause victims. |
+| `HUU_GUARD_AVAIL_PCT` | `10` | L2 | Available-RAM floor (% of total), combined with the swap floor. |
+| `HUU_GUARD_SWAP_FREE_PCT` | `10` | L2 | Free-swap floor (%). No swap configured counts as swap-exhausted. |
+| `HUU_GUARD_PSI_FULL_HIGH` | `5` | L2 | PSI `full avg10` (%) — the canonical thrash signal. |
+| `HUU_GUARD_SWAPIN_PAGES_SEC` | `1000` | L2 | Swap-in rate (pages/s) that counts as thrashing… |
+| `HUU_GUARD_SWAPIN_SUSTAIN_MS` | `2000` | L2 | …when sustained for this long. |
+| `HUU_GUARD_DESTROY_PCT` | `95` | L2 | The legacy RAM/CPU line, kept as a fallback trigger. |
+| `HUU_GUARD_AVAIL_PCT_EMERGENCY` | `5` | L3 | Emergency available-RAM floor (%). |
+| `HUU_GUARD_SWAP_FREE_PCT_EMERGENCY` | `5` | L3 | Emergency free-swap floor (%). |
+| `HUU_GUARD_PSI_FULL_EMERGENCY` | `20` | L3 | Emergency PSI `full avg10` (%). |
+
+### Kernel memory ceilings
+
+The ladder is software; the last line of defense is the kernel:
+
+- **Native Linux:** huu re-execs itself into a transient **systemd user
+  scope** (`systemd-run --user --scope`) with `MemoryHigh` = total − OS
+  reserve (the kernel throttles huu's whole tree before the host
+  thrashes — the desktop stays alive), `MemoryMax` = total − reserve/2
+  (worst case huu is killed inside its scope, never the host),
+  `MemorySwapMax` = `HUU_SWAP_MAX_MB` (default 4096 MiB; `0` = no swap)
+  and `TasksMax=8192`. When systemd isn't usable it degrades to
+  unwrapped with a one-line stderr note; `HUU_NO_CGROUP=1` opts out.
+- **Docker:** the wrapper passes `--memory` = host total − OS reserve,
+  `--memory-swap` = memory + `HUU_SWAP_MAX_MB`, and `--pids-limit 8192`
+  to the container. Override the ceiling with `HUU_DOCKER_MEMORY_MB`
+  (MiB) or restore the legacy unlimited container with
+  `HUU_NO_MEM_LIMIT=1`.
+
+`huu status` prints a **ram containment** doctor section: the dial and
+where it came from (web-settings / env / default), the budget in bytes,
+the OS reserve, the kernel ceiling detected on the current cgroup (or
+"NONE — software guard only"), live PSI some/full + swap, and every
+`HUU_*` safety knob currently set.
 
 ---
 
@@ -517,14 +621,23 @@ the same integration HEAD. If retries are exhausted, the run
 continues without that card and the failure is preserved in the
 summary.
 
-**Why did an agent's card jump back to TODO with a `↻` badge?**
-The always-on memory guard fired: at ~95% RAM (or CPU) it kills the
-**newest** agent — the one with the least work done — so the older
-agents' work survives. The card returns to the TODO column with a `↻N`
-requeue counter and the task restarts from zero once memory frees up.
-The guard is active in every concurrency mode (auto, manual, and MAX). Memory-aware auto-scale
-is the default; pin a fixed agent count with `--concurrency=N` or
+**Why did an agent's card jump back to TODO with a `↻` badge (or show an
+amber `⏸` PAUSED)?**
+The always-on memory guard fired. It runs a graded **pressure ladder** —
+sustained usage over the RAM-budget dial (L1), earlyoom-style
+host-pressure floors, PSI `full` or sustained swap-in (L2/L3), with the
+old ~95% RAM/CPU line kept only as a fallback — and preempts the
+**newest** agent, one victim per tick (the tick accelerates 500 ms →
+150 ms under host pressure) so the older agents' work survives. By
+default the victim is **paused** (worktree + session preserved, amber
+`⏸N`, resumed in place once headroom returns); it is killed and requeued
+(`↻N`, restart from zero) only when a checkpoint isn't possible or with
+`HUU_NO_PAUSE=1`. At L1 the guard never drains below ONE live agent — a
+run degrades to sequential, never to zero. The guard is active in every
+concurrency mode (auto, manual, and MAX). Memory-aware auto-scale is the
+default; pin a fixed agent count with `--concurrency=N` or
 `--no-auto-scale` (or `"concurrency": N` in a headless config).
+Thresholds: [Memory guard: the pressure ladder](#memory-guard-the-pressure-ladder).
 
 **Can I run huu in CI (GitHub Actions / GitLab)?**
 Yes — a CI runner is already an ephemeral container, so skip the

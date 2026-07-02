@@ -18,7 +18,7 @@
 | Fase | Estado | O que muda | Ganho | Risco |
 |---|---|---|---|---|
 | **1 — dias** | ✅ **Entregue** | Dial por % (`budget.ts`), PSI como freio, seed pessimista, lazy-admission na web, `oom_score_adj`, fast-ramp | Enche até o teto sem quebrar; fim da admissão cega da UI | Medição in-process imprecisa (mitigada por folga) |
-| **2 — semanas** | 🔨 **Parcial** (2.2 + 2.3 ✅ entregues; 2.1/2.4/2.5 pendentes) | cgroup-pai `memory.high/max` por %, controlador senpai+AIMD com histerese, sessão pi persistente, fila SQLite WAL, zram | OOM **global impossível** via kernel; degrada/retoma em vez de morrer | Thrash invisível; oscilação; CPU do zram |
+| **2 — semanas** | 🔨 **Parcial** (2.1 + 2.2 + 2.3 ✅ entregues; 2.4/2.5 pendentes) | cgroup-pai `memory.high/max` por %, controlador senpai+AIMD com histerese, sessão pi persistente, fila SQLite WAL, zram | OOM **global impossível** via kernel; degrada/retoma em vez de morrer | Thrash invisível; oscilação; CPU do zram |
 | **3 — estrutural** | ⏳ Planejado | Agentes em subprocessos, cgroup+`oom_score` por-agente, PSS honesto, hierarquia completa de degradação, container-por-run, multi-host | Vítima legítima de OOM; medição exata = margens menores = mais agentes; escala >1 host | Complexidade de IPC, órfãos, determinismo do resume |
 
 ---
@@ -55,7 +55,17 @@ uma invariante de kernel. A Fase 2 fecha isso.
 **Objetivo:** tornar o OOM-kill **global** IMPOSSÍVEL via kernel, e ganhar
 recuperação graciosa sob pressão (degradar/retomar em vez de morrer).
 
-### 2.1 Self-cgroup no boot (`memory.high` / `memory.max` derivados do dial)
+### 2.1 Self-cgroup no boot (`memory.high` / `memory.max`) — ✅ ENTREGUE
+
+> **Entregue (2026-07-02)** em `src/lib/cgroup-self-wrap.ts` + gate no topo do
+> `cli.tsx`, com um desvio deliberado do desenho abaixo: o scope é dimensionado
+> pela **reserva do SO** (`MemoryHigh = total − reserva`, `MemoryMax = total −
+> reserva/2`, `MemorySwapMax` via `HUU_SWAP_MAX_MB`), NÃO pelo dial — o dial é o
+> alvo de utilização interno (re-tunável ao vivo pela web) e o scope é a linha
+> de segurança do HOST, fixada no boot. O wrapper docker ganhou o teto
+> equivalente (`--memory`/`--memory-swap`/`--pids-limit`). Escapes:
+> `HUU_NO_CGROUP=1` (nativo) e `HUU_NO_MEM_LIMIT=1` (container). O texto
+> original segue como registro do desenho:
 
 Re-executar o huu dentro de um *scope* transitório com o orçamento derivado do mesmo
 % do dial:

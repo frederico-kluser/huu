@@ -197,7 +197,7 @@ terminal TUI back.
   first slot of the new one** (GPU-composited, `transform`-only, jank-free),
   and each column **scrolls** once it fills up instead of squashing the cards
   flat. Click a card for **per-agent tokens, cost, branch, files and live
-  logs**. Global log console, concurrency control (Auto · Manual · MAX) and a
+  logs**. Global log console, concurrency control (Auto · Manual) and a
   stop button up top.
 - **Errors are signalled, and cards retry.** A card that **hit its time limit**
   shows in **amber** (`timeout`), distinct from the **red** of any other failure
@@ -237,7 +237,18 @@ terminal TUI back.
   projects** — or **many projects on the same repo** — is safe: each run isolates
   its worktrees/branches by `runId`. **How much RAM huu may use is a dial**
   (Settings → **RAM budget %**, or `HUU_RAM_PERCENT` / `--ram-percent`; default
-  85%, the rest reserved for the OS). A **project selector** in the header
+  85%, the rest reserved for the OS) — and the web dial now **applies live**:
+  changing it takes effect **immediately** for running **and** queued runs, and
+  the value **persists on the server** (`~/.config/huu/web-settings.json`). A
+  **budget chip** in the topbar shows the dial in force, used/total RAM, PSI
+  and the guard's pressure level, live; the queue accepts up to **256
+  projects** (`HUU_MAX_QUEUED_RUNS` — a queued project costs no budget) and,
+  under pressure, a run whose agents are all withheld shows a pulsing amber
+  **paused (RAM)** pill and resumes on its own once memory frees up. And the
+  dial isn't the last line of defense: on native Linux huu runs inside a
+  **systemd scope** with a kernel memory ceiling (in Docker, `--memory` on the
+  container) — worst case huu goes down, the host **never freezes**. A
+  **project selector** in the header
   (**project · pipeline**) switches between the live boards. **With the queue
   running you can go back home (← Home) and add more pipelines/projects** — they
   **join the queue** and are admitted as capacity frees. If one fails, the rest
@@ -295,10 +306,10 @@ huu --cli                 # terminal TUI
 | `HUU_WEB_HOST` | Bind address (default `0.0.0.0`; `127.0.0.1` = local only). |
 | `HUU_WEB_TOKEN` | Shared secret required on data/action routes. |
 | `HUU_CLI=1` | Default to the TUI (same as `--cli`). |
-| `HUU_RAM_PERCENT` / `--ram-percent=<n>` | RAM budget as a % of total machine memory (default `85`, range 10–95). Also in the web under Settings → RAM budget %. |
-| `HUU_OOM_SCORE_ADJ` | Adjust the huu process's `oom_score_adj` (conservative default; best-effort, only takes effect with privilege, e.g. in the container). |
+| `HUU_RAM_PERCENT` / `--ram-percent=<n>` | RAM budget as a % of total machine memory (default `85`, range 10–95). Also in the web under Settings → RAM budget % — **applied live from the web** (takes effect immediately for current + queued runs, persisted server-side). |
+| `HUU_OOM_SCORE_ADJ` | Adjust the huu process's `oom_score_adj` (conservative default; best-effort — a negative value only sticks with `CAP_SYS_RESOURCE`, which even the container lacks; the effective lever is `HUU_CHILD_OOM_SCORE_ADJ`, which raises agent subprocesses to +500). |
 | `HUU_PI_HERMETIC=0` | Debug escape hatch: turns OFF the **hermetic pi runtime** (by default huu's pi sessions NEVER read `~/.pi` or load global npm `pi-*` extensions — only huu's prompts + the target repo root's AGENTS.md/CLAUDE.md). `huu status` shows the state. |
-| `HUU_AGENT_MEM_SEED_MB` | AutoScaler per-agent footprint seed (MiB, clamped 128–2048; pessimistic default `1536`). Lower it ONLY with measurements — see `scaler`/`ema_move` in the debug log. |
+| `HUU_AGENT_MEM_SEED_MB` | AutoScaler per-agent footprint seed (MiB, clamped 128–4096; pessimistic default `1536`). Lower it ONLY with measurements — see `scaler`/`ema_move` in the debug log. |
 | `HUU_AGENT_MEM_EMA_ALPHA` | EMA factor for the observed footprint (0.01–1; default `0.2`). Higher = converges faster from the seed to the real value. |
 
 ### Simulation mode (`/simulation`)
@@ -648,29 +659,38 @@ Deep dive: [`docs/onboarding.md#backends-deep-dive`](docs/onboarding.md#backends
 ## Dynamic concurrency (memory-aware, default on)
 
 By default huu **adapts concurrency to the real memory headroom**: it
-measures how much each agent actually consumes (moving average, seeded
-at 250 MiB and clamped between 128 MiB and 2 GiB) and admits new agents
-only while they fit in the available memory minus a safety margin (the
-larger of 10% and 512 MiB) — cgroup-aware, so inside a container it
-respects the container's limit, not the host's.
+measures how much each agent actually consumes (pessimistic moving
+average, seeded at 1536 MiB and clamped between 128 MiB and 4 GiB — only
+mature agents enter the average, and in-flight spawns are already
+charged as reservations) and admits new agents only while they fit the
+**RAM-dial budget**, minus an adaptive OS reserve — cgroup-aware, so
+inside a container it respects the container's limit, not the host's.
 
-A **memory guard stays always on** (even with manual or MAX concurrency):
-if RAM **or** CPU crosses ~95%, the **newest** agent — the one with the
-least work done (picked by `startedAt`) — is preempted. By default it is
-**paused**: huu checkpoints the agent's session, frees the RAM, but
-**preserves the worktree + transcript**, and the card enters **PAUSED**
-(`⏸N`) — resuming **where it left off** as soon as headroom returns. If a
-checkpoint isn't possible (or with `HUU_NO_PAUSE=1`) it falls back to the
-previous behaviour: the agent is **killed**, its card **returns to the
-TODO column** with a `↻N` counter, and the task restarts from zero. The
-older agents' work is never lost.
+A **memory guard stays always on** (even with manual or MAX concurrency)
+— and it now fires **well before** disaster, on a **pressure ladder**:
+usage **sustained over the RAM dial** (L1), **real host pressure**
+earlyoom-style — low available RAM **and** low free swap, high PSI
+`full`, or sustained swap-in (L2/L3) — with the old ~95% RAM/CPU line
+kept only as the **legacy fallback**. On each trigger the **newest**
+agent — the one with the least work done (picked by `startedAt`) — is
+preempted. By default it is **paused**: huu checkpoints the agent's
+session, frees the RAM, but **preserves the worktree + transcript**, and
+the card enters **PAUSED** (`⏸N`) — resuming **where it left off** as
+soon as headroom returns. At L1 the ladder **never drains below 1 live
+agent**: the run degrades to sequential, never to zero. If a checkpoint
+isn't possible (or with `HUU_NO_PAUSE=1`) it falls back to the previous
+behaviour: the agent is **killed**, its card **returns to the TODO
+column** with a `↻N` counter, and the task restarts from zero. The older
+agents' work is never lost. Details and the `HUU_GUARD_*` knobs:
+[`docs/operations.md`](docs/operations.md).
 
 Controls:
 
 | Where | How |
 |---|---|
 | CLI | `--concurrency=N` pins manual at N · `--no-auto-scale` turns the dynamic mode off |
-| TUI | `+`/`-` adjust (and pin manual) · `A` re-enables auto-scale · `M` MAX/greedy mode (floods to the memory limit) |
+| TUI | `+`/`-` adjust (and pin manual) · `A` re-enables auto-scale · `M` MAX/greedy mode (floods up to the RAM dial's CEILING — budget-greedy) |
+| Web | **Auto ⇄ Manual** toggle in the topbar — **MAX is gone from the web** (every web run is subordinate to the shared scheduler; legacy `greedy` POSTs coerce to `auto`) |
 | Headless | `"concurrency": N` in the config pins manual; omit it for the dynamic mode |
 
 ---

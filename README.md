@@ -199,7 +199,7 @@ TUI no terminal.
   travar), e cada coluna **rola sozinha** quando enche em vez de achatar os
   cards. Clique num card pra ver **tokens, custo, branch, arquivos e logs ao
   vivo** por agente. Console de log global, controle de concorrência
-  (Auto · Manual · MAX) e botão de parar no topo.
+  (Auto · Manual) e botão de parar no topo.
 - **Erro sinalizado e re-execução por card.** Um card que **estourou o tempo
   limite** aparece em **âmbar** (`timeout`), distinto do **vermelho** de
   qualquer outra falha (`failed`). Quando uma execução termina com cards em
@@ -238,8 +238,19 @@ TUI no terminal.
   em vários projetos** — ou **vários projetos no mesmo repo** — é seguro: cada
   execução isola worktrees/branches por `runId`. **Quanto da RAM o huu pode usar
   é um dial** (Settings → **RAM budget %**, ou `HUU_RAM_PERCENT` /
-  `--ram-percent`; padrão 85%, o resto fica reservado pro sistema). Um **seletor
-  de projetos** no topo (**projeto · pipeline**) alterna entre os boards ao vivo.
+  `--ram-percent`; padrão 85%, o resto fica reservado pro sistema) — e o dial da
+  web agora **aplica na hora**: mudar vale **imediatamente** pras execuções em
+  andamento **e** pras da fila, e o valor **persiste no servidor**
+  (`~/.config/huu/web-settings.json`). Um **chip de orçamento** no topo mostra
+  ao vivo o dial em vigor, RAM usada/total, PSI e o nível de pressão da guarda;
+  a fila aceita até **256 projetos** (`HUU_MAX_QUEUED_RUNS` — projeto na fila
+  não custa orçamento) e, sob pressão, uma execução com todos os agentes retidos
+  mostra um selo âmbar pulsante **paused (RAM)** e retoma sozinha quando a
+  memória liberar. E o dial não é a última defesa: no Linux nativo o huu roda
+  num **escopo systemd** com teto de memória do kernel (no Docker, `--memory`
+  no container) — o pior caso derruba o huu, **nunca congela o host**. Um
+  **seletor de projetos** no topo (**projeto · pipeline**) alterna entre os
+  boards ao vivo.
   **Com a fila rodando, dá para voltar à home (← Home) e adicionar mais
   pipelines/projetos** — eles **entram na fila** e são admitidos conforme a
   capacidade libera. Se um falha, os outros seguem. Cada execução é arquivada no
@@ -296,10 +307,10 @@ huu --cli                 # TUI no terminal
 | `HUU_WEB_HOST` | Endereço de bind (default `0.0.0.0`; `127.0.0.1` = só local). |
 | `HUU_WEB_TOKEN` | Segredo compartilhado exigido nas rotas de dados/ações. |
 | `HUU_CLI=1` | Default pra TUI (igual a `--cli`). |
-| `HUU_RAM_PERCENT` / `--ram-percent=<n>` | Orçamento de RAM como % do total da máquina (default `85`, faixa 10–95). Também na Web em Settings → RAM budget %. |
-| `HUU_OOM_SCORE_ADJ` | Ajuste do `oom_score_adj` do processo huu (default conservador; best-effort, só "pega" com privilégio, ex. no container). |
+| `HUU_RAM_PERCENT` / `--ram-percent=<n>` | Orçamento de RAM como % do total da máquina (default `85`, faixa 10–95). Também na Web em Settings → RAM budget % — **aplicado ao vivo pela web** (vale na hora pra execuções atuais + fila, persistido no servidor). |
+| `HUU_OOM_SCORE_ADJ` | Ajuste do `oom_score_adj` do processo huu (default conservador; best-effort — valor negativo só "pega" com `CAP_SYS_RESOURCE`, que nem o container tem; a alavanca real é `HUU_CHILD_OOM_SCORE_ADJ`, que sobe os subprocessos dos agentes pra +500). |
 | `HUU_PI_HERMETIC=0` | Escape de debug: desliga o **runtime pi hermético** (por padrão as sessões pi do huu NUNCA leem `~/.pi` nem carregam extensões `pi-*` globais do npm — só os prompts do huu + AGENTS.md/CLAUDE.md da raiz do repo-alvo). `huu status` mostra o estado. |
-| `HUU_AGENT_MEM_SEED_MB` | Seed do footprint por-agente do AutoScaler (MiB, clamp 128–2048; default pessimista `1536`). Baixe SÓ com medição — veja `scaler`/`ema_move` no debug log. |
+| `HUU_AGENT_MEM_SEED_MB` | Seed do footprint por-agente do AutoScaler (MiB, clamp 128–4096; default pessimista `1536`). Baixe SÓ com medição — veja `scaler`/`ema_move` no debug log. |
 | `HUU_AGENT_MEM_EMA_ALPHA` | Fator da EMA do footprint observado (0.01–1; default `0.2`). Maior = converge mais rápido do seed pro valor real. |
 
 ### Modo simulação (`/simulation`)
@@ -653,29 +664,39 @@ A fundo: [`docs/onboarding.pt-BR.md#backends-a-fundo`](docs/onboarding.pt-BR.md#
 ## Concorrência dinâmica (memória-aware, padrão)
 
 Por padrão o huu **adapta a concorrência ao headroom real de memória**:
-ele mede quanto cada agente consome de verdade (média móvel, semeada em
-250 MiB e travada entre 128 MiB e 2 GiB) e admite novos agentes só
-enquanto couberem na memória disponível menos uma margem de segurança
-(o maior entre 10% e 512 MiB) — cgroup-aware, então dentro de um
-container ele respeita o limite do container, não o do host.
+ele mede quanto cada agente consome de verdade (média móvel pessimista,
+semeada em 1536 MiB e travada entre 128 MiB e 4 GiB — só agentes maduros
+entram na conta, e spawns em voo já são cobrados como reserva) e admite
+novos agentes só enquanto couberem no orçamento do **dial de RAM**,
+descontada uma reserva adaptativa pro SO — cgroup-aware, então dentro de
+um container ele respeita o limite do container, não o do host.
 
 Uma **guarda de memória fica sempre ativa** (mesmo com concorrência
-manual ou MAX): se a RAM **ou** a CPU passam de ~95%, o agente **mais
-novo** — o que tem menos trabalho feito (escolhido por `startedAt`) — é
-preemptado. Por padrão ele é **pausado**: o huu faz checkpoint da sessão
-do agente, libera a RAM, mas **preserva a worktree + o transcript**, e o
-card entra em **PAUSED** (`⏸N`) — retomando **de onde parou** assim que
-houver folga. Se não der pra fazer checkpoint (ou com `HUU_NO_PAUSE=1`),
-cai no comportamento anterior: o agente é **morto**, o card **volta para
-a coluna TODO** com um contador `↻N` e a task recomeça do zero. O
-trabalho dos agentes mais antigos nunca é perdido.
+manual ou MAX) — e agora dispara **muito antes** do desastre, numa
+**escada de pressão**: uso **sustentado acima do dial de RAM** (L1),
+**pressão real do host** no estilo earlyoom — pouca RAM disponível **e**
+pouco swap livre, PSI `full` alto ou swap-in sustentado (L2/L3) — e os
+~95% de RAM/CPU de antes viram só a **linha legada** de fallback. A cada
+disparo o agente **mais novo** — o que tem menos trabalho feito
+(escolhido por `startedAt`) — é preemptado. Por padrão ele é **pausado**:
+o huu faz checkpoint da sessão do agente, libera a RAM, mas **preserva a
+worktree + o transcript**, e o card entra em **PAUSED** (`⏸N`) —
+retomando **de onde parou** assim que houver folga. No L1 a escada
+**nunca derruba abaixo de 1 agente vivo**: a execução degrada pra
+sequencial, nunca pra zero. Se não der pra fazer checkpoint (ou com
+`HUU_NO_PAUSE=1`), cai no comportamento anterior: o agente é **morto**,
+o card **volta para a coluna TODO** com um contador `↻N` e a task
+recomeça do zero. O trabalho dos agentes mais antigos nunca é perdido.
+Detalhes e os knobs `HUU_GUARD_*`:
+[`docs/operations.pt-BR.md`](docs/operations.pt-BR.md).
 
 Controles:
 
 | Onde | Como |
 |---|---|
 | CLI | `--concurrency=N` pina manual em N · `--no-auto-scale` desliga o modo dinâmico |
-| TUI | `+`/`-` ajustam (e pinam manual) · `A` religa o auto-scale · `M` modo MAX/greedy (inunda até o limite de memória) |
+| TUI | `+`/`-` ajustam (e pinam manual) · `A` religa o auto-scale · `M` modo MAX/greedy (inunda até o TETO do dial de RAM — budget-greedy) |
+| Web | Toggle **Auto ⇄ Manual** no topo — o **MAX saiu da web** (todo run web é subordinado ao scheduler compartilhado; POSTs `greedy` legados viram `auto`) |
 | Headless | `"concurrency": N` no config pina manual; omita para o modo dinâmico |
 
 ---
