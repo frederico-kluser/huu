@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDockerArgv,
   hasRemovedNativeBypass,
+  isPathInside,
+  resolveWorkspaceRoot,
   stripRemovedNativeFlags,
   decideReexec,
   detectDefaultRouteMtu,
@@ -613,5 +615,31 @@ describe('buildMemoryLimitArgs — kernel ceiling for the container', () => {
         else process.env[k] = saved[k];
       }
     }
+  });
+});
+
+describe('resolveWorkspaceRoot + isPathInside (folder-picker workspace)', () => {
+  const HOME = '/home/user';
+
+  it('defaults to $HOME when HUU_WORKSPACE is unset', () => {
+    expect(resolveWorkspaceRoot(HOME, {})).toBe(HOME);
+  });
+
+  it('falls back to $HOME for a non-existent HUU_WORKSPACE (degrade, never block)', () => {
+    expect(resolveWorkspaceRoot(HOME, { HUU_WORKSPACE: '/nope/does/not/exist' })).toBe(HOME);
+  });
+
+  it('honors HUU_WORKSPACE when it names a real directory', () => {
+    // The repo root always exists — use it as a stand-in real directory.
+    const real = process.cwd();
+    expect(resolveWorkspaceRoot(HOME, { HUU_WORKSPACE: real })).toBe(real);
+  });
+
+  it('isPathInside: nested + equal true, siblings/prefix-collisions false', () => {
+    expect(isPathInside('/home/user/.huu', '/home/user')).toBe(true);
+    expect(isPathInside('/home/user', '/home/user')).toBe(true);
+    expect(isPathInside('/home/user/Downloads', '/home/user')).toBe(true);
+    expect(isPathInside('/home/user2', '/home/user')).toBe(false); // prefix collision
+    expect(isPathInside('/mnt/code', '/home/user')).toBe(false);
   });
 });

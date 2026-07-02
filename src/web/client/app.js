@@ -1357,9 +1357,13 @@ const folderState = { path: '', parent: null, listing: null };
 
 $('folderUp').addEventListener('click', () => { if (folderState.parent) loadFolder(folderState.parent); });
 $('folderUse').addEventListener('click', () => { if (S.markedDirs.size >= 1) goStep(3); });
+// Jump to the workspace root (HUU_WORKSPACE, default $HOME) — where projects
+// live. A bare /api/folders (no path) resolves to it server-side.
+$('folderHome').addEventListener('click', () => loadFolder(S.boot?.workspace || ''));
 
-/** Enter step 2 → (re)load the last-visited folder (or the server cwd). */
-function renderFolderStep() { loadFolder(folderState.path || S.runDir || S.cwd); }
+/** Enter step 2 → open at the last-visited folder, else the workspace root
+    (where the user's projects live), else the server cwd. */
+function renderFolderStep() { loadFolder(folderState.path || S.boot?.workspace || S.runDir || S.cwd); }
 
 async function loadFolder(path) {
   try {

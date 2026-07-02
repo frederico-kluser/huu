@@ -479,3 +479,52 @@ describe('web server — machine-global settings (/api/settings)', () => {
     expect(boot.settings.ramPercent).toBe(40);
   });
 });
+
+describe('web server — folder-picker workspace (HUU_WORKSPACE)', () => {
+  let repo: string;
+  let workspace: string;
+  let server: Server;
+  let base: string;
+  let savedWs: string | undefined;
+
+  beforeEach(async () => {
+    savedWs = process.env.HUU_WORKSPACE;
+    workspace = mkdtempSync(join(tmpdir(), 'huu-ws-'));
+    // A sub-folder so the listing has an entry to assert on.
+    execSync(`mkdir -p ${join(workspace, 'projectA')}`, { encoding: 'utf8' });
+    process.env.HUU_WORKSPACE = workspace;
+    repo = mkdtempSync(join(tmpdir(), 'huu-web-'));
+    setupRepo(repo);
+    ({ server } = createWebServer({ cwd: repo, defaultAutoScale: true, initialPipeline: PIPELINE }));
+    base = await listenEphemeral(server);
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+    if (savedWs === undefined) delete process.env.HUU_WORKSPACE;
+    else process.env.HUU_WORKSPACE = savedWs;
+  });
+
+  it('bootstrap exposes the workspace root', async () => {
+    const boot = (await (await fetch(base + '/api/bootstrap')).json()) as { workspace: string };
+    expect(boot.workspace).toBe(workspace);
+  });
+
+  it('a bare /api/folders opens at the workspace root, not the cwd', async () => {
+    const d = (await (await fetch(base + '/api/folders')).json()) as {
+      path: string;
+      entries: Array<{ name: string }>;
+    };
+    expect(d.path).toBe(workspace);
+    expect(d.entries.map((e) => e.name)).toContain('projectA');
+  });
+
+  it('an explicit ?path still navigates anywhere reachable', async () => {
+    const d = (await (
+      await fetch(base + '/api/folders?path=' + encodeURIComponent(repo))
+    ).json()) as { path: string };
+    expect(d.path).toBe(repo);
+  });
+});

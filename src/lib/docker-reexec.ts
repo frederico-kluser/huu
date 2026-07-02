@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir, tmpdir, totalmem } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { API_KEY_REGISTRY, resolveApiKeyWithSource } from './api-key.js';
 import { osReserveBytes } from './budget.js';
 
@@ -173,6 +173,35 @@ export function probeDockerMemoryLimitSupport(): boolean {
   } catch {
     return true;
   }
+}
+
+/** True when `child` is `root` or nested under it (both absolute, normalized). */
+export function isPathInside(child: string, root: string): boolean {
+  const c = resolve(child);
+  const r = resolve(root);
+  return c === r || c.startsWith(r.endsWith('/') ? r : `${r}/`);
+}
+
+/**
+ * The host directory the web folder-picker may browse (and that agents in
+ * mounted runs can therefore reach). `HUU_WORKSPACE` when it names an existing
+ * directory; otherwise `$HOME`. Degrade-never-block: a missing/invalid value
+ * falls back to home rather than throwing.
+ */
+export function resolveWorkspaceRoot(
+  hostHome: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const raw = env.HUU_WORKSPACE?.trim();
+  if (raw) {
+    const abs = resolve(raw);
+    try {
+      if (existsSync(abs) && statSync(abs).isDirectory()) return abs;
+    } catch {
+      /* fall through to home */
+    }
+  }
+  return hostHome;
 }
 
 /** Subcommands that run native — no docker pull, no bind mount needed. */
@@ -366,6 +395,9 @@ export function buildDockerArgv(opts: DockerCommandOptions): string[] {
     // bind-mounted host filesystem instead of the container's ephemeral
     // $HOME. Paired with the host-home bind mounts added below.
     'HUU_HOST_HOME',
+    // The folder-picker workspace root — the in-container web server reads it
+    // to know where to open the picker.
+    'HUU_WORKSPACE',
     // Host git identity — populated by resolveHostGitIdentity() so the
     // container inherits the same author/committer as the host user.
     'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL',
@@ -632,10 +664,6 @@ export async function reexecInDocker(
   // in-container code reads HUU_HOST_HOME via getHuuHome() to resolve
   // saves to these host-side paths. Without this, "save pipeline" lands
   // in the container's ephemeral $HOME and is wiped by `docker run --rm`.
-  //
-  // Targeted mounts only — never the full $HOME — so the agent can't read
-  // ~/.ssh, ~/.aws, ~/.npmrc tokens. That's the whole point of Docker
-  // isolation here (see file header).
   const hostHome = homedir();
   const hostHuuDir = join(hostHome, '.huu');
   if (!existsSync(hostHuuDir)) {
@@ -647,6 +675,23 @@ export async function reexecInDocker(
     hostHomeMounts.push(hostDownloadsDir);
   }
   process.env.HUU_HOST_HOME = hostHome;
+
+  // WORKSPACE ROOT: the host directory the web folder-picker can browse (and
+  // therefore the tree agents in mounted runs can reach). Default $HOME so the
+  // picker sees every project under home; `HUU_WORKSPACE` tightens it (e.g.
+  // ~/Projects) or widens it (`/`). This is a DELIBERATE, user-chosen
+  // relaxation of the Docker isolation: mounting it RW means an agent's shell
+  // can read/write anything under it — including ~/.ssh etc. when it's $HOME.
+  // Keep it as small as your projects allow. Mounted at the same absolute path
+  // so a picked runDirectory resolves identically inside the container; the
+  // narrower state mounts nested under it are dropped (the workspace covers
+  // them).
+  const workspaceRoot = resolveWorkspaceRoot(hostHome);
+  process.env.HUU_WORKSPACE = workspaceRoot;
+  const workspaceMounts = [
+    workspaceRoot,
+    ...hostHomeMounts.filter((m) => !isPathInside(m, workspaceRoot)),
+  ];
 
   const cidfile = makeCidfilePath();
 
@@ -695,7 +740,7 @@ export async function reexecInDocker(
     gid: typeof process.getgid === 'function' ? process.getgid() : 0,
     secretMounts,
     excludeFromEnv,
-    extraMounts: [...(opts.extraMounts ?? []), ...hostHomeMounts],
+    extraMounts: [...(opts.extraMounts ?? []), ...workspaceMounts],
     network: pickDockerNetwork(),
     publishPorts: opts.publishPorts,
     memoryLimitSupported: probeDockerMemoryLimitSupport(),

@@ -14,6 +14,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Server } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { extname, join, normalize } from 'node:path';
 import type { AgentBackendKind } from '../orchestrator/backends/registry.js';
@@ -219,8 +220,10 @@ export function createWebServer(opts: WebServerOptions): {
       return sendJson(res, 200, { providers: listProvidersInfo() });
     }
     if (method === 'GET' && path === '/api/folders') {
-      // Folder navigation for the run-directory picker. Defaults to cwd.
-      const target = url.searchParams.get('path') ?? opts.cwd;
+      // Folder navigation for the run-directory picker. A bare call opens at
+      // the workspace root (HUU_WORKSPACE, default $HOME) so the picker lands
+      // where the user's projects live, not deep in one repo.
+      const target = url.searchParams.get('path') ?? workspaceRoot();
       return sendJson(res, 200, listDirs(target));
     }
     if (method === 'GET' && path === '/api/models') {
@@ -468,6 +471,15 @@ export function createWebServer(opts: WebServerOptions): {
     });
   }
 
+  // Folder-picker root: HUU_WORKSPACE (set by the wrapper to the host $HOME /
+  // configured path, mounted into the container at the same absolute path).
+  // Falls back to the server cwd when unset (dev/tests run without the
+  // wrapper) — the pre-workspace default.
+  function workspaceRoot(): string {
+    const w = process.env.HUU_WORKSPACE?.trim();
+    return w && existsSync(w) ? w : opts.cwd;
+  }
+
   function bootstrapPayload(): Record<string, unknown> {
     return {
       name: 'huu',
@@ -487,6 +499,10 @@ export function createWebServer(opts: WebServerOptions): {
       providers: listProvidersInfo(),
       pipelines: listPipelinesInfo(opts.cwd),
       initialPipeline: opts.initialPipeline?.name ?? null,
+      // Folder-picker root: HUU_WORKSPACE (default $HOME on the host, mounted
+      // into the container by the wrapper). The client opens the picker here
+      // and offers a "Home" shortcut back to it.
+      workspace: workspaceRoot(),
       runs: manager.getSnapshots().map(serializeSnapshot),
       // Server-persisted machine-global settings (source of truth for the ⚙
       // modal — localStorage is only a cache) + the budget the scheduler is

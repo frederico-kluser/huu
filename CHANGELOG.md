@@ -8,6 +8,20 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+### Added
+
+- **Folder picker reaches the whole workspace.** Now that huu is docker-only,
+  the web folder picker could only browse what was mounted into the container
+  (`~/.huu`, `~/Downloads`). The wrapper now bind-mounts a **workspace root**
+  (RW, at the same absolute path) — `HUU_WORKSPACE`, default `$HOME` — so the
+  picker opens there and can mark/run any project under it. A **⌂ Home**
+  button jumps to the root; `/api/bootstrap` exposes it and a bare
+  `/api/folders` opens there. Tighten the blast radius with
+  `HUU_WORKSPACE=~/Projects`, or widen it to `/` for the entire filesystem.
+  Security note: the workspace is mounted read-write, so an agent's shell can
+  reach anything under it (including `~/.ssh` when it's `$HOME`) — keep it as
+  small as your projects allow.
+
 ## [5.0.0] - 2026-07-02
 
 ### Added
