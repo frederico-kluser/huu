@@ -1,11 +1,6 @@
 import { existsSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import {
-  createAgentSession,
-  SessionManager,
-  AuthStorage,
-  ModelRegistry,
-} from '@mariozechner/pi-coding-agent';
+import { createAgentSession, SessionManager } from '@mariozechner/pi-coding-agent';
 import { getModel, clampThinkingLevel, type ModelThinkingLevel } from '@mariozechner/pi-ai';
 import type { AgentEvent, AgentFactory, SpawnedAgent } from '../../types.js';
 import { supportsThinking } from '../../../lib/model-factory.js';
@@ -16,6 +11,7 @@ import {
 import { buildAgentMessageHeader } from '../_shared/build-message.js';
 import { createDisposableState } from '../_shared/lifecycle.js';
 import { translatePiEvent } from './event-mapper.js';
+import { buildPiSessionEnvironment } from './hermetic.js';
 
 const OPENROUTER_HEADERS = {
   'HTTP-Referer': 'https://github.com/huu',
@@ -90,8 +86,15 @@ export const piAgentFactory: AgentFactory = async (
   const modelId = config.modelId.trim();
   if (!modelId) throw new Error('Model ID missing.');
 
-  const authStorage = AuthStorage.create();
-  authStorage.setRuntimeApiKey('openrouter', apiKey);
+  // Hermetic composition: in-memory auth/registry/settings + a discovery-off
+  // resource loader (scoped repo context only). See hermetic.ts for why —
+  // the SDK defaults would load host-global ~/.pi config and npm pi-* extensions.
+  const piEnv = await buildPiSessionEnvironment({
+    provider: 'openrouter',
+    apiKey,
+    providerConfig: { headers: OPENROUTER_HEADERS },
+    cwd,
+  });
 
   const model = getModel('openrouter', modelId as never);
   if (!model) {
@@ -100,9 +103,6 @@ export const piAgentFactory: AgentFactory = async (
         `Check the ID or the installed version of @mariozechner/pi-ai.`,
     );
   }
-
-  const modelRegistry = ModelRegistry.create(authStorage);
-  modelRegistry.registerProvider('openrouter', { headers: OPENROUTER_HEADERS });
 
   const baseThinking = await resolveThinkingLevel(modelId, apiKey, onEvent);
   // The conflict-resolver (integration) agent runs at the model's max thinking
@@ -134,8 +134,13 @@ export const piAgentFactory: AgentFactory = async (
     model,
     thinkingLevel,
     sessionManager,
-    authStorage,
-    modelRegistry,
+    authStorage: piEnv.authStorage,
+    modelRegistry: piEnv.modelRegistry,
+    // Hermetic injection (undefined under HUU_PI_HERMETIC=0 → SDK defaults):
+    // huu-owned agentDir, in-memory settings, discovery-off resource loader.
+    agentDir: piEnv.agentDir,
+    settingsManager: piEnv.settingsManager,
+    resourceLoader: piEnv.resourceLoader,
     cwd,
     // tools omitted → default built-ins (read, bash, edit, write) are enabled.
   });

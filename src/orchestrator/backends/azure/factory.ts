@@ -1,9 +1,4 @@
-import {
-  createAgentSession,
-  SessionManager,
-  AuthStorage,
-  ModelRegistry,
-} from '@mariozechner/pi-coding-agent';
+import { createAgentSession, SessionManager } from '@mariozechner/pi-coding-agent';
 import { getModel, clampThinkingLevel, type Model } from '@mariozechner/pi-ai';
 import type { AgentEvent, AgentFactory, SpawnedAgent } from '../../types.js';
 import { supportsThinking } from '../../../lib/model-factory.js';
@@ -13,6 +8,7 @@ import { buildAgentMessageHeader } from '../_shared/build-message.js';
 import { createDisposableState } from '../_shared/lifecycle.js';
 import { translatePiEvent } from '../pi/event-mapper.js';
 import { pickThinkingLevel } from '../pi/factory.js';
+import { buildPiSessionEnvironment } from '../pi/hermetic.js';
 
 const AZURE_PROVIDER = 'azure-openai-responses' as const;
 
@@ -113,13 +109,16 @@ export const azureAgentFactory: AgentFactory = async (
     });
   }
 
-  const authStorage = AuthStorage.create();
-  authStorage.setRuntimeApiKey(AZURE_PROVIDER, apiKey);
+  // Azure sessions are pi sessions too — same hermetic composition as the pi
+  // backend (in-memory auth/registry/settings, discovery-off loader), so the
+  // host's ~/.pi config and global npm pi-* extensions never leak in here either.
+  const piEnv = await buildPiSessionEnvironment({
+    provider: AZURE_PROVIDER,
+    apiKey,
+    cwd,
+  });
 
   const model = buildAzureModel(modelId, endpoint);
-
-  const modelRegistry = ModelRegistry.create(authStorage);
-  modelRegistry.registerProvider(AZURE_PROVIDER, {});
 
   const baseThinking = await resolveThinkingLevel(modelId, onEvent);
   // The conflict-resolver (integration) agent runs at the model's max thinking
@@ -134,8 +133,12 @@ export const azureAgentFactory: AgentFactory = async (
     model,
     thinkingLevel,
     sessionManager: SessionManager.inMemory(),
-    authStorage,
-    modelRegistry,
+    authStorage: piEnv.authStorage,
+    modelRegistry: piEnv.modelRegistry,
+    // Hermetic injection (undefined under HUU_PI_HERMETIC=0 → SDK defaults).
+    agentDir: piEnv.agentDir,
+    settingsManager: piEnv.settingsManager,
+    resourceLoader: piEnv.resourceLoader,
     cwd,
   });
 

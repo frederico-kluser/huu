@@ -290,6 +290,11 @@ export function buildDockerArgv(opts: DockerCommandOptions): string[] {
     // container inherits the same author/committer as the host user.
     'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL',
     'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL',
+    // Hermetic-pi escape hatch + RAM-tuning knobs must reach the in-container
+    // orchestrator. Deliberately NOT forwarding PI_CODING_AGENT_DIR: the
+    // container has no host ~/.pi to leak from, and the hermetic composition
+    // sets its own huu-owned dir.
+    'HUU_PI_HERMETIC', 'HUU_AGENT_MEM_SEED_MB', 'HUU_AGENT_MEM_EMA_ALPHA',
   ]);
   // Every API key spec contributes both `<NAME>` and `<NAME>_FILE` to the
   // passthrough — secret-mounting (when present) supersedes it via
