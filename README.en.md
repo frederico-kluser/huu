@@ -123,11 +123,11 @@ execution is left, it's exactly huu's job.**
 
 ## Quick start
 
-**Prerequisites:** Node.js ≥ 20, `git`, and Docker (recommended). For
+**Prerequisites:** Node.js ≥ 20, `git`, and Docker (required). For
 the default backend, export an `OPENROUTER_API_KEY`
 ([openrouter.ai/keys](https://openrouter.ai/keys)).
 
-### Docker (recommended)
+### Docker
 
 ```bash
 git clone https://github.com/frederico-kluser/huu
@@ -149,17 +149,19 @@ pulls automatically when no `HUU_IMAGE` is set. VPN-aware MTU, secret
 mounting, signal forwarding, and orphan cleanup are all handled by
 the wrapper.
 
-### Native
+### Via npm
 
 ```bash
-npm install -g huu-pipe        # Node 20+ and a working `git`
-huu --yolo                     # opens the web UI natively (no Docker)
-huu --yolo --cli               # or the terminal TUI, no Docker
+npm install -g huu-pipe        # Node 20+, `git`, and Docker
+huu                            # re-execs itself into the container
 ```
 
-Native runs expose your shell credentials to the LLM agent. Prefer
-Docker for anything real on your laptop. (`--no-docker` is the
-neutral-spelling alias of `--yolo`, meant for CI runners — see below.)
+huu is **docker-only**: every run executes in the container, which
+carries the kernel memory ceiling (`--memory`); there is no native
+mode. The old `--yolo` / `--no-docker` / `HUU_NO_DOCKER=1` bypasses
+were **removed** — if present, huu prints a one-line notice, ignores
+them and re-execs into Docker anyway. Only `--help` and the host
+utilities (`init-docker`, `status`, `prune`) run outside the container.
 Full install matrix (macOS / Windows / Linux, OrbStack notes, WSL2
 caveats): [`docs/onboarding.md#install`](docs/onboarding.md#install).
 
@@ -176,13 +178,11 @@ Glass, light/dark), real-time, no delay. It drives the same Orchestrator
 as the TUI; only the face changes. The **`--cli`** flag brings the
 terminal TUI back.
 
-- **Default, no friction.** `huu` → web. `huu --cli` → terminal.
-  `huu --yolo` → web **without Docker** (native). Every combination is
-  valid: the front-end (web/CLI) is orthogonal to the runtime
-  (Docker/native).
-- **Works with and without Docker.** In the container the server runs
-  inside and the port is published to the host (`-p`); native binds
-  directly.
+- **Default, no friction.** `huu` → web. `huu --cli` → terminal. The
+  front-end (web/CLI) is orthogonal to the runtime — which is **always
+  the container** (huu is docker-only).
+- **Always in Docker.** The server runs inside the container and the
+  port is published to the host (`-p`) automatically.
 - **On your network.** Binds `0.0.0.0` by default — reach it from your
   phone or another machine at `http://<your-machine-ip>:4888`. Real-time
   over Server-Sent Events (auto-reconnecting), zero new dependencies
@@ -237,7 +237,7 @@ terminal TUI back.
   projects** — or **many projects on the same repo** — is safe: each run isolates
   its worktrees/branches by `runId`. **How much RAM huu may use is a dial**
   (Settings → **RAM budget %**, or `HUU_RAM_PERCENT` / `--ram-percent`; default
-  85%, the rest reserved for the OS) — and the web dial now **applies live**:
+  70%, the rest reserved for the OS) — and the web dial now **applies live**:
   changing it takes effect **immediately** for running **and** queued runs, and
   the value **persists on the server** (`~/.config/huu/web-settings.json`). A
   **budget chip** in the topbar shows the dial in force, used/total RAM, PSI
@@ -245,9 +245,9 @@ terminal TUI back.
   projects** (`HUU_MAX_QUEUED_RUNS` — a queued project costs no budget) and,
   under pressure, a run whose agents are all withheld shows a pulsing amber
   **paused (RAM)** pill and resumes on its own once memory frees up. And the
-  dial isn't the last line of defense: on native Linux huu runs inside a
-  **systemd scope** with a kernel memory ceiling (in Docker, `--memory` on the
-  container) — worst case huu goes down, the host **never freezes**. A
+  dial isn't the last line of defense: the container carries a **kernel
+  memory ceiling** (`--memory` = host total minus the OS reserve) — worst
+  case huu goes down, the host **never freezes**. A
   **project selector** in the header
   (**project · pipeline**) switches between the live boards. **With the queue
   running you can go back home (← Home) and add more pipelines/projects** — they
@@ -306,7 +306,7 @@ huu --cli                 # terminal TUI
 | `HUU_WEB_HOST` | Bind address (default `0.0.0.0`; `127.0.0.1` = local only). |
 | `HUU_WEB_TOKEN` | Shared secret required on data/action routes. |
 | `HUU_CLI=1` | Default to the TUI (same as `--cli`). |
-| `HUU_RAM_PERCENT` / `--ram-percent=<n>` | RAM budget as a % of total machine memory (default `85`, range 10–95). Also in the web under Settings → RAM budget % — **applied live from the web** (takes effect immediately for current + queued runs, persisted server-side). |
+| `HUU_RAM_PERCENT` / `--ram-percent=<n>` | RAM budget as a % of total machine memory (default `70`, range 10–95). Also in the web under Settings → RAM budget % — **applied live from the web** (takes effect immediately for current + queued runs, persisted server-side). |
 | `HUU_OOM_SCORE_ADJ` | Adjust the huu process's `oom_score_adj` (conservative default; best-effort — a negative value only sticks with `CAP_SYS_RESOURCE`, which even the container lacks; the effective lever is `HUU_CHILD_OOM_SCORE_ADJ`, which raises agent subprocesses to +500). |
 | `HUU_PI_HERMETIC=0` | Debug escape hatch: turns OFF the **hermetic pi runtime** (by default huu's pi sessions NEVER read `~/.pi` or load global npm `pi-*` extensions — only huu's prompts + the target repo root's AGENTS.md/CLAUDE.md). `huu status` shows the state. |
 | `HUU_AGENT_MEM_SEED_MB` | AutoScaler per-agent footprint seed (MiB, clamped 128–4096; pessimistic default `1536`). Lower it ONLY with measurements — see `scaler`/`ema_move` in the debug log. |
@@ -730,16 +730,18 @@ Build pipes on top: `huu auto … | jq .runId`. Full doc:
 
 ---
 
-## Running in CI (GitHub Actions / GitLab — no Docker)
+## Running in CI (GitHub Actions / GitLab)
 
-A CI runner is already an ephemeral container: huu's Docker wrapper
-makes no sense there (and Docker-in-Docker rarely exists). Combine
-`HUU_NO_DOCKER=1` (or `--no-docker`) with headless mode and huu
-becomes a pipeline job on any runner with **Node.js ≥ 20 and git**:
+huu is **docker-only** in CI too: native execution was removed
+(`--no-docker` / `HUU_NO_DOCKER` are ignored with a notice and huu
+re-execs into the container anyway). The job needs a runner with
+**Docker available** (GitHub's hosted runners already have it) — run
+huu normally in headless mode and pin the image with `HUU_IMAGE` for
+reproducible builds:
 
 ```yaml
 env:
-  HUU_NO_DOCKER: '1'
+  HUU_IMAGE: ghcr.io/frederico-kluser/huu:latest   # pin a version tag
   OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 steps:
   - run: npm install -g huu-pipe
@@ -830,7 +832,7 @@ So nobody confuses intent with done:
 | Topic | Where |
 |---|---|
 | **Tutorial / first run / authoring** | [`docs/onboarding.md`](docs/onboarding.md) |
-| **CI without Docker (GitHub Actions / GitLab)** | [`docs/ci.md`](docs/ci.md) |
+| **CI (GitHub Actions / GitLab)** | [`docs/ci.md`](docs/ci.md) |
 | **Architecture & layered import rules** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | **Operations (Docker, env vars, FAQ, roadmap)** | [`docs/operations.md`](docs/operations.md) |
 | **Pipeline JSON schema** | [`docs/pipeline-json-guide.md`](docs/pipeline-json-guide.md) |

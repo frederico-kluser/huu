@@ -128,7 +128,9 @@ Flags globais relevantes ao Pi:
   LLM; escreve `STUB_*.md`). O backend stub tem
   `conflictResolverFactory: undefined`, então **desabilita** o resolver
   de conflitos LLM (falha loud em conflito).
-- `--yolo` / `--no-docker` — pula a re-exec em Docker e roda nativo (== `HUU_NO_DOCKER=1`).
+- `--yolo` / `--no-docker` (== `HUU_NO_DOCKER=1`) — **REMOVIDAS**: o huu é
+  docker-only; as flags são detectadas, um aviso de uma linha é impresso, e
+  o huu re-executa no container mesmo assim.
 - `--concurrency=N` / `--no-auto-scale` — pinam concorrência manual (o
   auto-scale por memória é o padrão; `--auto-scale` está deprecated).
 
@@ -582,7 +584,7 @@ caro/overkill para Q&A puro com saída structured.
 | --------------------------------- | ----------------- | -------------------------- |
 | `DEFAULT_CONCURRENCY`             | `10`              | `orchestrator/index.ts`    |
 | `MAX_INSTANCES` / `MIN_INSTANCES` | `20` / `1`        | `orchestrator/index.ts`    |
-| `DEFAULT_RAM_PERCENT`             | `85` (dial de budget; clamp 10–95)         | `lib/budget.ts`               |
+| `DEFAULT_RAM_PERCENT`             | `70` (dial de budget; clamp 10–95)         | `lib/budget.ts`               |
 | `DEFAULT_AGENT_MEMORY_ESTIMATE_MB` | `1536` (seed pessimista; clamp 128–2048)  | `orchestrator/auto-scaler.ts` |
 | `DEFAULT_ADMIT_PSI`               | `0.5` (freio de admissão PSI some-avg10 %) | `orchestrator/auto-scaler.ts` |
 | `DEFAULT_OOM_SCORE_ADJ`           | `-100` (conservador)                       | `lib/oom-score.ts`            |
@@ -622,9 +624,9 @@ caro/overkill para Q&A puro com saída structured.
   explícito se depende deles.
 - **`ensureGitignored`** edita `.gitignore` no `start()` sem opt-out
   (`.huu-worktrees/`, `.huu/`, `.env.huu`, `.huu-bin/`, `.huu-cache/`).
-- **`HUU_NO_DOCKER=1` expõe credenciais host** ao agente Pi
-  (acesso ao filesystem inteiro: `~/.ssh`, `~/.aws`, `.env`). Use só em
-  dev/CI controlado.
+- **`HUU_NO_DOCKER=1` foi removida** (era a armadilha de expor credenciais
+  host ao agente Pi): o huu é docker-only — a variável é ignorada com um
+  aviso e o huu re-executa no container mesmo assim.
 
 ---
 

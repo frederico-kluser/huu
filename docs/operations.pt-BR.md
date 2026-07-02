@@ -16,7 +16,7 @@ FAQ, roadmap.
   - [Docker secrets](#docker-secrets)
   - [Variantes de imagem](#variantes-de-imagem)
   - [Cookbook na imagem](#cookbook-na-imagem)
-  - [Não quer Docker?](#não-quer-docker)
+  - [Sem modo nativo (docker-only)](#sem-modo-nativo-docker-only)
 - [Configuração](#configuração)
   - [Registry de API keys](#registry-de-api-keys)
   - [Variáveis de ambiente](#variáveis-de-ambiente)
@@ -199,16 +199,18 @@ docker run --rm ghcr.io/frederico-kluser/huu:latest \
   cookbook pull huu-test-suite > my-test-pipeline.json
 ```
 
-### Não quer Docker?
+### Sem modo nativo (docker-only)
 
-`huu --yolo` (ou `HUU_NO_DOCKER=1 huu …`) ignora o Docker e roda
-nativo no host. A flag compõe com tudo: `huu --yolo` abre a TUI,
-`huu --yolo run x.json` executa um pipeline, `huu --yolo --stub`
-roda o agente stub. Execuções nativas exigem o `npm install` local das
-deps do huu, e o agente LLM vai ver suas credenciais de shell
-(`~/.ssh`, `~/.aws`, …) — um warning de uma linha aparece no stderr
-a cada vez. Os subcomandos não-TUI (`huu --help`, `huu init-docker`,
-`huu status`) sempre rodam nativo de qualquer forma.
+O huu é **docker-only**: toda execução de pipeline roda dentro do
+container, que carrega o teto de memória do kernel (`--memory`) — a
+única garantia que software não consegue minar. Os antigos bypasses
+nativos (`--yolo`, `--no-docker`, `HUU_NO_DOCKER=1`) foram
+**removidos**: o CLI detecta, imprime um aviso de uma linha, remove as
+flags e re-executa no Docker mesmo assim. O que ainda roda no host não
+é execução de pipeline: `huu --help` e os utilitários de host
+(`huu init-docker`, `huu status`, `huu prune`). Dentro do container,
+`HUU_IN_CONTAINER=1` (setada pela imagem) segue sendo o curto-circuito
+interno que impede o mesmo binário de se embrulhar de novo.
 
 ### Solução de problemas: erro `denied: denied` no pull
 
@@ -222,8 +224,10 @@ Três saídas, da mais simples à mais completa:
 |---|---|---|
 | Limpar credencial | `docker logout ghcr.io` | Resolve rápido um one-off |
 | **Build local** | `docker build -t huu:local .` então `HUU_IMAGE=huu:local huu run …` | **Recomendado** — reprodutível, sem registry |
-| Rodar nativo | `huu --yolo run …` (== `HUU_NO_DOCKER=1`) | Dev/teste; ⚠️ expõe `~/.ssh`/`~/.aws` ao agente |
 | Re-autenticar | `echo "$PAT" \| docker login ghcr.io -u <user> --password-stdin` | Precisa de imagens privadas (PAT com escopo `read:packages`) |
+
+(Rodar nativo não é mais uma saída: o huu é docker-only — os antigos
+bypasses `--yolo`/`--no-docker` são ignorados com um aviso.)
 
 ---
 
@@ -279,13 +283,13 @@ em `~/.config`.
 | `COPILOT_GITHUB_TOKEN` | sim (quando `--copilot`) | PAT fine-grained do GitHub com escopo "Copilot Requests" (ou `GH_TOKEN`). Obrigatória só quando `--backend=copilot` está ativo. Mesma cadeia de precedência via `COPILOT_GITHUB_TOKEN_FILE` e `/run/secrets/copilot_token`. |
 | `HUU_WORKTREE_BASE` | não | Override do diretório base dos worktrees por execução. Paths absolutos são usados verbatim; paths relativos resolvidos contra a raiz do repo. Padrão: `<repo>/.huu-worktrees`. Usado pelo modo isolated-volume do container. |
 | `HUU_CHECK_PUSH` | não | Quando setada, preflight verifica que o remote configurado está alcançável antes de a execução começar. |
-| `HUU_RAM_PERCENT` | não | Orçamento de RAM como percentual da memória TOTAL da máquina — o dial de admissão que governa a concorrência. Padrão `85`, clampado em `10`–`95`; o orçamento tem piso na reserva adaptativa do SO (veja `HUU_OS_RESERVE_MB`). Machine-global (uma máquina, uma RAM): em multi-run configura o único budget scaler compartilhado, sem override por-projeto. Também exposto como a flag CLI `--ram-percent=<n>` e o campo "RAM budget" das Settings web — o campo web agora aplica AO VIVO (`POST /api/settings` reconfigura na hora as execuções atuais + as da fila) e persiste no servidor em `~/.config/huu/web-settings.json`. Veja [Concorrência com auto-scaling](#concorrência-com-auto-scaling). |
+| `HUU_RAM_PERCENT` | não | Orçamento de RAM como percentual da memória TOTAL da máquina — o dial de admissão que governa a concorrência. Padrão `70` (num desktop o SO + navegador + IDE seguram 20–30% da RAM, então o antigo `85` já começava toda execução no limite), clampado em `10`–`95`; o orçamento tem piso na reserva adaptativa do SO (veja `HUU_OS_RESERVE_MB`). Machine-global (uma máquina, uma RAM): em multi-run configura o único budget scaler compartilhado, sem override por-projeto. Também exposto como a flag CLI `--ram-percent=<n>` e o campo "RAM budget" das Settings web — o campo web agora aplica AO VIVO (`POST /api/settings` reconfigura na hora as execuções atuais + as da fila) e persiste no servidor em `~/.config/huu/web-settings.json`. Veja [Concorrência com auto-scaling](#concorrência-com-auto-scaling). |
 | `HUU_OS_RESERVE_MB` | não | Override da reserva do SO — a fatia da RAM total que o orçamento (e os tetos de kernel) nunca tocam. O padrão agora é ADAPTATIVO: `max(min(2 GiB, 25% do total), 8% do total, 512 MiB)` — os 512 MiB fixos de antes eram finos demais pra um desktop. Valor em MiB, com teto em 90% do total. |
 | `HUU_GUARD_*` | não | Família de thresholds da **escada de pressão** graduada que substituiu o gatilho único de ≥ 95% da guarda de memória — pisos de RAM disponível + swap livre, linhas de PSI `full`, taxa/sustain de swap-in, sustain acima do orçamento, espaçamento de re-preempção. Todos têm defaults seguros; a tabela completa está em [Guarda de memória: a escada de pressão](#guarda-de-memória-a-escada-de-pressão). |
 | `HUU_OOM_SCORE_ADJ` | não | Ajusta o `/proc/self/oom_score_adj` do processo huu pra que o OOM-killer do kernel evite matar o huu. Padrão conservador (`-100`, um empurrão leve que NÃO imuniza); best-effort — um valor NEGATIVO só pega com `CAP_SYS_RESOURCE`, que nem um processo comum nem o container (que roda `--user <uid>:<gid>`, não-root) têm, então o empurrão em geral vira no-op. A alavanca que funciona é o `HUU_CHILD_OOM_SCORE_ADJ` abaixo — SUBIR um score não exige privilégio. Só-Linux. |
 | `HUU_CHILD_OOM_SCORE_ADJ` | não | Viés de OOM pros processos DESCENDENTES do huu: um watcher varre o `/proc` a cada 2 s e sobe os filhos-ferramenta dos agentes (workers do vitest, npm installs, builds…) pra `oom_score_adj` `+500` (o padrão), então um OOM do kernel mata um test runner — que vira um simples retry de task — em vez do orchestrator ou da sua sessão de desktop. Sete `0` pra desligar o watcher. Só-Linux. |
-| `HUU_NO_CGROUP` | não | Sete `1` pra pular o escopo systemd de usuário transiente em que o huu se re-executa no Linux nativo (o teto de memória do kernel — veja [Tetos de memória no kernel](#tetos-de-memória-no-kernel)). Sem a flag o huu já degrada pra rodar sem wrapper, com uma nota de uma linha no stderr, quando o systemd não está utilizável. |
-| `HUU_SWAP_MAX_MB` | não | Teto de swap pra árvore de processos do huu, em MiB (padrão `4096`; `0` = nada de swap). Aplicado como `MemorySwapMax` no escopo systemd nativo e como o delta do `--memory-swap` no container Docker. |
+| `HUU_NO_CGROUP` | não | Sete `1` pra pular o escopo systemd de usuário transiente do wrap nativo — hoje **defesa-em-profundidade dormente**, já que o huu é docker-only (o teto `--memory` do container é o que vale na prática; veja [Tetos de memória no kernel](#tetos-de-memória-no-kernel)). Sem a flag o wrap já degrada pra rodar sem wrapper, com uma nota de uma linha no stderr, quando o systemd não está utilizável. |
+| `HUU_SWAP_MAX_MB` | não | Teto de swap pra árvore de processos do huu, em MiB (padrão `4096`; `0` = nada de swap). Aplicado como o delta do `--memory-swap` no container Docker (e como `MemorySwapMax` no escopo systemd nativo dormente). |
 | `HUU_DOCKER_MEMORY_MB` | não | Override do teto de memória do container, em MiB. Padrão: total do host − reserva do SO, passado pelo wrapper como `docker run --memory`. |
 | `HUU_NO_MEM_LIMIT` | não | Sete `1` pra subir o container SEM teto de memória (o comportamento legado — um container ilimitado pode consumir 100% da RAM do host). |
 | `HUU_MAX_LIVE_RUNS` | não | Teto de execuções multi-run vivas ao mesmo tempo (padrão `8`). O cap efetivo se ADAPTA PRA BAIXO ao que o orçamento realmente comporta: `orçamento ÷ (HUU_RUN_BASELINE_MB + footprint por-agente)`. |
@@ -296,7 +300,7 @@ em `~/.config`.
 | `HUU_AGENT_MEM_EMA_ALPHA` | não | Fator de suavização da EMA do footprint observado por-agente (clamp `0.01`–`1`; padrão `0.2` ≈ constante de tempo de 5 s no poll de 1 Hz). Suba pra convergir mais rápido do seed pro footprint medido (mais reativo, mais ruidoso); desça pra estabilidade. |
 | `HUU_IN_CONTAINER` | não | Setada pra `1` automaticamente pela imagem Docker oficial. Usada pelo wrapper pra curto-circuitar o auto-Docker re-exec. |
 | `HUU_IMAGE` | não | Override da imagem de container usada pelo wrapper auto-Docker. Padrão: `ghcr.io/frederico-kluser/huu:latest`. Útil pra pinar uma release ou apontar pra um mirror privado. |
-| `HUU_NO_DOCKER` | não | Quando setada pra `1` ou `true`, pula o auto-Docker re-exec e roda huu nativo. Equivalente à flag `--no-docker` (o alias de grafia neutra do `--yolo`, pensado pra CI). Exige `npm install` local das deps do huu. Útil pro desenvolvimento do huu em si e pra runners de CI — veja [`docs/ci.pt-BR.md`](ci.pt-BR.md). |
+| `HUU_NO_DOCKER` | não | **REMOVIDA — ignorada com um aviso.** O huu é docker-only: o modo nativo de execução de pipeline não existe mais. Como as flags removidas `--no-docker`/`--yolo`, a variável é detectada, um aviso de uma linha é impresso, e o huu re-executa no container mesmo assim. O CI também roda via Docker agora — veja [`docs/ci.pt-BR.md`](ci.pt-BR.md). |
 | `HUU_DOCKER_NETWORK` | não | Valor pass-through pra `docker run --network=<value>`. Por padrão, huu auto-cria `huu-net-mtu<N>` quando em VPN (MTU da rota default < 1500); set isso pra override (ex.: `host`, ou o nome de uma rede gerenciada pelo usuário pré-existente). |
 | `HUU_DOCKER_PASS_ENV` | não | Lista separada por whitespace de nomes de env var adicionais pra forwardar pro container. O wrapper sempre forwarda `OPENROUTER_API_KEY`, `OPENROUTER_API_KEY_FILE`, `HUU_CHECK_PUSH`, `HUU_WORKTREE_BASE`, `HUU_HOST_HOME`, `TERM` e todos os knobs de segurança de RAM (`HUU_RAM_PERCENT`, a família `HUU_GUARD_*`, `HUU_OS_RESERVE_MB`, `HUU_MAX_LIVE_RUNS`, `HUU_MAX_QUEUED_RUNS`, `HUU_RUN_BASELINE_MB`, `HUU_OOM_SCORE_ADJ`, `HUU_NO_PAUSE`) — um `HUU_RAM_PERCENT` do host antes era ignorado dentro do container. Use isso pra adicionar nomes customizados. |
 | `HUU_HOST_HOME` | não | Setada automaticamente pelo wrapper pro home directory do host. Dentro do container, `getHuuHome()` lê isso pra escritas em `~/.huu/` e o target default de export `~/Downloads/` caírem no filesystem bind-montado do host. Sem set fora do Docker. |
@@ -318,9 +322,9 @@ em `~/.config`.
 | `<worktree>/.env.huu` | por-agente | Atribuições de porta por agente; auto-carregado por tools dotenv-aware. |
 | `<worktree>/.huu-bin/with-ports` | por-agente | Wrapper shell que faz source do `.env.huu` e `exec` num comando — necessário pra binários que ignoram dotenv. |
 
-Quando rodando sob Docker (modo host-bind, o padrão), todos esses paths
-ficam visíveis no filesystem do host depois que o container termina —
-igual a uma execução nativa. `huu` adiciona `.huu-worktrees/`, `.huu/`,
+No modo host-bind (o padrão), todos esses paths ficam visíveis no
+filesystem do host depois que o container termina — o bind mount faz as
+escritas do container caírem direto no host. `huu` adiciona `.huu-worktrees/`, `.huu/`,
 `.huu-cache/`, `.env.huu` e `.huu-bin/` ao `.gitignore` do repo na
 primeira execução.
 
@@ -355,7 +359,9 @@ bloquear a seleção.
 
 **O auto-scaling memória-aware é o padrão.** A concorrência é governada
 por um **dial de orçamento de RAM**: um percentual configurável da
-memória TOTAL da máquina (padrão `85`, clampado em `10`–`95`), com piso
+memória TOTAL da máquina (padrão `70`, clampado em `10`–`95` — num
+desktop o SO + navegador + IDE seguram 20–30% da RAM, então o antigo
+padrão de `85` já começava toda execução no limite), com piso
 numa **reserva adaptativa pro SO** — `max(min(2 GiB, 25% do total), 8%
 do total, 512 MiB)`, sobrescrevível com `HUU_OS_RESERVE_MB` (os 512 MiB
 fixos de antes eram finos demais pra um desktop com um navegador aberto
@@ -497,20 +503,23 @@ Todo threshold tem um knob de env:
 
 A escada é software; a última linha de defesa é o kernel:
 
-- **Linux nativo:** o huu se re-executa dentro de um **escopo systemd de
+- **Docker (o teto que vale na prática):** o huu é docker-only, então
+  toda execução ganha este. O wrapper passa `--memory` = total do host −
+  reserva do SO, `--memory-swap` = memória + `HUU_SWAP_MAX_MB` e
+  `--pids-limit 8192` pro container. Sobrescreva o teto com
+  `HUU_DOCKER_MEMORY_MB` (MiB) ou restaure o container ilimitado legado
+  com `HUU_NO_MEM_LIMIT=1`.
+- **Escopo systemd nativo (defesa-em-profundidade dormente):** o caminho
+  de código que re-executa o huu dentro de um **escopo systemd de
   usuário** transiente (`systemd-run --user --scope`) com `MemoryHigh` =
   total − reserva do SO (o kernel estrangula a árvore inteira do huu
-  antes de o host entrar em thrashing — o desktop continua vivo),
-  `MemoryMax` = total − reserva/2 (pior caso: o huu morre dentro do
-  próprio escopo, nunca o host), `MemorySwapMax` = `HUU_SWAP_MAX_MB`
-  (padrão 4096 MiB; `0` = sem swap) e `TasksMax=8192`. Quando o systemd
-  não está utilizável, degrada pra rodar sem wrapper com uma nota de uma
-  linha no stderr; `HUU_NO_CGROUP=1` desativa.
-- **Docker:** o wrapper passa `--memory` = total do host − reserva do
-  SO, `--memory-swap` = memória + `HUU_SWAP_MAX_MB` e `--pids-limit
-  8192` pro container. Sobrescreva o teto com `HUU_DOCKER_MEMORY_MB`
-  (MiB) ou restaure o container ilimitado legado com
-  `HUU_NO_MEM_LIMIT=1`.
+  antes de o host entrar em thrashing), `MemoryMax` = total − reserva/2
+  (pior caso: o huu morre dentro do próprio escopo, nunca o host),
+  `MemorySwapMax` = `HUU_SWAP_MAX_MB` (padrão 4096 MiB; `0` = sem swap)
+  e `TasksMax=8192` continua na árvore, mas com o modo nativo de
+  execução de pipeline removido ele não dispara mais em operação normal.
+  Quando o systemd não está utilizável, degrada pra rodar sem wrapper
+  com uma nota de uma linha no stderr; `HUU_NO_CGROUP=1` desativa.
 
 `huu status` imprime uma seção doctor de **ram containment**: o dial e
 de onde ele veio (web-settings / env / default), o orçamento em bytes, a
@@ -649,9 +658,12 @@ Thresholds: veja
 [Guarda de memória: a escada de pressão](#guarda-de-memória-a-escada-de-pressão).
 
 **Posso rodar o huu no CI (GitHub Actions / GitLab)?**
-Sim — um runner de CI já é um container efêmero, então pule o wrapper
-Docker com `HUU_NO_DOCKER=1` (ou `--no-docker`) e conduza a execução
-com `huu auto`. Receitas completas, incluindo upload de
+Sim — o job precisa de um runner com **Docker disponível** (os runners
+hospedados do GitHub já trazem; no GitLab use um job docker-enabled).
+Conduza a execução com `huu auto` — o wrapper re-executa na imagem do
+huu como sempre; fixe com `HUU_IMAGE`. A execução nativa em CI
+(`--no-docker` / `HUU_NO_DOCKER=1`) foi removida — as flags são
+ignoradas com um aviso. Receitas completas, incluindo upload de
 `.huu/audits/` como artefato: [`docs/ci.pt-BR.md`](ci.pt-BR.md).
 
 **E se dois agentes tocam no mesmo arquivo?**

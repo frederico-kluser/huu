@@ -70,21 +70,20 @@ huu run pipelines/huu-test-suite.pipeline.json     # auto-uses ghcr.io/frederico
 > Windows/WSL boundary are 10–20× slower for the many-small-files I/O that
 > `git worktree add` does.
 
-### Native (no Docker)
+### No native mode (docker-only)
 
 ```bash
-npm install -g huu-pipe        # Node 20+ and a working `git`
-huu --yolo                     # opens the TUI natively (no Docker)
+npm install -g huu-pipe        # Node 20+, a working `git`, and Docker
+huu                            # re-execs itself into the container
 ```
 
-Native runs expose your shell credentials to the LLM agent (`~/.ssh`,
-`~/.aws`, …) and require the local `npm install` of huu's deps. A one-line
-warning prints to stderr each time. Use Docker for anything real;
-`--yolo` is for `huu` development itself and quick smoke checks.
-`--no-docker` (or `HUU_NO_DOCKER=1`) is the CI-neutral alias of the
-same bypass — a CI runner is already an ephemeral container, so the
-warning spelling makes no sense there. See [`docs/ci.md`](ci.md) for
-the GitHub Actions / GitLab recipes.
+huu is **docker-only**: every run executes in the container, which
+carries the kernel memory ceiling; there is no native mode. The old
+bypasses (`--yolo`, `--no-docker`, `HUU_NO_DOCKER=1`) were **removed**
+— huu prints a one-line notice, ignores them and re-execs into Docker
+anyway. Only `--help` and the host utilities (`init-docker`, `status`,
+`prune`) run outside the container. CI needs a docker-enabled runner —
+see [`docs/ci.md`](ci.md) for the GitHub Actions / GitLab recipes.
 
 For more on Docker run modes (compose, isolated-volume mode, secrets,
 VPN/MTU), see [`docs/operations.md#docker`](operations.md#docker).
@@ -414,9 +413,10 @@ is the fallback); a key saved via the TUI takes precedence.
   the integration branch shipped what you expected.
 - **Exit code** — `0` if `manifest.status === 'done'`, `1` otherwise.
 
-Like `huu run …`, `huu auto …` re-execs into the Docker image by
-default — auto-MTU network applies, port-isolation shim applies, secrets
-mount applies. Use `--yolo` to skip Docker.
+Like `huu run …`, `huu auto …` re-execs into the Docker image —
+auto-MTU network applies, port-isolation shim applies, secrets mount
+applies. (huu is docker-only; the old `--yolo` bypass was removed and
+is ignored with a notice.)
 
 ---
 

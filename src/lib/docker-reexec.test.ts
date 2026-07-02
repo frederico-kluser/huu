@@ -2,6 +2,8 @@ import { existsSync, readFileSync, statSync, unlinkSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   buildDockerArgv,
+  hasRemovedNativeBypass,
+  stripRemovedNativeFlags,
   decideReexec,
   detectDefaultRouteMtu,
   imageIsLocal,
@@ -19,17 +21,6 @@ describe('decideReexec', () => {
     const r = decideReexec(['run', 'x.json'], env({ HUU_IN_CONTAINER: '1' }));
     expect(r.shouldReexec).toBe(false);
     expect(r.reason).toMatch(/inside the huu container/);
-  });
-
-  it('skips re-exec when HUU_NO_DOCKER=1', () => {
-    const r = decideReexec(['run', 'x.json'], env({ HUU_NO_DOCKER: '1' }));
-    expect(r.shouldReexec).toBe(false);
-    expect(r.reason).toMatch(/HUU_NO_DOCKER/);
-  });
-
-  it('skips re-exec when HUU_NO_DOCKER=true', () => {
-    const r = decideReexec([], env({ HUU_NO_DOCKER: 'true' }));
-    expect(r.shouldReexec).toBe(false);
   });
 
   it('skips re-exec for --help', () => {
@@ -72,39 +63,28 @@ describe('decideReexec', () => {
     expect(decideReexec(['--stub', 'run', 'p.json'], env()).shouldReexec).toBe(true);
   });
 
-  it('skips re-exec for --yolo (CLI alias for HUU_NO_DOCKER)', () => {
-    const r = decideReexec(['--yolo'], env());
-    expect(r.shouldReexec).toBe(false);
-    expect(r.reason).toMatch(/--yolo/);
+  // DOCKER-ONLY (native mode removed): the legacy bypasses are DETECTED and
+  // WARNED about but never honored — every run goes through the container.
+  it('re-execs even with --yolo / --no-docker / HUU_NO_DOCKER (native mode removed)', () => {
+    expect(decideReexec(['--yolo'], env()).shouldReexec).toBe(true);
+    expect(decideReexec(['--no-docker', 'run', 'p.json'], env()).shouldReexec).toBe(true);
+    expect(decideReexec(['run', 'x.json'], env({ HUU_NO_DOCKER: '1' })).shouldReexec).toBe(true);
+    expect(decideReexec([], env({ HUU_NO_DOCKER: 'true' })).shouldReexec).toBe(true);
   });
 
-  it('skips re-exec for --yolo regardless of position', () => {
-    expect(decideReexec(['--yolo', 'run', 'p.json'], env()).shouldReexec).toBe(false);
-    expect(decideReexec(['run', 'p.json', '--yolo'], env()).shouldReexec).toBe(false);
-    expect(decideReexec(['--stub', '--yolo', 'run', 'p.json'], env()).shouldReexec).toBe(false);
+  it('hasRemovedNativeBypass detects the legacy flags/env for the warning', () => {
+    expect(hasRemovedNativeBypass(['--yolo'], env())).toBe(true);
+    expect(hasRemovedNativeBypass([], env({ HUU_NO_DOCKER: '1' }))).toBe(true);
+    expect(hasRemovedNativeBypass(['run', 'p.json'], env())).toBe(false);
+    expect(hasRemovedNativeBypass([], env({ HUU_NO_DOCKER: '0' }))).toBe(false);
   });
 
-  it('skips re-exec for --no-docker (neutral CI spelling of --yolo)', () => {
-    const r = decideReexec(['--no-docker'], env());
-    expect(r.shouldReexec).toBe(false);
-    expect(r.reason).toMatch(/--no-docker/);
-  });
-
-  it('skips re-exec for --no-docker regardless of position and with subcommands', () => {
-    expect(decideReexec(['--no-docker', 'run', 'p.json'], env()).shouldReexec).toBe(false);
-    expect(decideReexec(['auto', 'p.json', '--config', 'c.json', '--no-docker'], env()).shouldReexec).toBe(false);
-  });
-
-  it('--no-docker wins over contradictory env state', () => {
-    const r = decideReexec(['--no-docker'], env({ HUU_NO_DOCKER: '0' }));
-    expect(r.shouldReexec).toBe(false);
-  });
-
-  it('--yolo wins over HUU_NO_DOCKER=0 in env', () => {
-    // Explicit user intent on the CLI overrides shell state. The value
-    // happens to be falsy here but the principle holds: CLI > env.
-    const r = decideReexec(['--yolo'], env({ HUU_NO_DOCKER: '0' }));
-    expect(r.shouldReexec).toBe(false);
+  it('stripRemovedNativeFlags keeps everything else intact', () => {
+    expect(stripRemovedNativeFlags(['--yolo', 'run', 'p.json', '--no-docker', '--stub'])).toEqual([
+      'run',
+      'p.json',
+      '--stub',
+    ]);
   });
 });
 

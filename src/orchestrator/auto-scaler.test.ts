@@ -35,6 +35,11 @@ describe('AutoScaler', () => {
   function createScaler(metrics: SystemMetrics, overrides: Partial<ConstructorParameters<typeof AutoScaler>[0]> = {}) {
     return new AutoScaler({
       resourceMonitor: () => metrics,
+      // Tests pin their own dial so the hand-computed budget math in the
+      // assertions is insulated from the PRODUCT default (85 → 70 already
+      // happened once). resolveRamPercent()/DEFAULT_RAM_PERCENT have their
+      // own tests in budget.test.ts.
+      budgetPercent: 85,
       ...overrides,
     });
   }

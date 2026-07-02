@@ -4,8 +4,10 @@
 
 huu's headless mode (`huu auto`) turns any pipeline into a CI job: no TTY, no
 keyboard, NDJSON progress on stderr, one final JSON object on stdout, exit
-code `0`/`1`. Combined with `--no-docker` (or `HUU_NO_DOCKER=1`) it runs on
-any runner that has **Node.js ≥ 20 and git** — no Docker-in-Docker required.
+code `0`/`1`. huu is **docker-only** — the CLI re-execs itself into the huu
+image — so the runner needs **Node.js ≥ 20, git and Docker available**.
+Native CI execution (`--no-docker` / `HUU_NO_DOCKER=1`) was **removed**: the
+flags are ignored with a one-line notice and huu runs in the container anyway.
 
 The report-only audit pipelines (Security, Quality, Docs, Performance,
 Refactor) are the natural fit: they write their findings to `.huu/audits/`
@@ -26,23 +28,30 @@ artifacts and the exit code gates the pipeline.
 ## How it fits together
 
 ```
-runner (already an ephemeral container)
+runner (with Docker available)
   └─ npm install -g huu-pipe
-  └─ HUU_NO_DOCKER=1 huu auto pipeline.json --config huu-ci-config.json
-       ├─ stderr: NDJSON progress events (status, stage, tasks, concurrency, autoScale)
-       ├─ stdout: ONE final JSON object ({ ok, runId, status, agents, … })
-       └─ exit:   0 when the run finished `done`, 1 otherwise
+  └─ huu auto pipeline.json --config huu-ci-config.json
+       └─ docker run ghcr.io/frederico-kluser/huu:<tag>   (automatic re-exec)
+            ├─ stderr: NDJSON progress events (status, stage, tasks, concurrency, autoScale)
+            ├─ stdout: ONE final JSON object ({ ok, runId, status, agents, … })
+            └─ exit:   0 when the run finished `done`, 1 otherwise
 ```
 
-On your laptop, huu wraps itself in Docker so the agent never sees your shell
-credentials. A CI runner is the opposite situation: it is *already* an
-ephemeral, credential-scoped container, and Docker-in-Docker is usually
-unavailable — so you opt out of the wrapper with `--no-docker` (the neutral
-spelling of `--yolo`) or `HUU_NO_DOCKER=1` in the job environment.
+The wrapper runs in CI exactly as it does on your laptop: it re-execs huu
+into the container, which carries a **kernel memory ceiling** (`--memory` =
+host total − OS reserve) — the one guarantee software can't undermine. The
+old native escape hatch for runners without Docker was removed; a job that
+runs huu now needs Docker (GitHub's hosted runners ship it; on GitLab use a
+docker-enabled job — see the recipe). Pin the image with `HUU_IMAGE` for
+reproducible jobs; the run's stdio passes straight through `docker run`, so
+the NDJSON/stdout/exit-code contract is unchanged.
 
 ## Prerequisites
 
-1. **Node.js ≥ 20** and a working `git` on the runner.
+1. **Node.js ≥ 20**, a working `git` and **Docker** on the runner — the
+   `huu` CLI is a thin wrapper; the run itself executes inside the huu image
+   (pin it with `HUU_IMAGE`). GitHub-hosted runners have Docker
+   preinstalled; on GitLab use a docker-enabled job (see the recipe below).
 2. **The pipeline JSON committed to your repo.** Pipelines are versioned
    artifacts — commit the ones huu materialized under `pipelines/`, or your
    own. `huu auto` takes the path explicitly.
@@ -94,10 +103,10 @@ on:
 
 jobs:
   audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest       # Docker preinstalled on hosted runners
     timeout-minutes: 60
     env:
-      HUU_NO_DOCKER: '1'
+      HUU_IMAGE: ghcr.io/frederico-kluser/huu:latest   # pin a version tag
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
       - uses: actions/checkout@v4
@@ -145,16 +154,25 @@ Notes:
 
 ## GitLab CI recipe
 
+The job must be **docker-enabled**: either a runner whose executor has
+Docker on the host (shell executor, or the socket bind-mounted), or the
+standard Docker-in-Docker service shown here.
+
 ```yaml
 # .gitlab-ci.yml
 huu:security-audit:
-  image: node:20
+  image: docker:27              # docker CLI in the job image
+  services:
+    - docker:27-dind            # docker daemon (runner must allow privileged)
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
   variables:
-    HUU_NO_DOCKER: '1'
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ''
+    HUU_IMAGE: ghcr.io/frederico-kluser/huu:latest   # pin a version tag
     GIT_DEPTH: 0                # secrets sweep reads git history
   before_script:
+    - apk add --no-cache nodejs npm git jq
     - npm install -g huu-pipe
     - |
       git ls-files 'src/**' | jq -R . | jq -s \
@@ -174,7 +192,9 @@ huu:security-audit:
 ```
 
 Set `OPENROUTER_API_KEY` as a masked CI/CD variable
-(Settings → CI/CD → Variables).
+(Settings → CI/CD → Variables). On a shell-executor runner with Docker on
+the host you can drop the `services:`/`DOCKER_*` lines and use any image
+(or none) — huu only needs `docker` reachable on the job's PATH.
 
 ## Reading the output
 
@@ -205,10 +225,12 @@ Pin it only when you need determinism over throughput:
 
 ## FAQ
 
-**Is `--no-docker` safe in CI?** The Docker wrapper exists to hide *your
-laptop's* credentials from the agent. A CI runner is already an ephemeral
-container whose only credentials are the secrets you explicitly inject — the
-trade-off the `--yolo` warning describes does not apply.
+**What happened to `--no-docker` / `HUU_NO_DOCKER` / `--yolo`?**
+**Removed.** huu is docker-only: the flags are detected, a one-line notice
+is printed, and huu re-execs into the container anyway. The container's
+kernel memory ceiling (`--memory`) is the one guarantee software can't
+undermine, so native pipeline execution — in CI or anywhere else — no longer
+exists. A runner without Docker can't run huu; use a docker-enabled job.
 
 **Do I need `huu init-docker`?** No. That scaffolds Docker assets for local
 use; CI uses none of them.

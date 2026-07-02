@@ -191,21 +191,14 @@ export function decideReexec(args: string[], env: NodeJS.ProcessEnv): ReexecDeci
   if (env.HUU_IN_CONTAINER === '1') {
     return { shouldReexec: false, reason: 'already inside the huu container' };
   }
-  // CLI aliases for HUU_NO_DOCKER=1. Listed before the env check so the flag
-  // wins regardless of env: a user typing `--yolo` is making an explicit,
-  // visible choice that should not be overridden by stale shell state.
-  // `--no-docker` is the neutral spelling for CI runners, where the runner
-  // is already an ephemeral container and Docker-in-Docker is unavailable.
-  if (args.includes('--yolo')) {
-    return { shouldReexec: false, reason: '--yolo flag — running native (no Docker isolation)' };
-  }
-  if (args.includes('--no-docker')) {
-    return { shouldReexec: false, reason: '--no-docker flag — running native (no Docker isolation)' };
-  }
-  if (env.HUU_NO_DOCKER === '1' || env.HUU_NO_DOCKER === 'true') {
-    return { shouldReexec: false, reason: 'HUU_NO_DOCKER set — running native' };
-  }
-  // --help / -h are pure prints, no need to spin a container.
+  // DOCKER-ONLY: the native pipeline-execution mode was REMOVED. Both machine
+  // freezes happened on native runs, and the kernel memory ceiling
+  // (`--memory` on the container) is the one guarantee software can't
+  // undermine — so every run now goes through the container. The legacy
+  // bypasses (`--yolo`, `--no-docker`, `HUU_NO_DOCKER`) no longer exist; the
+  // CLI prints a notice when it sees them and re-execs anyway. What still
+  // runs on the host is NOT pipeline execution: `--help` (pure print) and the
+  // host utilities below (they operate on the host fs / docker daemon).
   if (args.includes('--help') || args.includes('-h')) {
     return { shouldReexec: false, reason: 'help flag — runs native' };
   }
@@ -213,7 +206,24 @@ export function decideReexec(args: string[], env: NodeJS.ProcessEnv): ReexecDeci
   if (firstNonFlag && NATIVE_ONLY_SUBCOMMANDS.has(firstNonFlag)) {
     return { shouldReexec: false, reason: `${firstNonFlag} runs native (operates on host fs)` };
   }
-  return { shouldReexec: true, reason: 'TUI/run path — execute inside the container' };
+  return { shouldReexec: true, reason: 'docker-only — every run executes inside the container' };
+}
+
+/** Legacy native-mode bypasses, kept ONLY to detect + warn (never honored). */
+export const REMOVED_NATIVE_FLAGS = ['--yolo', '--no-docker'] as const;
+
+/** True when the invocation carries a removed native-mode bypass. */
+export function hasRemovedNativeBypass(args: string[], env: NodeJS.ProcessEnv): boolean {
+  return (
+    REMOVED_NATIVE_FLAGS.some((f) => args.includes(f)) ||
+    env.HUU_NO_DOCKER === '1' ||
+    env.HUU_NO_DOCKER === 'true'
+  );
+}
+
+/** Strip the removed flags so the in-container CLI never sees them. */
+export function stripRemovedNativeFlags(args: string[]): string[] {
+  return args.filter((a) => !REMOVED_NATIVE_FLAGS.includes(a as (typeof REMOVED_NATIVE_FLAGS)[number]));
 }
 
 export interface SecretMount {
@@ -581,18 +591,20 @@ export interface ReexecOptions {
  * can inspect the result.
  */
 export async function reexecInDocker(
-  args: string[],
+  rawArgs: string[],
   opts: ReexecOptions = {},
 ): Promise<number> {
+  // Docker-only: the removed native-mode flags must never reach the
+  // in-container CLI (it would treat them as unknown input).
+  const args = stripRemovedNativeFlags(rawArgs);
   if (!isDockerInstalled()) {
     process.stderr.write(
       'huu: docker is not installed.\n\n' +
-        'huu uses Docker by default to isolate LLM agents from your shell\n' +
-        'credentials (~/.ssh, ~/.aws, ~/.npmrc tokens, etc.). Install Docker:\n' +
-        '  https://docs.docker.com/engine/install/\n\n' +
-        'Or set HUU_NO_DOCKER=1 to bypass and run huu natively. The native\n' +
-        'path requires Node ≥ 18 and a working git, plus all of huu\'s npm\n' +
-        'dependencies, and the agent will see your shell credentials.\n',
+        'huu is DOCKER-ONLY: every run executes inside a container so the\n' +
+        'LLM agents are isolated from your shell credentials (~/.ssh, ~/.aws,\n' +
+        '~/.npmrc tokens, …) and the container carries a kernel memory\n' +
+        'ceiling that keeps the machine from ever freezing. Install Docker:\n' +
+        '  https://docs.docker.com/engine/install/\n',
     );
     return 127;
   }

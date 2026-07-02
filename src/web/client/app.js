@@ -1177,7 +1177,7 @@ function saveSettings() {
 }
 /** The global default "max time per agent" (minutes), or undefined = pipeline default. */
 function globalTimeoutMinutes() { return S.settings.maxAgentMinutes; }
-/** Parse a RAM-budget percent (10–95 int), or undefined for the 85% default. */
+/** Parse a RAM-budget percent (10–95 int), or undefined for the 70% default. */
 function parseRamPercent(v) {
   const n = Math.floor(Number(v));
   if (!Number.isFinite(n) || n <= 0) return undefined;

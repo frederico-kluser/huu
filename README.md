@@ -125,11 +125,11 @@ executá-lo com rigor, é exatamente o trabalho pro huu.**
 
 ## Início rápido
 
-**Pré-requisitos:** Node.js ≥ 20, `git` e Docker (recomendado). Para o
+**Pré-requisitos:** Node.js ≥ 20, `git` e Docker (obrigatório). Para o
 backend padrão, exporte uma `OPENROUTER_API_KEY`
 ([openrouter.ai/keys](https://openrouter.ai/keys)).
 
-### Docker (recomendado)
+### Docker
 
 ```bash
 git clone https://github.com/frederico-kluser/huu
@@ -151,19 +151,21 @@ wrapper puxa automaticamente quando nenhum `HUU_IMAGE` está setado.
 MTU VPN-aware, mount de secrets, forwarding de sinais e limpeza de
 órfãos são todos cuidados pelo wrapper.
 
-### Nativo
+### Via npm
 
 ```bash
-npm install -g huu-pipe        # Node 20+ e um `git` funcional
-huu --yolo                     # abre a UI web nativa (sem Docker)
-huu --yolo --cli               # ou a TUI no terminal, sem Docker
+npm install -g huu-pipe        # Node 20+, `git` e Docker
+huu                            # re-executa sozinho no container
 ```
 
-Execuções nativas expõem suas credenciais de shell pro agente LLM.
-Prefira Docker pra qualquer coisa real no seu laptop. (`--no-docker` é
-o alias de grafia neutra do `--yolo`, pensado pra runners de CI — veja
-abaixo.) Matriz completa de instalação (macOS / Windows / Linux, notas
-do OrbStack, caveats do WSL2):
+O huu é **docker-only**: todo run executa no container, que carrega o
+teto de memória do kernel (`--memory`); não existe modo nativo. As
+antigas `--yolo` / `--no-docker` / `HUU_NO_DOCKER=1` foram
+**removidas** — se aparecerem, o huu avisa em uma linha, ignora e
+re-executa no Docker mesmo assim. Só `--help` e os utilitários de host
+(`init-docker`, `status`, `prune`) rodam fora do container. Matriz
+completa de instalação (macOS / Windows / Linux, notas do OrbStack,
+caveats do WSL2):
 [`docs/onboarding.pt-BR.md#instalação`](docs/onboarding.pt-BR.md#instalação).
 
 A UI (web por padrão, ou a TUI com `--cli`) abre num dashboard: comece
@@ -179,11 +181,11 @@ na Apple (vidro líquido, claro/escuro), tempo real, sem delay. É o
 mesmo Orchestrator da TUI; só muda a cara. A flag **`--cli`** volta pra
 TUI no terminal.
 
-- **Padrão e sem fricção.** `huu` → web. `huu --cli` → terminal.
-  `huu --yolo` → web **sem Docker** (nativo). Toda combinação vale: o
-  front-end (web/CLI) é ortogonal ao runtime (Docker/nativo).
-- **Funciona com e sem Docker.** No container o servidor sobe lá dentro
-  e a porta é publicada pro host (`-p`); nativo ele liga direto.
+- **Padrão e sem fricção.** `huu` → web. `huu --cli` → terminal. O
+  front-end (web/CLI) é ortogonal ao runtime — que é **sempre o
+  container** (o huu é docker-only).
+- **Sempre no Docker.** O servidor sobe dentro do container e a porta é
+  publicada pro host (`-p`) automaticamente.
 - **Na sua rede.** Por padrão escuta em `0.0.0.0` — abra do celular ou de
   outra máquina via `http://<ip-da-sua-máquina>:4888`. Tempo real por
   Server-Sent Events (reconecta sozinho), zero dependência nova (só
@@ -238,7 +240,7 @@ TUI no terminal.
   em vários projetos** — ou **vários projetos no mesmo repo** — é seguro: cada
   execução isola worktrees/branches por `runId`. **Quanto da RAM o huu pode usar
   é um dial** (Settings → **RAM budget %**, ou `HUU_RAM_PERCENT` /
-  `--ram-percent`; padrão 85%, o resto fica reservado pro sistema) — e o dial da
+  `--ram-percent`; padrão 70%, o resto fica reservado pro sistema) — e o dial da
   web agora **aplica na hora**: mudar vale **imediatamente** pras execuções em
   andamento **e** pras da fila, e o valor **persiste no servidor**
   (`~/.config/huu/web-settings.json`). Um **chip de orçamento** no topo mostra
@@ -246,9 +248,9 @@ TUI no terminal.
   a fila aceita até **256 projetos** (`HUU_MAX_QUEUED_RUNS` — projeto na fila
   não custa orçamento) e, sob pressão, uma execução com todos os agentes retidos
   mostra um selo âmbar pulsante **paused (RAM)** e retoma sozinha quando a
-  memória liberar. E o dial não é a última defesa: no Linux nativo o huu roda
-  num **escopo systemd** com teto de memória do kernel (no Docker, `--memory`
-  no container) — o pior caso derruba o huu, **nunca congela o host**. Um
+  memória liberar. E o dial não é a última defesa: o container carrega um
+  **teto de memória do kernel** (`--memory` = total do host menos a reserva
+  do SO) — o pior caso derruba o huu, **nunca congela o host**. Um
   **seletor de projetos** no topo (**projeto · pipeline**) alterna entre os
   boards ao vivo.
   **Com a fila rodando, dá para voltar à home (← Home) e adicionar mais
@@ -307,7 +309,7 @@ huu --cli                 # TUI no terminal
 | `HUU_WEB_HOST` | Endereço de bind (default `0.0.0.0`; `127.0.0.1` = só local). |
 | `HUU_WEB_TOKEN` | Segredo compartilhado exigido nas rotas de dados/ações. |
 | `HUU_CLI=1` | Default pra TUI (igual a `--cli`). |
-| `HUU_RAM_PERCENT` / `--ram-percent=<n>` | Orçamento de RAM como % do total da máquina (default `85`, faixa 10–95). Também na Web em Settings → RAM budget % — **aplicado ao vivo pela web** (vale na hora pra execuções atuais + fila, persistido no servidor). |
+| `HUU_RAM_PERCENT` / `--ram-percent=<n>` | Orçamento de RAM como % do total da máquina (default `70`, faixa 10–95). Também na Web em Settings → RAM budget % — **aplicado ao vivo pela web** (vale na hora pra execuções atuais + fila, persistido no servidor). |
 | `HUU_OOM_SCORE_ADJ` | Ajuste do `oom_score_adj` do processo huu (default conservador; best-effort — valor negativo só "pega" com `CAP_SYS_RESOURCE`, que nem o container tem; a alavanca real é `HUU_CHILD_OOM_SCORE_ADJ`, que sobe os subprocessos dos agentes pra +500). |
 | `HUU_PI_HERMETIC=0` | Escape de debug: desliga o **runtime pi hermético** (por padrão as sessões pi do huu NUNCA leem `~/.pi` nem carregam extensões `pi-*` globais do npm — só os prompts do huu + AGENTS.md/CLAUDE.md da raiz do repo-alvo). `huu status` mostra o estado. |
 | `HUU_AGENT_MEM_SEED_MB` | Seed do footprint por-agente do AutoScaler (MiB, clamp 128–4096; default pessimista `1536`). Baixe SÓ com medição — veja `scaler`/`ema_move` no debug log. |
@@ -737,16 +739,18 @@ Construa pipes em cima: `huu auto … | jq .runId`. Doc completa:
 
 ---
 
-## Rodando no CI (GitHub Actions / GitLab — sem Docker)
+## Rodando no CI (GitHub Actions / GitLab)
 
-Um runner de CI já é um container efêmero: lá o wrapper Docker do huu
-não faz sentido (e Docker-in-Docker raramente existe). Combine
-`HUU_NO_DOCKER=1` (ou `--no-docker`) com o modo headless e o huu vira
-um job de esteira em qualquer runner com **Node.js ≥ 20 e git**:
+O huu é **docker-only** também no CI: a execução nativa foi removida
+(`--no-docker` / `HUU_NO_DOCKER` são ignoradas com um aviso e o huu
+re-executa no container mesmo assim). O job precisa de um runner com
+**Docker disponível** (os runners hospedados do GitHub já têm) — rode o
+huu normalmente em modo headless e fixe a imagem com `HUU_IMAGE` pra
+builds reprodutíveis:
 
 ```yaml
 env:
-  HUU_NO_DOCKER: '1'
+  HUU_IMAGE: ghcr.io/frederico-kluser/huu:latest   # fixe uma tag de versão
   OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 steps:
   - run: npm install -g huu-pipe
@@ -838,7 +842,7 @@ Pra ninguém confundir intenção com pronto:
 | Tópico | Onde |
 |---|---|
 | **Tutorial / primeira execução / autoria** | [`docs/onboarding.pt-BR.md`](docs/onboarding.pt-BR.md) |
-| **CI sem Docker (GitHub Actions / GitLab)** | [`docs/ci.pt-BR.md`](docs/ci.pt-BR.md) |
+| **CI (GitHub Actions / GitLab)** | [`docs/ci.pt-BR.md`](docs/ci.pt-BR.md) |
 | **Arquitetura & regras de import em camadas** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | **Operações (Docker, env vars, FAQ, roadmap)** | [`docs/operations.pt-BR.md`](docs/operations.pt-BR.md) |
 | **Schema JSON do pipeline** | [`docs/pipeline-json-guide.md`](docs/pipeline-json-guide.md) |

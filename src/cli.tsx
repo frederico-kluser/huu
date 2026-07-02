@@ -9,7 +9,7 @@
 // is a slightly slower first invocation while the image pulls.
 import { resolve as resolvePath } from 'node:path';
 import { existsSync, statSync } from 'node:fs';
-import { decideReexec, reexecInDocker } from './lib/docker-reexec.js';
+import { decideReexec, hasRemovedNativeBypass, reexecInDocker } from './lib/docker-reexec.js';
 import { decideCgroupWrap, reexecInCgroupScope } from './lib/cgroup-self-wrap.js';
 import { API_KEY_REGISTRY, configFilePath } from './lib/api-key.js';
 import { preflightGitOnHost } from './lib/git-preflight.js';
@@ -39,6 +39,16 @@ import { startOomChildWatcher } from './lib/oom-child-watcher.js';
 
 const reexec = decideReexec(process.argv.slice(2), process.env);
 if (reexec.shouldReexec) {
+  // The native pipeline mode was removed (both machine freezes happened on
+  // native runs) — surface the fact instead of silently ignoring stale flags
+  // or shell state, then proceed into the container as usual.
+  if (hasRemovedNativeBypass(process.argv.slice(2), process.env)) {
+    process.stderr.write(
+      'huu: the native (no-docker) mode was REMOVED — huu is docker-only now.\n' +
+        '     --yolo/--no-docker/HUU_NO_DOCKER are ignored; running inside the ' +
+        'container with its kernel memory ceiling.\n',
+    );
+  }
   // Host-side git preflight: fail fast BEFORE pulling/launching docker.
   // Also discovers any git paths (worktree common-dir, parent toplevel)
   // that the wrapper must additionally bind-mount so `git` resolves

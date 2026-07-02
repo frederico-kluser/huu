@@ -26,7 +26,7 @@ function inputs(partial: Partial<RamDoctorInputs> = {}): RamDoctorInputs {
 describe('resolveRamDoctorReport', () => {
   it('reports the default dial with source', () => {
     const r = resolveRamDoctorReport(inputs());
-    expect(r.dialPercent).toBe(85);
+    expect(r.dialPercent).toBe(70);
     expect(r.dialSource).toBe('default');
     expect(r.budgetBytes).toBeGreaterThan(0);
     expect(r.reserveBytes).toBeCloseTo(32 * GiB * 0.08, -6);

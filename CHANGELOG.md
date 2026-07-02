@@ -94,6 +94,20 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ### Changed
 
+- **BREAKING — huu is now DOCKER-ONLY.** The native pipeline-execution mode
+  was removed: `--yolo`, `--no-docker` and `HUU_NO_DOCKER` no longer bypass
+  the container (the CLI prints a notice and re-execs anyway; the flags are
+  stripped before reaching the in-container CLI). Both machine freezes
+  happened on native runs, and the container's kernel memory ceiling
+  (`--memory`) is the one guarantee software can't undermine. What still runs
+  on the host is not pipeline execution: `--help` and the host utilities
+  (`init-docker`, `status`, `prune`). `scripts/huu-try` now always builds +
+  runs `huu:local` via Docker. The native systemd-scope wrap remains in the
+  tree as dormant defense-in-depth.
+- **BREAKING — default RAM dial lowered 85% → 70%** (`DEFAULT_RAM_PERCENT`).
+  On a desktop the OS + browser + IDE routinely hold 20–30% of RAM, so 85%
+  started every run already at the edge. Explicit `HUU_RAM_PERCENT`, the
+  `--ram-percent` flag and the web Setting override as before.
 - **MAX (greedy) removed from the web UI**: every web run is subordinate to
   the shared scheduler, where the per-run greedy flag never drove anything —
   the button was lying (the 33-run incident was launched with it "on"). Legacy

@@ -6,7 +6,7 @@ This document describes the layered structure of `huu` and the design decisions 
 
 ```
 src/
-├── cli.tsx                    # entry CLI (argv, --help, --yolo/--no-docker, --concurrency/--no-auto-scale, terminal restoration)
+├── cli.tsx                    # entry CLI (argv, --help, --concurrency/--no-auto-scale, terminal restoration; removed --yolo/--no-docker are stripped with a notice)
 ├── app.tsx                    # screen router (welcome / assistant / editor / run / summary)
 ├── lib/
 │   ├── types.ts               # Pipeline, AgentStatus, RunManifest, AutoScaleStatus, defaults
@@ -206,7 +206,9 @@ at the very top of `cli.tsx` decides which it is.
                    │  cli.tsx top-level                          │
                    │  decideReexec(argv, env)                    │
                    │       │                                     │
-                   │       ├── HUU_NO_DOCKER=1 / --yolo → native │
+                   │       ├── HUU_NO_DOCKER/--yolo/--no-docker  │
+                   │       │     → REMOVED: notice, strip flags, │
+                   │       │       re-exec anyway (docker-only)  │
                    │       ├── --help/-h               → native  │
                    │       ├── init-docker|status|prune → native │
                    │       └── otherwise               → re-exec │
@@ -231,7 +233,7 @@ at the very top of `cli.tsx` decides which it is.
                    │   └─ PID 2: huu-entrypoint (shell)          │
                    │        └─ PID 3: huu (Node)                 │
                    │              cli.tsx (HUU_IN_CONTAINER=1    │
-                   │              short-circuits to native)      │
+                   │              short-circuits the re-exec)    │
                    │                                             │
                    │  HEALTHCHECK probe reads /tmp/huu/active    │
                    │  (sentinel written by the TUI launcher) and │
@@ -265,7 +267,7 @@ Key invariants:
 | Pipeline assistant | Conversational drafting with mandatory single-pass project recon | Authoring is the work; the recon is digest-only (`lib/project-digest.ts` + `lib/project-recon.ts`) so cost is bounded and the interview can ground itself in real project facts before asking ≤8 questions. |
 | Auto-scaling | Resource-bound state machine (`orchestrator/auto-scaler.ts`) | Overnight runs need concurrency to track CPU/RAM headroom without operator input. Default thresholds: stop at 90%, destroy newest agent at 95%, 30s cooldown after each event, max 200 agents. Manual `+`/`-` disables auto-scale until `A` re-enables. |
 | API key registry | Declarative spec list (`lib/api-key-registry.ts`) | Adding a key is a one-entry append; resolver, TUI prompt, Docker-secret bind-mount, env passthrough, orphan secret-file cleanup all iterate the same list. |
-| Native escape hatch | `--yolo` flag (and `HUU_NO_DOCKER=1`) | Some users (and most contributors) need to skip Docker. The flag is composable with every other CLI mode (`huu --yolo run x.json`, `huu --yolo --stub`); a stderr warning is printed once per run because the agent gains access to the host's shell credentials. |
+| Native escape hatch | **REMOVED** — huu is docker-only | `--yolo` / `--no-docker` / `HUU_NO_DOCKER` no longer bypass the container: the CLI detects them, prints a one-line notice, strips the flags and re-execs into Docker anyway. The container's kernel memory ceiling (`--memory`) is the one guarantee software can't undermine; the native systemd-scope wrap stays in the tree as dormant defense-in-depth. Only `--help` and the host utilities (`init-docker`, `status`, `prune`) run on the host. |
 
 ## Agent skills
 

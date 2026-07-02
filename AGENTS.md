@@ -104,16 +104,19 @@ The Docker host wrapper (`lib/docker-reexec.ts`) is invoked from the very top
 of `cli.tsx` BEFORE the heavy Ink/React imports, so on the wrapper path none
 of the TUI code loads. Inside the container, `HUU_IN_CONTAINER=1` (set by
 the Dockerfile) short-circuits the gate so the same binary runs the TUI
-directly. Native bypasses: `--yolo`, `--no-docker` (neutral CI spelling),
-or `HUU_NO_DOCKER=1` — see `docs/ci.md` for the GitHub Actions / GitLab
-recipes. See the `running-in-docker` skill for the full lifecycle.
+directly. **huu is DOCKER-ONLY**: the native pipeline mode was removed —
+`--yolo`/`--no-docker`/`HUU_NO_DOCKER` are detected, warned about and
+ignored (the run proceeds into the container, which carries the kernel
+memory ceiling `--memory`). Only `--help` and the host utilities
+(`init-docker`, `status`, `prune`) run natively. See the
+`running-in-docker` skill for the full lifecycle.
 
 ### Dynamic concurrency (memory-aware, default ON)
 
 The orchestrator always instantiates the `AutoScaler`
 (`src/orchestrator/auto-scaler.ts`). In `auto` mode (the default) the
 concurrency target is the **RAM BUDGET dial** — a configurable % of TOTAL RAM
-(`HUU_RAM_PERCENT` / `--ram-percent` / web Setting; default 85, clamp 10–95;
+(`HUU_RAM_PERCENT` / `--ram-percent` / web Setting; default 70, clamp 10–95;
 `src/lib/budget.ts`, floored at `total − 512MiB` for the OS) minus
 `ramUsedBytes`, divided by an EMA-observed per-agent footprint (seeded
 PESSIMISTIC at 1536MiB so a cold start under-admits then opens up as the EMA

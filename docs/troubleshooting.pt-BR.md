@@ -122,10 +122,10 @@ editaram as mesmas linhas numa stage.
 
 | Sintoma | Causa → ação |
 |---|---|
-| mudanças no próprio huu não fazem efeito | Um `huu` global re-executa na imagem PUBLICADA. Itere com `HUU_NO_DOCKER=1`. |
+| mudanças no próprio huu não fazem efeito | Um `huu` global re-executa na imagem PUBLICADA. Itere com `scripts/huu-try` (sempre builda + roda `huu:local` via Docker; `--no-build` pula o build), ou `docker build -t huu:local . && HUU_IMAGE=huu:local huu …`. (`HUU_NO_DOCKER=1` foi removida — é ignorada com um aviso.) |
 | containers órfãos após crash | `huu prune` (usa os cidfiles gravados). |
 | rede trava na VPN | O huu auto-cria bridge com MTU casado; override com `HUU_DOCKER_NETWORK`. |
-| CI sem Docker | `--no-docker` + receitas em [ci.pt-BR.md](ci.pt-BR.md). |
+| runner de CI sem Docker | O huu é docker-only (`--no-docker` foi removida, ignorada com um aviso) — use um runner/job docker-enabled; receitas em [ci.pt-BR.md](ci.pt-BR.md). |
 
 ## macOS: runs parados para sempre a $0 (corrigido)
 

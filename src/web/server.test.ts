@@ -453,7 +453,7 @@ describe('web server — machine-global settings (/api/settings)', () => {
         body: JSON.stringify({ ramPercent: null }),
       })
     ).json()) as { ramPercent: number };
-    expect(cleared.ramPercent).toBe(85); // env unset in tests → default
+    expect(cleared.ramPercent).toBe(70); // env unset in tests → default
   });
 
   it('POST /api/run no longer honors a body ramPercent (settings own the dial)', async () => {

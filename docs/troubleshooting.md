@@ -120,10 +120,10 @@ edited the same lines in one stage.
 
 | Symptom | Cause → fix |
 |---|---|
-| changes to huu itself don't take effect | A globally-installed `huu` re-execs into the PUBLISHED image. Iterate with `HUU_NO_DOCKER=1`. |
+| changes to huu itself don't take effect | A globally-installed `huu` re-execs into the PUBLISHED image. Iterate with `scripts/huu-try` (always builds + runs `huu:local` via Docker; `--no-build` skips the build), or `docker build -t huu:local . && HUU_IMAGE=huu:local huu …`. (`HUU_NO_DOCKER=1` was removed — it's ignored with a notice.) |
 | orphan containers after a crash | `huu prune` (uses recorded cidfiles). |
 | network hangs on VPN | huu auto-creates an MTU-matched bridge; override with `HUU_DOCKER_NETWORK`. |
-| CI without Docker | `--no-docker` + recipes in [ci.md](ci.md). |
+| CI runner without Docker | huu is docker-only (`--no-docker` was removed, ignored with a notice) — use a docker-enabled runner/job; recipes in [ci.md](ci.md). |
 
 ## macOS: runs idle forever at $0 (fixed)
 

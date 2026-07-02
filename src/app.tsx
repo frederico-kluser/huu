@@ -447,8 +447,10 @@ export function App({
           <Box marginTop={1} flexDirection="column">
             <Text bold color="cyan">Why does it run inside Docker?</Text>
             <Text>
-              {'  '}Isolation: agents have shell access and touch the filesystem. The wrapper
-              {'  '}re-executes the binary inside the container automatically. Use <Text bold>--yolo</Text> to run on the host.
+              {'  '}Isolation + a kernel memory ceiling: agents have shell access and touch the
+              {'  '}filesystem, and the container&apos;s <Text bold>--memory</Text> cap guarantees the machine never
+              {'  '}freezes. huu is docker-only — the wrapper re-executes the binary inside the
+              {'  '}container automatically (there is no native mode).
             </Text>
           </Box>
 

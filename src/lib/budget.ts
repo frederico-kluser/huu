@@ -13,8 +13,14 @@
  * clamped to a sane range, never thrown.
  */
 
-/** Budget when nothing is configured: 85% of total RAM. */
-export const DEFAULT_RAM_PERCENT = 85;
+/**
+ * Budget when nothing is configured: 70% of total RAM. Lowered from 85 after
+ * the 33-run incident: on a desktop the OS + browser + IDE routinely hold
+ * 20–30% of RAM, so an 85% dial started every run already at the edge — 70
+ * leaves honest headroom by default and the dial is right there for anyone
+ * who wants more.
+ */
+export const DEFAULT_RAM_PERCENT = 70;
 /**
  * Dial clamp. Below 10% nothing meaningful runs; above 95% there is no room for
  * the OS/page-cache to breathe before the kernel OOM-killer engages (the very

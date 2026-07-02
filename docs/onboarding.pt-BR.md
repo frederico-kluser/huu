@@ -70,22 +70,21 @@ huu run pipelines/huu-test-suite.pipeline.json     # usa ghcr.io/frederico-kluse
 > mounts que cruzam a fronteira Windows/WSL são 10–20× mais lentos pro
 > I/O de muitos arquivos pequenos que o `git worktree add` faz.
 
-### Nativo (sem Docker)
+### Sem modo nativo (docker-only)
 
 ```bash
-npm install -g huu-pipe        # Node 20+ e um `git` funcional
-huu --yolo                     # abre a TUI nativa (sem Docker)
+npm install -g huu-pipe        # Node 20+, um `git` funcional e Docker
+huu                            # re-executa sozinho no container
 ```
 
-Execuções nativas expõem suas credenciais de shell pro agente LLM
-(`~/.ssh`, `~/.aws`, …) e exigem o `npm install` local das deps do huu. Um
-warning de uma linha aparece no stderr a cada vez. Use Docker pra qualquer
-coisa real; `--yolo` é pro desenvolvimento do `huu` em si e smoke checks
-rápidos. `--no-docker` (ou `HUU_NO_DOCKER=1`) é o alias de grafia
-neutra do mesmo bypass, pensado pra CI — um runner de CI já é um
-container efêmero, então a grafia de aviso não faz sentido lá. Veja
-[`docs/ci.pt-BR.md`](ci.pt-BR.md) pras receitas de GitHub Actions /
-GitLab.
+O huu é **docker-only**: todo run executa no container, que carrega o
+teto de memória do kernel; não existe modo nativo. Os antigos bypasses
+(`--yolo`, `--no-docker`, `HUU_NO_DOCKER=1`) foram **removidos** — o
+huu imprime um aviso de uma linha, ignora e re-executa no Docker mesmo
+assim. Só `--help` e os utilitários de host (`init-docker`, `status`,
+`prune`) rodam fora do container. O CI precisa de um runner
+docker-enabled — veja [`docs/ci.pt-BR.md`](ci.pt-BR.md) pras receitas
+de GitHub Actions / GitLab.
 
 Mais sobre modos de execução Docker (compose, isolated-volume, secrets,
 VPN/MTU): [`docs/operations.pt-BR.md#docker`](operations.pt-BR.md#docker).
@@ -433,9 +432,10 @@ env var é o fallback); uma key salva pela TUI tem precedência.
 - **Exit code** — `0` se `manifest.status === 'done'`, `1` caso
   contrário.
 
-Igual ao `huu run …`, `huu auto …` re-exec no image do Docker por
-padrão — auto-MTU de rede vale, shim de isolamento de portas vale,
-mount de secrets vale. Use `--yolo` pra pular o Docker.
+Igual ao `huu run …`, `huu auto …` re-exec na imagem do Docker —
+auto-MTU de rede vale, shim de isolamento de portas vale, mount de
+secrets vale. (O huu é docker-only; o antigo bypass `--yolo` foi
+removido e é ignorado com um aviso.)
 
 ---
 
