@@ -32,6 +32,7 @@ import { execFileSync } from 'node:child_process';
 import {
   getSystemMetrics,
   parseMemoryPressureSome10,
+  parseMemoryPressureFull10,
   resetCpuSnapshot,
   resetDarwinAvailableCache,
   SystemMetricsSampler,
@@ -101,6 +102,11 @@ describe('getSystemMetrics', () => {
     expect(m).toHaveProperty('processRssBytes');
     expect(m).toHaveProperty('loadAvg1');
     expect(m).toHaveProperty('containerAware');
+    expect(m).toHaveProperty('memPressureSome10');
+    expect(m).toHaveProperty('memPressureFull10');
+    expect(m).toHaveProperty('swapTotalBytes');
+    expect(m).toHaveProperty('swapFreeBytes');
+    expect(m).toHaveProperty('swapInPagesPerSec');
   });
 
   it('keeps ramAvailableBytes within [0, ramTotalBytes]', () => {
@@ -421,5 +427,19 @@ describe('parseMemoryPressureSome10', () => {
     expect(parseMemoryPressureSome10('full avg10=1.0 avg60=0 avg300=0 total=1')).toBeNull();
     expect(parseMemoryPressureSome10('')).toBeNull();
     expect(parseMemoryPressureSome10('garbage')).toBeNull();
+  });
+});
+
+describe('parseMemoryPressureFull10', () => {
+  it('extracts the full-line avg10 from a real PSI body', () => {
+    const body =
+      'some avg10=0.42 avg60=0.10 avg300=0.03 total=12345678\n' +
+      'full avg10=7.31 avg60=1.20 avg300=0.40 total=6789012\n';
+    expect(parseMemoryPressureFull10(body)).toBe(7.31);
+  });
+
+  it('returns null when the full line is absent', () => {
+    expect(parseMemoryPressureFull10('some avg10=1.0 avg60=0 avg300=0 total=1')).toBeNull();
+    expect(parseMemoryPressureFull10('')).toBeNull();
   });
 });

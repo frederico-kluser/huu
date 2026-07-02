@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { GlobalScheduler, distributeBudget, type RunDriver } from './global-scheduler.js';
 import { AutoScaler } from './auto-scaler.js';
 import type { SystemMetrics } from '../lib/resource-monitor.js';
@@ -23,6 +23,10 @@ function metrics(partial: Partial<SystemMetrics> = {}): SystemMetrics {
     loadAvg1: 0,
     containerAware: false,
     memPressureSome10: partial.memPressureSome10 ?? null,
+    memPressureFull10: partial.memPressureFull10 ?? null,
+    swapTotalBytes: partial.swapTotalBytes ?? 0,
+    swapFreeBytes: partial.swapFreeBytes ?? 0,
+    swapInPagesPerSec: partial.swapInPagesPerSec ?? null,
   };
 }
 
@@ -252,5 +256,78 @@ describe('GlobalScheduler — explicit priority (list order is authoritative)', 
     sched.recomputeGrants();
     expect(sched.grantFor('r1')).toBe(150);
     expect(sched.grantFor('r2')).toBe(50);
+  });
+});
+
+describe('GlobalScheduler pressure ladder (L1 budget enforcement)', () => {
+  const GiB = 1024 ** 3;
+  const savedEnv: Record<string, string | undefined> = {};
+  const ENV_KEYS = ['HUU_GUARD_OVER_BUDGET_MS', 'HUU_GUARD_L1_REPREEMPT_MS'];
+
+  beforeEach(() => {
+    for (const k of ENV_KEYS) savedEnv[k] = process.env[k];
+    process.env.HUU_GUARD_OVER_BUDGET_MS = '0'; // fire L1 on the first over-budget read
+  });
+
+  afterEach(() => {
+    for (const k of ENV_KEYS) {
+      if (savedEnv[k] === undefined) delete process.env[k];
+      else process.env[k] = savedEnv[k];
+    }
+  });
+
+  /** 30 GiB used of 32 (93.75% < 95) with plentiful FREE swap → the ONLY
+   *  trigger is the dial (85% of 32 = 27.2 GiB < 30 GiB used). */
+  function overBudgetMetrics() {
+    return metrics({
+      ramTotalBytes: 32 * GiB,
+      ramUsedBytes: 30 * GiB,
+      ramAvailableBytes: 2 * GiB,
+      ramPercent: 93.75,
+      swapTotalBytes: 16 * GiB,
+      swapFreeBytes: 16 * GiB,
+    });
+  }
+
+  it('enforces the dial: preempts the lowest-priority newest agent when used > budget (RAM% < 95)', async () => {
+    const budget = new AutoScaler({ resourceMonitor: () => overBudgetMetrics() });
+    budget.setMode('auto');
+    budget.start();
+    const sched = new GlobalScheduler({ budget });
+    const top = new StubDriver('top', 0, [{ agentId: 1, startedAt: 100 }]);
+    const low = new StubDriver('low', 0, [
+      { agentId: 1, startedAt: 200 },
+      { agentId: 2, startedAt: 300 },
+    ]);
+    sched.register(top, 0);
+    sched.register(low, 1);
+
+    await sched.tick();
+
+    expect(low.killed).toEqual([2]); // lowest priority, newest agent
+    expect(top.killed).toEqual([]); // higher priority untouched
+    expect(sched.pressure.level).toBe(1);
+    expect(sched.shouldSpawn()).toBe(false); // growth frozen while over the dial
+
+    // Damped: an immediate second tick must NOT preempt again — the freed RAM
+    // has to land in `used` before the next L1 decision.
+    await sched.tick();
+    expect(low.killed).toEqual([2]);
+    budget.stop();
+  });
+
+  it('L1 never preempts the last live agent on the machine (degrade to sequential, not zero)', async () => {
+    const budget = new AutoScaler({ resourceMonitor: () => overBudgetMetrics() });
+    budget.setMode('auto');
+    budget.start();
+    const sched = new GlobalScheduler({ budget });
+    const only = new StubDriver('only', 0, [{ agentId: 1, startedAt: 100 }]);
+    sched.register(only, 0);
+
+    await sched.tick();
+
+    expect(only.killed).toEqual([]);
+    expect(sched.pressure.level).toBe(1);
+    budget.stop();
   });
 });

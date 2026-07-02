@@ -14,7 +14,7 @@
 
 /** Clamp bounds mirror the AutoScaler's estimate clamps (min/maxAgentMemoryMb). */
 const SEED_MIN_MB = 128;
-const SEED_MAX_MB = 2048;
+const SEED_MAX_MB = 4096;
 const ALPHA_MIN = 0.01;
 const ALPHA_MAX = 1;
 

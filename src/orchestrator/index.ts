@@ -56,7 +56,8 @@ import {
   writeAgentEnvFile,
 } from './agent-env.js';
 import { ensureNativeShim, type NativeShim } from './native-shim.js';
-import { AutoScaler } from './auto-scaler.js';
+import { AutoScaler, MATURE_AGE_MS } from './auto-scaler.js';
+import { PressureLadder } from './pressure-ladder.js';
 import type { GlobalScheduler, RunDriverHandle } from './global-scheduler.js';
 import { getSystemMetrics } from '../lib/resource-monitor.js';
 import { resolveRamPercent } from '../lib/budget.js';
@@ -130,6 +131,12 @@ const RETRY_MERGE_VISIT_BASE = 1_000_000;
 const AUTO_SCALE_MAX_INSTANCES = 200;
 const MIN_INSTANCES = 1;
 const POLL_INTERVAL_MS = 500;
+/**
+ * Accelerated pool tick under host pressure (ladder level ≥ 2): one victim per
+ * tick stays the rule, so shedding velocity comes from ticking faster while
+ * each preemption's freed RAM is observed before the next decision.
+ */
+const PRESSURE_POLL_INTERVAL_MS = 150;
 
 class TimeoutError extends Error {
   readonly isTimeout = true;
@@ -307,6 +314,8 @@ export class Orchestrator {
   private portAllocator: PortAllocator;
   private nativeShim: NativeShim | null = null;
   private autoScaler: AutoScaler;
+  /** Graded pressure verdicts for the single-run guard (see PressureLadder). */
+  private readonly pressureLadder = new PressureLadder();
   private autoScaleDisabledByUser = false;
   /**
    * Set when this run is subordinate to a GlobalScheduler (multi-run). Null on
@@ -957,6 +966,22 @@ export class Orchestrator {
     return out;
   }
 
+  /**
+   * Reservation-accounting inputs (see AutoScaler.syncReservations): spawns in
+   * flight plus live agents still younger than MATURE_AGE_MS — the RAM both
+   * will grow into is not yet visible in `ramUsedBytes`.
+   */
+  private spawnStats(): { spawning: number; young: number } {
+    const now = Date.now();
+    let young = 0;
+    for (const id of this.activeAgents.keys()) {
+      const st = this.agents.get(id);
+      const since = st?.startedAt ?? st?.createdAt ?? 0;
+      if (since > 0 && now - since < MATURE_AGE_MS) young++;
+    }
+    return { spawning: this.spawningIds.size, young };
+  }
+
   async start(): Promise<OrchestratorResult> {
     if (this.status !== 'idle') throw new Error('Orchestrator already running');
     this.startedAt = Date.now();
@@ -1137,6 +1162,7 @@ export class Orchestrator {
             // internally when no checkpoint is possible.
             pauseAgent: (id) => this.pauseAgent(id),
             acceptMetrics: (m) => this.autoScaler.acceptMetrics(m),
+            spawnStats: () => this.spawnStats(),
           },
           // Authoritative priority from the caller's list order (racy
           // register-call order would otherwise decide it).
@@ -1446,6 +1472,10 @@ export class Orchestrator {
       !this.aborted &&
       (this.pendingTasks.length > 0 || this.activeAgents.size > 0 || this.spawningIds.size > 0 || this.finalizingIds.size > 0)
     ) {
+      // Per-tick pressure snapshot (single-run path; the scheduler owns it in
+      // subordinate mode): freezes spawns at L1+ and shortens the tick at L2+.
+      let poolPressureLevel = 0;
+      let pressureBlocked = false;
       if (this.scheduler) {
         // SUBORDINATE (multi-run): the GlobalScheduler owns the concurrency
         // target AND the cross-run, priority-ordered memory-guard kill. Refresh
@@ -1456,6 +1486,10 @@ export class Orchestrator {
         this.instanceCount = this.scheduler.grantFor(this.manifest!.runId);
       } else {
         this.autoScaler.notifyTaskQueued(this.pendingTasks.length);
+        // Reservation accounting: report in-flight spawns + young agents so
+        // budgetAdditional() charges the RAM they will still grow into.
+        const spawnStats = this.spawnStats();
+        this.autoScaler.syncReservations(spawnStats.spawning, spawnStats.young);
         // Auto mode drives the concurrency target from memory headroom; greedy
         // (MAX) mode drives it from the queue depth; manual mode keeps the
         // user's pinned value. Both scaler modes recompute every tick.
@@ -1464,13 +1498,35 @@ export class Orchestrator {
           this.instanceCount = this.autoScaler.targetConcurrency();
         }
 
-        // Memory guard (both modes): at the destroy threshold, preempt the
-        // NEWEST agent — the one with the least work done — so older agents'
-        // progress is never lost. Fase 2.3: PAUSE it (preserve worktree +
-        // session, requeue to resume on headroom) by default; HUU_NO_PAUSE=1
-        // reverts to the legacy kill+requeue. pauseAgent itself falls back to a
-        // kill when no checkpoint is possible, so this never loses the backstop.
-        if (this.autoScaler.shouldDestroy() && this.activeAgents.size > 0) {
+        // Graded memory guard (PressureLadder — replaces the single ≥95%
+        // trigger that a swapping host never crosses): L1 = usage sustained
+        // over the RAM-budget dial (enforced for auto/greedy; a user-pinned
+        // manual pool ignores the dial), L2/L3 = host pressure/thrash
+        // (avail+swap floors, PSI full, sustained swap-in, legacy ≥95%) —
+        // enforced in EVERY mode. Preempt the NEWEST agent — the one with the
+        // least work done — so older agents' progress is never lost. Fase 2.3:
+        // PAUSE it (preserve worktree + session, requeue to resume on headroom)
+        // by default; HUU_NO_PAUSE=1 reverts to the legacy kill+requeue.
+        // pauseAgent itself falls back to a kill when no checkpoint is
+        // possible, so this never loses the backstop.
+        const verdict = this.pressureLadder.evaluate(
+          this.autoScaler.metrics(),
+          this.autoScaler.budgetBytes(),
+        );
+        poolPressureLevel = verdict.level;
+        const budgetEnforced = scaleMode !== 'manual';
+        pressureBlocked = verdict.level >= 2 || (verdict.level === 1 && budgetEnforced);
+        const guardFires =
+          verdict.level >= 2 || (verdict.level === 1 && budgetEnforced);
+        // L1 progress guarantee: budget enforcement never preempts the last
+        // live agent — degrade to sequential, never to zero. L2/L3 may drain
+        // fully; the pool self-resumes once pressure clears.
+        const minSurvivors = verdict.level === 1 ? 1 : 0;
+        if (
+          guardFires &&
+          this.activeAgents.size > minSurvivors &&
+          this.pressureLadder.preemptAllowed(verdict.level)
+        ) {
           let newestId = -1;
           let newestTime = 0;
           for (const [id, _agent] of this.activeAgents) {
@@ -1482,13 +1538,19 @@ export class Orchestrator {
             }
           }
           if (newestId >= 0) {
+            this.dlog('orch', 'guard_preempt', {
+              level: verdict.level,
+              reason: verdict.reason,
+              agentId: newestId,
+            });
             if (this.pauseInsteadOfKill) {
               await this.pauseAgent(newestId);
             } else {
               await this.destroyAgent(newestId);
             }
             this.autoScaler.notifyAgentDestroyed();
-            // Re-evaluation: next poll cycle will check shouldDestroy() again
+            this.pressureLadder.notePreempt(verdict.level);
+            // Re-evaluation: next poll cycle re-grades the ladder
           }
         }
       }
@@ -1503,7 +1565,7 @@ export class Orchestrator {
       const slotsAvailable = Math.max(0, this.instanceCount - busyCount);
       const ramping = this.scheduler != null || this.autoScaler.getMode() !== 'manual';
       const perTickCap = ramping ? Math.max(1, Math.ceil(busyCount * 0.5)) : slotsAvailable;
-      const toSpawn = Math.min(slotsAvailable, perTickCap);
+      const toSpawn = pressureBlocked ? 0 : Math.min(slotsAvailable, perTickCap);
       for (let i = 0; i < toSpawn && this.pendingTasks.length > 0; i++) {
         if (!(this.scheduler ? this.scheduler.shouldSpawn() : this.autoScaler.shouldSpawn())) {
           break;
@@ -1532,9 +1594,11 @@ export class Orchestrator {
         });
       }
 
-      // Wait with wakeup
+      // Wait with wakeup. Under host pressure (L2+) tick faster so the
+      // one-victim-per-tick guard drains a runaway pool in seconds.
+      const tickMs = poolPressureLevel >= 2 ? PRESSURE_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
       await new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, POLL_INTERVAL_MS);
+        const timer = setTimeout(resolve, tickMs);
         this.poolWakeup = () => {
           clearTimeout(timer);
           this.poolWakeup = null;

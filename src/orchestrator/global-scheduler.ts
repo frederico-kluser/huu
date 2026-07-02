@@ -1,7 +1,9 @@
 import { AutoScaler } from './auto-scaler.js';
+import { PressureLadder, HEALTHY_VERDICT, type PressureVerdict } from './pressure-ladder.js';
 import { SystemMetricsSampler, type SystemMetrics } from '../lib/resource-monitor.js';
 import { resolveRamPercent } from '../lib/budget.js';
 import { resolveRamTuning } from '../lib/ram-tuning.js';
+import { log as dlog } from '../lib/debug-logger.js';
 
 /**
  * GlobalScheduler — the single owner of the machine for MULTI-RUN scheduling.
@@ -27,6 +29,13 @@ import { resolveRamTuning } from '../lib/ram-tuning.js';
  * killer.
  */
 const SCHED_TICK_MS = 500;
+/**
+ * Accelerated cadence under host pressure (ladder level ≥ 2): one victim per
+ * tick stays the rule (each preemption's freed RAM is observed before the next
+ * decision), so shedding VELOCITY comes from ticking faster — ~6/s instead of
+ * 2/s — while the data between decisions stays fresh.
+ */
+const SCHED_PRESSURE_TICK_MS = 150;
 /**
  * Overflow guard on a single run's demand. Real bounding is the global budget
  * B (≤ AutoScaler maxAgents); this only stops a bogus getDemand() (e.g. a
@@ -73,6 +82,14 @@ export interface RunDriver {
    * itself (which would corrupt the shared CPU delta). Display-only.
    */
   acceptMetrics?(metrics: SystemMetrics): void;
+  /**
+   * Optional: reservation-accounting inputs — spawns in flight plus live agents
+   * younger than the maturation window. The scheduler SUMS these across runs and
+   * feeds the budget scaler so a multi-run spawn burst is charged against the
+   * budget before its RAM becomes visible in `used`. A driver without it simply
+   * contributes zero reservations (legacy behavior).
+   */
+  spawnStats?(): { spawning: number; young: number };
 }
 
 /** Returned to a run on register(); pass back to unregister(). */
@@ -136,10 +153,15 @@ export class GlobalScheduler {
   private readonly grants = new Map<string, number>();
   /** `${runId}#${agentId}` for kills in flight — never re-select the same victim. */
   private readonly preempting = new Set<string>();
-  private tickTimer: ReturnType<typeof setInterval> | null = null;
+  private tickTimer: ReturnType<typeof setTimeout> | null = null;
   private ticking = false;
+  private stopped = true;
   private lastBudget = 0;
   private lastRemaining = 0;
+  /** Graded pressure verdicts (swap/PSI-full/budget-aware) — see PressureLadder. */
+  private readonly ladder = new PressureLadder();
+  private lastPressure: PressureVerdict = HEALTHY_VERDICT;
+  private lastLoggedPressureLevel = 0;
   /**
    * One reservation set shared by every subordinate run's PortAllocator, so two
    * concurrent runs (each with their own agentId space) never hand out the same
@@ -177,18 +199,34 @@ export class GlobalScheduler {
 
   /** Begin sampling + the re-grant/guard tick. Idempotent. */
   start(): void {
-    if (this.tickTimer) return;
+    if (!this.stopped) return;
+    this.stopped = false;
     // The budget's internal poll is the SOLE caller of the sampler — one sample
-    // per second, so the single CPU-delta snapshot is never corrupted.
+    // per second (250 ms near the edge), so the single CPU-delta snapshot is
+    // never corrupted.
     this.budget.start();
     void this.tick();
-    this.tickTimer = setInterval(() => void this.tick(), SCHED_TICK_MS);
+    this.scheduleTick();
+  }
+
+  /**
+   * Self-rescheduling tick with pressure-adaptive cadence: 500 ms at rest,
+   * 150 ms while the ladder reports host pressure (level ≥ 2) so one-victim-
+   * per-tick shedding still drains a runaway fleet in seconds.
+   */
+  private scheduleTick(): void {
+    if (this.stopped) return;
+    const delay = this.lastPressure.level >= 2 ? SCHED_PRESSURE_TICK_MS : SCHED_TICK_MS;
+    this.tickTimer = setTimeout(() => {
+      void this.tick().finally(() => this.scheduleTick());
+    }, delay);
     this.tickTimer.unref?.();
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.tickTimer) {
-      clearInterval(this.tickTimer);
+      clearTimeout(this.tickTimer);
       this.tickTimer = null;
     }
     this.budget.stop();
@@ -235,9 +273,18 @@ export class GlobalScheduler {
     return this.grants.get(runId) ?? 0;
   }
 
-  /** Global RAM/CPU spawn gate (the budget's headroom check). */
+  /** Global RAM/CPU spawn gate (the budget's headroom check + pressure freeze). */
   shouldSpawn(): boolean {
+    // Any ladder level ≥ 1 means usage is already past the dial (or the host is
+    // pressured) — growing the fleet is wrong regardless of what the budget
+    // math says this instant.
+    if (this.lastPressure.level >= 1) return false;
     return this.budget.shouldSpawn();
+  }
+
+  /** Latest graded pressure verdict (level 0–3) — observability + admission. */
+  get pressure(): PressureVerdict {
+    return this.lastPressure;
   }
 
   /** Number of admitted runs. A selector/UI shows only when this is > 1. */
@@ -254,8 +301,11 @@ export class GlobalScheduler {
    * Free slots not claimed by any admitted run's demand (last recompute).
    * Positive only when every admitted run is fully served and budget remains —
    * the signal an admission policy samples to pull in the next queued run.
+   * Forced to 0 under host pressure (ladder ≥ 2): admitting a run while the
+   * machine sheds agents would fight the guard.
    */
   get remaining(): number {
+    if (this.lastPressure.level >= 2) return 0;
     return this.lastRemaining;
   }
 
@@ -271,6 +321,8 @@ export class GlobalScheduler {
 
     let activeTotal = 0;
     let pendingTotal = 0;
+    let spawningTotal = 0;
+    let youngTotal = 0;
     const demands: number[] = [];
     for (const s of ordered) {
       const active = s.driver.activeAgentAges().length;
@@ -278,11 +330,18 @@ export class GlobalScheduler {
       demands.push(demand);
       activeTotal += active;
       pendingTotal += Math.max(0, demand - active);
+      const stats = s.driver.spawnStats?.();
+      if (stats) {
+        spawningTotal += Math.max(0, stats.spawning);
+        youngTotal += Math.max(0, stats.young);
+      }
     }
 
     // Drive the ONE budget AutoScaler from the SUM across all runs, so
-    // targetConcurrency() returns the GLOBAL slot budget.
+    // targetConcurrency() returns the GLOBAL slot budget — including the
+    // reservation charge for spawns/young agents whose RAM `used` can't see yet.
     this.budget.syncCounts(activeTotal, pendingTotal);
+    this.budget.syncReservations(spawningTotal, youngTotal);
     const B = this.budget.targetConcurrency();
     this.lastBudget = B;
 
@@ -350,26 +409,70 @@ export class GlobalScheduler {
   }
 
   /**
-   * RAM/CPU backstop: at ≥ the destroy threshold, preempt the global victim
-   * (lowest-priority newest) and arm the budget's cooldown so we don't re-preempt
-   * before the freed RAM is observed. One preemption per tick — the tick cadence
-   * + cooldown are the damping (mirrors the single-run guard). Fase 2.3: PAUSE
-   * the victim (preserve its worktree + session, resume on headroom) by default;
-   * HUU_NO_PAUSE=1 or a driver without pauseAgent ⇒ legacy kill+requeue.
+   * Graded memory guard. The PressureLadder replaces the single RAM/CPU ≥ 95%
+   * trigger (which a swapping host never crosses — it thrash-freezes first):
+   *
+   *   L1 (used > dial, sustained) — BUDGET ENFORCEMENT: the dial is a contract,
+   *      not advice. Preempt the lowest-priority run's newest agent until usage
+   *      returns under the dial; damped so each dispose's freed RAM lands in
+   *      `used` before the next decision. Never drains the machine below one
+   *      live agent — degrade to sequential, never to zero.
+   *   L2/L3 (host pressure/thrash: avail+swap floors, PSI full, swap-in, or the
+   *      legacy ≥ 95% line) — preempt every tick, with the tick accelerated to
+   *      SCHED_PRESSURE_TICK_MS. May drain to zero; the pool self-resumes via
+   *      shouldSpawn() once pressure clears (paused agents keep their worktree
+   *      + session, so nothing is lost).
+   *
+   * One preemption per invocation stays the rule — velocity comes from the
+   * faster tick, freshness from re-reading metrics between victims. Fase 2.3:
+   * PAUSE the victim (preserve worktree + session, resume on headroom) by
+   * default; HUU_NO_PAUSE=1 or a driver without pauseAgent ⇒ legacy kill.
    */
   private async enforceMemoryGuard(): Promise<void> {
-    if (!this.budget.shouldDestroy()) return;
+    // An unstarted budget holds stale constructor-time metrics — never preempt
+    // on those (mirrors the legacy shouldDestroy() enabled-gate).
+    if (!this.budget.isActive()) return;
+    const verdict = this.ladder.evaluate(this.budget.metrics(), this.budget.budgetBytes());
+    this.lastPressure = verdict;
+    if (verdict.level !== this.lastLoggedPressureLevel) {
+      dlog('scheduler', 'pressure_level', {
+        level: verdict.level,
+        reason: verdict.reason,
+        overshootMb: Math.round(verdict.overshootBytes / (1024 * 1024)),
+      });
+      this.lastLoggedPressureLevel = verdict.level;
+    }
+    if (verdict.level === 0) return;
+    if (!this.ladder.preemptAllowed(verdict.level)) return;
+
+    // L1 progress guarantee: budget enforcement never preempts the LAST live
+    // agent on the machine — the system degrades to sequential, not to zero.
+    if (verdict.level === 1) {
+      const totalActive = this.slots.reduce(
+        (n, s) => n + s.driver.activeAgentAges().length,
+        0,
+      );
+      if (totalActive <= 1) return;
+    }
+
     const victim = this.selectGlobalVictim();
     if (!victim) return;
     const key = `${victim.runId}#${victim.agentId}`;
     this.preempting.add(key);
     try {
+      dlog('scheduler', 'guard_preempt', {
+        level: verdict.level,
+        reason: verdict.reason,
+        runId: victim.runId,
+        agentId: victim.agentId,
+      });
       if (this.pauseInsteadOfKill && victim.driver.pauseAgent) {
         await victim.driver.pauseAgent(victim.agentId);
       } else {
         await victim.driver.destroyAgent(victim.agentId);
       }
       this.budget.notifyAgentDestroyed();
+      this.ladder.notePreempt(verdict.level);
     } finally {
       this.preempting.delete(key);
     }

@@ -70,8 +70,30 @@ const DEFAULT_RE_EVALUATION_MS = 5_000;
 const DEFAULT_MAX_AGENTS = 200;
 const DEFAULT_SAFETY_MARGIN_PERCENT = 10;
 const DEFAULT_MIN_AGENT_MEMORY_MB = 128;
-const DEFAULT_MAX_AGENT_MEMORY_MB = 2048;
+// Raised 2048 → 4096: an agent whose TOOL SUBPROCESSES (vitest workers, npm
+// installs, builds) push its attributed footprint past 2 GiB used to saturate
+// the clamp, silently over-admitting — the 33-run freeze. The clamp is a
+// sanity bound, not a planning target.
+const DEFAULT_MAX_AGENT_MEMORY_MB = 4096;
 const DEFAULT_EMA_ALPHA = 0.2;
+/**
+ * Asymmetric EMA (used when the caller does NOT pin `emaAlpha`): track UP fast,
+ * DOWN slowly. Underestimating the footprint is the fatal failure mode (it
+ * over-admits into an OOM/thrash); overestimating only costs idle slots for a
+ * while. An explicit `emaAlpha` (env knob / caller config) restores the legacy
+ * symmetric behavior.
+ */
+const DEFAULT_EMA_ALPHA_UP = 0.5;
+const DEFAULT_EMA_ALPHA_DOWN = 0.05;
+/**
+ * An agent younger than this is still GROWING toward its steady-state working
+ * set (a pi agent ramps for many seconds after spawn), so (a) it is charged
+ * against the budget as a reservation rather than trusted to `used`, and (b)
+ * the footprint EMA never samples while one is present — young agents look
+ * cheap and used to drag the estimate down, re-opening admission that the
+ * grown agents then blew through (the over-admission spiral).
+ */
+export const MATURE_AGE_MS = 45_000;
 /**
  * Closed-loop PSI controller (Fase 2.2 — senpai/TMO + Netflix AIMD/Vegas). The
  * controller drives a `controlledLimit` toward the RAM budget ceiling using PSI
@@ -86,6 +108,13 @@ const VEGAS_ALPHA_FRAC = 0.1; // additive increase = 10% of the current limit
 const AIMD_CUT = 0.5; // multiplicative decrease on a pressure cut
 const CONTROLLER_HOLD_MS = 5_000; // suppress re-ramp for ~5 ticks after a cut
 const POLL_INTERVAL_MS = 1_000;
+/**
+ * Adaptive cadence: when usage nears the budget or PSI warms up, sample at
+ * 250 ms instead of 1 s. The 1 Hz poll left a window in which N runs' spawn
+ * bursts were all admitted against the SAME stale reading; near the edge the
+ * window must shrink faster than the burst can grow.
+ */
+const PRESSURE_POLL_INTERVAL_MS = 250;
 const MIB = 1024 * 1024;
 
 export class AutoScaler {
@@ -96,7 +125,20 @@ export class AutoScaler {
   private mode: AutoScaleMode = 'auto';
   private activeAgentCount = 0;
   private pendingTaskCount = 0;
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  /**
+   * Reservation accounting (the burst-overshoot fix): agents whose RAM is not
+   * yet (fully) visible in `ramUsedBytes`. `spawningCount` = spawn in flight
+   * (invisible until the next sample); `youngCount` = live but younger than
+   * MATURE_AGE_MS (partially materialized, still growing). Both charge the
+   * budget in budgetAdditional().
+   */
+  private spawningCount = 0;
+  private youngCount = 0;
+  /** True once the EMA has accepted at least one mature-cohort sample. */
+  private emaHasMatureSample = false;
+  /** Whether the caller pinned emaAlpha (legacy symmetric smoothing). */
+  private readonly emaAlphaExplicit: boolean;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private cooldownTimer: ReturnType<typeof setTimeout> | null = null;
   private cooldownEndAt = 0;
   private destroyedAt = 0;
@@ -135,6 +177,7 @@ export class AutoScaler {
     };
     this.currentMetrics = config.resourceMonitor();
     this.observedAgentBytes = this.config.agentMemoryEstimateMb * MIB;
+    this.emaAlphaExplicit = config.emaAlpha !== undefined;
   }
 
   start(): void {
@@ -145,20 +188,43 @@ export class AutoScaler {
     // EFFECTIVE memory model (seed/alpha/clamps/budget) a run began with.
     dlog('scaler', 'config', {
       seedMb: this.config.agentMemoryEstimateMb,
-      emaAlpha: this.config.emaAlpha,
+      emaAlpha: this.emaAlphaExplicit ? this.config.emaAlpha : null,
       minMb: this.config.minAgentMemoryMb,
       maxMb: this.config.maxAgentMemoryMb,
       budgetPercent: this.config.budgetPercent,
       targetPsi: this.config.targetPsi,
     });
     this.pollMetrics();
-    this.pollTimer = setInterval(() => this.pollMetrics(), POLL_INTERVAL_MS);
+    this.schedulePoll();
+  }
+
+  /**
+   * Self-rescheduling poll with ADAPTIVE cadence: 1 Hz at rest, 250 ms once
+   * usage nears the budget or PSI warms up — the stale-reading window between
+   * samples must shrink faster than a multi-run spawn burst can grow.
+   */
+  private schedulePoll(): void {
+    if (!this.enabled) return;
+    this.pollTimer = setTimeout(() => {
+      this.pollMetrics();
+      this.schedulePoll();
+    }, this.pollDelayMs());
+    this.pollTimer.unref?.();
+  }
+
+  private pollDelayMs(): number {
+    const { ramTotalBytes, ramUsedBytes, memPressureSome10 } = this.currentMetrics;
+    const budgetBytes = ramBudgetBytes(ramTotalBytes, this.config.budgetPercent);
+    const nearBudget = budgetBytes > 0 && ramUsedBytes > budgetBytes * 0.8;
+    const psiWarm =
+      memPressureSome10 !== null && memPressureSome10 >= this.config.targetPsi / 2;
+    return nearBudget || psiWarm ? PRESSURE_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
   }
 
   stop(): void {
     this.enabled = false;
     if (this.pollTimer) {
-      clearInterval(this.pollTimer);
+      clearTimeout(this.pollTimer);
       this.pollTimer = null;
     }
     if (this.cooldownTimer) {
@@ -182,6 +248,11 @@ export class AutoScaler {
 
   getMode(): AutoScaleMode {
     return this.mode;
+  }
+
+  /** True while start()ed (polling and holding fresh metrics), any mode. */
+  isActive(): boolean {
+    return this.enabled;
   }
 
   /**
@@ -238,21 +309,41 @@ export class AutoScaler {
   }
 
   /**
+   * The per-agent byte figure admission plans with. Until the EMA has accepted
+   * at least one MATURE-cohort sample, the pessimistic seed acts as a floor —
+   * early samples of still-growing agents used to drag the estimate down and
+   * re-open admission (the over-admission spiral). Once a mature sample exists
+   * the EMA is trusted both ways, so genuinely-small agents (stub runs) still
+   * open the tap.
+   */
+  private chargeBytes(): number {
+    if (this.emaHasMatureSample) return this.observedAgentBytes;
+    return Math.max(this.observedAgentBytes, this.config.agentMemoryEstimateMb * MIB);
+  }
+
+  /**
    * How many MORE agents fit under the RAM BUDGET (the % dial — now the
    * admission invariant, replacing the legacy available−margin headroom):
    *
    *   budget     = ramBudgetBytes(total, budgetPercent)   // % of total, OS-reserve-floored
-   *   headroom   = max(0, budget − used)
-   *   additional = floor(headroom / observedAgentBytes)
+   *   reserved   = spawning × charge + young × charge/2
+   *   headroom   = max(0, budget − used − reserved)
+   *   additional = floor(headroom / charge)
    *
    * Uses ramUsedBytes (real used, cgroup-aware) vs the budget, NOT
-   * ramAvailableBytes vs a margin.
+   * ramAvailableBytes vs a margin. The reservation term is the burst-overshoot
+   * fix: an in-flight spawn is invisible to `used` until the next sample and a
+   * young agent has only partially materialized, yet both WILL grow to ~charge
+   * bytes — without the reservation, N runs each admit against the same stale
+   * reading and the budget is blown before it is ever observed.
    */
   private budgetAdditional(): number {
     const { ramTotalBytes, ramUsedBytes } = this.currentMetrics;
     const budgetBytes = ramBudgetBytes(ramTotalBytes, this.config.budgetPercent);
-    const headroom = Math.max(0, budgetBytes - ramUsedBytes);
-    return Math.floor(headroom / this.observedAgentBytes);
+    const charge = this.chargeBytes();
+    const reserved = this.spawningCount * charge + Math.ceil((this.youngCount * charge) / 2);
+    const headroom = Math.max(0, budgetBytes - ramUsedBytes - reserved);
+    return Math.floor(headroom / charge);
   }
 
   /**
@@ -359,6 +450,21 @@ export class AutoScaler {
     return Math.round(this.observedAgentBytes / MIB);
   }
 
+  /** The RAM budget in bytes under the current dial (0 when totals unknown). */
+  budgetBytes(): number {
+    return ramBudgetBytes(this.currentMetrics.ramTotalBytes, this.config.budgetPercent);
+  }
+
+  /** Current dial percent (clamped). */
+  budgetPercent(): number {
+    return this.config.budgetPercent;
+  }
+
+  /** The per-agent planning charge in bytes (EMA, seed-floored until mature). */
+  plannedChargeBytes(): number {
+    return this.chargeBytes();
+  }
+
   notifyAgentDestroyed(): void {
     this.activeAgentCount = Math.max(0, this.activeAgentCount - 1);
     this.guardKillCount++;
@@ -398,6 +504,19 @@ export class AutoScaler {
   syncCounts(activeTotal: number, pendingTotal: number): void {
     this.activeAgentCount = Math.max(0, Math.floor(activeTotal));
     this.pendingTaskCount = Math.max(0, Math.floor(pendingTotal));
+  }
+
+  /**
+   * Report in-flight spawn + young-agent counts for reservation accounting
+   * (see budgetAdditional). Called each tick by BOTH paths: the single-run
+   * pool loop with its own counts, and the GlobalScheduler with the sums
+   * across all subordinate runs. Also gates the footprint EMA — while any
+   * spawn is in flight or any agent is young, the cohort is not mature and
+   * sampling would understate the real footprint.
+   */
+  syncReservations(spawningCount: number, youngCount: number): void {
+    this.spawningCount = Math.max(0, Math.floor(spawningCount));
+    this.youngCount = Math.max(0, Math.floor(youngCount));
   }
 
   /**
@@ -470,6 +589,16 @@ export class AutoScaler {
    * Feed the EMA with (used − baseline) / activeAgents. The baseline is the
    * usage with zero agents running, re-captured whenever the pool drains so
    * unrelated host activity doesn't permanently skew the attribution.
+   *
+   * MATURE-COHORT GATE: never sample while a spawn is in flight or any agent is
+   * younger than MATURE_AGE_MS — young agents look cheap and used to drag the
+   * estimate down exactly when admission decisions mattered most (the N-run
+   * cold start). Under constant churn the EMA simply holds its last (or seed)
+   * value — pessimistic, which is the safe direction.
+   *
+   * ASYMMETRIC SMOOTHING (unless the caller pinned emaAlpha): track UP fast
+   * (underestimating over-admits into a freeze), DOWN slowly (overestimating
+   * only costs idle slots).
    */
   private sampleObservedAgentMemory(): void {
     const { ramUsedBytes } = this.currentMetrics;
@@ -481,15 +610,22 @@ export class AutoScaler {
       this.baselineUsedBytes = ramUsedBytes;
       return;
     }
+    if (this.spawningCount > 0 || this.youngCount > 0) return;
     const sample = (ramUsedBytes - this.baselineUsedBytes) / this.activeAgentCount;
     if (sample <= 0) return;
-    const { emaAlpha, minAgentMemoryMb, maxAgentMemoryMb } = this.config;
+    const { minAgentMemoryMb, maxAgentMemoryMb } = this.config;
+    const emaAlpha = this.emaAlphaExplicit
+      ? this.config.emaAlpha
+      : sample >= this.observedAgentBytes
+        ? DEFAULT_EMA_ALPHA_UP
+        : DEFAULT_EMA_ALPHA_DOWN;
     const prev = this.observedAgentBytes;
     const next = emaAlpha * sample + (1 - emaAlpha) * this.observedAgentBytes;
     this.observedAgentBytes = Math.min(
       maxAgentMemoryMb * MIB,
       Math.max(minAgentMemoryMb * MIB, next),
     );
+    this.emaHasMatureSample = true;
     // Observability for seed calibration: log SIGNIFICANT footprint moves only
     // (≥64MiB or ≥10% of the prior estimate) so the 1 Hz poll stays quiet.
     const deltaBytes = Math.abs(this.observedAgentBytes - prev);

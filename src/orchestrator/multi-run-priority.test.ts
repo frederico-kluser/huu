@@ -44,6 +44,10 @@ function metrics(ramPercent: number, ramAvailableGiB: number): SystemMetrics {
     loadAvg1: 0,
     containerAware: false,
     memPressureSome10: null,
+    memPressureFull10: null,
+    swapTotalBytes: 0,
+    swapFreeBytes: 0,
+    swapInPagesPerSec: null,
   };
 }
 

@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { resolveAgentMemSeedMb, resolveEmaAlpha, resolveRamTuning } from './ram-tuning.js';
 
 describe('resolveAgentMemSeedMb', () => {
-  it('parses and clamps to the scaler estimate bounds [128, 2048]', () => {
+  it('parses and clamps to the scaler estimate bounds [128, 4096]', () => {
     expect(resolveAgentMemSeedMb({ HUU_AGENT_MEM_SEED_MB: '512' })).toBe(512);
     expect(resolveAgentMemSeedMb({ HUU_AGENT_MEM_SEED_MB: '64' })).toBe(128);
-    expect(resolveAgentMemSeedMb({ HUU_AGENT_MEM_SEED_MB: '9000' })).toBe(2048);
+    expect(resolveAgentMemSeedMb({ HUU_AGENT_MEM_SEED_MB: '9000' })).toBe(4096);
     expect(resolveAgentMemSeedMb({ HUU_AGENT_MEM_SEED_MB: ' 1024.9 ' })).toBe(1024);
   });
   it('unset/garbage/non-positive → undefined (defaults preserved, never throws)', () => {

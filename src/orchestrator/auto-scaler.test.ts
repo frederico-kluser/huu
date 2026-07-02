@@ -15,6 +15,10 @@ function makeMetrics(partial: Partial<SystemMetrics> = {}): SystemMetrics {
     loadAvg1: 1.5,
     containerAware: false,
     memPressureSome10: null,
+    memPressureFull10: null,
+    swapTotalBytes: 0,
+    swapFreeBytes: 0,
+    swapInPagesPerSec: null,
     ...partial,
   };
 }
@@ -438,11 +442,12 @@ describe('AutoScaler', () => {
       expect(scaler.observedAgentMemoryMb()).toBe(1536);
     });
 
-    it('converges toward (used − baseline) / activeAgents', () => {
+    it('converges toward (used − baseline) / activeAgents (explicit alpha = legacy symmetric)', () => {
       const metricsRef = { current: makeMetrics({ ramUsedBytes: 4 * 1024 ** 3 }) };
       const scaler = new AutoScaler({
         resourceMonitor: () => metricsRef.current,
         agentMemoryEstimateMb: 250,
+        emaAlpha: 0.2,
       });
       scaler.start(); // baseline re-captured at 4 GiB (0 active agents)
       scaler.notifyAgentSpawned();
@@ -457,7 +462,50 @@ describe('AutoScaler', () => {
       scaler.stop();
     });
 
-    it('clamps the estimate to maxAgentMemoryMb', () => {
+    it('tracks UP fast and DOWN slowly when no alpha is pinned (asymmetric default)', () => {
+      const metricsRef = { current: makeMetrics({ ramUsedBytes: 4 * 1024 ** 3 }) };
+      const scaler = new AutoScaler({
+        resourceMonitor: () => metricsRef.current,
+        agentMemoryEstimateMb: 250,
+      });
+      scaler.start();
+      scaler.notifyAgentSpawned();
+      scaler.notifyAgentSpawned();
+
+      // Sample ABOVE the estimate → fast alpha 0.5: 0.5×512 + 0.5×250 = 381.
+      metricsRef.current = makeMetrics({ ramUsedBytes: 5 * 1024 ** 3 });
+      vi.advanceTimersByTime(1_000);
+      expect(scaler.observedAgentMemoryMb()).toBe(381);
+
+      // Sample BELOW the estimate → slow alpha 0.05: 0.05×128 + 0.95×381 ≈ 368.
+      metricsRef.current = makeMetrics({ ramUsedBytes: 4 * 1024 ** 3 + 256 * 1024 ** 2 });
+      vi.advanceTimersByTime(1_000);
+      expect(scaler.observedAgentMemoryMb()).toBe(368);
+      scaler.stop();
+    });
+
+    it('never samples while spawns are in flight or agents are young (mature-cohort gate)', () => {
+      const metricsRef = { current: makeMetrics({ ramUsedBytes: 4 * 1024 ** 3 }) };
+      const scaler = new AutoScaler({
+        resourceMonitor: () => metricsRef.current,
+        agentMemoryEstimateMb: 250,
+      });
+      scaler.start();
+      scaler.notifyAgentSpawned();
+      scaler.syncReservations(1, 1); // one spawn in flight, one young agent
+
+      metricsRef.current = makeMetrics({ ramUsedBytes: 5 * 1024 ** 3 });
+      vi.advanceTimersByTime(2_000);
+      // Young cohort → the cheap-looking sample is DISCARDED, estimate holds.
+      expect(scaler.observedAgentMemoryMb()).toBe(250);
+
+      scaler.syncReservations(0, 0); // cohort matured
+      vi.advanceTimersByTime(1_000);
+      expect(scaler.observedAgentMemoryMb()).toBeGreaterThan(250);
+      scaler.stop();
+    });
+
+    it('clamps the estimate to maxAgentMemoryMb (default raised to 4096)', () => {
       const metricsRef = { current: makeMetrics({ ramUsedBytes: 4 * 1024 ** 3 }) };
       const scaler = new AutoScaler({
         resourceMonitor: () => metricsRef.current,
@@ -472,7 +520,7 @@ describe('AutoScaler', () => {
       });
       vi.advanceTimersByTime(1_000);
 
-      expect(scaler.observedAgentMemoryMb()).toBe(2048);
+      expect(scaler.observedAgentMemoryMb()).toBe(4096);
       scaler.stop();
     });
 
@@ -481,6 +529,7 @@ describe('AutoScaler', () => {
       const scaler = new AutoScaler({
         resourceMonitor: () => metricsRef.current,
         agentMemoryEstimateMb: 250,
+        emaAlpha: 0.2,
       });
       scaler.start();
       scaler.notifyAgentSpawned();
@@ -499,6 +548,25 @@ describe('AutoScaler', () => {
 
       // EMA: 0.2 × 500 + 0.8 × 250 = 300 MiB
       expect(scaler.observedAgentMemoryMb()).toBe(300);
+      scaler.stop();
+    });
+  });
+
+  describe('reservation accounting (budget charge for spawning/young agents)', () => {
+    it('subtracts in-flight spawn + young-agent reservations from budget headroom', () => {
+      // 16 GiB total, 4 GiB used, dial 85% → budget ≈ 13.6 GiB, headroom ≈ 9.6 GiB.
+      // Seed 1024 MiB → 9 more agents with no reservations.
+      const m = makeMetrics({ ramTotalBytes: 16 * 1024 ** 3, ramUsedBytes: 4 * 1024 ** 3 });
+      const scaler = createScaler(m, { agentMemoryEstimateMb: 1024 });
+      scaler.setMode('auto');
+      scaler.start();
+      scaler.syncCounts(0, 100);
+      expect(scaler.targetConcurrency()).toBe(9);
+
+      // 4 spawns in flight + 4 young agents → reserve 4×1 GiB + 4×0.5 GiB = 6 GiB
+      // → headroom ≈ 3.6 GiB → 3 additional.
+      scaler.syncReservations(4, 4);
+      expect(scaler.targetConcurrency()).toBe(3);
       scaler.stop();
     });
   });
