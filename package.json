@@ -63,8 +63,8 @@
   "dependencies": {
     "@langchain/core": "^1.1.42",
     "@langchain/openai": "^1.4.5",
-    "@mariozechner/pi-ai": "^0.73.1",
-    "@mariozechner/pi-coding-agent": "^0.73.1",
+    "@mariozechner/pi-ai": "0.73.1",
+    "@mariozechner/pi-coding-agent": "0.73.1",
     "ink": "^4.4.1",
     "ink-select-input": "^5.0.0",
     "ink-text-input": "^5.0.1",
