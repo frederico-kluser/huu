@@ -7,6 +7,7 @@ import {
   imageIsLocal,
   makeSecretFile,
   pickDockerNetwork,
+  buildMemoryLimitArgs,
 } from './docker-reexec.js';
 
 describe('decideReexec', () => {
@@ -561,5 +562,76 @@ describe('buildDockerArgv host-home persistence', () => {
     const mountSpecs = vIndices.map((i) => argv[i + 1]);
     expect(mountSpecs).toContain('/home/user/.huu:/home/user/.huu');
     expect(mountSpecs).toContain('/home/user/Downloads:/home/user/Downloads');
+  });
+});
+
+describe('buildMemoryLimitArgs — kernel ceiling for the container', () => {
+  const GiB = 1024 ** 3;
+
+  it('sizes --memory to host total minus the adaptive OS reserve, swap bounded', () => {
+    const args = buildMemoryLimitArgs({}, 32 * GiB);
+    const mem = Number(args[args.indexOf('--memory') + 1]);
+    const memSwap = Number(args[args.indexOf('--memory-swap') + 1]);
+    expect(mem).toBe(Math.floor(32 * GiB - 32 * GiB * 0.08)); // 8% reserve on 32 GiB
+    expect(memSwap).toBe(mem + 4096 * 1024 * 1024); // default 4 GiB swap allowance
+    expect(args[args.indexOf('--pids-limit') + 1]).toBe('8192');
+  });
+
+  it('HUU_DOCKER_MEMORY_MB overrides; HUU_SWAP_MAX_MB=0 pins swap off', () => {
+    const args = buildMemoryLimitArgs(
+      { HUU_DOCKER_MEMORY_MB: '8192', HUU_SWAP_MAX_MB: '0' },
+      32 * GiB,
+    );
+    const mem = Number(args[args.indexOf('--memory') + 1]);
+    expect(mem).toBe(8192 * 1024 * 1024);
+    expect(Number(args[args.indexOf('--memory-swap') + 1])).toBe(mem); // == memory → no swap
+  });
+
+  it('HUU_NO_MEM_LIMIT=1 restores the legacy unlimited container', () => {
+    expect(buildMemoryLimitArgs({ HUU_NO_MEM_LIMIT: '1' }, 32 * GiB)).toEqual([]);
+  });
+
+  it('buildDockerArgv carries the limits and the RAM-safety env passthrough', () => {
+    const argv = buildDockerArgv({
+      cwd: '/w',
+      image: 'huu:test',
+      cidfile: '/tmp/cid',
+      args: [],
+      hasTTY: false,
+      uid: 1000,
+      gid: 1000,
+    });
+    expect(argv).toContain('--memory');
+    expect(argv).toContain('--memory-swap');
+    expect(argv).toContain('--pids-limit');
+  });
+
+  it('forwards host RAM-safety knobs into the container env', () => {
+    const saved: Record<string, string | undefined> = {};
+    const keys = ['HUU_RAM_PERCENT', 'HUU_GUARD_PSI_FULL_HIGH', 'HUU_OS_RESERVE_MB'];
+    for (const k of keys) {
+      saved[k] = process.env[k];
+      process.env[k] = '42';
+    }
+    try {
+      const argv = buildDockerArgv({
+        cwd: '/w',
+        image: 'huu:test',
+        cidfile: '/tmp/cid',
+        args: [],
+        hasTTY: false,
+        uid: 1000,
+        gid: 1000,
+      });
+      for (const k of keys) {
+        const i = argv.findIndex((a, idx) => a === '-e' && argv[idx + 1] === k);
+        expect(i, `expected -e ${k}`).toBeGreaterThanOrEqual(0);
+      }
+    } finally {
+      for (const k of keys) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    }
   });
 });

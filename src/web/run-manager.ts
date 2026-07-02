@@ -145,6 +145,20 @@ export interface RunSnapshot {
   state: OrchestratorState | null;
 }
 
+/**
+ * Slim a TERMINAL run's retained state: cap the log tails (the browser
+ * archived the full final frame already; IndexedDB owns history) while keeping
+ * every card/merge/judge so a late-connecting tab still renders the board.
+ */
+function slimTerminalState(state: OrchestratorState | null): OrchestratorState | null {
+  if (!state) return null;
+  return {
+    ...state,
+    logs: state.logs.slice(-100),
+    agents: state.agents.map((a) => ({ ...a, logs: a.logs.slice(-40) })),
+  };
+}
+
 const IDLE_SNAPSHOT: RunSnapshot = {
   phase: 'idle',
   runId: '',
@@ -576,10 +590,28 @@ export class WebRunManager {
         unsubscribeOutput?.();
         entry.orch = null;
         entry.sim = null;
+        // Memory hygiene: a terminal run's full untrimmed OrchestratorState
+        // used to be retained for the server's lifetime — 33 finished runs of
+        // per-agent logs add up. Keep a slim snapshot (enough for SSE replay /
+        // bootstrap) and cap how many terminal runs stay tracked at all.
+        entry.snapshot = { ...entry.snapshot, state: slimTerminalState(entry.snapshot.state) };
+        this.pruneTerminalRuns();
         this.onUpdate(entry.snapshot);
       });
 
     this.onUpdate(entry.snapshot);
+  }
+
+  /**
+   * Drop the OLDEST terminal runs beyond the retention cap. Non-terminal runs
+   * are never touched; the browser keeps full history in IndexedDB anyway.
+   */
+  private pruneTerminalRuns(keep = 100): void {
+    const terminal: string[] = [];
+    for (const [id, e] of this.runs) {
+      if (e.snapshot.phase === 'done' || e.snapshot.phase === 'error') terminal.push(id);
+    }
+    while (terminal.length > keep) this.runs.delete(terminal.shift()!);
   }
 
   /** Hard-stop one run, or (no id) every run + tear the shared scheduler down. */

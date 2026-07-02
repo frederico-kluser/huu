@@ -10,12 +10,14 @@
 import { resolve as resolvePath } from 'node:path';
 import { existsSync, statSync } from 'node:fs';
 import { decideReexec, reexecInDocker } from './lib/docker-reexec.js';
+import { decideCgroupWrap, reexecInCgroupScope } from './lib/cgroup-self-wrap.js';
 import { API_KEY_REGISTRY, configFilePath } from './lib/api-key.js';
 import { preflightGitOnHost } from './lib/git-preflight.js';
 // Pure, dependency-light: safe to load on the wrapper path without pulling
 // in React/Ink (which we deliberately avoid until after the re-exec gate).
 import { decideInterfaceMode, resolveWebPort } from './web/interface-mode.js';
 import { applyOomScoreAdj } from './lib/oom-score.js';
+import { startOomChildWatcher } from './lib/oom-child-watcher.js';
 
 // `--dir=<path>` chooses WHERE to run — the default is the current directory.
 // Honor it at the very top (before the Docker gate) so every downstream
@@ -71,6 +73,27 @@ if (reexec.shouldReexec) {
   process.exit(code);
 }
 
+// Native Linux (the path where the host actually froze): wrap ourselves in a
+// transient systemd USER scope with memory.high/max sized from the OS reserve
+// (ROADMAP Fase 2.1). memory.high makes the KERNEL throttle huu's whole tree
+// before the host thrashes; memory.max turns the absolute worst case into
+// "huu's process dies inside its scope" instead of "the machine freezes". The
+// sampler is already cgroup-aware, so the budget/PSI machinery becomes
+// scope-relative automatically. Degrades silently to unwrapped when systemd
+// isn't usable; HUU_NO_CGROUP=1 opts out. Placed before the heavy imports for
+// the same reason as the docker gate — the wrapped child does all the work.
+{
+  const cgroupWrap = decideCgroupWrap(process.argv.slice(2), process.env);
+  if (cgroupWrap.shouldWrap) {
+    const code = await reexecInCgroupScope();
+    if (code !== null) process.exit(code);
+    process.stderr.write(
+      'huu: systemd user scope unavailable — running without a kernel memory ceiling ' +
+        '(the software guard still applies).\n',
+    );
+  }
+}
+
 // Past the gate we ARE the app process (in-container, --no-docker, or a native
 // subcommand) — never the host docker wrapper. Bias the kernel OOM-killer to
 // prefer other processes over huu. Best-effort + conservative by default (does
@@ -78,6 +101,11 @@ if (reexec.shouldReexec) {
 // (so a non-root native user is unaffected; it takes effect in the root
 // container). See lib/oom-score.
 applyOomScoreAdj();
+// …and make agent TOOL SUBPROCESSES (vitest workers, npm, builds) the
+// PREFERRED kernel-OOM victims (+500): they inherit huu's protective score
+// otherwise, and a killed test runner surfaces as a task retry — a killed
+// orchestrator (or compositor) does not. Best-effort /proc sweep, Linux only.
+startOomChildWatcher();
 
 import { execFileSync } from 'node:child_process';
 import React from 'react';

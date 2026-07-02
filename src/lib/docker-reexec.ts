@@ -9,9 +9,10 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { homedir, tmpdir, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { API_KEY_REGISTRY, resolveApiKeyWithSource } from './api-key.js';
+import { osReserveBytes } from './budget.js';
 
 /**
  * Transparent re-exec from the host into the official Docker image.
@@ -125,6 +126,36 @@ export function pickDockerNetwork(
   return name ?? undefined;
 }
 
+/**
+ * `docker run` memory-limit flags derived from the host (the wrapper runs
+ * host-side). `--memory` → cgroup memory.max; `--memory-swap` = memory + a
+ * bounded swap allowance (HUU_SWAP_MAX_MB, default 4096 — 0 pins swap off for
+ * the container). Pure over env + injectable total so tests drive it directly.
+ */
+export function buildMemoryLimitArgs(
+  env: NodeJS.ProcessEnv = process.env,
+  totalBytes: number = totalmem(),
+): string[] {
+  if (env.HUU_NO_MEM_LIMIT === '1' || env.HUU_NO_MEM_LIMIT === 'true') return [];
+  const mib = 1024 * 1024;
+  const overrideMb = Number(env.HUU_DOCKER_MEMORY_MB?.trim() || NaN);
+  const memoryBytes =
+    Number.isFinite(overrideMb) && overrideMb > 0
+      ? Math.floor(overrideMb) * mib
+      : Math.max(512 * mib, Math.floor(totalBytes - osReserveBytes(totalBytes, env)));
+  const rawSwap = Number(env.HUU_SWAP_MAX_MB?.trim() || NaN);
+  const swapAllowanceBytes =
+    (Number.isFinite(rawSwap) && rawSwap >= 0 ? Math.floor(rawSwap) : 4096) * mib;
+  return [
+    '--memory',
+    String(memoryBytes),
+    '--memory-swap',
+    String(memoryBytes + swapAllowanceBytes),
+    '--pids-limit',
+    '8192',
+  ];
+}
+
 /** Subcommands that run native — no docker pull, no bind mount needed. */
 const NATIVE_ONLY_SUBCOMMANDS = new Set(['init-docker', 'status', 'prune']);
 
@@ -232,6 +263,14 @@ export function buildDockerArgv(opts: DockerCommandOptions): string[] {
   // error out with "the input device is not a TTY".
   if (opts.hasTTY) argv.push('-t');
   if (opts.network) argv.push('--network', opts.network);
+  // Kernel memory ceiling for the container (cgroup memory.max via --memory):
+  // an unlimited container can consume 100% of host RAM and freeze the box —
+  // the 33-run incident class. Sized like the native systemd scope: host total
+  // minus the adaptive OS reserve, plus a bounded swap allowance. Worst case
+  // becomes "the container dies with 137" instead of "the host dies".
+  // HUU_DOCKER_MEMORY_MB overrides; HUU_NO_MEM_LIMIT=1 restores the old
+  // unlimited behavior. --pids-limit is the runaway-fork backstop.
+  for (const flag of buildMemoryLimitArgs(process.env)) argv.push(flag);
   // Publish the web-UI port(s) so the host browser can reach the in-container
   // server. Bound to the same number inside (HUU_WEB_PORT) and out.
   for (const port of opts.publishPorts ?? []) {
@@ -295,6 +334,17 @@ export function buildDockerArgv(opts: DockerCommandOptions): string[] {
     // container has no host ~/.pi to leak from, and the hermetic composition
     // sets its own huu-owned dir.
     'HUU_PI_HERMETIC', 'HUU_AGENT_MEM_SEED_MB', 'HUU_AGENT_MEM_EMA_ALPHA',
+    // RAM-safety knobs (dial, guard ladder, admission, OS reserve, pause) —
+    // set on the host, they must govern the in-container scheduler too.
+    // (Before this passthrough a host HUU_RAM_PERCENT was silently ignored
+    // inside the container.)
+    'HUU_RAM_PERCENT', 'HUU_OOM_SCORE_ADJ', 'HUU_NO_PAUSE', 'HUU_OS_RESERVE_MB',
+    'HUU_MAX_LIVE_RUNS', 'HUU_MAX_QUEUED_RUNS', 'HUU_RUN_BASELINE_MB',
+    'HUU_GUARD_AVAIL_PCT', 'HUU_GUARD_SWAP_FREE_PCT',
+    'HUU_GUARD_AVAIL_PCT_EMERGENCY', 'HUU_GUARD_SWAP_FREE_PCT_EMERGENCY',
+    'HUU_GUARD_PSI_FULL_HIGH', 'HUU_GUARD_PSI_FULL_EMERGENCY',
+    'HUU_GUARD_SWAPIN_PAGES_SEC', 'HUU_GUARD_SWAPIN_SUSTAIN_MS',
+    'HUU_GUARD_OVER_BUDGET_MS', 'HUU_GUARD_DESTROY_PCT', 'HUU_GUARD_L1_REPREEMPT_MS',
   ]);
   // Every API key spec contributes both `<NAME>` and `<NAME>_FILE` to the
   // passthrough — secret-mounting (when present) supersedes it via
