@@ -69,7 +69,12 @@ export const DEFAULT_PIPELINE_NAME = 'huu Test Suite';
 // `.gitignore` adjustment — Test Suite's side-effect surface stays "root docs
 // + README badge".
 const TARGETS_PATH = 'huu-tests-targets.json';
-const TARGETS_MAX_FILES = 12;
+// 24 (was 12): the per-file fan-out is the ONLY parallel step of this pipeline,
+// so its width is what actually exercises the machine-wide RAM budget — at 12
+// the aggregate demand rarely reached the admission ceiling and the RAM dial
+// went unused (demand-starvation). Width stays budget-safe: the AutoScaler
+// admits agents against real headroom regardless of how many are queued.
+const TARGETS_MAX_FILES = 24;
 
 // The closed allowlist of paths this pipeline may write. Repeated verbatim at
 // the top of every mutating step (and enforced by the judge) so the writable
