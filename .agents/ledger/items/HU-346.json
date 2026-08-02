@@ -1,0 +1,11 @@
+{
+  "id": "HU-346",
+  "pergunta": "O huu tem um teto absoluto, numérico, por sessão como último backstop quando PSI é null (não-Linux) e o clamp de host está desligado?",
+  "por_que_aberto": "O controle de admissão atual é baseado em PSI + RAM, com HARD_PER_RUN_CEILING=512 e DEFAULT_MAX_AGENTS=200. Mas não existe teto absoluto por processo/vida da sessão que independa de sinais dinâmicos. O Claude Code implementa fail-fast numérico (20 concorrentes, 200 por sessão) que funciona mesmo sem PSI. A medição proposta (rodar N runs até PSI null com HUU_NO_HOST_CLAMP=1) não foi executada.",
+  "decisao_provisoria": "O RAM guard (≥95% → pause) é suficiente como último backstop em todas as plataformas. O teto absoluto por sessão é redundante em Linux e desnecessário em não-Linux porque o OOM killer do SO é o backstop final.",
+  "verificacao": "Em máquina não-Linux (macOS) ou com HUU_NO_HOST_CLAMP=1: rodar scripts/stress-test-session-cap.sh que dispara 500 agentes stub sequenciais e mede se algo além do OOM killer do SO segura o processo. Se o processo morre por OOM sem intervenção do huu, o teto é necessário.",
+  "impacto_se_divergir": "Em plataformas sem PSI (macOS, Windows), o huu pode consumir toda a RAM da máquina sem auto-regulação, derrubando o processo e perdendo trabalho. Um teto absoluto salvaria a sessão.",
+  "status": "ABERTO",
+  "evidencia": "",
+  "data_resolucao": ""
+}

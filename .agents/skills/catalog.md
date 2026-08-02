@@ -1,0 +1,44 @@
+# huu skill catalog
+
+> llms.txt-style index. The project-router consults this file to assemble skill chains.
+> Source of truth: `.agents/skills/` (each skill: `SKILL.md` + `LEARNINGS.md`). Portable via per-skill
+> symlinks in `.claude/skills/`. Task skills end with an `<evolution>` step; knowledge skills receive
+> learnings routed by domain ownership.
+
+## Router
+
+- [project-router](project-router/SKILL.md) `router` — entry point for EVERY task; classifies, assembles the chain, enforces evolution.
+## Knowledge skills
+
+- [following-architecture-conventions](following-architecture-conventions/SKILL.md) `knowledge` — layers, downward-only imports, ESM `.js`, named exports, style; load before writing any TS in src/.
+- [working-on-orchestrator](working-on-orchestrator/SKILL.md) `knowledge` — run lifecycle, AutoScaler math, memory-guard requeue (`killedAgentIds`), the interactive-retry hold (`awaiting_retry` + `retryTask`/`finish`, `interactiveRetry` option), the multi-run `GlobalScheduler` (subordinate mode, priority backfill, cross-run kill, event-pushed re-grants via `notifyAgentLifecycle`/`wakeup`, reserved judge/merge agents counted in the budget, `run-many`), CheckStep judge 9998, checkRuns, the `simulation/` SimulationEngine demo driver; for any src/orchestrator change.
+- [orchestrating-git-worktrees](orchestrating-git-worktrees/SKILL.md) `knowledge` — worktree/branch naming (branch-namer), ascending --no-ff merges, never-rewind invariant, preflight, conflict policy; for src/git work and ANY stage-merge behavior change.
+- [integrating-llm-backends](integrating-llm-backends/SKILL.md) `knowledge` — backend registry (pi/azure/stub), BackendBundle, API-key chain, model catalogs, new-backend checklist.
+- [isolating-agent-ports](isolating-agent-ports/SKILL.md) `knowledge` — port windows from 55100, .env.huu, with-ports sourcing gotcha, shim compile cache; for port collisions and shim work.
+- [running-in-docker](running-in-docker/SKILL.md) `knowledge` — decideReexec bypass order, cidfile/prune, image/network/secrets, health sentinel, smoke suite; for wrapper/container/CI work.
+- [writing-tests](writing-tests/SKILL.md) `knowledge` — vitest colocated, real git in temp dirs, stub factories, regression-tests-as-spec; load before touching any test, and include in any chain that changes runtime code.
+- [writing-project-docs](writing-project-docs/SKILL.md) `knowledge` — pt-BR/EN twin files, docs/ layout, Keep-a-Changelog, identity framing; for any markdown work.
+- [authoring-agent-prompts](authoring-agent-prompts/SKILL.md) `knowledge` — cross-LLM step-prompt techniques (atomic ops, output contract, $file/$hint injection, mechanical forward-default judges, lean pi prompts); for writing/sharpening any step prompt, judge condition or memory recon prompt.
+## Task skills (end with `<evolution>`)
+
+- [surf-plan-skill](surf-plan-skill/SKILL.md) `task` — research-grounded execution plans: project read → MANDATORY web research → interview with researched options → plan with cited sources + a research ledger. Research is the `surf-research-skill` CLI (keys at `~/.config/surf/keys.json`, materialized by huu from the registry's `tavily`/`parallel`/`brave` specs); Layer B is the keyless `surf-free-skill`, NOT harness WebSearch (a pi agent in the container has none) — neither ⇒ a `blocker` finding + a `NOT WEB-RESEARCHED` plan, never a failed run. VENDORED from surf-skill@5.2.0; for any design/plan/spec/architecture request.
+- [authoring-pipelines](authoring-pipelines/SKILL.md) `task` — pipeline JSON v2 schema + design + stub dry-run; for any *.pipeline.json.
+- [editing-default-pipelines](editing-default-pipelines/SKILL.md) `task` — the 7 bundled defaults, registry.test contract, knowledge-protocol helpers, never-overwrite trap.
+- [building-tui-screens](building-tui-screens/SKILL.md) `task` — FSM + app.tsx routing, theme.ai rule, cardHeight sync, useInput ref-stability; for Ink UI work.
+- [building-web-ui](building-web-ui/SKILL.md) `task` — vanilla-ESM no-build client (app.js/db.js), multi-run node:http+SSE server (live queue: add projects while running; SSE liveness watchdog + real `event: ping`; queue v2 refresh-relink; picker Mark-all), browser-owns-state (sessionStorage keys + IndexedDB history), provider→backend dispatch gotcha, no-browser verification, synthetic `/simulation` demo (SimulationEngine via a RunDriver seam); for any src/web work.
+- [running-dev-mode](running-dev-mode/SKILL.md) `task` — development mode (`huu dev`, web `/dev`): the RUN-TIME step graph. Knowledge gate (`detectKnowledge` → `huu Knowledge System` in greedy/MAX), the TWO-RUN epoch (A knowledge → B plan → C execution), the BLIND orchestrator (no file reads, no repo digest — only a digest agents wrote), gap/task specs as real files committed BEFORE the run, the per-task `review` critic loop (severity convergence, forward-default), per-role model routing + registry preflight (`z-ai/glm-5.2` is planner-only), session-namespaced blackboard with resume + orphan branches, the epoch-landing merge, and the MANIFESTO boundary; for anything under src/lib/dev-mode/, knowledge-detect.ts, model-registry-check.ts or web/dev-manager.ts.
+- [translating-the-ui](translating-the-ui/SKILL.md) `task` — the bilingual UI (en + pt-BR): one catalog under `src/lib/i18n/`, a typed `t()` that THROWS on a key missing from ANY locale, the three enforcement layers (tsc key parity → `initI18n()` boot audit → per-call throw, with `HUU_I18N_STRICT=0` as the operator escape hatch), the browser half fed by `GET /api/i18n` + `data-i18n` attributes, and `coverage.test.ts` scanning the source for untranslated references; for ANY user-facing string in src/ui, src/web, src/cli.tsx or a lib message that reaches a screen.
+- [committing-and-validating](committing-and-validating/SKILL.md) `task` — typecheck+test gate locally, the same 9-step `scripts/gate.sh` CI runs on push/PR, Conventional Commits, smoke triggers; for every commit/push.
+- [releasing-versions](releasing-versions/SKILL.md) `task` — manual release steps, GHCR multi-arch publish, published-image smoke.
+
+## Meta skills
+
+- [meta-skill-evolution](meta-skill-evolution/SKILL.md) `meta` — update/create/discard decision for new learnings; anti-injection; always a reviewable diff.- [meta-skill-consolidate](meta-skill-consolidate/SKILL.md) `meta` — periodic GC: dedupe, temporal versioning, probation→promotion, token budgets.
+## Chain hints
+
+- Design / architecture / spec / "make a plan" request → the chain STARTS with surf-plan-skill (its gate must open before any plan is presented), then the domain skills for whatever it plans to touch.
+- Any code change → following-architecture-conventions + the domain skill → writing-tests → committing-and-validating.
+- Pipeline work: authoring-pipelines for user JSONs; editing-default-pipelines when the change is under src/lib/default-pipelines/.
+- UI work: building-tui-screens for Ink (src/ui/, app.tsx); building-web-ui for the browser client + web server (src/web/) — pair with working-on-orchestrator when the change spans run state/streaming.
+- ANY user-facing string (new screen, new toast, new flag help, a reworded label): add translating-the-ui to the chain alongside the surface skill — the string needs an `en` + `pt-BR` pair before it can render at all, so it is part of writing the feature, not a follow-up.
+- Development mode (`huu dev` / web `/dev`, src/lib/dev-mode/): running-dev-mode first, then authoring-pipelines (the compiler must emit a valid graph) + orchestrating-git-worktrees (epoch landing) — and building-web-ui when the change reaches src/web/dev-manager.ts.

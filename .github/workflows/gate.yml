@@ -1,0 +1,24 @@
+name: huu gate
+on: [push, pull_request]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # The suite builds REAL git repos in temp dirs and commits into them (no
+      # git mocks — see the writing-tests skill). A GitHub runner ships with no
+      # identity, so every helper that does not set one per-repo died on
+      # `fatal: unable to auto-detect email address`, taking 64 tests with it.
+      # A developer's machine has a global identity, which is why this was
+      # invisible locally.
+      - name: Configure git identity (the suite commits for real)
+        run: |
+          git config --global user.email "gate@huu.invalid"
+          git config --global user.name "huu gate"
+      - run: npm ci
+      - run: npm run build
+      - run: bash scripts/gate.sh

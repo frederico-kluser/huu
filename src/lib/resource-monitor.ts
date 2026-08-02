@@ -1,0 +1,557 @@
+import { readFileSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { cpus, totalmem, freemem, loadavg } from 'node:os';
+
+export interface SystemMetrics {
+  /** System-wide CPU usage in [0, 100], aggregated across all cores. */
+  cpuPercent: number;
+  /** System RAM usage percentage in [0, 100]. In-container aware. */
+  ramPercent: number;
+  /** RAM bytes in use. Within a container this reflects the cgroup limit. */
+  ramUsedBytes: number;
+  /** Total RAM bytes available. Within a container this reflects the cgroup limit. */
+  ramTotalBytes: number;
+  /**
+   * RAM bytes still claimable before hitting the limit. On Linux hosts this
+   * is /proc/meminfo MemAvailable (accounts for reclaimable page cache); on
+   * macOS it is vm_stat's free+inactive+purgeable+speculative pages (the
+   * reclaimable-cache equivalent — os.freemem() alone saturates ramPercent
+   * on any warmed-up Mac); inside a cgroup it is limit − current; elsewhere
+   * os.freemem().
+   */
+  ramAvailableBytes: number;
+  /** RSS of the current Node process. */
+  processRssBytes: number;
+  /** 1-minute load average (0 on Windows where unsupported). */
+  loadAvg1: number;
+  /** True when memory values were sourced from a container/cgroup boundary. */
+  containerAware: boolean;
+  /**
+   * Linux PSI memory pressure: the `some` line's `avg10` (percent of the last
+   * 10s in which at least one task stalled waiting on memory). Rises BEFORE the
+   * machine exhausts RAM, so it is the front-brake admission signal. `null` when
+   * PSI is unavailable (macOS, kernels without CONFIG_PSI, or no readable
+   * pressure file) — callers must fall back to the RAM-percent gate.
+   */
+  memPressureSome10: number | null;
+  /**
+   * PSI `full avg10`: percent of the last 10s in which ALL non-idle tasks were
+   * stalled on memory simultaneously — the canonical THRASHING signal (a
+   * workload spending sustained time here is livelocked on reclaim, the state
+   * that freezes a host long before RAM% reaches 95). `null` when PSI is
+   * unavailable.
+   */
+  memPressureFull10: number | null;
+  /**
+   * Host swap size in bytes. 0 = KNOWN to have no swap (Linux, SwapTotal=0);
+   * null = UNKNOWN (macOS/Windows/unreadable /proc/meminfo) — consumers must
+   * NOT conflate the two: "no swap" collapses the earlyoom joint condition,
+   * "unknown" must never. Swap is a HOST-level resource even inside a
+   * container, so this is always the host figure (the container-scoped
+   * complement is the containerSwap* pair below).
+   */
+  swapTotalBytes: number | null;
+  /** Host free swap in bytes (null when swapTotalBytes is null). */
+  swapFreeBytes: number | null;
+  /**
+   * Host MemTotal from /proc/meminfo. /proc is NOT namespaced, so inside a
+   * container this is still the HOST figure — deliberately: it pairs with
+   * hostMemAvailableBytes to tell the scheduler how much room the MACHINE has
+   * left, which the container cgroup cannot see (other host processes are
+   * invisible to memory.current). On a native Linux host it simply mirrors
+   * ramTotalBytes. null when /proc/meminfo is unreadable (macOS, Windows).
+   */
+  hostMemTotalBytes: number | null;
+  /**
+   * Host MemAvailable from /proc/meminfo (same host-scoped semantics as
+   * hostMemTotalBytes). This is the live "the machine can still give this
+   * much" signal used to clamp admission so huu yields to browsers/IDEs on
+   * the host instead of pushing the whole machine into swap. null when
+   * unreadable.
+   */
+  hostMemAvailableBytes: number | null;
+  /**
+   * Container-scoped swap usage: cgroup v2 `memory.swap.current`. Detects the
+   * container spilling into its own --memory-swap allowance — its ramPercent
+   * plateaus below the guard thresholds while pages leak to swap (the same
+   * failure the host swap pair guards against, but scoped to the container,
+   * which HOST SwapFree cannot see). null when not container-aware, on cgroup
+   * v1, or unreadable.
+   */
+  containerSwapUsedBytes: number | null;
+  /**
+   * Container swap ceiling: cgroup v2 `memory.swap.max`. null when the file
+   * is unreadable/absent or reports `max` (unlimited) — a percentage is only
+   * meaningful against a finite allowance.
+   */
+  containerSwapTotalBytes: number | null;
+  /**
+   * Swap-in rate in pages/sec (delta of /proc/vmstat `pswpin` between this
+   * sampler's consecutive samples). Sustained swap-IN means the working set no
+   * longer fits in RAM — active thrash, not just cold pages parked in swap.
+   * `null` on the first sample and wherever /proc/vmstat is unavailable.
+   */
+  swapInPagesPerSec: number | null;
+}
+
+interface CpuSnapshot {
+  idle: number;
+  total: number;
+}
+
+function readCpu(): CpuSnapshot {
+  let idle = 0;
+  let total = 0;
+  for (const cpu of cpus()) {
+    const t = cpu.times;
+    idle += t.idle;
+    total += t.user + t.nice + t.sys + t.idle + t.irq;
+  }
+  return { idle, total };
+}
+
+/**
+ * Read the cgroup's current memory usage (v2 then v1), or null when no
+ * cgroup counter is readable. Used to give the constrainedMemory() branch a
+ * whole-container "used" figure — this process's RSS alone undercounts when
+ * agent tool subprocesses are running.
+ */
+function readCgroupUsedBytes(): number | null {
+  const v2CurPath = '/sys/fs/cgroup/memory.current';
+  if (existsSync(v2CurPath)) {
+    try {
+      const used = Number(readFileSync(v2CurPath, 'utf8').trim());
+      if (Number.isFinite(used) && used >= 0) return used;
+    } catch {
+      /* fall through to v1 */
+    }
+  }
+  const v1UsagePath = '/sys/fs/cgroup/memory/memory.usage_in_bytes';
+  if (existsSync(v1UsagePath)) {
+    try {
+      const used = Number(readFileSync(v1UsagePath, 'utf8').trim());
+      if (Number.isFinite(used) && used >= 0) return used;
+    } catch {
+      /* fall through */
+    }
+  }
+  return null;
+}
+
+interface MeminfoRead {
+  memTotalBytes: number | null;
+  memAvailableBytes: number | null;
+  swapTotalBytes: number | null;
+  swapFreeBytes: number | null;
+}
+
+/**
+ * Read MemTotal + MemAvailable + SwapTotal + SwapFree from /proc/meminfo in
+ * ONE read. MemAvailable accounts for reclaimable page cache, so it is a far
+ * better headroom signal than os.freemem() on Linux hosts; the swap pair feeds
+ * the earlyoom-style pressure ladder (a swapping host thrash-freezes long
+ * before RAM% saturates, so RAM% alone is blind to the failure mode); the
+ * MemTotal/MemAvailable pair is host-scoped even inside a container (/proc is
+ * not namespaced) and feeds the host-availability clamp. Unreadable (macOS,
+ * Windows, sandboxed fs) → nulls, never throws.
+ */
+function readMeminfo(): MeminfoRead {
+  // UNKNOWN (not "no swap"): off-Linux / unreadable — nulls, never zeros.
+  const unknown: MeminfoRead = {
+    memTotalBytes: null,
+    memAvailableBytes: null,
+    swapTotalBytes: null,
+    swapFreeBytes: null,
+  };
+  const path = '/proc/meminfo';
+  if (!existsSync(path)) return unknown;
+  try {
+    const text = readFileSync(path, 'utf8');
+    const kb = (label: string): number | null => {
+      const m = new RegExp(`^${label}:\\s+(\\d+)\\s*kB`, 'm').exec(text);
+      if (!m) return null;
+      const v = Number(m[1]);
+      return Number.isFinite(v) && v >= 0 ? v * 1024 : null;
+    };
+    return {
+      memTotalBytes: kb('MemTotal'),
+      memAvailableBytes: kb('MemAvailable'),
+      swapTotalBytes: kb('SwapTotal'),
+      swapFreeBytes: kb('SwapFree'),
+    };
+  } catch {
+    return unknown;
+  }
+}
+
+/**
+ * Read the container's swap usage/ceiling from cgroup v2
+ * (`memory.swap.current` / `memory.swap.max`). Only attempted when the memory
+ * figures themselves came from a container boundary — on a bare host the
+ * root cgroup files may exist but the host /proc/meminfo pair is the honest
+ * source. cgroup v1 (`memory.memsw.*`) is deliberately skipped: v1 is a
+ * legacy degrade path everywhere else in this module too. `memory.swap.max`
+ * reading `max` (unlimited) → null total (a percentage against infinity is
+ * meaningless). Never throws.
+ */
+function readContainerSwap(containerAware: boolean): {
+  usedBytes: number | null;
+  totalBytes: number | null;
+} {
+  if (!containerAware) return { usedBytes: null, totalBytes: null };
+  const curPath = '/sys/fs/cgroup/memory.swap.current';
+  const maxPath = '/sys/fs/cgroup/memory.swap.max';
+  let usedBytes: number | null = null;
+  let totalBytes: number | null = null;
+  if (existsSync(curPath)) {
+    try {
+      const used = Number(readFileSync(curPath, 'utf8').trim());
+      if (Number.isFinite(used) && used >= 0) usedBytes = used;
+    } catch {
+      /* unreadable → null */
+    }
+  }
+  if (existsSync(maxPath)) {
+    try {
+      const raw = readFileSync(maxPath, 'utf8').trim();
+      if (raw !== 'max') {
+        const max = Number(raw);
+        if (Number.isFinite(max) && max > 0) totalBytes = max;
+      }
+    } catch {
+      /* unreadable → null */
+    }
+  }
+  return { usedBytes, totalBytes };
+}
+
+/**
+ * Read the cumulative swapped-in page count from /proc/vmstat (`pswpin`), or
+ * null when unavailable. Monotonic counter — the sampler differentiates it into
+ * a pages/sec rate.
+ */
+function readPswpinPages(): number | null {
+  const path = '/proc/vmstat';
+  if (!existsSync(path)) return null;
+  try {
+    const m = /^pswpin\s+(\d+)/m.exec(readFileSync(path, 'utf8'));
+    if (!m) return null;
+    const v = Number(m[1]);
+    return Number.isFinite(v) && v >= 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse the `some` line's `avg10` from a Linux PSI pressure file body (the
+ * shape of `/proc/pressure/memory` and cgroup `memory.pressure`):
+ *
+ *   some avg10=0.42 avg60=0.10 avg300=0.03 total=12345678
+ *   full avg10=0.00 avg60=0.00 avg300=0.00 total=6789012
+ *
+ * Returns the `some` avg10 as a number, or null when the line/field is absent
+ * or non-numeric. Pure — unit-tested directly.
+ */
+export function parseMemoryPressureSome10(text: string): number | null {
+  return parsePressureAvg10(text, 'some');
+}
+
+/**
+ * Parse the `full` line's `avg10` — the thrash signal (ALL non-idle tasks
+ * stalled simultaneously). Same file shape as {@link parseMemoryPressureSome10}.
+ * Pure — unit-tested directly.
+ */
+export function parseMemoryPressureFull10(text: string): number | null {
+  return parsePressureAvg10(text, 'full');
+}
+
+function parsePressureAvg10(text: string, line: 'some' | 'full'): number | null {
+  const m = new RegExp(`^${line}\\b[^\\n]*\\bavg10=(\\d+(?:\\.\\d+)?)`, 'm').exec(text);
+  if (!m) return null;
+  const v = Number(m[1]);
+  return Number.isFinite(v) ? v : null;
+}
+
+/**
+ * Read the `some avg10` + `full avg10` memory-pressure pair from ONE file read.
+ * Prefers the per-cgroup `memory.pressure` when container-aware (PSI is cgroup
+ * v2+; v1 containers have no such file and fall through to the host), then the
+ * system-wide `/proc/pressure/memory`. Returns nulls when no pressure file is
+ * readable — never throws (mirrors the rest of this module's graceful
+ * degradation).
+ */
+function readMemoryPressure(containerAware: boolean): {
+  some10: number | null;
+  full10: number | null;
+} {
+  const paths = containerAware
+    ? ['/sys/fs/cgroup/memory.pressure', '/proc/pressure/memory']
+    : ['/proc/pressure/memory'];
+  for (const p of paths) {
+    if (!existsSync(p)) continue;
+    try {
+      const text = readFileSync(p, 'utf8');
+      const some10 = parseMemoryPressureSome10(text);
+      if (some10 !== null) return { some10, full10: parseMemoryPressureFull10(text) };
+    } catch {
+      /* try the next source */
+    }
+  }
+  return { some10: null, full10: null };
+}
+
+/**
+ * Read total, used, and available memory from the first source available in
+ * this order:
+ *   1. process.constrainedMemory()  (Node 20+ container-aware API; used =
+ *      cgroup current when readable, else this process's RSS)
+ *   2. cgroup v2  (/sys/fs/cgroup/memory.{max,current})
+ *   3. cgroup v1  (/sys/fs/cgroup/memory/memory.{limit_in_bytes,usage_in_bytes})
+ *   4. host       (os.totalmem(); available = MemAvailable on Linux,
+ *      vm_stat-derived on macOS, os.freemem() elsewhere)
+ *
+ * `darwinAvailable` is the caller's cached vm_stat-derived figure (or null
+ * off-darwin / when unavailable); `memAvailable` is the caller's single
+ * /proc/meminfo read (both owned per-sampler so concurrent samplers don't
+ * share caches and meminfo is read once per sample).
+ *
+ * Returns { totalBytes, usedBytes, availableBytes, containerAware }.
+ */
+function readContainerMemory(darwinAvailable: number | null, memAvailable: number | null): {
+  totalBytes: number;
+  usedBytes: number;
+  availableBytes: number;
+  containerAware: boolean;
+} {
+  const constrained =
+    typeof process.constrainedMemory === 'function'
+      ? process.constrainedMemory()
+      : 0;
+  if (constrained > 0 && constrained < Number.MAX_SAFE_INTEGER) {
+    const rss =
+      typeof process.memoryUsage === 'function'
+        ? process.memoryUsage().rss
+        : totalmem() - freemem();
+    const used = readCgroupUsedBytes() ?? rss;
+    const available = Math.max(0, constrained - used);
+    return {
+      totalBytes: constrained,
+      usedBytes: used,
+      availableBytes: available,
+      containerAware: true,
+    };
+  }
+
+  const v2MaxPath = '/sys/fs/cgroup/memory.max';
+  const v2CurPath = '/sys/fs/cgroup/memory.current';
+  if (existsSync(v2MaxPath) && existsSync(v2CurPath)) {
+    try {
+      const maxRaw = readFileSync(v2MaxPath, 'utf8').trim();
+      if (maxRaw !== 'max') {
+        const total = Number(maxRaw);
+        const used = Number(readFileSync(v2CurPath, 'utf8').trim());
+        if (total > 0) {
+          return {
+            totalBytes: total,
+            usedBytes: used,
+            availableBytes: Math.max(0, total - used),
+            containerAware: true,
+          };
+        }
+      }
+    } catch {
+      /* cgroup v2 read error — fall through */
+    }
+  }
+
+  const v1LimitPath = '/sys/fs/cgroup/memory/memory.limit_in_bytes';
+  const v1UsagePath = '/sys/fs/cgroup/memory/memory.usage_in_bytes';
+  if (existsSync(v1LimitPath) && existsSync(v1UsagePath)) {
+    try {
+      const total = Number(readFileSync(v1LimitPath, 'utf8').trim());
+      const used = Number(readFileSync(v1UsagePath, 'utf8').trim());
+      if (total > 0 && total < Number.MAX_SAFE_INTEGER) {
+        return {
+          totalBytes: total,
+          usedBytes: used,
+          availableBytes: Math.max(0, total - used),
+          containerAware: true,
+        };
+      }
+    } catch {
+      /* cgroup v1 read error — fall through */
+    }
+  }
+
+  const memTotal = totalmem();
+  const availableBytes = memAvailable ?? darwinAvailable ?? freemem();
+  const memUsed = Math.max(0, memTotal - availableBytes);
+  return {
+    totalBytes: memTotal,
+    usedBytes: memUsed,
+    availableBytes,
+    containerAware: false,
+  };
+}
+
+/**
+ * Owns the mutable sampling state (CPU delta snapshot + the macOS vm_stat TTL
+ * cache). Each instance computes CPU% as a delta between its OWN consecutive
+ * `sample()` calls, so two samplers polling on overlapping cadences never
+ * corrupt each other's delta — the reason multi-run scheduling must give the
+ * global scheduler a single dedicated sampler instead of having every per-run
+ * AutoScaler poll the module singleton.
+ */
+export class SystemMetricsSampler {
+  private prevCpu: CpuSnapshot | null = null;
+  private darwinAvailableCache: { at: number; bytes: number | null } | null = null;
+  /** Previous /proc/vmstat pswpin reading — differentiated into pages/sec. */
+  private prevSwapIn: { at: number; pages: number } | null = null;
+
+  /**
+   * Reset the internal CPU snapshot. Primarily useful in test beforeEach to
+   * guarantee each test starts with a clean CPU delta state.
+   */
+  resetCpuSnapshot(): void {
+    this.prevCpu = null;
+  }
+
+  /**
+   * Reset the cached vm_stat reading. Test hook (same spirit as
+   * resetCpuSnapshot) — the 500ms TTL would otherwise leak one test's mocked
+   * vm_stat output into the next.
+   */
+  resetDarwinAvailableCache(): void {
+    this.darwinAvailableCache = null;
+  }
+
+  /**
+   * macOS equivalent of Linux's MemAvailable: free + inactive + purgeable +
+   * speculative pages from `vm_stat`. os.freemem() on darwin counts ONLY
+   * truly-free pages — on any warmed-up Mac the file cache keeps that near
+   * zero, which made ramPercent saturate ≥95% and permanently gate
+   * `AutoScaler.shouldSpawn()`. Returns null off-darwin or when vm_stat is
+   * unavailable. Cached briefly so several per-tick consumers don't re-exec
+   * vm_stat.
+   */
+  private readDarwinAvailableBytes(): number | null {
+    if (process.platform !== 'darwin') return null;
+    const now = Date.now();
+    if (this.darwinAvailableCache && now - this.darwinAvailableCache.at < 500) {
+      return this.darwinAvailableCache.bytes;
+    }
+    let bytes: number | null = null;
+    try {
+      const out = execFileSync('vm_stat', { encoding: 'utf8', timeout: 2000 });
+      const pageSize = Number(/page size of (\d+) bytes/.exec(out)?.[1] ?? 16384);
+      const pagesOf = (label: string): number =>
+        Number(new RegExp(`^Pages ${label}:\\s+(\\d+)`, 'm').exec(out)?.[1] ?? 0);
+      const pages =
+        pagesOf('free') + pagesOf('inactive') + pagesOf('purgeable') + pagesOf('speculative');
+      bytes = pages > 0 ? pages * pageSize : null;
+    } catch {
+      bytes = null;
+    }
+    this.darwinAvailableCache = { at: now, bytes };
+    return bytes;
+  }
+
+  /**
+   * Sample system-wide CPU% (delta between two cpus() reads), container-aware
+   * RAM%, process RSS, and 1-minute load average.
+   *
+   * The first call returns 0 for cpuPercent (no prior snapshot to compute a
+   * delta against). Each subsequent call computes the delta from the previous
+   * call's snapshot.
+   *
+   * All I/O is synchronous — suitable for use in a setInterval or similar
+   * polling loop. This method does not throw: unexpected errors in cgroup
+   * reads degrade gracefully to host fallback.
+   */
+  sample(): SystemMetrics {
+    const curr = readCpu();
+    let cpuPercent = 0;
+    if (this.prevCpu !== null) {
+      const idleDelta = curr.idle - this.prevCpu.idle;
+      const totalDelta = curr.total - this.prevCpu.total;
+      cpuPercent =
+        totalDelta > 0
+          ? Math.max(0, Math.min(100, (1 - idleDelta / totalDelta) * 100))
+          : 0;
+    }
+    this.prevCpu = curr;
+
+    const meminfo = readMeminfo();
+    const { totalBytes, usedBytes, availableBytes, containerAware } = readContainerMemory(
+      this.readDarwinAvailableBytes(),
+      meminfo.memAvailableBytes,
+    );
+    const ramPercent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
+
+    const processRssBytes =
+      typeof process.memoryUsage === 'function' ? process.memoryUsage().rss : 0;
+
+    const loadAvg1 = loadavg()[0] ?? 0;
+    const pressure = readMemoryPressure(containerAware);
+    const containerSwap = readContainerSwap(containerAware);
+
+    // Swap-in rate: differentiate the monotonic pswpin counter between this
+    // sampler's consecutive samples. First sample (or no /proc/vmstat) → null.
+    const pswpin = readPswpinPages();
+    let swapInPagesPerSec: number | null = null;
+    if (pswpin !== null) {
+      const now = Date.now();
+      if (this.prevSwapIn && now > this.prevSwapIn.at) {
+        swapInPagesPerSec = Math.max(
+          0,
+          ((pswpin - this.prevSwapIn.pages) * 1000) / (now - this.prevSwapIn.at),
+        );
+      }
+      this.prevSwapIn = { at: now, pages: pswpin };
+    }
+
+    return {
+      cpuPercent,
+      ramPercent,
+      ramUsedBytes: usedBytes,
+      ramTotalBytes: totalBytes,
+      ramAvailableBytes: availableBytes,
+      processRssBytes,
+      loadAvg1,
+      containerAware,
+      memPressureSome10: pressure.some10,
+      memPressureFull10: pressure.full10,
+      swapTotalBytes: meminfo.swapTotalBytes,
+      swapFreeBytes: meminfo.swapFreeBytes,
+      swapInPagesPerSec,
+      hostMemTotalBytes: meminfo.memTotalBytes,
+      hostMemAvailableBytes: meminfo.memAvailableBytes,
+      containerSwapUsedBytes: containerSwap.usedBytes,
+      containerSwapTotalBytes: containerSwap.totalBytes,
+    };
+  }
+}
+
+/**
+ * Process-wide default sampler. Backs the legacy free-function API so existing
+ * callers (the TUI useSystemMetrics hook, single-run AutoScalers, tests) keep
+ * their previous behavior. Multi-run scheduling constructs its OWN
+ * SystemMetricsSampler so it does not share this instance's CPU-delta state.
+ */
+const DEFAULT_SAMPLER = new SystemMetricsSampler();
+
+/** See {@link SystemMetricsSampler.sample}. Uses the process-wide default sampler. */
+export function getSystemMetrics(): SystemMetrics {
+  return DEFAULT_SAMPLER.sample();
+}
+
+/** Reset the default sampler's CPU snapshot (test hook). */
+export function resetCpuSnapshot(): void {
+  DEFAULT_SAMPLER.resetCpuSnapshot();
+}
+
+/** Reset the default sampler's cached vm_stat reading (test hook). */
+export function resetDarwinAvailableCache(): void {
+  DEFAULT_SAMPLER.resetDarwinAvailableCache();
+}

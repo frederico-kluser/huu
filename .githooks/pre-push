@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Pre-push hook: validação local que substitui CI automatizada.
+# Falha → push abortado.
+#
+# Habilitar uma vez por clone:
+#   git config core.hooksPath .githooks
+#
+# Desabilitar:
+#   git config --unset core.hooksPath
+#
+# O smoke da imagem (`smoke-image.sh` + `smoke-pipeline.sh`) é
+# opt-in dentro deste hook: só roda se HUU_PREPUSH_SMOKE=1 no env,
+# porque builda a imagem e leva ~90s. Em dia-a-dia roda só
+# typecheck+test (~3s). Antes de release/PR não-trivial:
+#
+#   HUU_PREPUSH_SMOKE=1 git push
+set -euo pipefail
+
+# `git push` FROM A LINKED WORKTREE exports GIT_DIR (a plain clone does not),
+# pointing at <main>/.git/worktrees/<name>. Those variables override `cwd` for
+# every `git` a child process spawns, so the suite's temp-repo helpers — which
+# do `execFileSync('git', args, { cwd: tmpdir })` — would silently operate on
+# THIS repository instead. It fails as 248 ordinary-looking assertion errors
+# that name nothing about the environment.
+#
+# `GitClient` scrubs these itself (see nonInteractiveGitEnv), which covers huu
+# at run time; this line covers the test helpers that spawn git directly.
+unset GIT_DIR GIT_COMMON_DIR GIT_WORK_TREE GIT_INDEX_FILE \
+      GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES \
+      GIT_NAMESPACE GIT_PREFIX
+
+echo "[pre-push] typecheck"
+npm run typecheck
+
+echo "[pre-push] tests"
+npm test
+
+if [ "${HUU_PREPUSH_SMOKE:-}" = "1" ]; then
+    echo "[pre-push] docker build (HUU_PREPUSH_SMOKE=1)"
+    docker build -q -t huu:prepush . >/dev/null
+
+    echo "[pre-push] smoke-image"
+    ./scripts/smoke-image.sh huu:prepush
+
+    echo "[pre-push] smoke-pipeline"
+    ./scripts/smoke-pipeline.sh huu:prepush
+fi
+
+echo "[pre-push] OK"

@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#0b0b0f" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
+    <title>huu · web</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Ambient depth: gooey accent blobs drifting behind the glass, theme-aware. -->
+    <div class="aurora" aria-hidden="true">
+      <div class="aurora__goo">
+        <span class="aurora__blob aurora__blob--a"></span>
+        <span class="aurora__blob aurora__blob--b"></span>
+        <span class="aurora__blob aurora__blob--c"></span>
+        <span class="aurora__blob aurora__blob--d"></span>
+      </div>
+    </div>
+
+    <header class="topbar glass">
+      <div class="topbar__brand">
+        <!-- The morphing gooey blob IS huu's mark — it animates the whole time.
+             Same liquid mark as the launch/loader blobs: needs blob--goo (the
+             #huu-goo filter + visible inner cut), just rendered smaller here. -->
+        <span class="brand-orb blob blob--goo" aria-hidden="true"><span class="blob__i"></span></span>
+        <div class="brand-text">
+          <strong>huu</strong>
+          <span class="brand-repo" id="repoName">—</span>
+        </div>
+      </div>
+
+      <!-- Project selector — a dropdown (project · pipeline) to switch between
+           concurrent runs; shown only when >1 run is tracked. -->
+      <div class="run-selector" id="runSelector" hidden></div>
+
+      <div class="topbar__status" id="runStatusGroup" hidden>
+        <span class="status-pill" id="statusPill"><i class="dot"></i><span id="statusText" data-i18n="web.status.idle">idle</span></span>
+        <div class="metrics" id="metrics">
+          <div class="metric" data-i18n-title="web.top.stage_title"><span class="metric__label" data-i18n="web.top.stage">Stage</span><span class="metric__val" id="mStage">—</span></div>
+          <div class="metric" data-i18n-title="web.top.tasks_title"><span class="metric__label" data-i18n="web.top.tasks">Tasks</span><span class="metric__val" id="mTasks">—</span></div>
+          <div class="metric" data-i18n-title="web.top.elapsed_title"><span class="metric__label" data-i18n="web.top.elapsed">Elapsed</span><span class="metric__val" id="mElapsed">—</span></div>
+          <div class="metric" data-i18n-title="web.top.cost_title"><span class="metric__label" data-i18n="web.top.cost">Cost</span><span class="metric__val" id="mCost">—</span></div>
+        </div>
+      </div>
+
+      <!-- Machine-global budget chip: dial in force · used/total RAM · pressure
+           level. Fed by the 1 Hz {type:'budget'} SSE frame — the feedback loop
+           that confirms the ⚙ RAM setting actually took. -->
+      <div class="budget-chip" id="budgetChip" hidden></div>
+
+      <div class="topbar__actions">
+        <div class="conc" id="concControl" hidden>
+          <button class="conc__btn" id="concDown" data-i18n-title="web.top.fewer_agents">−</button>
+          <button class="conc__mode" id="concMode" data-i18n-title="web.top.conc_mode">
+            <span id="concVal">—</span><span class="conc__tag" id="concTag" data-i18n="web.top.auto">auto</span>
+          </button>
+          <button class="conc__btn" id="concUp" data-i18n-title="web.top.more_agents">+</button>
+        </div>
+        <button class="btn" id="pauseBtn" hidden data-i18n-title="web.top.pause_title" data-i18n="web.top.pause">Pause</button>
+        <button class="btn btn--primary" id="finishBtn" hidden data-i18n-title="web.top.finish_title" data-i18n="web.top.finish">Finish</button>
+        <button class="btn btn--danger" id="abortBtn" hidden data-i18n="web.top.stop">Stop</button>
+        <button class="btn btn--danger" id="stopQueueBtn" hidden data-i18n-title="web.top.stop_queue_title" data-i18n="web.top.stop_queue">Stop queue</button>
+        <button class="iconbtn iconbtn--badge" id="historyBtn" data-i18n-title="web.history.title" data-i18n-aria-label="web.history.title">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l4 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="badge" id="historyBadge" hidden>0</span>
+        </button>
+        <button class="iconbtn" id="settingsBtn" data-i18n-title="web.settings.title" data-i18n-aria-label="web.settings.title">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 13a7.7 7.7 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 2h-4l-.4 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.7 7.7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1L11 22h4l.4-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="iconbtn" id="themeBtn" data-i18n-title="web.top.theme" data-i18n-aria-label="web.top.theme">
+          <svg viewBox="0 0 24 24" class="i-theme" width="18" height="18" aria-hidden="true"><use href="#ic-auto"></use></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="stage" id="stage">
+      <!-- MODE SWITCH — the two ways to start work, side by side. Lives OUTSIDE
+           both views so it renders identically on /  and /dev. Anchors (not
+           buttons) so they are real links; app.js intercepts the click to swap
+           views in place and pushState the URL, and rewrites the href through
+           withTok() on a token-gated server. -->
+      <nav class="mode-switch" id="modeSwitch" data-i18n-aria-label="web.mode.aria">
+        <a class="mode-switch__opt is-on" id="modePipelines" href="/" data-mode="launch" aria-current="page">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 6h10M4 12h16M4 18h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="18" cy="6" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="18" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          <span class="mode-switch__t"><strong data-i18n="web.mode.pipelines">Pipelines</strong><span class="muted" data-i18n="web.mode.pipelines_sub">You already have the method</span></span>
+        </a>
+        <a class="mode-switch__opt" id="modeDev" href="/dev" data-mode="dev">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 17l-5-5 5-5M16 7l5 5-5 5M14 4l-4 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="mode-switch__t"><strong data-i18n="web.mode.development">Development</strong><span class="muted" data-i18n="web.mode.development_sub">You have a goal instead</span></span>
+        </a>
+      </nav>
+
+      <!-- LAUNCH VIEW -->
+      <section class="view view--launch" id="viewLaunch">
+        <div class="launch-head">
+          <h1 data-i18n="web.launch.title">Run a pipeline</h1>
+          <p class="muted" data-i18n="web.launch.subtitle">Deterministic processes over thinking agents — pick one, choose a model, go.</p>
+        </div>
+
+        <!-- Live-queue indicator: shown on home WHILE a queue is running, so you
+             know projects you add now start automatically. Jumps to the board. -->
+        <div class="launch-running" id="launchRunning" hidden role="status" aria-live="polite">
+          <span class="lr-pulse" aria-hidden="true"></span>
+          <span class="lr-text" id="launchRunningText" data-i18n="web.launch.queue_running">Queue running</span>
+          <button type="button" class="btn btn--ghost btn--sm" id="launchViewBoard" data-i18n="web.launch.view_board">View board →</button>
+        </div>
+
+        <!-- Guided launch (cart): pick a pipeline → mark one or more project
+             folders → configure this pipeline → it fans out over every marked
+             project into the queue. Add another pipeline, or run everything
+             concurrently. The step panels below are toggled by goStep() in app.js. -->
+        <ol class="stepper" id="stepper" role="list" data-i18n-aria-label="web.launch.steps_aria">
+          <li class="step-chip is-current" data-step="1"><span class="step-chip__n">1</span><span class="step-chip__t" data-i18n="web.step.pipeline">Pipeline</span></li>
+          <li class="step-chip" data-step="2"><span class="step-chip__n">2</span><span class="step-chip__t" data-i18n="web.step.projects">Projects</span></li>
+          <li class="step-chip" data-step="3"><span class="step-chip__n">3</span><span class="step-chip__t" data-i18n="web.step.config">Config</span></li>
+          <li class="step-chip" data-step="4"><span class="step-chip__n">4</span><span class="step-chip__t" data-i18n="web.step.queue">Queue</span></li>
+        </ol>
+
+        <!-- STEP 1 — pick a pipeline -->
+        <section class="wizard-step" id="step1">
+          <div class="panel glass panel--pipelines">
+            <div class="panel__title"><span data-i18n="web.launch.pick_pipeline">Pick a pipeline</span><span class="count" id="pipeCount"></span></div>
+            <div class="pipeline-gallery" id="pipelineGallery">
+              <div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 2 — mark one or more project folders (checkbox multi-select) -->
+        <section class="wizard-step" id="step2" hidden>
+          <div class="panel glass panel--folder">
+            <div class="panel__title"><span data-i18n="web.launch.mark_folders">Mark project folders</span><span class="count" id="markedCount"></span></div>
+            <p class="muted wizard-hint" data-i18n="web.launch.mark_hint">Navigate the filesystem and tick every project this pipeline should run on — each marked folder becomes its own run. Marks persist as you browse.</p>
+            <div class="folder-nav">
+              <button type="button" class="btn btn--ghost btn--sm" id="folderHome" data-i18n-title="web.folder.home_title" data-i18n="web.folder.home">⌂ Home</button>
+              <button type="button" class="btn btn--ghost btn--sm" id="folderUp" data-i18n="web.folder.parent">↑ Parent</button>
+              <button type="button" class="btn btn--ghost btn--sm" id="folderMarkAll" data-i18n-title="web.folder.mark_all_title" hidden data-i18n="web.folder.mark_all">☑ Mark all</button>
+              <code class="dir-path" id="folderPath" title="">—</code>
+              <span class="folder-modal__git" id="folderGit"></span>
+            </div>
+            <div class="folder-list" id="folderList"></div>
+            <div class="marked-chips" id="markedChips"></div>
+            <div class="wizard-foot">
+              <button type="button" class="btn btn--ghost" id="step2Back" data-i18n="web.common.back">← Back</button>
+              <button type="button" class="btn btn--primary" id="folderUse" disabled><span data-i18n="web.folder.use_prefix">Use</span> <span id="markedUseN">0</span> <span data-i18n="web.folder.use_suffix">selected →</span></button>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 3 — configure this pipeline (shared by all its marked projects) -->
+        <section class="wizard-step" id="step3" hidden>
+          <aside class="panel glass panel--config" id="configPanel">
+            <div class="panel__title"><span data-i18n="web.config.title">Configure this pipeline</span></div>
+            <form class="config-form" id="configForm">
+              <div class="field">
+                <label data-i18n="web.config.pipeline">Pipeline</label>
+                <div class="selected-pipe" id="selectedPipe">—</div>
+                <div class="selected-pipe__desc muted" id="selectedPipeDesc"></div>
+              </div>
+
+              <div class="field">
+                <label><span data-i18n="web.config.projects">Projects</span> <span class="count" id="cfgProjCount"></span></label>
+                <div class="cfg-projects" id="cfgProjects"></div>
+              </div>
+
+              <div class="field">
+                <label data-i18n="web.config.provider">Provider</label>
+                <div class="segmented" id="providerSeg"></div>
+              </div>
+
+              <div class="field">
+                <label for="modelInput" data-i18n="web.config.model">Model</label>
+                <div class="combo" id="modelCombo">
+                  <input id="modelInput" class="combo__input" type="text" role="combobox"
+                         aria-expanded="false" aria-controls="modelList" aria-autocomplete="list"
+                         autocomplete="off" spellcheck="false" data-i18n-placeholder="web.config.model_placeholder" placeholder="Loading models…" />
+                  <ul class="combo__list" id="modelList" role="listbox" hidden></ul>
+                </div>
+                <div class="model-cap" id="modelCap"></div>
+                <div class="model-hint" id="modelHint"></div>
+              </div>
+
+              <div class="field">
+                <label for="resolverModelInput" data-i18n="web.config.resolver_model">Conflict resolver model</label>
+                <div class="combo" id="resolverModelCombo">
+                  <input id="resolverModelInput" class="combo__input" type="text" role="combobox"
+                         aria-expanded="false" aria-controls="resolverModelList" aria-autocomplete="list"
+                         autocomplete="off" spellcheck="false" data-i18n-placeholder="web.config.resolver_placeholder" placeholder="Same as run model" />
+                  <ul class="combo__list" id="resolverModelList" role="listbox" hidden></ul>
+                </div>
+                <div class="model-hint" id="resolverModelHint" data-i18n="web.config.resolver_hint">Used only to resolve merge conflicts during integration · runs at max thinking · empty = same as run model</div>
+              </div>
+
+              <!-- Key area: JS renders one row per credential the provider needs,
+                   and a "change" affordance even when a key is already set. Keys
+                   are validated against the provider, then kept only in this
+                   browser tab (sessionStorage) — never written to disk. -->
+              <div class="field" id="keyArea"></div>
+
+              <div class="field">
+                <label data-i18n="web.config.concurrency">Concurrency</label>
+                <!-- MAX (greedy) removed: web runs are scheduler-subordinate, where a
+                     per-run greedy flag never drove anything. Machine throughput is
+                     the ⚙ RAM budget dial. -->
+                <div class="segmented segmented--sm" id="modeSeg">
+                  <button type="button" data-mode="auto" class="on" data-i18n="web.common.auto">Auto</button>
+                  <button type="button" data-mode="manual" data-i18n="web.common.manual">Manual</button>
+                </div>
+                <div class="manual-row" id="manualRow" hidden>
+                  <input type="range" id="concRange" min="1" max="32" value="10" />
+                  <output id="concOut">10</output>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="timeoutInput" data-i18n="web.config.timeout">Max time per agent</label>
+                <div class="timeout-row">
+                  <input type="number" id="timeoutInput" class="timeout-input" min="1" step="1"
+                         inputmode="numeric" data-i18n-placeholder="web.common.default" placeholder="default" aria-describedby="timeoutHint" />
+                  <span class="timeout-unit" data-i18n="web.common.min">min</span>
+                </div>
+                <div class="config-hint muted" id="timeoutHint" data-i18n="web.config.timeout_hint">Time limit for each agent, applied to the whole pipeline. Empty = the global default from Settings (⚙), or the pipeline default if that's unset too.</div>
+              </div>
+
+              <div class="wizard-foot">
+                <button type="button" class="btn btn--ghost" id="step3Back" data-i18n="web.common.back">← Back</button>
+                <button type="submit" class="btn btn--primary btn--lg" id="addBtn">
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  <span id="addBtnLabel" data-i18n="web.config.add_to_queue">Add to queue</span>
+                </button>
+              </div>
+              <div class="config-hint muted" id="addHint" data-i18n="web.config.add_hint">This pipeline runs on every project you marked — add more pipelines next, or run the queue.</div>
+              <div class="run-error" id="runError" hidden></div>
+            </form>
+          </aside>
+        </section>
+
+        <!-- STEP 4 — the accumulated queue: add another pipeline, or run all -->
+        <section class="wizard-step" id="step4" hidden>
+          <section class="panel glass panel--queue" id="queuePanel">
+            <div class="panel__title">
+              <span data-i18n="web.queue.title">Queue</span>
+              <span class="count" id="queueCount"></span>
+            </div>
+            <div class="queue-empty muted" id="queueEmpty" hidden data-i18n="web.queue.empty">Queue is empty — add a pipeline to get started.</div>
+            <div class="queue-list" id="queueList"></div>
+            <div class="queue-foot">
+              <button type="button" class="btn btn--ghost btn--sm" id="queueClear" data-i18n="web.common.clear_all">Clear all</button>
+              <button type="button" class="btn btn--ghost" id="addAnotherBtn">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span data-i18n="web.queue.add_another">Add another pipeline</span>
+              </button>
+              <button type="button" class="btn btn--primary" id="queueRun">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+                <span id="queueRunLabel" data-i18n="web.queue.run">Run queue</span>
+              </button>
+            </div>
+          </section>
+        </section>
+      </section>
+
+      <!-- RUN VIEW -->
+      <section class="view view--run" id="viewRun" hidden>
+        <!-- Gooey morph loader shown while the orchestrator spins up (before
+             the first agent card lands), and as the empty-board "thinking" state. -->
+        <div class="run-loader" id="runLoader" hidden>
+          <span class="blob blob--goo blob--lg"><span class="blob__i"></span></span>
+          <div class="run-loader__label" id="runLoaderLabel" data-i18n="web.run.spinning_up">Spinning up agents…</div>
+        </div>
+
+        <div class="board" id="board">
+          <div class="lane" data-lane="todo">
+            <div class="lane__head"><span class="lane__dot todo"></span><span data-i18n="web.lane.todo">To do</span><span class="lane__count" id="cntTodo">0</span></div>
+            <div class="lane__body" id="laneTodo"></div>
+          </div>
+          <div class="lane" data-lane="doing">
+            <div class="lane__head"><span class="lane__dot doing"></span><span data-i18n="web.lane.doing">In progress</span><span class="lane__count" id="cntDoing">0</span></div>
+            <div class="lane__body" id="laneDoing"></div>
+          </div>
+          <div class="lane" data-lane="done">
+            <div class="lane__head"><span class="lane__dot done"></span><span data-i18n="web.lane.done">Done</span><span class="lane__count" id="cntDone">0</span></div>
+            <div class="lane__body" id="laneDone"></div>
+          </div>
+        </div>
+
+        <!-- Global run log — a live activity console. The header doubles as a
+             cross-project activity bar: it sums the agents running RIGHT NOW
+             across every concurrent run (Σ activeAgentCount over S.runs), so the
+             count reflects ALL projects in real time, not just the viewed one.
+             The body unifies every run's log lines (project-tagged) when more
+             than one run is live. -->
+        <div class="logbar glass" id="logbar">
+          <div class="logbar__head" id="logHead">
+            <button class="logbar__toggle" id="logToggle" type="button" aria-expanded="false" aria-controls="logBody">
+              <svg class="chev" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>
+              <span class="logbar__title" data-i18n="web.log.title">Run log</span>
+            </button>
+
+            <!-- Live: simultaneous tasks across ALL running projects. -->
+            <div class="activity" id="logActivity" hidden aria-live="polite">
+              <span class="activity__pulse" aria-hidden="true"></span>
+              <span class="activity__count"><b id="actRunning">0</b> <span data-i18n="web.log.running">running</span></span>
+              <span class="activity__sub" id="actProjects"></span>
+              <span class="activity__sub" id="actQueued"></span>
+            </div>
+
+            <span class="logbar__spacer"></span>
+
+            <div class="logfilter" id="logFilter" role="group" data-i18n-aria-label="web.log.filter_aria">
+              <button type="button" class="logfilter__chip is-on" data-lvl="all" data-i18n="web.log.all">All</button>
+              <button type="button" class="logfilter__chip logfilter__chip--warn" data-lvl="warn" data-i18n-title="web.log.warn_only" data-i18n-aria-label="web.log.warn_only">⚠</button>
+              <button type="button" class="logfilter__chip logfilter__chip--error" data-lvl="error" data-i18n-title="web.log.error_only" data-i18n-aria-label="web.log.error_only">✕</button>
+            </div>
+
+            <span class="logbar__meta" id="logMeta"></span>
+          </div>
+
+          <div class="logbar__body" id="logBody" role="log"></div>
+          <button type="button" class="logjump" id="logJump" hidden data-i18n="web.log.jump">↓ Latest</button>
+        </div>
+
+        <div class="run-footer">
+          <button class="btn btn--ghost" id="backToLaunch" hidden data-i18n="web.run.new_run">← New run</button>
+          <button class="btn btn--primary" id="regenBtn" hidden data-i18n="web.run.run_again">↻ Run again</button>
+          <div class="queue-progress" id="queueProgress" hidden></div>
+          <div class="run-summary" id="runSummary"></div>
+        </div>
+      </section>
+
+      <!-- SIMULATION VIEW (/simulation) — synthetic run for demos / advertising.
+           No branches, no API key, no LLM: the kanban, logs and agents are all
+           fabricated by the SimulationEngine. -->
+      <section class="view view--sim" id="viewSim" hidden>
+        <div class="launch-head">
+          <h1 data-i18n="web.sim.title">Simulation</h1>
+          <p class="muted" data-i18n="web.sim.subtitle">Watch the kanban, agents and live logs run end-to-end — fully synthetic: no branches, no API key, no cost. Pick your models, how many files, and how many agents run at once.</p>
+        </div>
+
+        <div class="sim-grid">
+          <aside class="panel glass panel--config">
+            <div class="panel__title"><span data-i18n="web.sim.configure">Configure the simulation</span></div>
+            <form class="config-form" id="simForm">
+              <div class="field">
+                <label for="simModelInput" data-i18n="web.sim.models">Models</label>
+                <div class="sim-modeladd">
+                  <input id="simModelInput" class="combo__input" type="text" autocomplete="off"
+                         spellcheck="false" data-i18n-placeholder="web.sim.model_placeholder" placeholder="e.g. deepseek/deepseek-chat — type and Add" />
+                  <button type="button" class="btn btn--ghost btn--sm" id="simModelAdd" data-i18n="web.common.add">Add</button>
+                </div>
+                <div class="sim-suggest" id="simModelSuggest"></div>
+                <div class="sim-chips" id="simModelChips"></div>
+              </div>
+
+              <div class="field">
+                <label><span data-i18n="web.sim.files">Number of files</span> <output id="simFilesOut">12</output></label>
+                <input type="range" id="simFiles" min="1" max="60" value="12" />
+              </div>
+
+              <div class="field">
+                <label><span data-i18n="web.sim.agents">Simultaneous agents</span> <output id="simAgentsOut">6</output></label>
+                <input type="range" id="simAgents" min="1" max="24" value="6" />
+              </div>
+
+              <button type="submit" class="btn btn--primary btn--lg" id="simStartBtn">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+                <span data-i18n="web.sim.start">Start simulation</span>
+              </button>
+              <div class="config-hint muted" data-i18n="web.sim.hint">Each run randomly draws the full mix of scenarios — streaming, memory-guard requeues (↻), retries, stage merges and the judge’s rework loop.</div>
+            </form>
+          </aside>
+        </div>
+
+        <div class="sim-foot"><a class="muted sim-back" href="/" data-i18n="web.sim.back">← Back to huu</a></div>
+      </section>
+
+      <!-- Development mode: goal in, swarm of parallel FRONTS out. -->
+      <section class="view view--dev" id="viewDev" hidden>
+        <div class="launch-head">
+          <h1 data-i18n="web.dev.title">Development mode</h1>
+          <p class="muted" data-i18n-html="web.dev.subtitle">Write the goal — huu bootstraps the project's agent skills when it has none, then plans and runs epochs of parallel <strong>fronts</strong>, each fanning out into a swarm of worktree agents and closing on a judge. You underwrite the goal; the planner only decomposes it.</p>
+        </div>
+
+        <form class="dev-form" id="devForm">
+          <!-- GOAL is the one input the whole run is underwritten by, so it
+               gets the whole width and the dictation button. -->
+          <section class="panel glass dev-goal">
+            <div class="panel__title">
+              <span data-i18n="web.dev.goal">Goal</span>
+              <span class="count" id="devGoalCount"></span>
+            </div>
+            <div class="dev-goal__box">
+              <textarea id="devGoal" rows="4" spellcheck="false"
+                        data-i18n-placeholder="web.dev.goal_placeholder" placeholder="e.g. migrate the parser to streaming without breaking the public API"></textarea>
+              <button type="button" class="mic" id="devMic" data-i18n-title="web.dev.mic_title" data-i18n-aria-label="web.dev.mic_title">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+            <div class="dev-goal__foot">
+              <span class="muted" id="devMicHint" data-i18n="web.dev.mic_hint">Click the mic to dictate — transcribed by Gemini via your OpenRouter key.</span>
+            </div>
+          </section>
+
+          <!-- PROJECT: the same filesystem browser the pipeline flow uses,
+               single-select (a dev session targets exactly one repo). -->
+          <section class="panel glass">
+            <div class="panel__title"><span data-i18n="web.dev.project">Project</span><span class="count" id="devPickedName"></span></div>
+            <div class="folder-nav">
+              <button type="button" class="btn btn--ghost btn--sm" id="devFolderHome" data-i18n-title="web.folder.home_title_short" data-i18n="web.folder.home">⌂ Home</button>
+              <button type="button" class="btn btn--ghost btn--sm" id="devFolderUp" data-i18n="web.folder.parent">↑ Parent</button>
+              <code class="dir-path" id="devFolderPath" title="">—</code>
+              <span class="folder-modal__git" id="devFolderGit"></span>
+            </div>
+            <div class="folder-list" id="devFolderList"></div>
+          </section>
+
+          <!-- MODEL -->
+          <section class="panel glass">
+            <div class="panel__title"><span data-i18n="web.config.model">Model</span></div>
+            <div class="field">
+              <label data-i18n="web.config.provider">Provider</label>
+              <div class="segmented" id="devProviderSeg"></div>
+            </div>
+            <!-- FALLBACK ONLY. Per-role routing is the required config, so this
+                 single-model field is shown ONLY when the server does not
+                 advertise devModelRoles/devModelPresets (a stale build). On the
+                 normal path it stays hidden and the run's fallback id is
+                 derived from the role fields below. -->
+            <div class="field" id="devModelFallbackField" hidden>
+              <label for="devModel" data-i18n="web.dev.model_fallback">Model for every role (server has no role table)</label>
+              <input id="devModel" class="combo__input" type="text" autocomplete="off" spellcheck="false"
+                     data-i18n-placeholder="web.dev.model_placeholder" placeholder="e.g. anthropic/claude-sonnet-4" />
+            </div>
+
+            <!-- Per-role routing. Roles and presets come from /api/bootstrap
+                 (devModelRoles / devModelPresets) — the SAME tables the
+                 compiler reads — so this panel never carries its own copy.
+                 NOT collapsible and NOT optional: which model plays which role
+                 is the central decision of a dev session, and hiding it behind
+                 a disclosure made it look like a tweak. It hides itself only on
+                 a server that doesn't advertise the tables. -->
+            <div class="rolepanel" id="devModelsPanel" hidden>
+              <div class="rolepanel__head">
+                <span data-i18n="web.dev.route_roles">Route each role to its own model</span>
+                <span class="muted" id="devModelsSummary">preset “hetero”</span>
+              </div>
+              <div class="field">
+                <label data-i18n="web.dev.preset">Preset</label>
+                <div class="segmented segmented--sm" id="devPresetSeg"></div>
+                <p class="muted wizard-hint" id="devPresetHint"></p>
+              </div>
+              <div class="roles" id="devRoleFields"></div>
+              <!-- One shared model list for all seven fields, filled from the
+                   catalog the run-model combo already downloaded. -->
+              <datalist id="devModelOptions"></datalist>
+              <div class="config-hint muted" data-i18n-html="web.dev.roles_hint">Splitting roles across models is <strong>not</strong> a cost optimization — a fan-out costs several times a single agent while the price gap between these models is about 2×. The point is context isolation, parallelism, and for the critic a second opinion from another vendor.</div>
+            </div>
+          </section>
+
+          <!-- METHODOLOGY: the human underwrites the METHOD, not just the
+               goal. The toggles render from /api/bootstrap
+               (devMethodologyOptions) — the client never hardcodes the list —
+               and everything is OFF by default: with nothing checked the
+               session compiles exactly the pipeline it compiles today. The
+               panel hides itself only on a server that doesn't advertise the
+               catalog (a stale build), same degradation as the role panel. -->
+          <section class="panel glass" id="devMethodPanel" hidden>
+            <div class="panel__title"><span data-i18n="web.dev.methodology">Methodology</span></div>
+            <div class="method-list" id="devMethodList"></div>
+            <div class="config-hint muted" data-i18n="web.dev.methodology_hint">All OFF by default — with nothing checked, the session compiles exactly the pipeline it compiles today. Each option changes the compiled STRUCTURE (steps, gates, rubrics); none gives the model new fields.</div>
+          </section>
+
+          <!-- HOW IT RUNS -->
+          <section class="panel glass">
+            <div class="panel__title"><span data-i18n="web.dev.how_it_runs">How it runs</span></div>
+
+            <div class="field">
+              <label data-i18n="web.dev.approval">Approval</label>
+              <div class="segmented" id="devApprovalSeg">
+                <button type="button" class="on" data-approval="autonomous" data-i18n="web.dev.autonomous">Autonomous</button>
+                <button type="button" data-approval="each-epoch" data-i18n="web.dev.approve_each">Approve each epoch</button>
+              </div>
+              <p class="muted wizard-hint" id="devApprovalHint" data-i18n="web.dev.approval_hint_auto">Runs until the goal is reported complete, or you stop it. There is no epoch limit.</p>
+            </div>
+
+            <div class="field">
+              <label data-i18n="web.dev.fronts">Parallel fronts</label>
+              <div class="segmented segmented--sm" id="devFrontsSeg">
+                <button type="button" data-fronts-mode="auto" class="on" data-i18n="web.common.auto">Auto</button>
+                <button type="button" data-fronts-mode="manual" data-i18n="web.common.manual">Manual</button>
+              </div>
+              <div class="conc-row" id="devFrontsRow" hidden>
+                <input type="range" id="devFronts" min="1" max="4" value="4" />
+                <output id="devFrontsOut">4</output>
+              </div>
+              <p class="muted wizard-hint" data-i18n="web.dev.fronts_hint">Auto lets the planner choose (up to 4). Manual pins the ceiling — the compiler enforces it, not just the prompt.</p>
+            </div>
+
+            <button type="submit" class="btn btn--primary btn--lg" id="devStartBtn">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+              <span data-i18n="web.dev.start">Start development</span>
+            </button>
+            <div class="config-hint muted" data-i18n="web.dev.merge_warning">Every epoch ends in a merge into your current branch, so commit or stash your work first.</div>
+          </section>
+        </form>
+
+        <section class="panel glass dev-session" id="devStatusPanel" hidden>
+          <div class="panel__title"><span data-i18n="web.dev.session">Session</span><span class="muted" id="devPhase">—</span></div>
+          <div class="dev-status" id="devStatus"></div>
+          <div class="dev-plan" id="devPlan"></div>
+          <div class="dev-gate" id="devGate" hidden>
+            <div class="dev-gate__title" data-i18n="web.dev.gate_plan">This plan is waiting for you</div>
+            <div class="dev-gate__actions">
+              <button type="button" class="btn btn--primary" id="devApprove" data-i18n="web.dev.run_epoch">Run this epoch</button>
+              <button type="button" class="btn btn--ghost" id="devReject" data-i18n="web.dev.stop_session">Stop the session</button>
+            </div>
+          </div>
+          <!-- Resume gate: a previous session with THIS goal stopped unfinished. -->
+          <div class="dev-gate" id="devResumeGate" hidden>
+            <div class="dev-gate__title" data-i18n="web.dev.gate_resume">Continue the previous session?</div>
+            <div class="dev-gate__body" id="devResumeBody"></div>
+            <div class="dev-gate__actions">
+              <button type="button" class="btn btn--primary" id="devResumeAccept" data-i18n="web.dev.resume_accept">Continue it</button>
+              <button type="button" class="btn btn--ghost" id="devResumeReject" data-i18n="web.dev.resume_reject">Start from scratch</button>
+            </div>
+          </div>
+          <!-- Orphan gate: huu integration branches that never landed. Ignoring
+               is always safe — a forgotten branch must never block a session. -->
+          <div class="dev-gate" id="devOrphanGate" hidden>
+            <div class="dev-gate__title" data-i18n="web.dev.gate_orphan">Unmerged huu branches from an earlier run</div>
+            <div class="dev-gate__body" id="devOrphanBody"></div>
+            <div class="dev-gate__actions">
+              <button type="button" class="btn btn--primary" id="devOrphanLand" data-i18n="web.dev.orphan_land">Land them</button>
+              <button type="button" class="btn btn--ghost" id="devOrphanIgnore" data-i18n="web.dev.orphan_ignore">Ignore and continue</button>
+            </div>
+          </div>
+          <div class="dev-epochs" id="devEpochList"></div>
+          <pre class="drawer__logs" id="devLogs"></pre>
+          <div class="dev-foot">
+            <button type="button" class="btn btn--ghost btn--sm" id="devViewBoard" data-i18n="web.launch.view_board">View board →</button>
+            <button type="button" class="btn btn--danger btn--sm" id="devAbort" data-i18n="web.dev.abort">Abort session</button>
+          </div>
+        </section>
+      </section>
+
+    </main>
+
+    <!-- Card detail drawer -->
+    <div class="drawer-scrim" id="drawerScrim" hidden></div>
+    <aside class="drawer glass" id="drawer" hidden aria-hidden="true">
+      <div class="drawer__head">
+        <div class="drawer__title" id="drawerTitle">—</div>
+        <button class="iconbtn" id="drawerClose" data-i18n-aria-label="web.common.close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="drawer__meta" id="drawerMeta"></div>
+      <div class="drawer__retry" id="drawerRetry" hidden></div>
+      <div class="drawer__logs-head" data-i18n="web.drawer.logs">Logs</div>
+      <pre class="drawer__logs" id="drawerLogs"></pre>
+    </aside>
+
+    <!-- Run history modal (per-project executions saved in IndexedDB) -->
+    <div class="modal-scrim" id="historyScrim" hidden></div>
+    <div class="history-modal glass" id="historyModal" hidden role="dialog" data-i18n-aria-label="web.history.title">
+      <div class="folder-modal__head">
+        <div class="folder-modal__title" data-i18n="web.history.title">Run history</div>
+        <button class="iconbtn" id="historyClose" data-i18n-aria-label="web.common.close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="history-sub">
+        <span class="muted" id="historyMeta">—</span>
+        <div class="history-actions">
+          <button class="btn btn--ghost btn--sm" id="historyClear" data-i18n="web.common.clear_all">Clear all</button>
+          <button class="btn btn--primary btn--sm" id="historyExport" data-i18n="web.history.export">Export JSON</button>
+        </div>
+      </div>
+      <div class="history-list" id="historyList"></div>
+    </div>
+
+    <div class="modal-scrim" id="settingsScrim" hidden></div>
+    <div class="settings-modal glass" id="settingsModal" hidden role="dialog" data-i18n-aria-label="web.settings.aria">
+      <div class="folder-modal__head">
+        <div class="folder-modal__title" data-i18n="web.settings.title">Settings</div>
+        <button class="iconbtn" id="settingsClose" data-i18n-aria-label="web.common.close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="settings-body">
+        <div class="field">
+          <label for="langSelect" data-i18n="web.settings.language">Language</label>
+          <select id="langSelect" class="timeout-input" style="width:100%"></select>
+          <div class="config-hint muted" data-i18n="web.settings.language_hint">Applies to this browser only. The terminal UI follows HUU_LANG.</div>
+        </div>
+        <div class="field">
+          <label for="globalTimeoutInput" data-i18n="web.config.timeout">Max time per agent</label>
+          <div class="timeout-row">
+            <input type="number" id="globalTimeoutInput" class="timeout-input" min="1" step="1"
+                   inputmode="numeric" data-i18n-placeholder="web.common.default" placeholder="default" aria-describedby="globalTimeoutHint" />
+            <span class="timeout-unit" data-i18n="web.common.min">min</span>
+          </div>
+          <div class="config-hint muted" id="globalTimeoutHint" data-i18n="web.settings.timeout_hint">Default for every run started from this browser, applied to the whole pipeline. Empty = the pipeline's default (10 min · 5 min for single-file tasks). A per-project value overrides this. Web UI only — the CLI keeps its own rules.</div>
+        </div>
+        <div class="field">
+          <label for="globalRamPercentInput" data-i18n="web.settings.ram">RAM budget</label>
+          <div class="timeout-row">
+            <input type="number" id="globalRamPercentInput" class="timeout-input" min="10" max="95" step="1"
+                   inputmode="numeric" placeholder="70" aria-describedby="globalRamPercentHint" />
+            <span class="timeout-unit">%</span>
+          </div>
+          <div class="config-hint muted" id="globalRamPercentHint" data-i18n="web.settings.ram_hint">Share of total RAM huu may use across ALL concurrent runs on this machine (10–95). Applied IMMEDIATELY to running and queued runs, persisted on the server, and enforced by the pressure guard (the topbar chip shows the live value). Higher = more parallelism, thinner safety margin; the rest is reserved for the OS. Empty = 70%.</div>
+        </div>
+        <div class="field">
+          <label for="orKeyInput" data-i18n="web.settings.keys">OpenRouter API keys</label>
+          <div class="key-status" id="orKeyStatus"><span class="muted" data-i18n="web.settings.checking">Checking…</span></div>
+          <!-- One row per pooled key: masked value, state chip, remove. Filled
+               from GET /api/keys/pool, which never returns a key's value; on a
+               server without that endpoint it stays hidden and the status line
+               above is the whole panel, exactly as before. -->
+          <div class="keypool" id="orKeyPool" hidden></div>
+          <div class="key-row" id="orKeyRow">
+            <input type="password" id="orKeyInput" placeholder="sk-or-v1-…" autocomplete="off" spellcheck="false" />
+            <button type="button" class="btn btn--primary btn--sm" id="orKeySave" data-i18n="web.settings.validate_add">Validate &amp; add</button>
+          </div>
+          <div class="config-hint muted" id="orKeyHint" data-i18n="web.settings.keys_hint">Checked against OpenRouter first — a rejected key is never saved. A valid key joins the pool and is used by every new run (this session and future huu starts); this tab starts using it immediately. With more than one key huu rotates per attempt, skipping burned and cooling ones. Validation results and any run problem are also logged in the terminal running huu.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast" hidden></div>
+
+    <!-- Icon sprite + the gooey SVG filter that gives the blob its liquid edges -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <filter id="huu-goo">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+          <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9" result="goo" />
+          <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+        </filter>
+        <filter id="huu-goo-bg">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur" />
+          <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" />
+        </filter>
+        <symbol id="ic-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M19.4 4.6l-1.8 1.8M6.4 17.6l-1.8 1.8"/></g></symbol>
+        <symbol id="ic-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" fill="currentColor"/></symbol>
+        <symbol id="ic-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></symbol>
+      </defs>
+    </svg>
+
+    <!-- Motion animation engine (vendored, offline — see vendor/README.md).
+         Classic script: runs BEFORE the deferred module below, so window.Motion
+         is ready when app.js loads. app.js still degrades gracefully if absent. -->
+    <script src="vendor/motion.js"></script>
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

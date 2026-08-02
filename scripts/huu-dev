@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Wrapper de desenvolvimento: roda o huu local (src/) de qualquer pasta,
+# sem interferir no pacote global instalado via `npm i -g huu-pipe`.
+#
+# Uso de qualquer lugar:
+#   huu-dev                    → abre a TUI de boas-vindas
+#   huu-dev --stub             → TUI com agente fake
+#   huu-dev run pipeline.json  → executa um pipeline
+#   huu-dev status             → inspeciona última run
+#
+# Para tornar disponível globalmente no shell, adicione ao ~/.zshrc ou ~/.bashrc:
+#   alias huu-dev='/home/ondokai/Projects/huu/scripts/huu-dev'
+#
+# (Ou coloque este script numa pasta no PATH, ex: ~/bin/huu-dev)
+
+set -euo pipefail
+
+HUU_PROJECT="/home/ondokai/Projects/huu"
+
+# Sempre força modo nativo (sem Docker), porque estamos desenvolvendo o próprio huu
+export HUU_NO_DOCKER=1
+
+# Executa o cli.tsx via tsx, passando todos os argumentos recebidos
+exec npx tsx "${HUU_PROJECT}/src/cli.tsx" "$@"

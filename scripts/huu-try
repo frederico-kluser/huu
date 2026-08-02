@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# huu-try — fluxo completo de teste num único comando, de qualquer pasta.
+#
+# Por padrão o huu roda via Docker (isolamento + teto de memória do kernel).
+# Este wrapper builda a imagem local (huu:local) e executa no container.
+# `--no-docker`/`--yolo` pulam o container e rodam nativo no host — sem
+# precisar buildar a imagem (a CLI avisa sobre a falta de isolamento).
+#
+# Para usar de qualquer projeto, adicione ao ~/.zshrc ou ~/.bashrc:
+#   alias huu-try='/home/ondokai/Projects/huu/scripts/huu-try'
+#
+# Exemplos:
+#   huu-try --stub                    # builda huu:local + roda no container
+#   huu-try run pipeline.json         # pipeline real no container
+#   huu-try --no-build status         # reusa huu:local sem rebuild
+#   huu-try --no-docker status        # roda nativo no host (sem build, sem container)
+#
+# Flags consumidas pelo wrapper (não passam para o huu):
+#   --no-build    Pula o `docker build` e reusa a huu:local existente.
+
+set -euo pipefail
+
+HUU_PROJECT="/home/ondokai/Projects/huu"
+SKIP_BUILD=0
+ARGS=()
+
+for arg in "$@"; do
+    case "$arg" in
+        --no-build)  SKIP_BUILD=1 ;;
+        --docker)    ;; # legado: docker é o modo padrão
+        --no-docker) SKIP_BUILD=1; ARGS+=("--no-docker") ;; # nativo: não precisa da imagem
+        *)           ARGS+=("$arg") ;;
+    esac
+done
+
+TARGET="$PWD"
+
+# O wrapper host-side (re-exec) roda a partir de dist/cli.js via npm link.
+if [[ ! -f "$HUU_PROJECT/dist/cli.js" ]]; then
+    if [[ ! -d "$HUU_PROJECT/node_modules" ]]; then
+        echo "==> instalando dependências em $HUU_PROJECT (primeira vez)" >&2
+        (cd "$HUU_PROJECT" && npm install)
+    fi
+    echo "==> compilando dist/ em $HUU_PROJECT (primeira vez)" >&2
+    (cd "$HUU_PROJECT" && npm run build)
+fi
+
+if [[ $SKIP_BUILD -eq 0 ]]; then
+    echo "==> docker build -t huu:local . ($HUU_PROJECT)" >&2
+    (cd "$HUU_PROJECT" && docker build -t huu:local .)
+fi
+
+cd "$TARGET"
+echo "==> rodando via Docker (HUU_IMAGE=huu:local) em $TARGET" >&2
+exec env HUU_IMAGE=huu:local huu "${ARGS[@]}"

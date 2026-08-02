@@ -1,0 +1,22 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.huu-worktrees/
+.huu/
+
+# vitest json reporter output (posttest gate)
+.vitest-report.json
+
+# smoke-test scratch (scripts/smoke-*.sh no macOS)
+.smoke-tmp/
+
+# huu runtime cache (native shim compiled on host smoke runs)
+.huu-cache/
+
+# Local refactor fixtures (teste_1 / teste_2) — their own git repos
+/projects/
+
+.omo/
+
+.claude/

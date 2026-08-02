@@ -1,0 +1,585 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { GlobalScheduler, distributeBudget, type RunDriver } from './global-scheduler.js';
+import { AutoScaler } from './auto-scaler.js';
+import type { SystemMetrics } from '../lib/resource-monitor.js';
+
+/**
+ * Plentiful RAM by default → global budget B = min(totalDemand, maxAgents=200).
+ * Sized comfortably above maxAgents × the pessimistic per-agent seed (1.5 GiB ×
+ * 200 = 300 GiB) so the budget headroom never becomes the binding constraint in
+ * these distribution tests.
+ */
+function metrics(partial: Partial<SystemMetrics> = {}): SystemMetrics {
+  const ramTotalBytes = partial.ramTotalBytes ?? 512 * 1024 ** 3;
+  const ramAvailableBytes = partial.ramAvailableBytes ?? 504 * 1024 ** 3;
+  const ramUsedBytes = partial.ramUsedBytes ?? ramTotalBytes - ramAvailableBytes;
+  return {
+    cpuPercent: partial.cpuPercent ?? 20,
+    ramPercent: partial.ramPercent ?? (ramUsedBytes / ramTotalBytes) * 100,
+    ramUsedBytes,
+    ramTotalBytes,
+    ramAvailableBytes,
+    processRssBytes: 1,
+    loadAvg1: 0,
+    containerAware: partial.containerAware ?? false,
+    memPressureSome10: partial.memPressureSome10 ?? null,
+    memPressureFull10: partial.memPressureFull10 ?? null,
+    swapTotalBytes: partial.swapTotalBytes ?? 0,
+    swapFreeBytes: partial.swapFreeBytes ?? 0,
+    swapInPagesPerSec: partial.swapInPagesPerSec ?? null,
+    hostMemTotalBytes: partial.hostMemTotalBytes ?? null,
+    hostMemAvailableBytes: partial.hostMemAvailableBytes ?? null,
+    containerSwapUsedBytes: partial.containerSwapUsedBytes ?? null,
+    containerSwapTotalBytes: partial.containerSwapTotalBytes ?? null,
+  };
+}
+
+class StubDriver implements RunDriver {
+  killed: number[] = [];
+  private agents: Array<{ agentId: number; startedAt: number }>;
+  constructor(
+    public runId: string,
+    private pending = 0,
+    agents: Array<{ agentId: number; startedAt: number }> = [],
+  ) {
+    this.agents = agents;
+  }
+  setPending(n: number): void {
+    this.pending = n;
+  }
+  getDemand(): number {
+    return this.agents.length + this.pending;
+  }
+  activeAgentAges(): Array<{ agentId: number; startedAt: number }> {
+    return [...this.agents];
+  }
+  async destroyAgent(agentId: number): Promise<void> {
+    this.killed.push(agentId);
+    this.agents = this.agents.filter((a) => a.agentId !== agentId);
+  }
+}
+
+describe('distributeBudget', () => {
+  it('serves highest priority first, backfills the remainder', () => {
+    expect(distributeBudget([10, 10], 12)).toEqual([10, 2]);
+  });
+
+  it('a saturated top run leaves nothing for lower runs', () => {
+    expect(distributeBudget([20, 5, 5], 20)).toEqual([20, 0, 0]);
+  });
+
+  it('cascades budget to a third run when the first two are idle/merging', () => {
+    expect(distributeBudget([0, 0, 8], 10)).toEqual([0, 0, 8]);
+  });
+
+  it('grants each run its full demand when the budget covers everyone', () => {
+    expect(distributeBudget([3, 4, 2], 100)).toEqual([3, 4, 2]);
+  });
+
+  it('returns zeros for a zero (or negative) budget', () => {
+    expect(distributeBudget([5, 5], 0)).toEqual([0, 0]);
+    expect(distributeBudget([5, 5], -3)).toEqual([0, 0]);
+  });
+
+  it('clamps negative demand to zero', () => {
+    expect(distributeBudget([-3, 4], 10)).toEqual([0, 4]);
+  });
+
+  it('caps a single run by the per-run overflow ceiling', () => {
+    expect(distributeBudget([1000], 600, 64)).toEqual([64]);
+  });
+});
+
+describe('GlobalScheduler — reserved judge/merge agents in the budget', () => {
+  /** StubDriver that ALSO reports a live reserved judge/merge agent, mirroring
+      the real RunDriver literal (demand includes reserved). */
+  class ReservedStubDriver extends StubDriver {
+    reserved = 0;
+    reservedLiveCount(): number {
+      return this.reserved;
+    }
+    override getDemand(): number {
+      return super.getDemand() + this.reserved;
+    }
+  }
+
+  it('counts a live reserved agent into demand, grants and telemetry', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    const d = new ReservedStubDriver('r1', 4);
+    d.reserved = 1;
+    sched.register(d);
+    sched.recomputeGrants();
+    // demand = 4 pending + 1 reserved → the judge's slot is in the grant…
+    expect(sched.grantFor('r1')).toBe(5);
+    // …and the telemetry decomposition sees it as a LIVE agent.
+    const t = sched.budgetTelemetry();
+    expect(t.reservedAgents).toBe(1);
+    expect(t.liveAgents).toBe(1);
+  });
+
+  it('a live reserved agent shrinks the admission signal (remaining) by one slot', () => {
+    const remainingWith = (reserved: number): number => {
+      const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+      const d = new ReservedStubDriver('r', 3);
+      d.reserved = reserved;
+      sched.register(d);
+      sched.recomputeGrants();
+      return sched.remaining;
+    };
+    // The 9-run incident's shape: invisible judges made `remaining` read one
+    // slot too high per judge, admitting new runs on top of them.
+    expect(remainingWith(1)).toBe(remainingWith(0) - 1);
+  });
+
+  it('legacy drivers without reservedLiveCount keep byte-identical grants', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    sched.register(new StubDriver('r1', 150));
+    sched.register(new StubDriver('r2', 100));
+    sched.recomputeGrants();
+    expect(sched.grantFor('r1')).toBe(150);
+    expect(sched.grantFor('r2')).toBe(50);
+    expect(sched.budgetTelemetry().reservedAgents).toBe(0);
+  });
+});
+
+describe('GlobalScheduler — event-pushed re-grants (notifyAgentLifecycle)', () => {
+  it('re-grants a freed slot within the debounce window, with NO tick', async () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    const a = new StubDriver('a', 0, [{ agentId: 1, startedAt: 1 }]);
+    const b = new StubDriver('b', 200);
+    sched.register(a);
+    sched.register(b);
+    expect(sched.grantFor('b')).toBe(199);
+    // Run a's agent finishes: its demand drops, and the run ANNOUNCES it —
+    // the slot must move to b without waiting for the 500 ms poll tick.
+    await a.destroyAgent(1);
+    sched.notifyAgentLifecycle({ runId: 'a', agentId: 1, event: 'exit', cause: 'completed' });
+    await new Promise((r) => setTimeout(r, 60));
+    expect(sched.grantFor('b')).toBe(200);
+  });
+
+  it('coalesces a burst of exits into ONE recompute', async () => {
+    class CountingDriver extends StubDriver {
+      demandReads = 0;
+      override getDemand(): number {
+        this.demandReads++;
+        return super.getDemand();
+      }
+    }
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    const d = new CountingDriver('a', 5);
+    sched.register(d);
+    const before = d.demandReads;
+    for (let i = 1; i <= 5; i++) {
+      sched.notifyAgentLifecycle({ runId: 'a', agentId: i, event: 'exit' });
+    }
+    await new Promise((r) => setTimeout(r, 80));
+    expect(d.demandReads - before).toBe(1);
+  });
+
+  it('wakes ONLY the run whose grant rose (the beneficiary)', async () => {
+    class WakeStub extends StubDriver {
+      wakeups = 0;
+      wakeup(): void {
+        this.wakeups++;
+      }
+    }
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    const a = new WakeStub('a', 150);
+    const b = new WakeStub('b', 100);
+    sched.register(a);
+    sched.register(b);
+    expect(sched.grantFor('b')).toBe(50); // B=200: a saturates 150, b backfills
+    a.wakeups = 0;
+    b.wakeups = 0;
+    a.setPending(100); // a shrank — the freed 50 slots belong to b now
+    sched.notifyAgentLifecycle({ runId: 'a', agentId: 9, event: 'exit' });
+    await new Promise((r) => setTimeout(r, 60));
+    expect(sched.grantFor('b')).toBe(100);
+    expect(b.wakeups).toBe(1); // nudged awake to spawn into the raised grant
+    expect(a.wakeups).toBe(0); // drains need no nudge
+  });
+
+  it('stop() cancels a pending debounced re-grant', async () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    const a = new StubDriver('a', 0, [{ agentId: 1, startedAt: 1 }]);
+    const b = new StubDriver('b', 200);
+    sched.register(a);
+    sched.register(b);
+    await a.destroyAgent(1);
+    sched.notifyAgentLifecycle({ runId: 'a', agentId: 1, event: 'exit' });
+    sched.stop();
+    await new Promise((r) => setTimeout(r, 60));
+    expect(sched.grantFor('b')).toBe(199); // the pending push was cancelled
+  });
+
+  it('announces exits to the operator ONLY in true multi-run (slots > 1)', () => {
+    const lines: string[] = [];
+    const sched = new GlobalScheduler({
+      resourceMonitor: () => metrics(),
+      onAnnounce: (l) => lines.push(l),
+    });
+    const a = new StubDriver('run-aaaaaaaa', 0, [{ agentId: 1, startedAt: 1 }]);
+    sched.register(a);
+    sched.notifyAgentLifecycle({ runId: 'run-aaaaaaaa', agentId: 1, event: 'exit', cause: 'completed' });
+    expect(lines).toHaveLength(0); // single run — its own run log already narrates
+
+    sched.register(new StubDriver('run-bbbbbbbb', 2));
+    sched.notifyAgentLifecycle({ runId: 'run-aaaaaaaa', agentId: 1, event: 'exit', cause: 'completed' });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('agent 1 (run run-aaaa) completed — global live');
+    expect(lines[0]).toMatch(/B \d+, remaining \d+/);
+
+    // Reserved ids get a human name in the line.
+    sched.notifyAgentLifecycle({
+      runId: 'run-bbbbbbbb',
+      agentId: 9998,
+      event: 'exit',
+      reserved: true,
+      cause: 'completed',
+    });
+    expect(lines[1]).toContain('judge (run run-bbbb) completed');
+  });
+
+  it('normal exits never arm the guard destroy-COOLDOWN', async () => {
+    // Footgun pin: wiring completions to notifyAgentDestroyed() would freeze
+    // spawns for 30 s after EVERY finished task. Only guard preemptions may.
+    class SpyBudget extends AutoScaler {
+      destroys = 0;
+      override notifyAgentDestroyed(): void {
+        this.destroys++;
+        super.notifyAgentDestroyed();
+      }
+    }
+    const budget = new SpyBudget({ resourceMonitor: () => metrics() });
+    budget.setMode('auto');
+    const sched = new GlobalScheduler({ budget });
+    sched.register(new StubDriver('a', 1));
+    sched.notifyAgentLifecycle({ runId: 'a', agentId: 1, event: 'exit', cause: 'completed' });
+    await new Promise((r) => setTimeout(r, 60));
+    expect(budget.destroys).toBe(0);
+  });
+});
+
+describe('GlobalScheduler.recomputeGrants', () => {
+  it('distributes by priority across registered runs (backfill)', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    sched.register(new StubDriver('r1', 150)); // priority 0
+    sched.register(new StubDriver('r2', 100)); // priority 1
+    sched.recomputeGrants();
+    // B = min(250, 200) = 200; r1 saturates 150, r2 backfills the remaining 50.
+    expect(sched.currentBudget).toBe(200);
+    expect(sched.grantFor('r1')).toBe(150);
+    expect(sched.grantFor('r2')).toBe(50);
+  });
+
+  it('gives a saturated top-priority run everything, lower runs drain to 0', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    sched.register(new StubDriver('r1', 220)); // wants more than the whole budget
+    sched.register(new StubDriver('r2', 30));
+    sched.recomputeGrants();
+    expect(sched.grantFor('r1')).toBe(200); // capped at B
+    expect(sched.grantFor('r2')).toBe(0); // nothing left → drains
+  });
+
+  it('register() grants immediately without an explicit recompute', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    sched.register(new StubDriver('r1', 5));
+    expect(sched.grantFor('r1')).toBe(5);
+  });
+
+  it('remaining reports spare machine capacity beyond demand (admission signal)', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    sched.register(new StubDriver('r1', 3));
+    sched.register(new StubDriver('r2', 4));
+    sched.recomputeGrants();
+    // Plentiful RAM → capacity 200, demand 7 → spare headroom for more runs.
+    expect(sched.remaining).toBeGreaterThan(0);
+  });
+
+  it('remaining is 0 when demand saturates the machine', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    sched.register(new StubDriver('r1', 250)); // exceeds the maxAgents cap
+    sched.recomputeGrants();
+    expect(sched.remaining).toBe(0);
+  });
+});
+
+describe('GlobalScheduler.selectGlobalVictim', () => {
+  it('targets the lowest-priority run, its newest agent', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    sched.register(new StubDriver('r1', 0, [{ agentId: 1, startedAt: 100 }])); // priority 0
+    sched.register(
+      new StubDriver('r2', 0, [
+        { agentId: 1, startedAt: 200 },
+        { agentId: 2, startedAt: 350 },
+      ]),
+    ); // priority 1 (lowest)
+    const v = sched.selectGlobalVictim();
+    expect(v?.runId).toBe('r2');
+    expect(v?.agentId).toBe(2); // newest startedAt
+  });
+
+  it('skips lower-priority runs that have no live agent', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    sched.register(new StubDriver('r1', 0, [{ agentId: 5, startedAt: 100 }]));
+    sched.register(new StubDriver('r2', 0, [])); // lowest priority but idle
+    const v = sched.selectGlobalVictim();
+    expect(v?.runId).toBe('r1');
+    expect(v?.agentId).toBe(5);
+  });
+
+  it('returns null when no run has a live agent', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    sched.register(new StubDriver('r1', 5, []));
+    expect(sched.selectGlobalVictim()).toBeNull();
+  });
+});
+
+describe('GlobalScheduler memory guard (tick)', () => {
+  it('kills the lowest-priority newest agent at the destroy threshold', async () => {
+    const high = metrics({ ramPercent: 98, ramAvailableBytes: 1 * 1024 ** 3 });
+    const budget = new AutoScaler({ resourceMonitor: () => high });
+    budget.setMode('auto');
+    budget.start(); // enabled → shouldDestroy can fire
+    const sched = new GlobalScheduler({ budget });
+    const d1 = new StubDriver('r1', 0, [{ agentId: 1, startedAt: 100 }]);
+    const d2 = new StubDriver('r2', 0, [
+      { agentId: 1, startedAt: 200 },
+      { agentId: 2, startedAt: 300 },
+    ]);
+    sched.register(d1);
+    sched.register(d2);
+
+    await sched.tick();
+
+    expect(d1.killed).toEqual([]); // higher priority untouched
+    expect(d2.killed).toEqual([2]); // lower priority, newest agent
+    budget.stop();
+  });
+
+  it('does not kill when RAM is healthy', async () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics({ ramPercent: 40 }) });
+    const d = new StubDriver('r1', 0, [{ agentId: 1, startedAt: 100 }]);
+    sched.register(d);
+    await sched.tick(); // budget not started → shouldDestroy false → no kill
+    expect(d.killed).toEqual([]);
+  });
+});
+
+describe('GlobalScheduler register / unregister', () => {
+  it('assigns ascending seq (priority) in registration order', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    const h1 = sched.register(new StubDriver('r1', 5));
+    const h2 = sched.register(new StubDriver('r2', 5));
+    expect(h1.seq).toBeLessThan(h2.seq);
+    expect(sched.size).toBe(2);
+  });
+
+  it('clears grants and shrinks on unregister, freeing budget to survivors', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    sched.register(new StubDriver('r1', 10));
+    const h2 = sched.register(new StubDriver('r2', 10));
+    sched.recomputeGrants();
+    expect(sched.grantFor('r2')).toBeGreaterThan(0);
+
+    sched.unregister(h2);
+    expect(sched.size).toBe(1);
+    expect(sched.grantFor('r2')).toBe(0);
+    sched.recomputeGrants();
+    expect(sched.grantFor('r1')).toBe(10);
+  });
+});
+
+describe('GlobalScheduler — explicit priority (list order is authoritative)', () => {
+  // The multi-run front-ends start their runs CONCURRENTLY, so the order
+  // register() is called is a race (each run registers only after its own async
+  // preflight). These pin that an explicit priority — the project's position in
+  // the user's list — decides rank instead: the first project is always served
+  // first, and the last is always the kill victim, regardless of who registered
+  // first. This is the guarantee behind "pull cards from the first project on."
+
+  it('serves the explicitly-highest-priority run first even when it registered LAST', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    // Registration order is the REVERSE of priority: the LOW-priority run
+    // registers first (seq 0), the HIGH-priority run second (seq 1).
+    sched.register(new StubDriver('low', 150), 5);
+    sched.register(new StubDriver('high', 150), 0);
+    sched.recomputeGrants();
+    // B = min(300, 200) = 200. Priority 0 ('high') saturates 150; 'low' backfills
+    // the remaining 50 — NOT the reverse (which a registration-order sort gives).
+    expect(sched.currentBudget).toBe(200);
+    expect(sched.grantFor('high')).toBe(150);
+    expect(sched.grantFor('low')).toBe(50);
+  });
+
+  it('kills the explicitly-lowest-priority run first even when it registered FIRST', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    // 'lowest' registers FIRST (seq 0) but is priority 9 (lowest); 'top'
+    // registers second but is priority 0 (highest).
+    sched.register(new StubDriver('lowest', 0, [{ agentId: 7, startedAt: 500 }]), 9);
+    sched.register(new StubDriver('top', 0, [{ agentId: 1, startedAt: 100 }]), 0);
+    const v = sched.selectGlobalVictim();
+    expect(v?.runId).toBe('lowest');
+    expect(v?.agentId).toBe(7);
+  });
+
+  it('falls back to registration order when no explicit priority is given', () => {
+    const sched = new GlobalScheduler({ resourceMonitor: () => metrics() });
+    sched.register(new StubDriver('r1', 150)); // seq 0 → priority 0
+    sched.register(new StubDriver('r2', 150)); // seq 1 → priority 1
+    sched.recomputeGrants();
+    expect(sched.grantFor('r1')).toBe(150);
+    expect(sched.grantFor('r2')).toBe(50);
+  });
+});
+
+describe('GlobalScheduler pressure ladder (L1 budget enforcement)', () => {
+  const GiB = 1024 ** 3;
+  const savedEnv: Record<string, string | undefined> = {};
+  const ENV_KEYS = ['HUU_GUARD_OVER_BUDGET_MS', 'HUU_GUARD_L1_REPREEMPT_MS'];
+
+  beforeEach(() => {
+    for (const k of ENV_KEYS) savedEnv[k] = process.env[k];
+    process.env.HUU_GUARD_OVER_BUDGET_MS = '0'; // fire L1 on the first over-budget read
+  });
+
+  afterEach(() => {
+    for (const k of ENV_KEYS) {
+      if (savedEnv[k] === undefined) delete process.env[k];
+      else process.env[k] = savedEnv[k];
+    }
+  });
+
+  /** 30 GiB used of 32 (93.75% < 95) with plentiful FREE swap → the ONLY
+   *  trigger is the dial (85% of 32 = 27.2 GiB < 30 GiB used). */
+  function overBudgetMetrics() {
+    return metrics({
+      ramTotalBytes: 32 * GiB,
+      ramUsedBytes: 30 * GiB,
+      ramAvailableBytes: 2 * GiB,
+      ramPercent: 93.75,
+      swapTotalBytes: 16 * GiB,
+      swapFreeBytes: 16 * GiB,
+    });
+  }
+
+  it('enforces the dial: preempts the lowest-priority newest agent when used > budget (RAM% < 95)', async () => {
+    const budget = new AutoScaler({ resourceMonitor: () => overBudgetMetrics() });
+    budget.setMode('auto');
+    budget.start();
+    const sched = new GlobalScheduler({ budget });
+    const top = new StubDriver('top', 0, [{ agentId: 1, startedAt: 100 }]);
+    const low = new StubDriver('low', 0, [
+      { agentId: 1, startedAt: 200 },
+      { agentId: 2, startedAt: 300 },
+    ]);
+    sched.register(top, 0);
+    sched.register(low, 1);
+
+    await sched.tick();
+
+    expect(low.killed).toEqual([2]); // lowest priority, newest agent
+    expect(top.killed).toEqual([]); // higher priority untouched
+    expect(sched.pressure.level).toBe(1);
+    expect(sched.shouldSpawn()).toBe(false); // growth frozen while over the dial
+
+    // Damped: an immediate second tick must NOT preempt again — the freed RAM
+    // has to land in `used` before the next L1 decision.
+    await sched.tick();
+    expect(low.killed).toEqual([2]);
+    budget.stop();
+  });
+
+  it('L1 never preempts the last live agent on the machine (degrade to sequential, not zero)', async () => {
+    const budget = new AutoScaler({ resourceMonitor: () => overBudgetMetrics() });
+    budget.setMode('auto');
+    budget.start();
+    const sched = new GlobalScheduler({ budget });
+    const only = new StubDriver('only', 0, [{ agentId: 1, startedAt: 100 }]);
+    sched.register(only, 0);
+
+    await sched.tick();
+
+    expect(only.killed).toEqual([]);
+    expect(sched.pressure.level).toBe(1);
+    budget.stop();
+  });
+});
+
+describe('GlobalScheduler L1 floor-of-one (review regression)', () => {
+  const GiB = 1024 ** 3;
+  const savedEnv: Record<string, string | undefined> = {};
+  const ENV_KEYS = ['HUU_GUARD_OVER_BUDGET_MS'];
+
+  beforeEach(() => {
+    for (const k of ENV_KEYS) savedEnv[k] = process.env[k];
+    process.env.HUU_GUARD_OVER_BUDGET_MS = '0';
+  });
+
+  afterEach(() => {
+    for (const k of ENV_KEYS) {
+      if (savedEnv[k] === undefined) delete process.env[k];
+      else process.env[k] = savedEnv[k];
+    }
+  });
+
+  it('allows the FIRST spawn even while used > dial (external overshoot must not freeze runs at zero)', async () => {
+    // The incident-review scenario: 19 of 32 GiB held by OTHER processes
+    // (desktop + browser), dial at 50% (16 GiB) → over budget, but RAM% (59)
+    // is far below every legacy gate. Zero agents must still bootstrap.
+    const overBudget = metrics({
+      ramTotalBytes: 32 * GiB,
+      ramUsedBytes: 19 * GiB,
+      ramAvailableBytes: 13 * GiB,
+      ramPercent: 59.4,
+      swapTotalBytes: 16 * GiB,
+      swapFreeBytes: 16 * GiB,
+    });
+    const budget = new AutoScaler({ resourceMonitor: () => overBudget, budgetPercent: 50 });
+    budget.setMode('auto');
+    budget.start();
+    const sched = new GlobalScheduler({ budget });
+    const idle = new StubDriver('idle', 3, []); // demand but ZERO live agents
+    sched.register(idle, 0);
+
+    await sched.tick();
+    expect(sched.pressure.level).toBe(1);
+    // Floor of one: with nothing running, the bootstrap spawn must pass.
+    expect(sched.shouldSpawn()).toBe(true);
+
+    // With something already running, L1 freezes growth as designed.
+    const busy = new StubDriver('busy', 0, [{ agentId: 1, startedAt: 100 }]);
+    sched.register(busy, 1);
+    await sched.tick();
+    expect(sched.pressure.level).toBe(1);
+    expect(sched.shouldSpawn()).toBe(false);
+    budget.stop();
+  });
+});
+
+describe('budgetTelemetry — host-aware fields', () => {
+  it('carries the host pair, clamp flag and no-kernel-ceiling flag', () => {
+    const GiB = 1024 ** 3;
+    const sched = new GlobalScheduler({
+      resourceMonitor: () =>
+        metrics({
+          containerAware: true,
+          hostMemTotalBytes: 16 * GiB,
+          hostMemAvailableBytes: 9 * GiB,
+        }),
+    });
+    sched.start();
+    try {
+      const t = sched.budgetTelemetry();
+      expect(t.containerAware).toBe(true);
+      expect(t.hostTotalBytes).toBe(16 * GiB);
+      expect(t.hostAvailableBytes).toBe(9 * GiB);
+      expect(typeof t.hostClampActive).toBe('boolean');
+      // Not in a container in tests → the gap-B flag must stay false.
+      expect(t.noKernelCeiling).toBe(false);
+    } finally {
+      sched.stop();
+    }
+  });
+});

@@ -1,0 +1,26 @@
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    // Vitest 4 no longer excludes build output by default. Without this,
+    // `npm run build && npm test` runs every compiled dist/**/*.test.js IN
+    // PARALLEL with its src/ twin — doubling the suite and making the
+    // native-shim port-bind tests race each other on 127.0.0.1:3000.
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.git/**',
+      // Sandbox fixtures live in their OWN git repos under projects/ and carry
+      // their own React/Vitest test suites — never run them as part of huu's.
+      '**/projects/**',
+      // Running agents create real git repos inside run-scoped worktrees.
+      // Those carry their own test suites (sandbox repos) and can be large.
+      // Never discover them from the host project root.
+      '**/.huu-worktrees/**',
+      // Future web UI (browser client, vanilla JS). Not a testable module
+      // under vitest — its logic lives in the browser.
+      '**/webui/**',
+    ],
+    reporters: ['default', ['json', { outputFile: '.vitest-report.json' }]],
+  },
+});

@@ -1,0 +1,168 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  DEFAULT_RAM_PERCENT,
+  MAX_RAM_PERCENT,
+  MIN_OS_RESERVE_BYTES,
+  MIN_RAM_PERCENT,
+  clampPercent,
+  hostHeadroomBytes,
+  osReserveBytes,
+  ramBudgetBytes,
+  resolveRamPercent,
+} from './budget.js';
+
+const GiB = 1024 ** 3;
+
+describe('clampPercent', () => {
+  it('passes a normal value through (rounded to int)', () => {
+    expect(clampPercent(85)).toBe(85);
+    expect(clampPercent(72.4)).toBe(72);
+  });
+  it('clamps below MIN and above MAX', () => {
+    expect(clampPercent(0)).toBe(MIN_RAM_PERCENT);
+    expect(clampPercent(-50)).toBe(MIN_RAM_PERCENT);
+    expect(clampPercent(150)).toBe(MAX_RAM_PERCENT);
+  });
+  it('falls back to default on non-finite', () => {
+    expect(clampPercent(NaN)).toBe(DEFAULT_RAM_PERCENT);
+    expect(clampPercent(Infinity)).toBe(DEFAULT_RAM_PERCENT);
+  });
+});
+
+describe('resolveRamPercent', () => {
+  const saved = process.env.HUU_RAM_PERCENT;
+  beforeEach(() => {
+    delete process.env.HUU_RAM_PERCENT;
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env.HUU_RAM_PERCENT;
+    else process.env.HUU_RAM_PERCENT = saved;
+  });
+
+  it('returns the default when nothing is set', () => {
+    expect(resolveRamPercent()).toBe(DEFAULT_RAM_PERCENT);
+  });
+  it('reads HUU_RAM_PERCENT from env', () => {
+    process.env.HUU_RAM_PERCENT = '70';
+    expect(resolveRamPercent()).toBe(70);
+  });
+  it('clamps an out-of-range env value', () => {
+    process.env.HUU_RAM_PERCENT = '999';
+    expect(resolveRamPercent()).toBe(MAX_RAM_PERCENT);
+  });
+  it('ignores an empty/garbage env value (falls back to default)', () => {
+    process.env.HUU_RAM_PERCENT = '';
+    expect(resolveRamPercent()).toBe(DEFAULT_RAM_PERCENT);
+    process.env.HUU_RAM_PERCENT = 'abc';
+    expect(resolveRamPercent()).toBe(DEFAULT_RAM_PERCENT);
+  });
+  it('explicit value wins over env and is clamped', () => {
+    process.env.HUU_RAM_PERCENT = '50';
+    expect(resolveRamPercent(90)).toBe(90);
+    expect(resolveRamPercent(3)).toBe(MIN_RAM_PERCENT);
+  });
+});
+
+describe('ramBudgetBytes', () => {
+  it('computes pct of total', () => {
+    expect(ramBudgetBytes(32 * GiB, 85)).toBeCloseTo(32 * GiB * 0.85, -6);
+  });
+  it('never claims more than total minus the OS reserve floor', () => {
+    // 95% of 1 GiB would be 0.95 GiB, but total - 512MiB = 0.5 GiB is lower.
+    const total = 1 * GiB;
+    expect(ramBudgetBytes(total, 95)).toBe(total - MIN_OS_RESERVE_BYTES);
+  });
+  it('returns 0 for non-positive/non-finite total', () => {
+    expect(ramBudgetBytes(0, 85)).toBe(0);
+    expect(ramBudgetBytes(-1, 85)).toBe(0);
+    expect(ramBudgetBytes(NaN, 85)).toBe(0);
+  });
+  it('clamps the percent defensively (ceiling = total − ADAPTIVE reserve)', () => {
+    const total = 32 * GiB;
+    // On a 32 GiB desktop the adaptive reserve is 8% (2.56 GiB) — larger than
+    // the legacy 512 MiB floor that proved far too thin for a desktop.
+    expect(ramBudgetBytes(total, 999)).toBe(
+      Math.min(total * (MAX_RAM_PERCENT / 100), total - osReserveBytes(total)),
+    );
+  });
+});
+
+describe('osReserveBytes', () => {
+  const savedReserve = process.env.HUU_OS_RESERVE_MB;
+  afterEach(() => {
+    if (savedReserve === undefined) delete process.env.HUU_OS_RESERVE_MB;
+    else process.env.HUU_OS_RESERVE_MB = savedReserve;
+  });
+
+  it('reserves max(min(2GiB, 25%), 8%, 512MiB)', () => {
+    delete process.env.HUU_OS_RESERVE_MB;
+    expect(osReserveBytes(32 * GiB)).toBeCloseTo(32 * GiB * 0.08, -6); // 2.56 GiB (8% wins)
+    expect(osReserveBytes(16 * GiB)).toBe(2 * GiB); // 2 GiB cap wins
+    expect(osReserveBytes(4 * GiB)).toBe(1 * GiB); // 25% of a small box
+    expect(osReserveBytes(1 * GiB)).toBe(MIN_OS_RESERVE_BYTES); // 512 MiB floor
+  });
+
+  it('HUU_OS_RESERVE_MB overrides, capped at 90% of total', () => {
+    process.env.HUU_OS_RESERVE_MB = '4096';
+    expect(osReserveBytes(32 * GiB)).toBe(4096 * 1024 * 1024);
+    process.env.HUU_OS_RESERVE_MB = '999999';
+    expect(osReserveBytes(4 * GiB)).toBe(Math.floor(4 * GiB * 0.9));
+    process.env.HUU_OS_RESERVE_MB = 'garbage';
+    expect(osReserveBytes(32 * GiB)).toBeCloseTo(32 * GiB * 0.08, -6);
+  });
+});
+
+describe('ramBudgetBytes containerAware (double-reserve fix)', () => {
+  const GiB2 = 1024 ** 3;
+
+  it('skips the OS-reserve ceiling when the total IS a cgroup limit', () => {
+    // 14 GiB container (--memory = 16 GiB host − 2 GiB reserve). At dial 95
+    // the host-side reserve must not be charged AGAIN: budget = 95% of 14 GiB
+    // (13.3 GiB), not 14 − 2 = 12 GiB.
+    const total = 14 * GiB2;
+    expect(ramBudgetBytes(total, 95, { containerAware: true })).toBeCloseTo(total * 0.95, -6);
+    // Default (host scope) keeps the reserve ceiling — unchanged behavior.
+    expect(ramBudgetBytes(total, 95)).toBe(
+      Math.min(total * 0.95, total - osReserveBytes(total)),
+    );
+  });
+
+  it('low dials are identical in both scopes (the percent binds, not the ceiling)', () => {
+    const total = 14 * GiB2;
+    expect(ramBudgetBytes(total, 70, { containerAware: true })).toBe(
+      ramBudgetBytes(total, 70),
+    );
+  });
+});
+
+describe('hostHeadroomBytes (host-availability clamp)', () => {
+  const GiB3 = 1024 ** 3;
+
+  it('returns available − the adaptive OS reserve of the HOST total', () => {
+    // 16 GiB host → reserve 2 GiB; 9.2 GiB available → 7.2 GiB claimable.
+    expect(hostHeadroomBytes(9.2 * GiB3, 16 * GiB3, {})).toBeCloseTo(7.2 * GiB3, -6);
+  });
+
+  it('floors at 0 when the host is below the reserve', () => {
+    expect(hostHeadroomBytes(1 * GiB3, 16 * GiB3, {})).toBe(0);
+  });
+
+  it('propagates null (no clamp) when either input is null or invalid', () => {
+    expect(hostHeadroomBytes(null, 16 * GiB3, {})).toBeNull();
+    expect(hostHeadroomBytes(8 * GiB3, null, {})).toBeNull();
+    expect(hostHeadroomBytes(NaN, 16 * GiB3, {})).toBeNull();
+    expect(hostHeadroomBytes(8 * GiB3, 0, {})).toBeNull();
+    expect(hostHeadroomBytes(-1, 16 * GiB3, {})).toBeNull();
+  });
+
+  it('HUU_NO_HOST_CLAMP disables the clamp entirely', () => {
+    expect(hostHeadroomBytes(9 * GiB3, 16 * GiB3, { HUU_NO_HOST_CLAMP: '1' })).toBeNull();
+    expect(hostHeadroomBytes(9 * GiB3, 16 * GiB3, { HUU_NO_HOST_CLAMP: 'true' })).toBeNull();
+    expect(hostHeadroomBytes(9 * GiB3, 16 * GiB3, { HUU_NO_HOST_CLAMP: '0' })).not.toBeNull();
+  });
+
+  it('HUU_OS_RESERVE_MB governs the clamp reserve too (one knob, both sides)', () => {
+    const env = { HUU_OS_RESERVE_MB: '1024' };
+    expect(hostHeadroomBytes(9 * GiB3, 16 * GiB3, env)).toBe(8 * GiB3);
+  });
+});

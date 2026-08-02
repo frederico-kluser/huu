@@ -1,0 +1,262 @@
+/**
+ * `huu status` doctor section for RAM containment — answers, at a glance:
+ * which dial is in force (and where it came from), how much the budget really
+ * is in bytes, whether a KERNEL ceiling (systemd scope / container cgroup) is
+ * active, and what the pressure signals look like right now. Born from the
+ * 33-run incident, where the user had NO way to tell whether the 50% dial had
+ * taken effect at all.
+ *
+ * Shape follows pi-doctor: a PURE core (`resolveRamDoctorReport`) with every
+ * fs/env input injected — unit-testable — plus one impure gatherer and a text
+ * renderer. Everything degrades to nulls instead of throwing.
+ */
+
+import { readFileSync } from 'node:fs';
+import { totalmem } from 'node:os';
+import {
+  DEFAULT_RAM_PERCENT,
+  clampPercent,
+  hostHeadroomBytes,
+  osReserveBytes,
+  ramBudgetBytes,
+} from './budget.js';
+import { loadWebSettings } from './web-settings.js';
+import { SystemMetricsSampler, type SystemMetrics } from './resource-monitor.js';
+import { dockerMemoryLimitBytes } from './docker-reexec.js';
+
+const GIB = 1024 ** 3;
+
+export interface RamDoctorReport {
+  dialPercent: number;
+  dialSource: 'web-settings' | 'env' | 'default';
+  totalBytes: number;
+  reserveBytes: number;
+  budgetBytes: number;
+  /** Kernel ceiling on the CURRENT cgroup (systemd scope or container). */
+  cgroupMemoryHighBytes: number | null;
+  cgroupMemoryMaxBytes: number | null;
+  wrapped: boolean;
+  swapTotalBytes: number | null;
+  swapFreeBytes: number | null;
+  psiSome10: number | null;
+  psiFull10: number | null;
+  /** Host /proc/meminfo pair (null off-Linux). */
+  hostMemTotalBytes: number | null;
+  hostMemAvailableBytes: number | null;
+  /** Live host-availability clamp: bytes huu may claim right now (null = no clamp). */
+  hostClaimableBytes: number | null;
+  /** The --memory the docker wrapper would set (null = disabled/unlimited). */
+  dockerMemoryBytes: number | null;
+  /** The in-container budget the dial yields against that --memory. */
+  containerBudgetBytes: number | null;
+  /** RAM-safety HUU_* knobs currently set (names only). */
+  activeKnobs: string[];
+}
+
+export interface RamDoctorInputs {
+  env: NodeJS.ProcessEnv;
+  totalBytes: number;
+  webSettingsRamPercent: number | undefined;
+  cgroupMemoryHighBytes: number | null;
+  cgroupMemoryMaxBytes: number | null;
+  swapTotalBytes: number | null;
+  swapFreeBytes: number | null;
+  psiSome10: number | null;
+  psiFull10: number | null;
+  hostMemTotalBytes: number | null;
+  hostMemAvailableBytes: number | null;
+}
+
+const KNOB_NAMES = [
+  'HUU_RAM_PERCENT',
+  'HUU_OS_RESERVE_MB',
+  'HUU_AGENT_MEM_SEED_MB',
+  'HUU_AGENT_MEM_EMA_ALPHA',
+  'HUU_NO_PAUSE',
+  'HUU_PAUSE_BACKOFF_MS',
+  'HUU_NO_CGROUP',
+  'HUU_NO_MEM_LIMIT',
+  'HUU_NO_HOST_CLAMP',
+  'HUU_SWAP_MAX_MB',
+  'HUU_DOCKER_MEMORY_MB',
+  'HUU_MAX_LIVE_RUNS',
+  'HUU_MAX_QUEUED_RUNS',
+  'HUU_RUN_BASELINE_MB',
+  'HUU_CHILD_OOM_SCORE_ADJ',
+  'HUU_OOM_SCORE_ADJ',
+  'HUU_GUARD_AVAIL_PCT',
+  'HUU_GUARD_SWAP_FREE_PCT',
+  'HUU_GUARD_AVAIL_PCT_EMERGENCY',
+  'HUU_GUARD_SWAP_FREE_PCT_EMERGENCY',
+  'HUU_GUARD_PSI_FULL_HIGH',
+  'HUU_GUARD_PSI_FULL_EMERGENCY',
+  'HUU_GUARD_SWAPIN_PAGES_SEC',
+  'HUU_GUARD_SWAPIN_SUSTAIN_MS',
+  'HUU_GUARD_CONTAINER_SWAP_PCT',
+  'HUU_GUARD_OVER_BUDGET_MS',
+  'HUU_GUARD_DESTROY_PCT',
+  'HUU_GUARD_L1_REPREEMPT_MS',
+  'HUU_GUARD_REOPEN_CALM_MS',
+];
+
+/** PURE: derive the report from injected inputs — no fs/env reads. */
+export function resolveRamDoctorReport(inputs: RamDoctorInputs): RamDoctorReport {
+  const fromWeb = inputs.webSettingsRamPercent;
+  const envRaw = inputs.env.HUU_RAM_PERCENT?.trim();
+  const envPct = envRaw && Number.isFinite(Number(envRaw)) ? Number(envRaw) : undefined;
+  let dialPercent: number;
+  let dialSource: RamDoctorReport['dialSource'];
+  if (fromWeb !== undefined) {
+    dialPercent = clampPercent(fromWeb);
+    dialSource = 'web-settings';
+  } else if (envPct !== undefined) {
+    dialPercent = clampPercent(envPct);
+    dialSource = 'env';
+  } else {
+    dialPercent = DEFAULT_RAM_PERCENT;
+    dialSource = 'default';
+  }
+  const dockerMemoryBytes = dockerMemoryLimitBytes(inputs.env, inputs.totalBytes);
+  return {
+    dialPercent,
+    dialSource,
+    totalBytes: inputs.totalBytes,
+    reserveBytes: osReserveBytes(inputs.totalBytes, inputs.env),
+    budgetBytes: ramBudgetBytes(inputs.totalBytes, dialPercent),
+    cgroupMemoryHighBytes: inputs.cgroupMemoryHighBytes,
+    cgroupMemoryMaxBytes: inputs.cgroupMemoryMaxBytes,
+    wrapped: inputs.env.HUU_CGROUP_WRAPPED === '1' || inputs.env.HUU_IN_CONTAINER === '1',
+    swapTotalBytes: inputs.swapTotalBytes,
+    swapFreeBytes: inputs.swapFreeBytes,
+    psiSome10: inputs.psiSome10,
+    psiFull10: inputs.psiFull10,
+    hostMemTotalBytes: inputs.hostMemTotalBytes,
+    hostMemAvailableBytes: inputs.hostMemAvailableBytes,
+    hostClaimableBytes: hostHeadroomBytes(
+      inputs.hostMemAvailableBytes,
+      inputs.hostMemTotalBytes,
+      inputs.env,
+    ),
+    dockerMemoryBytes,
+    containerBudgetBytes:
+      dockerMemoryBytes === null
+        ? null
+        : ramBudgetBytes(dockerMemoryBytes, dialPercent, { containerAware: true }),
+    activeKnobs: KNOB_NAMES.filter((k) => (inputs.env[k]?.trim() ?? '') !== ''),
+  };
+}
+
+/**
+ * One-time warning for the "no kernel ceiling" configuration (gap B of the RAM
+ * accounting audit): huu is INSIDE its container but the memory figures did
+ * not come from a cgroup limit — either the user disabled it
+ * (HUU_NO_MEM_LIMIT) or the daemon couldn't enforce --memory (rootless Docker
+ * without memory-controller delegation). In that state the budget is computed
+ * against the HOST total with no kernel backstop — the exact configuration of
+ * the multi-run OOM incident. Pure; returns null when the ceiling is fine (or
+ * when running natively, where the systemd scope path applies instead).
+ */
+export function noKernelCeilingWarning(
+  m: Pick<SystemMetrics, 'containerAware'>,
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  if (env.HUU_IN_CONTAINER !== '1' || m.containerAware) return null;
+  const cause =
+    env.HUU_NO_MEM_LIMIT === '1' || env.HUU_NO_MEM_LIMIT === 'true'
+      ? 'HUU_NO_MEM_LIMIT=1'
+      : 'the Docker daemon could not enforce --memory (rootless without memcg delegation?)';
+  return (
+    `no kernel RAM ceiling: ${cause} — containment is software-only ` +
+    '(budget dial + pressure guard; the host-availability clamp stays active)'
+  );
+}
+
+/**
+ * Parse the cgroup v2 relative path out of /proc/self/cgroup ("0::<path>").
+ * Pure — unit-tested directly.
+ */
+export function parseCgroupV2Path(text: string): string | null {
+  const m = /^0::(.+)$/m.exec(text);
+  return m ? m[1]!.trim() : null;
+}
+
+/** Read a cgroup memory limit file: number of bytes, or null ("max"/absent). */
+function readCgroupLimit(file: string): number | null {
+  try {
+    const raw = readFileSync(file, 'utf8').trim();
+    if (raw === 'max') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/** IMPURE: read the machine + the current cgroup's memory limits. */
+export function gatherRamDoctorInputs(): Omit<RamDoctorInputs, 'env'> {
+  const m = new SystemMetricsSampler().sample();
+  let high: number | null = null;
+  let max: number | null = null;
+  try {
+    const rel = parseCgroupV2Path(readFileSync('/proc/self/cgroup', 'utf8'));
+    if (rel) {
+      high = readCgroupLimit(`/sys/fs/cgroup${rel}/memory.high`);
+      max = readCgroupLimit(`/sys/fs/cgroup${rel}/memory.max`);
+    }
+  } catch {
+    /* off-Linux / cgroup v1 — no kernel ceiling to report */
+  }
+  return {
+    totalBytes: totalmem(),
+    webSettingsRamPercent: loadWebSettings().ramPercent,
+    cgroupMemoryHighBytes: high,
+    cgroupMemoryMaxBytes: max,
+    swapTotalBytes: m.swapTotalBytes,
+    swapFreeBytes: m.swapFreeBytes,
+    psiSome10: m.memPressureSome10,
+    psiFull10: m.memPressureFull10,
+    hostMemTotalBytes: m.hostMemTotalBytes,
+    hostMemAvailableBytes: m.hostMemAvailableBytes,
+  };
+}
+
+const gib = (b: number): string => `${(b / GIB).toFixed(1)}G`;
+
+export function renderRamDoctorText(r: RamDoctorReport): string[] {
+  const lines: string[] = [];
+  lines.push('  ram containment:');
+  lines.push(
+    `    dial:        ${r.dialPercent}% of ${gib(r.totalBytes)} → budget ${gib(r.budgetBytes)} (source: ${r.dialSource}; OS reserve ${gib(r.reserveBytes)})`,
+  );
+  const ceiling =
+    r.cgroupMemoryHighBytes !== null || r.cgroupMemoryMaxBytes !== null
+      ? `high=${r.cgroupMemoryHighBytes !== null ? gib(r.cgroupMemoryHighBytes) : 'max'} max=${r.cgroupMemoryMaxBytes !== null ? gib(r.cgroupMemoryMaxBytes) : 'max'}`
+      : 'NONE — software guard only';
+  lines.push(`    kernel:      ${ceiling}${r.wrapped ? '' : ' (unwrapped process)'}`);
+  const psi =
+    r.psiSome10 === null
+      ? 'unavailable'
+      : `some ${r.psiSome10.toFixed(2)}% / full ${r.psiFull10?.toFixed(2) ?? '0.00'}%`;
+  const swap =
+    r.swapTotalBytes === null
+      ? 'swap unknown'
+      : `swap free ${gib(r.swapFreeBytes ?? 0)} of ${gib(r.swapTotalBytes)}`;
+  lines.push(`    pressure:    PSI ${psi} · ${swap}`);
+  if (r.hostMemTotalBytes !== null) {
+    const avail = r.hostMemAvailableBytes !== null ? gib(r.hostMemAvailableBytes) : '?';
+    const claim =
+      r.hostClaimableBytes !== null
+        ? ` → huu may claim ≤${gib(r.hostClaimableBytes)} right now`
+        : ' → host clamp disabled';
+    lines.push(`    host:        total ${gib(r.hostMemTotalBytes)} · available ${avail}${claim}`);
+  }
+  lines.push(
+    r.dockerMemoryBytes !== null
+      ? `    docker:      --memory would be ${gib(r.dockerMemoryBytes)} (dial ${r.dialPercent}% → in-container budget ${gib(r.containerBudgetBytes ?? 0)})`
+      : '    docker:      --memory DISABLED (HUU_NO_MEM_LIMIT) — no kernel ceiling in the container',
+  );
+  if (r.activeKnobs.length > 0) {
+    lines.push(`    knobs:       ${r.activeKnobs.join(', ')}`);
+  }
+  return lines;
+}

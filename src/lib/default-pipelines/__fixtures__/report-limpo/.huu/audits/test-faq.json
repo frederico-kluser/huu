@@ -1,0 +1,20 @@
+[
+  {
+    "id": "F-001",
+    "title": "Hardcoded API key in config",
+    "severity": "critical",
+    "description": "A hardcoded API key was found in the configuration file."
+  },
+  {
+    "id": "F-002",
+    "title": "Missing input validation",
+    "severity": "warn",
+    "description": "Several functions lack proper input validation."
+  },
+  {
+    "id": "F-003",
+    "title": "README improvements",
+    "severity": "info",
+    "description": "README could be more descriptive."
+  }
+]

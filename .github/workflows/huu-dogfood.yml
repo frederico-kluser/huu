@@ -1,0 +1,57 @@
+# .github/workflows/huu-dogfood.yml — huu audits itself weekly
+name: huu dogfood audits
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 0'   # weekly, Sunday 06:00 UTC
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      HUU_IMAGE: ghcr.io/frederico-kluser/huu:latest
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install huu
+        run: npm install -g huu-pipe
+
+      - name: Build config
+        run: |
+          cat > huu-ci-config.json <<'EOF'
+          {
+            "modelId": "x-ai/grok-4-fast",
+            "backend": "pi"
+          }
+          EOF
+
+      - name: Run Docs Audit
+        run: huu auto pipelines/huu-docs-audit.pipeline.json \
+               --config huu-ci-config.json > huu-docs-audit-result.json
+
+      - name: Run Quality Audit
+        run: huu auto pipelines/huu-quality-audit.pipeline.json \
+               --config huu-ci-config.json > huu-quality-audit-result.json
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: huu-dogfood-audits
+          path: |
+            .huu/audits/**
+            huu-docs-audit-result.json
+            huu-quality-audit-result.json
+
+      - name: Gate on results
+        if: always()
+        run: |
+          jq -e '.ok == true' huu-docs-audit-result.json
+          jq -e '.ok == true' huu-quality-audit-result.json

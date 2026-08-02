@@ -1,0 +1,67 @@
+{
+  "models": [
+    {
+      "id": "deepseek/deepseek-v4-flash",
+      "label": "DeepSeek V4 Flash",
+      "inputPrice": 0.14,
+      "outputPrice": 0.28,
+      "description": "★ default — rápido, barato e capaz (1M de contexto, tools + reasoning). O modelo padrão para rodar os steps; troque por um tier planning só para arquitetar.",
+      "bestFor": ["fast", "cheap", "coding"],
+      "tier": "fast"
+    },
+    {
+      "id": "deepseek/deepseek-v4-pro",
+      "label": "DeepSeek V4 Pro",
+      "inputPrice": 0.435,
+      "outputPrice": 0.87,
+      "description": "★ planejamento — o melhor custo-benefício para o Pipeline Architect (esboços paralelos + seleção). Planejar é alavancagem: o plano guia o run inteiro.",
+      "bestFor": ["planning", "reasoning"],
+      "tier": "planning"
+    },
+    {
+      "id": "z-ai/glm-5.2",
+      "label": "GLM-5.2",
+      "inputPrice": 0.7686,
+      "outputPrice": 2.4156,
+      "description": "★ SÓ orquestrador — ausente do registry do pi (que para no glm-5.1), então NÃO roda como agente, juiz ou revisor. Serve de planner porque essa via é LangChain→OpenRouter.",
+      "bestFor": ["planning", "reasoning"],
+      "tier": "planning"
+    },
+    {
+      "id": "openai/gpt-5.4",
+      "label": "GPT-5.4",
+      "inputPrice": 2.5,
+      "outputPrice": 15.0,
+      "description": "★ planejamento — frontier para arquitetar pipelines complexas no Pipeline Architect.",
+      "bestFor": ["planning", "reasoning"],
+      "tier": "planning"
+    },
+    {
+      "id": "anthropic/claude-opus-4.6",
+      "label": "Claude Opus 4.6",
+      "inputPrice": 5.0,
+      "outputPrice": 25.0,
+      "description": "★ planejamento — frontier para arquitetar pipelines complexas no Pipeline Architect.",
+      "bestFor": ["planning", "reasoning"],
+      "tier": "planning"
+    },
+    {
+      "id": "minimax/minimax-m2.7",
+      "label": "MiniMax M2.7",
+      "inputPrice": 0.134,
+      "outputPrice": 1.31,
+      "description": "Rápido e barato — use para steps simples, per-file, fan-out paralelo (lint, rename, JSDoc, traduzir, boilerplate).",
+      "bestFor": ["cheap", "fast"],
+      "tier": "fast"
+    },
+    {
+      "id": "moonshotai/kimi-k2.6",
+      "label": "Kimi K2.6",
+      "inputPrice": 0.646,
+      "outputPrice": 2.72,
+      "description": "★ crítico recomendado — cross-family em relação ao worker DeepSeek. Contexto 256k, mas saída máx. 16k no registry do pi: é esse teto que obriga o cap de achados por rodada.",
+      "bestFor": ["coding", "reasoning", "agentic"],
+      "tier": "workhorse"
+    }
+  ]
+}

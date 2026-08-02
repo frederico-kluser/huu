@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="huu">
+  <defs>
+    <linearGradient id="g" x1="14" y1="10" x2="52" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d07cff"/>
+      <stop offset="1" stop-color="#5e5ce6"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="#0b0b0f"/>
+  <!-- A static frame of the morphing gooey blob — huu's indigo→purple mark. -->
+  <path fill="url(#g)" d="M33 11c8 0 15 4 19 12 4 8 1 16-5 22-6 6-15 9-23 6-8-3-12-11-11-19 1-9 6-16 13-19 2-1 5-2 7-2z"/>
+  <circle cx="25" cy="25" r="5" fill="#ffffff" opacity="0.32"/>
+</svg>

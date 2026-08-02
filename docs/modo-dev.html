@@ -1,0 +1,1124 @@
+<!doctype html>
+<!--
+  Modo dev do huu — explicação de arquivo único, tema escuro, conteúdo em abas.
+  Nada de npm, nada de build: tudo entra por CDN. Abre com duplo clique (file://).
+-->
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Diz ao navegador que a página é escura ANTES do CSS carregar: sem flash branco,
+     e os controles nativos (scrollbar, select, input) já nascem escuros. -->
+<meta name="color-scheme" content="dark">
+<title>Modo dev do huu</title>
+
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+      integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
+      crossorigin="anonymous">
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css"
+      integrity="sha384-CK2SzKma4jA5H/MXDUU7i1TqZlCFaD4T01vtyDFvPlD97JQyS+IsSh1nI2EFbpyk"
+      crossorigin="anonymous">
+<link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css"
+      integrity="sha384-wH75j6z1lH97ZOpMOInqhgKzFkAInZPPSPlZpYKYTOqsaizPvhQZmAtLcPKXpLyH"
+      crossorigin="anonymous">
+
+<style>
+  /* Todo o CSS do documento cabe aqui. Se precisar de mais que isto, é porque
+     existe um utilitário do Bootstrap que resolve — procure antes de escrever. */
+
+  /* Âncora não fica escondida atrás da navbar fixa. */
+  [id] { scroll-margin-top: 5rem; }
+
+  /* Bloco de código: espaço à direita para o botão de copiar não cobrir o texto. */
+  pre { position: relative; margin-bottom: 1rem; }
+  pre code.hljs { padding-right: 4rem; border-radius: var(--bs-border-radius); font-size: .875rem; }
+
+  .copy-btn { position: absolute; top: .5rem; right: .5rem; opacity: .4; transition: opacity .15s; }
+  pre:hover .copy-btn, .copy-btn:focus-visible { opacity: 1; }
+
+  /* Abrir o arquivo em #pane-x foca o painel (bom: o leitor de tela cai no conteúdo),
+     e o outline branco do navegador fica gritante. Anel discreto, do tema, no lugar —
+     tirar o indicador por completo quebraria quem navega por teclado. */
+  .tab-pane:focus-visible { outline: 0; box-shadow: 0 0 0 .2rem rgba(var(--bs-emphasis-color-rgb), .15); }
+
+  /* Impressão/PDF: abre TODAS as abas, senão o papel sai com uma só. */
+  @media print {
+    /* .d-print-none do Bootstrap resolve o resto: marque com ela o que é só de tela. */
+    .nav-tabs, .copy-btn { display: none !important; }
+    .tab-content > .tab-pane { display: block !important; opacity: 1 !important; page-break-inside: avoid; }
+    .tab-pane::before { content: attr(data-print-title); display: block;
+                        font-size: 1.25rem; font-weight: 600; margin: 1.5rem 0 .5rem; }
+  }
+</style>
+</head>
+
+<body class="bg-body">
+
+<nav class="navbar navbar-expand-lg sticky-top bg-body-tertiary border-bottom">
+  <div class="container">
+    <span class="navbar-brand fw-semibold"><i class="bi bi-file-earmark-code me-1"></i>Modo dev do huu</span>
+    <span class="navbar-text small text-body-secondary d-none d-md-inline"><code>huu dev</code></span>
+  </div>
+</nav>
+
+<main class="container py-4" style="max-width: 60rem">
+
+  <header class="mb-4">
+    <h1 class="display-6 fw-semibold">Modo dev do huu</h1>
+    <p class="lead text-body-secondary">
+      O que o <code>huu dev</code> é, o que ele faz sozinho, o que ele
+      deliberadamente <strong>não</strong> faz — e onde ele costuma parar.
+    </p>
+    <div class="d-flex flex-wrap gap-2">
+      <span class="badge text-bg-secondary">huu v5.3.0</span>
+      <span class="badge text-bg-secondary">30/07/2026</span>
+      <span class="badge text-bg-secondary">conferido no código</span>
+    </div>
+  </header>
+
+  <!-- Fora das abas de propósito: é o que muda o seu repositório. -->
+  <div class="alert alert-warning d-flex gap-3" role="alert">
+    <i class="bi bi-exclamation-triangle-fill fs-4"></i>
+    <div>
+      <strong>Antes de rodar, três coisas que mexem no seu repo.</strong>
+      <ol class="mb-0 mt-2">
+        <li><strong>Ele faz merge no seu branch atual.</strong> A cada época o huu
+          faz <code>merge --no-ff</code> do branch de integração no branch em que
+          você está. Não é um sandbox que você inspeciona depois.</li>
+        <li><strong>Sua árvore precisa estar limpa.</strong> Qualquer coisa não
+          commitada que não seja do huu faz a sessão recusar na hora
+          (<code>dirty-tree</code>).</li>
+        <li><strong>Autonomia é o padrão.</strong> Um <code>huu dev "objetivo"</code>
+          puro planeja e executa tudo até o teto sem perguntar nada. O portão
+          humano é opt-in: <code>--approve-each</code>.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ABAS
+       Regras que não podem ser quebradas:
+       · <ul role="tablist"> e cada <button role="tab">
+       · button.id  ←→  tabpanel.aria-labelledby
+       · button.data-bs-target ←→ #id do tabpanel (e aria-controls com o mesmo id, sem #)
+       · exatamente UM botão .active + UM painel .show.active
+       O Bootstrap já faz navegação por seta/Home/End no tablist; não reimplemente. -->
+  <ul class="nav nav-tabs" id="doc-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="tab-o-que-e" data-bs-toggle="tab" data-bs-target="#pane-o-que-e"
+              type="button" role="tab" aria-controls="pane-o-que-e" aria-selected="true">
+        O que é
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-usando" data-bs-toggle="tab" data-bs-target="#pane-usando"
+              type="button" role="tab" aria-controls="pane-usando" aria-selected="false">
+        Usando
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-por-dentro" data-bs-toggle="tab" data-bs-target="#pane-por-dentro"
+              type="button" role="tab" aria-controls="pane-por-dentro" aria-selected="false">
+        Por dentro
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-nao-tem" data-bs-toggle="tab" data-bs-target="#pane-nao-tem"
+              type="button" role="tab" aria-controls="pane-nao-tem" aria-selected="false">
+        O que <strong>não</strong> tem
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-modelos" data-bs-toggle="tab" data-bs-target="#pane-modelos"
+              type="button" role="tab" aria-controls="pane-modelos" aria-selected="false">
+        Modelos e custo
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-erros" data-bs-toggle="tab" data-bs-target="#pane-erros"
+              type="button" role="tab" aria-controls="pane-erros" aria-selected="false">
+        Quando para
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content border border-top-0 rounded-bottom p-4" id="doc-tabs-content">
+
+    <!-- ══════════════════════════════════════ 1. O QUE É ══════════════════ -->
+    <div class="tab-pane fade show active" id="pane-o-que-e" role="tabpanel"
+         aria-labelledby="tab-o-que-e" tabindex="0" data-print-title="O que é">
+
+      <h2 class="h4">Em uma frase</h2>
+      <p class="fs-5">
+        No huu normal, <strong>você escreve o método</strong> (o pipeline) e os
+        agentes executam. No modo dev, você escreve <strong>só o objetivo</strong>
+        — e um planejador LLM escreve o método em tempo de execução, do zero, a
+        cada época.
+      </p>
+
+      <p>
+        É o <strong>único</strong> fluxo do huu cujo grafo de passos nasce durante
+        o run. Todo o resto do huu roda um <code>pipeline.json</code> que um humano
+        escreveu antes.
+      </p>
+
+      <h2 class="h4 mt-4">O loop</h2>
+      <p>Uma <em>época</em> é uma volta completa. O modo dev repete épocas até acabar:</p>
+
+<pre><code class="language-text">planejar → (aprovar) → rodar → aterrissar no seu branch → replanejar
+    ↑                                                          │
+    └──────────────────────────────────────────────────────────┘
+       até: o planejador dizer "objetivo concluído"
+            ou bater o teto de épocas (padrão 3 no CLI)
+            ou algo quebrar</code></pre>
+
+      <p>Dentro de <strong>uma</strong> época, o trabalho se abre em leque:</p>
+
+      <div class="row g-3 my-3">
+        <div class="col-md-4">
+          <div class="card h-100 bg-body-tertiary">
+            <div class="card-body">
+              <h3 class="h6 card-title"><i class="bi bi-1-circle me-1"></i>Frentes</h3>
+              <p class="card-text small mb-0">
+                O planejador quebra o objetivo em até <strong>4 frentes</strong>
+                paralelas (ex.: <code>api</code>, <code>cli</code>,
+                <code>tests</code>). Frentes independentes rodam ao mesmo tempo.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card h-100 bg-body-tertiary">
+            <div class="card-body">
+              <h3 class="h6 card-title"><i class="bi bi-2-circle me-1"></i>Enxame</h3>
+              <p class="card-text small mb-0">
+                Cada frente faz um recon, escreve uma spec markdown por tarefa, e
+                aí dispara <strong>um agente por tarefa</strong>, cada um na sua
+                git worktree isolada.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card h-100 bg-body-tertiary">
+            <div class="card-body">
+              <h3 class="h6 card-title"><i class="bi bi-3-circle me-1"></i>Merge</h3>
+              <p class="card-text small mb-0">
+                Antes de entrar, o trabalho de cada tarefa passa por um
+                <strong>crítico</strong>. Depois os branches são mergeados em
+                ordem determinística, e a época aterrissa no seu branch.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="h4 mt-4">Para que serve — e para que não serve</h2>
+
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="card h-100 border-success-subtle">
+            <div class="card-header bg-success-subtle fw-semibold">
+              <i class="bi bi-check-lg me-1"></i>Faz sentido
+            </div>
+            <ul class="list-group list-group-flush">
+              <li class="list-group-item bg-transparent small">Trabalho que se divide bem por <strong>arquivo</strong>: migração mecânica, refactor amplo, cobertura de testes.</li>
+              <li class="list-group-item bg-transparent small">Objetivo com critério de pronto <strong>verificável por comando</strong> (compila, testa, lint passa).</li>
+              <li class="list-group-item bg-transparent small">Repo que já tem <strong>skills / catalog.md</strong> — o planejador cego depende disso.</li>
+              <li class="list-group-item bg-transparent small">Quando você vai <strong>ler o diff</strong> no fim. Sempre.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-danger-subtle">
+            <div class="card-header bg-danger-subtle fw-semibold">
+              <i class="bi bi-x-lg me-1"></i>Não faz
+            </div>
+            <ul class="list-group list-group-flush">
+              <li class="list-group-item bg-transparent small">Objetivo vago (&ldquo;melhorar o código&rdquo;). Sem critério mecânico, o juiz vira carimbo.</li>
+              <li class="list-group-item bg-transparent small">Mudança que <strong>concentra num arquivo só</strong> — o paralelismo não tem onde acontecer e você paga o overhead à toa.</li>
+              <li class="list-group-item bg-transparent small">Design novo, decisão de arquitetura, escolha de biblioteca. Isso é humano.</li>
+              <li class="list-group-item bg-transparent small">Repo com árvore suja ou sem remote/branch em que dê para mergear.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="alert alert-secondary mt-4" role="alert">
+        <h3 class="h6"><i class="bi bi-info-circle me-1"></i>A tensão com o MANIFESTO, dita em voz alta</h3>
+        <p class="mb-0 small">
+          O MANIFESTO do huu vende <strong>&ldquo;zero planner LLM em runtime&rdquo;</strong>
+          como diferencial e diz que o huu <strong>não é ferramenta para desenvolver
+          features novas</strong>. O modo dev contraria os dois. O que sobrevive:
+          o humano assina o objetivo (verbatim, ninguém reescreve), a
+          <strong>forma</strong> da época é do huu e fixa, o modelo escreve
+          <em>conteúdo</em> e nunca <em>estrutura</em>, e todo caminho termina num
+          juiz. O que piora: o merge passa a ser filtrado por um crítico LLM cujo
+          critério é prosa que outro LLM escreveu.
+        </p>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════ 2. USANDO ═══════════════════ -->
+    <div class="tab-pane fade" id="pane-usando" role="tabpanel"
+         aria-labelledby="tab-usando" tabindex="0" data-print-title="Usando">
+
+      <h2 class="h4">Os três comandos que cobrem 90%</h2>
+
+<pre><code class="language-bash"># 1. Autônomo — O PADRÃO. Planeja e roda até o teto de épocas, sem perguntar nada.
+huu dev "migrar o parser para streaming sem quebrar a API pública" \
+    --model=anthropic/claude-sonnet-4
+
+# 2. Com portão humano: mostra o plano de cada época e espera você confirmar.
+huu dev "extrair o cliente HTTP para um pacote próprio" \
+    --model=anthropic/claude-sonnet-4 --approve-each --epochs=2
+
+# 3. Ensaio sem LLM: compila o grafo, roda as ondas, faz os merges. Custo zero.
+huu dev "qualquer coisa" --stub --epochs=1</code></pre>
+
+      <div class="alert alert-info small" role="alert">
+        <i class="bi bi-lightbulb me-1"></i>
+        <code>--autonomous</code> existe só para você declarar o padrão em voz alta.
+        Não muda nada, e passá-la junto com <code>--approve-each</code> é recusado.
+      </div>
+
+      <h2 class="h4 mt-4">Flags</h2>
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle">
+          <thead>
+            <tr><th style="width: 34%">Flag</th><th>O que faz</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>--model &lt;id&gt;</code></td>
+              <td>Modelo do planejador e do enxame. <strong>Obrigatório</strong> fora do <code>--stub</code> — a menos que todo papel já tenha id via roteamento.</td>
+            </tr>
+            <tr>
+              <td><code>--epochs &lt;n&gt;</code></td>
+              <td>Teto de épocas. Padrão <strong>3</strong>. A interface web não tem teto.</td>
+            </tr>
+            <tr>
+              <td><code>--fronts &lt;n&gt;</code></td>
+              <td>Teto de frentes paralelas por época. Padrão e máximo: <strong>4</strong>. Imposto pelo compilador, não só pelo prompt.</td>
+            </tr>
+            <tr>
+              <td><code>--approve-each</code></td>
+              <td>Portão opt-in: mostra o plano e espera confirmação. <strong>Exige terminal interativo.</strong></td>
+            </tr>
+            <tr>
+              <td><code>--autonomous</code></td>
+              <td>No-op que declara o padrão. Recusada junto com <code>--approve-each</code>.</td>
+            </tr>
+            <tr>
+              <td><code>--models &lt;preset&gt;</code></td>
+              <td><code>hetero</code> · <code>thrifty</code> · <code>monoculture</code> · <code>uniform</code>. Veja a aba <em>Modelos e custo</em>.</td>
+            </tr>
+            <tr>
+              <td><code>--worker-model=&lt;id&gt;</code><br><code>--critic-model=&lt;id&gt;</code>…</td>
+              <td>Sobrescreve o modelo de <strong>um papel</strong>. Combina com <code>--models</code>: o preset é a base, a flag por papel vence.</td>
+            </tr>
+            <tr>
+              <td><code>--resume</code> / <code>--no-resume</code></td>
+              <td>Retoma (ou recusa retomar) a sessão anterior sem perguntar. Só é oferecido quando o objetivo bate <strong>exatamente</strong>.</td>
+            </tr>
+            <tr>
+              <td><code>--land-orphans</code></td>
+              <td>Aterrissa branches <code>huu/*/integration</code> que ficaram órfãos de sessões passadas.</td>
+            </tr>
+            <tr>
+              <td><code>--skip-knowledge</code></td>
+              <td>Não faz bootstrap de skills mesmo quando o projeto não tem nenhuma.</td>
+            </tr>
+            <tr>
+              <td><code>--run-dir &lt;path&gt;</code></td>
+              <td>Repositório alvo. Padrão: diretório atual.</td>
+            </tr>
+            <tr>
+              <td><code>--stub</code></td>
+              <td>Ensaio sem LLM. Compila e mergeia, mas <strong>não escreve código</strong> — leia a ressalva na aba <em>O que não tem</em>.</td>
+            </tr>
+            <tr>
+              <td><code>--backend</code> / <code>--provider</code></td>
+              <td>Backend de agente e provedor de LLM (OpenRouter ou Azure AI Foundry).</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 class="h4 mt-4">Pela interface web</h2>
+      <p>
+        Um switch no topo separa as duas formas de começar trabalho — e cada
+        metade é uma rota de verdade, então dá para favoritar:
+      </p>
+
+<pre><code class="language-text">┌──────────────────────────┬──────────────────────────┐
+│ ≡ Pipelines              │ &lt;/&gt; Development          │
+│   Você já tem o método   │   Você tem um objetivo   │
+│   (rota /)               │   (rota /dev)            │
+└──────────────────────────┴──────────────────────────┘</code></pre>
+
+      <ul>
+        <li><strong>Goal</strong> — o único campo que o run subscreve. O botão de
+          microfone dita: o navegador grava, re-codifica em WAV mono 16&nbsp;kHz e
+          manda transcrever. Custa cerca de <strong>US$&nbsp;0,00007</strong> por
+          clipe de quatro segundos, e o texto é <em>anexado</em> ao que já estiver escrito.</li>
+        <li><strong>Project</strong> — seleção <strong>única</strong>: uma sessão de
+          dev termina num merge no branch de <em>um</em> repo.</li>
+        <li><strong>Approval</strong> — autônomo vem pré-selecionado, igual ao CLI.</li>
+        <li><strong>Sem teto de épocas.</strong> A sessão web roda até o planejador
+          declarar concluído ou você abortar. O CLI mantém <code>--epochs=3</code>
+          porque um run headless pode estar desacompanhado e não tem botão de Abort.</li>
+      </ul>
+
+      <p class="small text-body-secondary">
+        Enquanto uma sessão roda, a metade <em>Development</em> ganha um ponto
+        pulsante verde — âmbar quando um plano está travado esperando a sua aprovação.
+      </p>
+    </div>
+
+    <!-- ══════════════════════════════════════ 3. POR DENTRO ═══════════════ -->
+    <div class="tab-pane fade" id="pane-por-dentro" role="tabpanel"
+         aria-labelledby="tab-por-dentro" tabindex="0" data-print-title="Por dentro">
+
+      <h2 class="h4">Fase 0 — o portão de conhecimento</h2>
+      <p>
+        Antes de qualquer coisa, o huu sonda o repositório procurando uma
+        <strong>superfície de roteamento</strong> de skills, nesta ordem:
+      </p>
+      <ol>
+        <li><code>.agents/skills/catalog.md</code> existe → presente</li>
+        <li>senão, um <code>.agents/skills/*/SKILL.md</code> que seja roteador
+          (frontmatter <code>type: router</code>, ou os nomes
+          <code>project-router</code> / <code>project-knowledge</code>)</li>
+        <li>senão, o mesmo sob <code>.claude/skills/</code></li>
+      </ol>
+      <p class="mb-4">
+        <strong>Skills sem superfície de roteamento não contam como &ldquo;presente&rdquo;</strong>
+        — o planejador não teria por onde entrar nelas. Se estiver ausente, o huu
+        roda o pipeline embutido <code>huu Knowledge System</code> em modo MAX
+        (um agente por tarefa enfileirada até o teto duro, com o guarda de memória
+        como único freio) e aterrissa esse trabalho antes de começar.
+      </p>
+
+      <h2 class="h4">Uma época são DUAS runs, não uma</h2>
+      <p>
+        O plano só pode existir depois que o conhecimento chega. Então cada época
+        se parte em três fases:
+      </p>
+
+<pre><code class="language-text">A. CONHECIMENTO   run #1 — um pipeline FIXO, sobre o qual nenhum modelo opina
+   ① o orquestrador cego declara as LACUNAS de que precisa
+   ② o huu, em TypeScript, escreve um .md real por lacuna e COMMITA
+   ③ K0 prepara · K1 responde (fan-out) · K2 consolida → digest.md (≤ 6000 chars)
+
+B. PLANO          nenhuma run — lê objetivo + digest + histórico + evidência
+                  → compila o pipeline da época → portão → grava pipeline.json
+
+C. EXECUÇÃO       run #2 — o pipeline planejado, com o laço de crítica por tarefa
+                  → aterrissa → coleta evidência → replaneja</code></pre>
+
+      <div class="alert alert-secondary small" role="alert">
+        <strong>Zero lacunas ⇒ a fase A é pulada inteira</strong> e a época volta a
+        ser uma run só. É o que mantém um <code>--stub</code> em uma run por época.
+      </div>
+
+      <h2 class="h4 mt-4">O planejador é cego — de propósito</h2>
+      <p>
+        Ele <strong>não lê arquivo nenhum</strong>. Não tem ferramentas, não recebe
+        digest do repositório, não faz grep. A única coisa que ele aprende sobre o
+        seu código é o <code>digest.md</code> que <em>agentes</em> escreveram, com
+        citações de caminhos reais.
+      </p>
+      <p>
+        Isso não é &ldquo;planejar sem olhar o repositório&rdquo;: a fase de
+        conhecimento <strong>é</strong> o retrieval, só que delegada. Dois
+        mecanismos mantêm a cegueira sem congelar a qualidade:
+      </p>
+      <ul>
+        <li><strong>Lacunas de base</strong> (época 1): stack e pontos de entrada,
+          comandos de build/teste, onde o objetivo aterrissa, superfície de
+          convenções. É o piso de fundação.</li>
+        <li><strong>Entregue × planejado</strong> (época 2 em diante): substitui as
+          lacunas de base por uma pergunta que manda um <em>agente</em> comparar o
+          que a última época prometeu com o que ela realmente entregou.</li>
+      </ul>
+      <p class="small text-body-secondary">
+        No schema do briefing, <code>unknowns</code> é <strong>obrigatório</strong>
+        enquanto <code>facts</code> e <code>sources</code> têm default vazio. A
+        assimetria é intencional: um agente sem lugar para dizer &ldquo;não consegui
+        verificar isso&rdquo; escreve enchimento confiante — e um único fato
+        plausível-mas-errado degrada o leitor mais do que uma lacuna honesta.
+      </p>
+
+      <h2 class="h4 mt-4">O que a época vira, compilada</h2>
+
+<pre><code class="language-text">0. Recon do objetivo                          (raiz)
+├─ 1a. &lt;frente&gt; — recon        (produz &lt;frente&gt;/tasks.json + uma spec por tarefa)
+│  └─ 1b. &lt;frente&gt; — implementar    (fan-out: um agente por spec)
+│     └─ 1c. &lt;frente&gt; — verificar  (juiz: approved ↦ segue, rework ↦ volta pro 1b)
+├─ 2a/2b/2c …                                  (frentes rodam em ondas PARALELAS)
+├─ N+1. Consolidar época      (depende de todos os juízes)
+├─ N+2. Portão de qualidade   (juiz: approved ↦ selo, rework ↦ consolidação)
+└─ N+3. Selar época</code></pre>
+
+      <p>
+        Esse formato é <strong>do huu, fixo</strong>. O schema do plano não carrega
+        <code>steps</code>, nem <code>dependsOn</code>, nem caminho de arquivo: o
+        modelo é <em>estruturalmente incapaz</em> de emitir um grafo. Ele preenche
+        conteúdo em um molde. E o pipeline compilado ainda passa pelo
+        <code>PipelineSchema</code> de produção + <code>validateTopology</code>
+        antes de rodar — falha ali é bug do huu, não plano ruim.
+      </p>
+
+      <h2 class="h4 mt-4">O quadro-negro (<code>.huu/dev/</code>)</h2>
+
+<pre><code class="language-text">.huu/dev/
+  goal.md                    ← o huu escreve, ninguém reescreve
+  state.json                 ← o huu escreve (huu-devstate-v2)
+  journal.md                 ← agentes acrescentam (append-only)
+  &lt;sessionId&gt;/               ← namespace por sessão
+    epoch-&lt;N&gt;/
+      atlas.md               ← mapa do código, do recon global
+      pipeline.json          ← o grafo compilado, auditável e re-executável
+      findings/              ← um shard JSON POR ESCRITOR, nunca um arquivo só
+      report.md              ← relatório da consolidação
+      knowledge/             ← gaps/ · briefs/ · digest.md
+      &lt;frente&gt;/
+        tasks.json           ← lista huu-memory-v1
+        T-001.md …           ← uma spec por tarefa</code></pre>
+
+      <p><strong>Duas decisões aqui que parecem detalhe e não são:</strong></p>
+      <ul>
+        <li><strong>As specs são arquivos reais, commitados antes da run.</strong>
+          O resolvedor derruba qualquer caminho que não exista no worktree de
+          integração — e quando uma lista não-vazia resolve para zero, ele
+          <em>lança erro</em> e mata a run. Efeito colateral bom: o plano fica
+          versionado e auditável.</li>
+        <li><strong>O namespace por sessão não é cosmético.</strong> Sem ele, o
+          <code>epoch-1/api/tasks.json</code> commitado por uma sessão anterior é
+          um alvo válido para o fan-out da sessão de agora — e ids de frente são
+          semânticos (<code>api</code>, <code>cli</code>, <code>tests</code>),
+          então a colisão era provável, não exótica.</li>
+      </ul>
+
+      <h2 class="h4 mt-4">O laço gerador → crítico</h2>
+      <p>
+        Antes de o branch de uma tarefa ficar elegível ao merge, um
+        <strong>crítico</strong> lê o diff. O que importa saber:
+      </p>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <tbody>
+            <tr>
+              <td class="text-nowrap"><strong>O que bloqueia</strong></td>
+              <td>Achados de severidade <code>blocker</code> ou <code>major</code>
+                (o padrão). O texto do veredito do crítico é registrado, mas
+                <strong>não decide nada</strong> — a convergência é mecânica, por severidade.</td>
+            </tr>
+            <tr>
+              <td class="text-nowrap"><strong>Quantas rodadas</strong></td>
+              <td>No máximo <strong>2</strong>. Estourou o teto com bloqueio ainda
+                aberto ⇒ <em>waive</em>, registra, e o trabalho <strong>mergeia</strong>.</td>
+            </tr>
+            <tr>
+              <td class="text-nowrap"><strong>Se o crítico falhar</strong></td>
+              <td>Estourar, dar timeout, ser abandonado ou devolver algo
+                improcessável ⇒ zero bloqueio, o trabalho mergeia. <strong>Toda
+                falha é forward-default.</strong></td>
+            </tr>
+            <tr>
+              <td class="text-nowrap"><strong>Por que assim</strong></td>
+              <td>Reprovar o card faria o merge do estágio <em>descartar o branch</em>,
+                transformando &ldquo;90% certo com um achado major&rdquo; em nada.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small text-body-secondary mb-0">
+        Achados waived não somem: viajam na evidência da época até o próximo
+        planejador. E o crítico roda <strong>cross-family</strong> (Kimi contra
+        workers DeepSeek) porque &ldquo;o mesmo modelo barato como autor E
+        revisor&rdquo; é a suposição mais frágil do desenho.
+      </p>
+    </div>
+
+    <!-- ══════════════════════════════════════ 4. O QUE NÃO TEM ════════════ -->
+    <div class="tab-pane fade" id="pane-nao-tem" role="tabpanel"
+         aria-labelledby="tab-nao-tem" tabindex="0" data-print-title="O que não tem">
+
+      <h2 class="h4">Limites duros</h2>
+      <p class="text-body-secondary">
+        Nada aqui é bug ou &ldquo;a fazer&rdquo;. São escolhas de desenho com custo
+        conhecido — e o custo está escrito.
+      </p>
+
+      <div class="accordion" id="acc-limites">
+
+        <div class="accordion-item">
+          <h3 class="accordion-header">
+            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#lim-1">
+              <i class="bi bi-shield-exclamation me-2 text-warning"></i>
+              Não tem portão de merge determinístico por tarefa
+            </button>
+          </h3>
+          <div id="lim-1" class="accordion-collapse collapse show" data-bs-parent="#acc-limites">
+            <div class="accordion-body">
+              <p>Essa é <strong>a</strong> perda. A barreira determinística de merge era
+              o ponto do huu; o modo dev põe a opinião de um LLM na frente dela. O
+              crítico bloqueia por <strong>severidade</strong>, tendo ou não respaldado
+              o achado com um comando que de fato falhou.</p>
+              <p class="mb-0"><strong>O custo, medido por terceiros:</strong> o modo de
+              falha de um crítico LLM é <em>bloquear código correto</em> — de 22,5% a
+              91,9% de rejeição falsa em 5 modelos × 3 benchmarks, sendo 87,2% disso
+              alucinação semântica, não implicância de estilo. O único remédio que
+              alguém mediu é exigir que o achado seja <strong>executável</strong> antes
+              de poder bloquear. <strong>O huu não exige isso</strong> — ele
+              <em>conta</em>: todo achado bloqueante vira &ldquo;provado&rdquo; ou
+              &ldquo;não-provado&rdquo; no card, para essa escolha poder ser revista
+              com número deste projeto. Trocar para bloqueio proof-gated é uma linha
+              em <code>blockOn</code>.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#lim-2">
+              <i class="bi bi-diagram-2 me-2 text-info"></i>
+              Não tem paralelismo <em>entre</em> épocas — só dentro
+            </button>
+          </h3>
+          <div id="lim-2" class="accordion-collapse collapse" data-bs-parent="#acc-limites">
+            <div class="accordion-body mb-0">
+              Uma época é uma <strong>barreira</strong>: todas as frentes mergeiam
+              antes de qualquer replanejamento. Frentes em profundidades independentes
+              exigiriam abandonar o merge determinístico por estágio, que é a espinha
+              do módulo de git.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#lim-3">
+              <i class="bi bi-123 me-2 text-info"></i>
+              Não passa de 4 frentes por época
+            </button>
+          </h3>
+          <div id="lim-3" class="accordion-collapse collapse" data-bs-parent="#acc-limites">
+            <div class="accordion-body mb-0">
+              É o que cabe no teto de 20 passos do pipeline compilado. O limite é
+              imposto pelo <strong>compilador</strong> — um modelo que devolva mais
+              frentes do que o pedido simplesmente tem o excedente cortado.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#lim-4">
+              <i class="bi bi-patch-question me-2 text-warning"></i>
+              Um juiz verde não é prova de correção
+            </button>
+          </h3>
+          <div id="lim-4" class="accordion-collapse collapse" data-bs-parent="#acc-limites">
+            <div class="accordion-body mb-0">
+              O juiz é uma <strong>válvula anti-laço</strong>: existe para a época não
+              girar para sempre. Como todo caminho de falha é forward-default, um juiz
+              que quebra <strong>aprova em silêncio</strong>. Dê um modelo capaz ao
+              juiz e leia o diff você mesmo.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#lim-5">
+              <i class="bi bi-hourglass-split me-2 text-info"></i>
+              Não tem garantia de tempo — uma tarefa revisada pode triplicar
+            </button>
+          </h3>
+          <div id="lim-5" class="accordion-collapse collapse" data-bs-parent="#acc-limites">
+            <div class="accordion-body mb-0">
+              Um card revisado leva até <code>timeout × (1 + rodadas)</code> de relógio,
+              e cada revisão em voo <strong>segura um slot do pool</strong> — o worker
+              fica não-preemptível enquanto o crítico lê a worktree.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#lim-6">
+              <i class="bi bi-robot me-2 text-info"></i>
+              O <code>--stub</code> não exercita o enxame nem o crítico
+            </button>
+          </h3>
+          <div id="lim-6" class="accordion-collapse collapse" data-bs-parent="#acc-limites">
+            <div class="accordion-body mb-0">
+              O grafo compila, as ondas escalonam, os merges acontecem — mas o backend
+              stub <strong>não escreve arquivo</strong>. Então o fan-out resolve para
+              <strong>zero tarefas</strong> e o laço de crítica nunca roda. É um teste
+              de fiação, não de trabalho. Já houve correção que embarcou completamente
+              inexercitada por causa disso.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#lim-7">
+              <i class="bi bi-arrow-counterclockwise me-2 text-info"></i>
+              Não tem rollback, nem migração de estado antigo
+            </button>
+          </h3>
+          <div id="lim-7" class="accordion-collapse collapse" data-bs-parent="#acc-limites">
+            <div class="accordion-body mb-0">
+              A época aterrissa com <code>merge --no-ff</code> no seu branch; desfazer
+              é <code>git</code> na sua mão. E um <code>state.json</code> de formato
+              antigo não é migrado: ele degrada para &ldquo;sem retomada&rdquo;, em
+              silêncio e sem código de migração.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="h4 mt-4">O que ele se recusa a fazer</h2>
+      <p>Coisas que o modo dev bloqueia <em>por desenho</em> — não são falhas:</p>
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle">
+          <thead><tr><th style="width: 42%">Recusa</th><th>Por quê</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>O planejador <strong>não pode emitir um grafo</strong></td>
+              <td>O schema do plano não tem <code>steps</code>, <code>dependsOn</code> nem caminho de arquivo. Ele escreve conteúdo, o huu escreve estrutura.</td>
+            </tr>
+            <tr>
+              <td>Nenhum agente <strong>reescreve o objetivo</strong></td>
+              <td>Entra verbatim em <code>goal.md</code>. O planejador <em>decompõe</em>; nunca amplia, reduz ou reinterpreta.</td>
+            </tr>
+            <tr>
+              <td><strong>Duas tarefas não podem possuir o mesmo arquivo</strong></td>
+              <td>Antes de compilar, o huu confere a partição de escrita das specs. Sobreposição <strong>para a época</strong> — não é aviso.</td>
+            </tr>
+            <tr>
+              <td><strong>&ldquo;Objetivo concluído&rdquo; na época 1 é recusado</strong></td>
+              <td>Declarar pronto sem nenhuma época executada não tem corroboração. O huu registra o aviso e planeja mesmo assim.</td>
+            </tr>
+            <tr>
+              <td><code>--approve-each</code> <strong>sem terminal interativo</strong></td>
+              <td>Encerra sem rodar a época, em vez de travar esperando um enter que nunca vem.</td>
+            </tr>
+            <tr>
+              <td>Modelo desconhecido <strong>não entra</strong></td>
+              <td>Um preflight valida os ids nos papéis executados antes de criar worktree — recusa limpa em vez de estourar dentro do primeiro agente.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="alert alert-secondary mt-3 small" role="alert">
+        <strong>Detalhe fácil de confundir:</strong> existem <em>duas</em> mecânicas
+        de write-set. A <strong>partição</strong> (antes da run, sobre as specs)
+        <strong>para a época</strong> se duas tarefas reivindicam o mesmo arquivo.
+        Já as <strong>violações</strong> (depois da run, sobre o que foi realmente
+        commitado fora do declarado) são só <strong>instrumentação</strong>: contam
+        e viajam na evidência, mas não bloqueiam nada.
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════ 5. MODELOS ══════════════════ -->
+    <div class="tab-pane fade" id="pane-modelos" role="tabpanel"
+         aria-labelledby="tab-modelos" tabindex="0" data-print-title="Modelos e custo">
+
+      <h2 class="h4">Sete papéis, cada um com seu modelo</h2>
+      <p>
+        O modo dev roteia por <strong>papel</strong>, não por run. Papel deixado em
+        branco <strong>omite</strong> o campo no passo emitido, então a configuração
+        global do app segue sendo a única autoridade. Sem roteamento nenhum, o
+        pipeline compilado é <strong>byte a byte</strong> igual ao de antes.
+      </p>
+
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle">
+          <thead><tr><th>Papel</th><th>O que faz</th></tr></thead>
+          <tbody>
+            <tr><td><code>planner</code></td><td>O líder cego. Escreve as frentes da época.</td></tr>
+            <tr><td><code>recon</code></td><td>Mapeia o código e escreve as specs de tarefa.</td></tr>
+            <tr><td><code>worker</code></td><td>O enxame — quem de fato escreve código.</td></tr>
+            <tr><td><code>critic</code></td><td>Lê o diff <strong>antes</strong> do merge, na worktree do worker.</td></tr>
+            <tr><td><code>reporter</code></td><td>Prosa mecânica sobre um diff (consolidação).</td></tr>
+            <tr><td><code>judge</code></td><td>Roda <strong>depois</strong> do merge, no worktree de integração, e roteia o passo.</td></tr>
+            <tr><td><code>integration</code></td><td>Trabalho no worktree de integração.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="alert alert-info small" role="alert">
+        <i class="bi bi-info-circle me-1"></i>
+        <strong><code>critic</code> e <code>judge</code> são papéis distintos de propósito.</strong>
+        O crítico decide se o branch <em>entra</em>; o juiz roda depois do merge e
+        decide para onde o pipeline vai. Como os caminhos de falha do juiz são
+        forward-default, um juiz fraco <strong>aprova em silêncio</strong> — por isso
+        ele fica no modelo forte em todos os presets.
+      </div>
+
+      <h2 class="h4 mt-4">Os presets</h2>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr><th>Preset</th><th>planner</th><th>critic</th><th>reporter</th><th>resto</th></tr>
+          </thead>
+          <tbody>
+            <tr class="table-active">
+              <td><strong>hetero</strong> <span class="badge text-bg-success">padrão</span></td>
+              <td><code>z-ai/glm-5.2</code></td>
+              <td><code>moonshotai/kimi-k2.6</code></td>
+              <td><code>deepseek-v4-pro</code></td>
+              <td><code>deepseek-v4-pro</code></td>
+            </tr>
+            <tr>
+              <td><strong>thrifty</strong></td>
+              <td><code>z-ai/glm-5.2</code></td>
+              <td><code>moonshotai/kimi-k2.6</code></td>
+              <td><code>deepseek-v4-flash</code></td>
+              <td><code>deepseek-v4-pro</code></td>
+            </tr>
+            <tr>
+              <td><strong>monoculture</strong></td>
+              <td><code>z-ai/glm-5.2</code></td>
+              <td><code>deepseek-v4-pro</code></td>
+              <td><code>deepseek-v4-pro</code></td>
+              <td><code>deepseek-v4-pro</code></td>
+            </tr>
+            <tr>
+              <td><strong>uniform</strong></td>
+              <td colspan="4" class="text-body-secondary">Todos caem no modelo global — comportamento idêntico ao de antes do roteamento existir.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="small text-body-secondary">
+        <strong>monoculture não é recomendação.</strong> Ele existe justamente para
+        permitir o A/B contra o crítico cross-family — é a configuração que a
+        evidência aponta como a suposição mais frágil do desenho (mesmo modelo como
+        autor <em>e</em> revisor).
+      </p>
+
+      <div class="alert alert-warning" role="alert">
+        <h3 class="h6"><i class="bi bi-exclamation-triangle me-1"></i><code>z-ai/glm-5.2</code> só pode ser o <code>planner</code></h3>
+        <p class="mb-0 small">
+          Esse id não existe no registro do backend de execução — pedir por ele em
+          qualquer outro papel estoura. O planejador escapa porque ele nunca toca o
+          registro: é o único papel que roda por outro caminho. Por isso o preflight
+          verifica os <strong>seis papéis executados</strong> e exclui
+          <code>planner</code> <em>no nível do tipo</em> — um preflight que o
+          checasse recusaria o modo dev no seu próprio preset padrão.
+        </p>
+      </div>
+
+      <h2 class="h4 mt-4">Sobre o custo — a conta lida ao contrário</h2>
+      <p>
+        <strong>Dividir papéis entre modelos não é economia, e não é vendido como
+        tal.</strong> Um fan-out de agentes custa <strong>3–10× os tokens</strong> de
+        um agente único, enquanto a diferença de preço entre o líder e os workers é
+        de cerca de <strong>2×</strong>. Rotear trabalho para o modelo barato não
+        paga esse multiplicador.
+      </p>
+      <p>A justificativa real é outra:</p>
+      <ul>
+        <li><strong>Isolamento de contexto</strong> — cada agente vê só a sua tarefa.</li>
+        <li><strong>Paralelismo</strong> — relógio de parede, não tokens.</li>
+        <li><strong>Segunda opinião de outro fornecedor</strong>, no caso do crítico.</li>
+      </ul>
+
+      <p class="mb-0">
+        O custo por época (das <strong>duas</strong> runs) é medido e viaja na
+        evidência, junto com quantos achados bloquearam com prova, quantos sem, e
+        quantas tarefas foram waived no teto de rodadas. Esses contadores existem
+        para serem <strong>medidos</strong> — nenhum deles é um portão, e transformar
+        um deles em portão silenciosamente é justamente o que não se deve fazer.
+      </p>
+    </div>
+
+    <!-- ══════════════════════════════════════ 6. QUANDO PARA ══════════════ -->
+    <div class="tab-pane fade" id="pane-erros" role="tabpanel"
+         aria-labelledby="tab-erros" tabindex="0" data-print-title="Quando para">
+
+      <h2 class="h4">Toda saída tem exatamente um motivo</h2>
+      <p>
+        O CLI imprime um único JSON no stdout com o campo
+        <code>stoppedBecause</code>, as épocas e os commits. São doze motivos
+        possíveis:
+      </p>
+
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle">
+          <thead>
+            <tr>
+              <th style="width: 20%">Motivo</th>
+              <th>Significa</th>
+              <th class="text-center" style="width: 8%">Sai&nbsp;0?</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>goal-complete</code></td>
+              <td>O planejador provou que o objetivo já está satisfeito.</td>
+              <td class="text-center text-success"><i class="bi bi-check-lg"></i></td>
+            </tr>
+            <tr>
+              <td><code>max-epochs</code></td>
+              <td>Bateu o teto de épocas com tudo aterrissado.</td>
+              <td class="text-center text-success"><i class="bi bi-check-lg"></i></td>
+            </tr>
+            <tr>
+              <td><code>plan-rejected</code></td>
+              <td>Você recusou um plano no portão.</td>
+              <td class="text-center text-success"><i class="bi bi-check-lg"></i></td>
+            </tr>
+            <tr>
+              <td><code>dirty-tree</code></td>
+              <td>Havia trabalho não commitado que não é do huu. Recusa antes de começar, com a lista de arquivos.</td>
+              <td class="text-center text-danger"><i class="bi bi-x-lg"></i></td>
+            </tr>
+            <tr>
+              <td><code>empty-plan</code></td>
+              <td>O planejador não deu frentes nem declarou conclusão.</td>
+              <td class="text-center text-danger"><i class="bi bi-x-lg"></i></td>
+            </tr>
+            <tr>
+              <td><code>planner-failed</code></td>
+              <td>O modelo não produziu plano válido — <strong>ou</strong> duas specs reivindicaram o mesmo arquivo.</td>
+              <td class="text-center text-danger"><i class="bi bi-x-lg"></i></td>
+            </tr>
+            <tr>
+              <td><code>run-failed</code></td>
+              <td>A época terminou com erro.</td>
+              <td class="text-center text-danger"><i class="bi bi-x-lg"></i></td>
+            </tr>
+            <tr>
+              <td><code>landing-failed</code></td>
+              <td>O merge da época conflitou. O huu roda <code>merge --abort</code> antes, então sua árvore volta limpa.</td>
+              <td class="text-center text-danger"><i class="bi bi-x-lg"></i></td>
+            </tr>
+            <tr>
+              <td><code>bootstrap-failed</code></td>
+              <td>O bootstrap de conhecimento não completou.</td>
+              <td class="text-center text-danger"><i class="bi bi-x-lg"></i></td>
+            </tr>
+            <tr>
+              <td><code>knowledge-failed</code></td>
+              <td>A fase de conhecimento (run #1) não completou.</td>
+              <td class="text-center text-danger"><i class="bi bi-x-lg"></i></td>
+            </tr>
+            <tr>
+              <td><code>model-preflight-failed</code></td>
+              <td>Algum papel recebeu um id de modelo que não existe no registro.</td>
+              <td class="text-center text-danger"><i class="bi bi-x-lg"></i></td>
+            </tr>
+            <tr>
+              <td><code>aborted</code></td>
+              <td>Você abortou a sessão.</td>
+              <td class="text-center text-danger"><i class="bi bi-x-lg"></i></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 class="h4 mt-4">Os três que mais aparecem</h2>
+
+      <div class="card bg-body-tertiary mb-3">
+        <div class="card-body">
+          <h3 class="h6"><code>dirty-tree</code> — árvore suja</h3>
+          <p class="small mb-2">
+            A sessão precisa mergear no seu branch a cada época; começar com trabalho
+            solto significaria morrer na primeira aterrissagem. Ele recusa na hora, o
+            que é melhor.
+          </p>
+<pre class="mb-0"><code class="language-bash">git status --porcelain     # veja o que está solto
+git stash                  # ou commite
+huu dev "..." --model=...</code></pre>
+        </div>
+      </div>
+
+      <div class="card bg-body-tertiary mb-3">
+        <div class="card-body">
+          <h3 class="h6"><code>landing-failed</code> — o merge da época conflitou</h3>
+          <p class="small mb-0">
+            Parada real da sessão. O <code>merge --abort</code> já rodou, então a
+            árvore está limpa — mas o trabalho da época ficou no branch
+            <code>huu/&lt;runId&gt;/integration</code>. Ele <strong>não</strong> se
+            perde: resolva o merge na mão, ou rode a próxima sessão com
+            <code>--land-orphans</code>. O huu detecta branches de integração que o
+            seu HEAD nunca absorveu — trabalho genuinamente perdido que o
+            <code>git status</code> não mostra — e <strong>nunca bloqueia</strong> por
+            causa disso: sem resposta, ele avisa, nomeia o branch e segue.
+          </p>
+        </div>
+      </div>
+
+      <div class="card bg-body-tertiary mb-3">
+        <div class="card-body">
+          <h3 class="h6"><code>planner-failed</code> por partição de escrita</h3>
+          <p class="small mb-0">
+            Duas specs de tarefa declararam possuir o mesmo arquivo. Como tarefas
+            paralelas viram merges sequenciais, isso conflitaria em todo branch depois
+            do primeiro. A mensagem de erro nomeia o caminho disputado e as specs que
+            o reivindicam — dá para abrir os <code>.md</code> em
+            <code>.huu/dev/&lt;sessionId&gt;/epoch-&lt;N&gt;/</code> e ver o plano que
+            gerou aquilo.
+          </p>
+        </div>
+      </div>
+
+      <h2 class="h4 mt-4">Ficou parado, o que olhar</h2>
+      <ul>
+        <li><strong>Época rodou e não fez nada</strong> — provavelmente o fan-out
+          resolveu para zero tarefas. Confira se as specs existem e foram
+          <em>commitadas</em> em <code>epoch-&lt;N&gt;/&lt;frente&gt;/</code>. Se você
+          está de <code>--stub</code>, é o esperado: o stub não escreve arquivo.</li>
+        <li><strong>Card travado revisando</strong> — cada revisão em voo segura um
+          slot do pool, e o worker fica não-preemptível enquanto o crítico lê a
+          worktree. Até <code>timeout × 3</code> é comportamento normal.</li>
+        <li><strong>Plano genérico demais</strong> — leia o
+          <code>knowledge/digest.md</code> da época. O planejador é cego: se o digest
+          está vago, o plano <em>tem</em> que sair vago. Um repo sem skills roteáveis
+          costuma ser a causa.</li>
+        <li><strong>Achados vagos do crítico</strong> — o padrão contra o qual ele
+          julga é o <code>atlas.md</code> da época. Atlas vago produz achado vago.</li>
+        <li><strong>Não retomou a sessão</strong> — a retomada só é oferecida quando o
+          objetivo bate <strong>exatamente</strong> e a sessão anterior não reportou
+          conclusão. E o teto de épocas conta de onde a sessão <em>começa</em>: um
+          <code>--epochs=3</code> retomado significa três épocas <em>a mais</em>.</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <footer class="text-body-secondary small border-top mt-5 pt-3">
+    <p class="mb-1">
+      Conferido contra o código em <strong>30/07/2026</strong> (huu v5.3.0):
+      <code>src/lib/dev-mode/</code>, <code>src/lib/types/dev-mode.ts</code>,
+      <code>src/lib/knowledge-detect.ts</code>, <code>src/orchestrator/review-agent.ts</code>.
+      Referência completa em <code>docs/dev-mode.pt-BR.md</code>.
+    </p>
+    <p class="mb-0">Documento de arquivo único — salve, mande por anexo, abra offline.</p>
+  </footer>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+        crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"
+        integrity="sha384-RH2xi4eIQ/gjtbs9fUXM68sLSi99C7ZWBRX1vDrVv6GQXRibxXLbwO2NGZB74MbU"
+        crossorigin="anonymous"></script>
+
+<script>
+/* ── runtime do documento ────────────────────────────────────────────────────
+   Copie este bloco inteiro, sem editar. Ele faz três coisas:
+   1. guarda o código-fonte cru ANTES de qualquer transformação (para o copiar);
+   2. destaca a sintaxe e injeta o botão de copiar;
+   3. liga as abas ao #hash da URL, nos dois sentidos.
+   ────────────────────────────────────────────────────────────────────────── */
+(function () {
+  'use strict';
+
+  // 1. Fonte cru primeiro. Depois do highlight o DOM ganha <span>; textContent ainda
+  //    devolve o texto certo, mas plugins de numeração de linha o contaminam. Guardar
+  //    antes é a única versão que nunca mente.
+  var sources = new WeakMap();
+  document.querySelectorAll('pre > code').forEach(function (code) {
+    sources.set(code, code.textContent.replace(/\n$/, ''));
+  });
+
+  // 2. Highlight. Declare sempre a linguagem na classe: a auto-detecção erra em
+  //    trechos curtos (o mesmo snippet vira "ruby" numa aba e "perl" na outra).
+  if (window.hljs) hljs.highlightAll();
+
+  // Copiar. navigator.clipboard exige contexto seguro; em file:// o comportamento
+  // varia por navegador, então o fallback com execCommand não é opcional.
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text).then(function () { return true; },
+                                                      function () { return legacyCopy(text); });
+    }
+    return Promise.resolve(legacyCopy(text));
+  }
+
+  function legacyCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    // position:fixed + opacity:0 evita que a página role até o textarea.
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length); // iOS ignora select() sozinho
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  document.querySelectorAll('pre > code').forEach(function (code) {
+    var pre = code.parentElement;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm btn-outline-secondary copy-btn';
+    btn.innerHTML = '<i class="bi bi-clipboard"></i>';
+    btn.setAttribute('aria-label', 'Copiar código');
+    btn.addEventListener('click', function () {
+      copyText(sources.get(code) || code.textContent).then(function (ok) {
+        btn.innerHTML = ok ? '<i class="bi bi-check-lg"></i>' : '<i class="bi bi-x-lg"></i>';
+        btn.classList.toggle('btn-outline-success', ok);
+        btn.classList.toggle('btn-outline-danger', !ok);
+        btn.classList.remove('btn-outline-secondary');
+        setTimeout(function () {
+          btn.innerHTML = '<i class="bi bi-clipboard"></i>';
+          btn.className = 'btn btn-sm btn-outline-secondary copy-btn';
+        }, 1500);
+      });
+    });
+    pre.appendChild(btn);
+  });
+
+  // 3. Aba ↔ URL. Sem isto, mandar "olha a aba Armadilhas" exige explicar o clique.
+  var tabs = document.querySelectorAll('[data-bs-toggle="tab"]');
+  if (!tabs.length) return;
+
+  function activateFromHash() {
+    var hash = window.location.hash;
+    if (!hash || hash.length < 2) return;
+    var target = document.querySelector(hash);
+    if (!target) return;
+    // O #hash pode apontar para o painel OU para um título dentro dele.
+    var pane = target.closest('.tab-pane') || (target.classList.contains('tab-pane') ? target : null);
+    if (!pane) return;
+    var trigger = document.querySelector('[data-bs-target="#' + CSS.escape(pane.id) + '"]');
+    if (trigger) bootstrap.Tab.getOrCreateInstance(trigger).show();
+    // O navegador já tentou rolar até o alvo — e falhou, porque naquele instante o
+    // painel ainda era display:none. Agora que apareceu, role de novo: sem isto a
+    // página abre num scroll intermediário, com as abas escondidas atrás da navbar.
+    var scrollTo = target !== pane ? target : (trigger && trigger.closest('[role="tablist"]')) || pane;
+    requestAnimationFrame(function () { scrollTo.scrollIntoView({ block: 'start' }); });
+  }
+
+  tabs.forEach(function (t) {
+    t.addEventListener('shown.bs.tab', function (e) {
+      var id = (e.target.getAttribute('data-bs-target') || '').slice(1);
+      // replaceState, não location.hash: mudar o hash direto faz a página pular.
+      if (id) history.replaceState(null, '', '#' + id);
+    });
+  });
+
+  window.addEventListener('hashchange', activateFromHash);
+  activateFromHash();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "id": "HU-348",
+  "pergunta": "O merge determinístico de N branches ao fim de cada etapa — a barreira BSP que o MANIFESTO.md chama de diferencial nº 1 — tem contrapartida externa na indústria hoje (2026-07-30)?",
+  "por_que_aberto": "A pesquisa (METODO.md §9, 108 agentes, verificação adversarial) não encontrou nenhum produto que faça merge-back determinístico de N worktrees paralelas. Todos os produtos enviados transformam o merge num funil explícito acionado por humano (Apply-or-discard, /apply-worktree). Mas 'ausência de evidência não é evidência de ausência' — o espaço de produtos de agentes de código está em evolução acelerada, e o que é verdade hoje pode não ser em 6 meses.",
+  "decisao_provisoria": "Tratar o merge determinístico como diferencial confirmado do huu e investir em verificabilidade (M3-03, M2-06) em vez de gastar energia procurando concorrentes.",
+  "verificacao": "Re-executar a pesquisa do METODO.md §9.3 em 2027-01-30: varrer produtos de coding agent (Claude Code, Cursor, Codex, Copilot, Cody, Aider) por 'merge-back', 'apply-worktree', 'integrate branches', 'fan-in'. Se zero produtos fizerem merge determinístico, o diferencial é confirmado por ausência.",
+  "impacto_se_divergir": "Se um concorrente implementar merge determinístico antes do huu ter verificabilidade (M3-03 gate entre merges, M2-06 teste dos invariantes), o huu perde a janela de 'primeiro a fazer' sem ter o 'primeiro a fazer direito'.",
+  "status": "ABERTO",
+  "evidencia": "",
+  "data_resolucao": ""
+}

@@ -1,0 +1,11 @@
+{
+  "id": "HU-345",
+  "pergunta": "Alguma decisão de arquitetura ou implementação do huu depende da premissa de que sub-agentes não podem gerar sub-agentes?",
+  "por_que_aberto": "A premissa era verdadeira até a v2.1.219 do Claude Code, mas o binário 2.1.220 introduziu aninhamento com profundidade default 3 (CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH). O código do huu e a biblioteca de skills não foram auditados para dependências dessa premissa.",
+  "decisao_provisoria": "Assumir que NENHUMA decisão do huu depende dessa premissa até prova em contrário — a arquitetura do huu (worktree por agente, merge determinístico) é ortogonal à capacidade de aninhamento do backend.",
+  "verificacao": "rg -i 'subagent.*cannot spawn|não pode gerar|sub.agent.*spawn|aninhamento' .agents/skills docs src/scripts. Se zero resultados, a premissa não está codificada. Se houver, cada ocorrência precisa ser reavaliada contra o comportamento atual do backend.",
+  "impacto_se_divergir": "Se houver decisões que assumem 'sem aninhamento', o modelo de segurança (portas, worktrees, cotas) pode subestimar o número real de processos filhos e o isolamento pode ser violado por um agente que dispara sub-agentes sem o conhecimento do orquestrador.",
+  "status": "ABERTO",
+  "evidencia": "",
+  "data_resolucao": ""
+}

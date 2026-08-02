@@ -1,0 +1,11 @@
+{
+  "id": "HU-347",
+  "pergunta": "O enforcement de propriedade de arquivo na camada de ferramenta do backend (não apenas validação pré-merge) é viável nos backends que o huu suporta (pi, azure)?",
+  "por_que_aberto": "A indústria (Claude Code v2.1.203+) moveu o isolamento de worktree para a camada de ferramenta: um comando Bash que resolve de volta para o checkout principal FALHA. O huu hoje depende de prosa em prompt e validação pré-merge (M3-02). Mover essa garantia para a camada de ferramenta exigiria que o backend do agente expusesse um hook de pré-escrita ou um sistema de arquivos virtual com allowlist. Não se sabe se o pi ou o azure expõem essa capacidade.",
+  "decisao_provisoria": "A validação pré-merge (write-set disjunto + gate entre merges) é suficiente para o curto prazo. O enforcement na camada de ferramenta é aspiracional e depende de capacidade do backend que pode não existir.",
+  "verificacao": "Spike técnico: investigar se o pi expõe hook de pré-escrita (pre-tool callback, filesystem sandbox, allowedPaths). Para o azure, verificar na documentação do Azure AI Foundry se o agente suporta restrição de paths. Documentar achados em docs/backend-write-enforcement.md.",
+  "impacto_se_divergir": "Se nenhum backend expuser essa capacidade, o huu nunca terá isolamento na camada de ferramenta e a proteção contra escrita cruzada dependerá para sempre da validação pré-merge — que é reativa (pega depois do fato), não preventiva (impede a escrita).",
+  "status": "ABERTO",
+  "evidencia": "",
+  "data_resolucao": ""
+}

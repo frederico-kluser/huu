@@ -1,0 +1,82 @@
+// Dev Container metadata — reuse the bundled Dockerfile so editing huu
+// itself happens inside the same image users run in production.
+//
+// Spec: https://containers.dev/implementors/json_reference/
+//
+// VS Code: install the "Dev Containers" extension, then run
+// "Dev Containers: Reopen in Container" from the command palette.
+//
+// To get full native Linux performance on macOS / Windows even when the
+// host repo is on the slow side of a VM boundary, use:
+//   "Dev Containers: Clone Repository in Container Volume..."
+// which clones into a named volume instead of bind-mounting the host fs.
+{
+  "name": "huu",
+
+  // Build the same image the runtime ships — keeps dev and prod in sync.
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": ".."
+  },
+
+  // The image's ENTRYPOINT is `tini -- huu-entrypoint`, which terminates
+  // after handing off to the CMD. Dev Containers needs the container to
+  // stay alive while the IDE is attached, so override the CMD with sleep
+  // infinity. tini stays PID 1 and forwards signals correctly.
+  "overrideCommand": false,
+  "runArgs": [
+    "--init"
+  ],
+
+  // Mount the workspace at the same absolute path the user has on the
+  // host. This mirrors the recommended `docker run -v $PWD:$PWD -w $PWD`
+  // pattern from the README — keeps git worktree absolute paths
+  // consistent host<->container so .huu-worktrees/ created during
+  // pipeline runs are usable both inside and outside the container.
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
+  "workspaceFolder": "${localWorkspaceFolder}",
+
+  // The node:20-slim base ships a `node` user (UID 1000). Use it as the
+  // remote user so files VS Code creates inside the container land owned
+  // by the host user (assuming host UID 1000). updateRemoteUserUID makes
+  // VS Code adjust the in-container UID/GID to match the host's at attach
+  // time, covering hosts whose primary user isn't UID 1000.
+  // (Devcontainer spec: remoteUser controls who VS Code shells in as;
+  // updateRemoteUserUID syncs that user's UID/GID with the host.)
+  "remoteUser": "node",
+  "updateRemoteUserUID": true,
+
+  "containerEnv": {
+    "TERM": "xterm-256color",
+    "GIT_TERMINAL_PROMPT": "0",
+    "HUU_IN_CONTAINER": "1",
+    "HOME": "/home/node"
+  },
+
+  // Forward host secrets without baking them into the image. The user
+  // exports OPENROUTER_API_KEY in their shell, VS Code passes it through.
+  "remoteEnv": {
+    "OPENROUTER_API_KEY": "${localEnv:OPENROUTER_API_KEY}",
+    "HUU_CHECK_PUSH": "${localEnv:HUU_CHECK_PUSH}"
+  },
+
+  // Restore devDependencies (Dockerfile prunes them for the runtime
+  // stage). Runs once after the container is built and the workspace
+  // is mounted — cached by Docker so subsequent re-opens are fast.
+  "postCreateCommand": "npm ci",
+
+  // Editor wiring. Kept minimal — no opinionated lint/format extensions
+  // beyond what the repo already enforces via tsc + vitest.
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "typescript.tsdk": "node_modules/typescript/lib"
+      }
+    }
+  }
+}

@@ -1,0 +1,996 @@
+<!doctype html>
+<!--
+  huu — Playbook de ondas. Companheiro navegável de METODO.md (raiz do repositório).
+  Arquivo único, sem build, sem assets ao lado: abre com duplo clique (file://).
+  Diagnóstico medido no commit 28364d6, 2026-07-30.
+-->
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Diz ao navegador que a página é escura ANTES do CSS carregar: sem flash branco,
+     e os controles nativos (scrollbar, select, input) já nascem escuros. -->
+<meta name="color-scheme" content="dark">
+<title>huu — Playbook de ondas</title>
+
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+      integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
+      crossorigin="anonymous">
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css"
+      integrity="sha384-CK2SzKma4jA5H/MXDUU7i1TqZlCFaD4T01vtyDFvPlD97JQyS+IsSh1nI2EFbpyk"
+      crossorigin="anonymous">
+<link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css"
+      integrity="sha384-wH75j6z1lH97ZOpMOInqhgKzFkAInZPPSPlZpYKYTOqsaizPvhQZmAtLcPKXpLyH"
+      crossorigin="anonymous">
+
+<style>
+  /* Todo o CSS do documento cabe aqui. Se precisar de mais que isto, é porque
+     existe um utilitário do Bootstrap que resolve — procure antes de escrever. */
+
+  /* Âncora não fica escondida atrás da navbar fixa. */
+  [id] { scroll-margin-top: 5rem; }
+
+  /* Bloco de código: espaço à direita para o botão de copiar não cobrir o texto. */
+  pre { position: relative; margin-bottom: 1rem; }
+  pre code.hljs { padding-right: 4rem; border-radius: var(--bs-border-radius); font-size: .875rem; }
+
+  .copy-btn { position: absolute; top: .5rem; right: .5rem; opacity: .4; transition: opacity .15s; }
+  pre:hover .copy-btn, .copy-btn:focus-visible { opacity: 1; }
+
+  /* Abrir o arquivo em #pane-x foca o painel (bom: o leitor de tela cai no conteúdo),
+     e o outline branco do navegador fica gritante. Anel discreto, do tema, no lugar —
+     tirar o indicador por completo quebraria quem navega por teclado. */
+  .tab-pane:focus-visible { outline: 0; box-shadow: 0 0 0 .2rem rgba(var(--bs-emphasis-color-rgb), .15); }
+
+  /* Impressão/PDF: abre TODAS as abas, senão o papel sai com uma só. */
+  @media print {
+    /* .d-print-none do Bootstrap resolve o resto: marque com ela o que é só de tela. */
+    .nav-tabs, .copy-btn { display: none !important; }
+    .tab-content > .tab-pane { display: block !important; opacity: 1 !important; page-break-inside: avoid; }
+    .tab-pane::before { content: attr(data-print-title); display: block;
+                        font-size: 1.25rem; font-weight: 600; margin: 1.5rem 0 .5rem; }
+  }
+</style>
+</head>
+
+<body class="bg-body">
+
+<nav class="navbar navbar-expand-lg sticky-top bg-body-tertiary border-bottom">
+  <div class="container">
+    <span class="navbar-brand fw-semibold"><i class="bi bi-file-earmark-code me-1"></i>huu — Playbook de ondas</span>
+    <span class="navbar-text small text-body-secondary d-none d-md-inline">commit 28364d6 · 2026-07-30 · texto integral em <code>METODO.md</code></span>
+  </div>
+</nav>
+
+<main class="container py-4" style="max-width: 60rem">
+
+  <header class="mb-4">
+    <h1 class="display-6 fw-semibold">huu — Playbook de ondas</h1>
+    <p class="lead text-body-secondary">O diagnóstico medido do método de desenvolvimento do
+      <code>huu</code>, e um plano de 34 ações em 11 ondas para fechar o que a documentação
+      já promete e o código ainda não garante.</p>
+    <div class="d-flex flex-wrap gap-2">
+      <span class="badge text-bg-secondary">commit 28364d6</span>
+      <span class="badge text-bg-secondary">2026-07-30</span>
+      <span class="badge text-bg-primary">135.866 linhas versionadas</span>
+      <span class="badge text-bg-primary">1.786 testes / 13,3 s</span>
+      <span class="badge text-bg-danger">3 de 4 mutações sobreviveram</span>
+    </div>
+  </header>
+
+  <div class="alert alert-warning d-flex gap-3" role="alert">
+    <i class="bi bi-exclamation-triangle-fill fs-4 flex-shrink-0"></i>
+    <div>
+      <strong>Leia isto antes de qualquer aba.</strong> O <em>diagnóstico</em> é medido:
+      quatro mutações aplicadas ao código, dois erros de tipo plantados, um teste cruzado
+      entre os gêmeos e 14 citações conferidas uma a uma. O <em>plano</em> não é:
+      <strong>nenhum dos 34 cards foi executado.</strong> Trate as ondas W4–W9 como desenho
+      revisado no papel, não como prática validada. O texto integral, com todos os
+      <code>arquivo:linha</code>, está em <code>METODO.md</code> na raiz do repositório.
+    </div>
+  </div>
+
+  <!-- ABAS
+       Regras que não podem ser quebradas:
+       · <ul role="tablist"> e cada <button role="tab">
+       · button.id  ←→  tabpanel.aria-labelledby
+       · button.data-bs-target ←→ #id do tabpanel (e aria-controls com o mesmo id, sem #)
+       · exatamente UM botão .active + UM painel .show.active
+       O Bootstrap já faz navegação por seta/Home/End no tablist; não reimplemente. -->
+  <ul class="nav nav-tabs" id="doc-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="tab-diagnostico" data-bs-toggle="tab" data-bs-target="#pane-diagnostico"
+              type="button" role="tab" aria-controls="pane-diagnostico" aria-selected="true">
+        Diagnóstico
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-falso-verde" data-bs-toggle="tab" data-bs-target="#pane-falso-verde"
+              type="button" role="tab" aria-controls="pane-falso-verde" aria-selected="false">
+        Falso-verde <span class="badge text-bg-danger ms-1">23</span>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-ondas" data-bs-toggle="tab" data-bs-target="#pane-ondas"
+              type="button" role="tab" aria-controls="pane-ondas" aria-selected="false">
+        As ondas
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-cards" data-bs-toggle="tab" data-bs-target="#pane-cards"
+              type="button" role="tab" aria-controls="pane-cards" aria-selected="false">
+        Os cards <span class="badge text-bg-secondary ms-1">34</span>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-industria" data-bs-toggle="tab" data-bs-target="#pane-industria"
+              type="button" role="tab" aria-controls="pane-industria" aria-selected="false">
+        Indústria
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-templates" data-bs-toggle="tab" data-bs-target="#pane-templates"
+              type="button" role="tab" aria-controls="pane-templates" aria-selected="false">
+        Templates
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content border border-top-0 rounded-bottom p-4" id="doc-tabs-content">
+
+    <!-- ================= 1. DIAGNÓSTICO ================= -->
+    <div class="tab-pane fade show active" id="pane-diagnostico" role="tabpanel"
+         aria-labelledby="tab-diagnostico" tabindex="0" data-print-title="Diagnóstico">
+
+      <h2 class="h4">A resposta, numa frase</h2>
+      <blockquote class="blockquote fs-5 border-start border-4 border-primary ps-3">
+        O <code>huu</code> é excelente em tornar o <strong>método</strong> determinístico e
+        quase não investiu em tornar a <strong>verificação</strong> falsificável.
+      </blockquote>
+      <p>Cada uma das quatro famílias de lacuna abaixo é essa mesma frase em outro domínio.
+        Nenhuma delas é sobre orquestração — o BSP sobre git funciona e está provado em
+        dogfooding. Todas são sobre <strong>verificação</strong>,
+        <strong>propriedade de arquivo</strong> e <strong>proveniência</strong>.</p>
+
+      <h3 class="h5 mt-4">As quatro famílias</h3>
+      <div class="accordion" id="acc-familias">
+
+        <div class="accordion-item">
+          <h4 class="accordion-header">
+            <button class="accordion-button" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#fam-a" aria-expanded="true" aria-controls="fam-a">
+              <span class="badge text-bg-danger me-2">A</span> Falso verde — o verde que não pode ficar vermelho
+            </button>
+          </h4>
+          <div id="fam-a" class="accordion-collapse collapse show" data-bs-parent="#acc-familias">
+            <div class="accordion-body">
+              <p>O achado mais grave do repositório tem uma linha. A cláusula 4 do juiz
+                compartilhado das 5 auditorias usa <code>git status --porcelain</code> — e o
+                próprio código do <code>huu</code>, 100 arquivos ao lado, explica por que ela
+                nunca pode falhar:</p>
+              <blockquote class="blockquote small border-start ps-3">
+                “the stage merges are already committed by the time the judge runs, so a bare
+                <code>git status</code> is clean” — <code>check-evaluator.ts:19-22</code>
+              </blockquote>
+              <p class="mb-0"><strong>Consequência exata:</strong> o contrato report-only de
+                <strong>5 dos 7 pipelines default</strong> — a promessa de que uma auditoria não
+                toca seu código — é verificado por um comando que não consegue reprovar. A forma
+                correta existe um arquivo ao lado (<code>huu-test-suite.ts:343</code>) e
+                <code>$baseCommit</code> já é substituído. É uma linha. Ver a aba
+                <a href="#pane-falso-verde">Falso-verde</a>
+                para os outros 22 casos.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h4 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#fam-b" aria-expanded="false" aria-controls="fam-b">
+              <span class="badge text-bg-danger me-2">B</span> Propriedade de arquivo — a garantia que a doc afirma ter
+            </button>
+          </h4>
+          <div id="fam-b" class="accordion-collapse collapse" data-bs-parent="#acc-familias">
+            <div class="accordion-body">
+              <p><code>docs/dev-mode.md:250-253</code> traz um cabeçalho literal:
+                <strong>“Rules huu enforces (that the planner cannot break)” — Partition by
+                file ownership</strong>.</p>
+              <p><strong>Nada enforça isso.</strong> A busca foi exaustiva e negativa:
+                <code>prepareStageTasks</code> e <code>decomposeTasks</code> não comparam
+                caminho entre tasks; não há lock, não há teste de disjunção, não há checagem
+                pré-merge. O isolamento é <em>de worktree</em> — impede pisar em tempo real,
+                não impede o merge limpo que integra código contraditório. O que existe diz de
+                si mesmo:</p>
+              <blockquote class="blockquote small border-start ps-3">
+                “PURE INSTRUMENTATION — nothing is blocked, reverted or warned about to the
+                agent.” — <code>index.ts:2727-2733</code>
+              </blockquote>
+              <p class="mb-0">O modo de falha que ninguém pega <strong>não é o conflito</strong>:
+                é o não-conflito. Dois agentes editam hunks disjuntos do mesmo barrel, roteador
+                ou union de tipos, o git mergeia limpo, e sai código que nenhum dos dois
+                pretendeu. E o schema <strong>não tem onde declarar write-set</strong>.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h4 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#fam-c" aria-expanded="false" aria-controls="fam-c">
+              <span class="badge text-bg-warning text-dark me-2">C</span> Nada entre os merges, e nada depois do crash
+            </button>
+          </h4>
+          <div id="fam-c" class="accordion-collapse collapse" data-bs-parent="#acc-familias">
+            <div class="accordion-body">
+              <p>O corpo do loop de merge de uma etapa é, na íntegra
+                (<code>integration-merge.ts:40-71</code>): filtra pending, loga, chama
+                <code>git.merge</code>, empurra pra <code>branchesMerged</code>.
+                <strong>Sem typecheck, sem teste, sem build, sem lint, sem hook, sem nem um
+                <code>git status</code> de sanidade.</strong> O único critério de sucesso é o
+                git ter saído 0.</p>
+              <p>Com um merge dentro do gate, um vermelho <strong>nomeia o card</strong>; com
+                quatro, não nomeia nada. A bissecção é o produto, não a limpeza.</p>
+              <p class="mb-0">E a durabilidade:
+                <code>working-on-orchestrator/SKILL.md:70</code> afirma que o
+                <code>RunManifest</code> “is written incrementally during the run”.
+                <strong>É falso</strong> — <code>RunLogger.flush</code> é chamado uma vez, no
+                <code>finally</code>. Um SIGKILL no meio de uma etapa deixa
+                <strong>zero</strong> artefato em <code>.huu/</code>. O trabalho está nos
+                branches; recuperável só à mão.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h4 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#fam-d" aria-expanded="false" aria-controls="fam-d">
+              <span class="badge text-bg-warning text-dark me-2">D</span> Proveniência — a citação que ninguém confere
+            </button>
+          </h4>
+          <div id="fam-d" class="accordion-collapse collapse" data-bs-parent="#acc-familias">
+            <div class="accordion-body">
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <tbody>
+                    <tr><td>Ponteiros <code>arquivo:linha</code> em toda a biblioteca</td><td class="text-end fw-semibold">15</td></tr>
+                    <tr><td>Entradas de LEARNINGS com ponteiro</td><td class="text-end fw-semibold">2 de 195 (1,0%)</td></tr>
+                    <tr><td>Ponteiros no <code>AGENTS.md</code> (520 linhas)</td><td class="text-end fw-semibold">0</td></tr>
+                    <tr class="table-danger"><td>Das 14 citações reais, quantas <strong>sustentam</strong> a afirmação</td><td class="text-end fw-semibold">4 — 29%</td></tr>
+                    <tr><td>Das 10 que erram, quantas afirmam comportamento <strong>deletado</strong></td><td class="text-end fw-semibold">5</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>Os piores casos são de uma categoria única: <strong>a skill ensina o oposto do
+                código, e a skill é o que o agente carrega.</strong></p>
+              <ul>
+                <li><code>running-in-docker/SKILL.md</code> ainda ensina os 7 passos de bypass com
+                  <code>--yolo</code>/<code>HUU_NO_DOCKER</code> levando à execução nativa. O real
+                  tem 3 ramos. <strong>A própria LEARNINGS registrou a ordem de serviço em
+                  2026-07-02</strong> — e ela segue stale 28 dias depois. O
+                  <code>AGENTS.md</code> está correto; a skill contradiz o doc raiz.</li>
+                <li><code>copilot</code> ainda está na <strong>description do frontmatter</strong> —
+                  o sinal de roteamento carregado em todo agente — enquanto três testes assertam
+                  que o backend foi removido. <em>O sistema testa a remoção e ensina a
+                  presença.</em></li>
+                <li><code>admitPsiThreshold</code> tem <strong>0 ocorrências</strong> em
+                  <code>src/</code>.</li>
+              </ul>
+              <p class="mb-0">E a governança que devia consertar isso não roda:
+                <strong>zero hooks</strong>; o único validador mecânico
+                (<code>validate-skills.sh</code>) <strong>não está ligado a nada e está
+                vermelho agora</strong>; <strong>0 entradas <code>[superseded]</code></strong>
+                contra 15 que escrevem “SUPERSEDES” em prosa; e a regra “só a consolidação edita
+                corpo de SKILL.md” é <strong>revogada pelo próprio template</strong>, copiado em
+                8 de 8 skills de tarefa.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="h5 mt-4">Duas ironias medidas</h3>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="card h-100 border-warning">
+            <div class="card-body">
+              <h4 class="card-title h6">Constrói pro cliente o que não usa em si</h4>
+              <p class="card-text small mb-0">O pipeline <code>huu Knowledge System</code> termina
+                com um <em>eval de roteamento cego</em> para as skills que ele <strong>gera</strong>.
+                A biblioteca de 20 skills que <strong>governa o próprio repo</strong> não tem eval
+                nenhum. E <code>docs/ci.md</code> (245 linhas) ensina, com receita pronta de GitHub
+                Actions, a rodar as auditorias do huu em CI — num repositório
+                <strong>sem <code>.github/</code></strong>.</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-warning">
+            <div class="card-body">
+              <h4 class="card-title h6">O <code>$hint</code> é um canal de injeção</h4>
+              <p class="card-text small mb-0">O playbook de prompts manda “fence the injected
+                <code>$hint</code> inside its own tagged block so the model never treats scanned
+                data as orders”. Em <strong>7 de 7</strong> pipelines o <code>$hint</code> é
+                interpolado como <strong>prosa de instrução</strong>, sem escape — e ele é texto
+                <strong>escrito por um LLM</strong> (o step de recon), limitado apenas por um
+                truncamento de 600 chars.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="h5 mt-4">O que já está resolvido — e melhor que na referência</h3>
+      <p>Um plano que não credita o que existe produz retrabalho. Estes cinco estão fechados
+        <strong>por construção</strong>, e o playbook de origem teve de resolvê-los à mão:</p>
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead><tr><th>Lição que custou caro na referência</th><th>Como o <code>huu</code> resolve</th></tr></thead>
+          <tbody>
+            <tr><td>Onda ≠ nível topológico (um card ficou órfão sem ninguém ver)</td><td><code>dependsOn</code> → ondas <strong>derivadas pelo motor</strong>; aresta para frente é rejeitada. O erro é impossível</td></tr>
+            <tr><td>Barreira por leitura de tela (deu “1/1 terminaram” com 2 agentes rodando)</td><td>A barreira <strong>é o merge de integração</strong>. Não há tela para ler</td></tr>
+            <tr><td>Merge octopus perde a atribuição</td><td>Um a um, ascendente, <code>--no-ff</code>, nunca rebobina</td></tr>
+            <tr><td>“Estado do programa” escrito à mão era a afirmação menos exata do repo</td><td><strong>Contrato de verdade do kanban</strong>: verde só depois do branch mesclar</td></tr>
+            <tr><td>Matar o agente sob pressão perde o trabalho</td><td><strong>Checkpoint + pause</strong>, com backoff anti-churn e jitter determinístico</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ================= 2. FALSO-VERDE ================= -->
+    <div class="tab-pane fade" id="pane-falso-verde" role="tabpanel"
+         aria-labelledby="tab-falso-verde" tabindex="0" data-print-title="Falso-verde">
+
+      <h2 class="h4">A prova por mutação</h2>
+      <p>Tudo no diagnóstico é leitura de código. <strong>Isto é experimento</strong>: quatro
+        mutações aplicadas ao fonte, suíte inteira rodada, código restaurado. A suíte tem
+        <strong>1.786 testes passando em 13,3 s</strong> — velocidade nunca foi desculpa.</p>
+
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr><th>#</th><th>Mutação</th><th>Resultado</th></tr></thead>
+          <tbody>
+            <tr class="table-danger">
+              <td>1</td>
+              <td><code>index.ts:1460</code> <strong>e</strong> <code>:3496</code> — <strong>os dois</strong> guardas de <code>maxNodeExecutions</code> → <code>if (false &amp;&amp; …)</code></td>
+              <td><strong>1.786 passam, exit 0</strong> · <code>tsc</code> 0 ⇒ <strong>SOBREVIVEU</strong></td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td><code>integration-merge.ts:33</code> — ordem ascendente → descendente</td>
+              <td>exit 1 — morta, <strong>mas por acidente</strong></td>
+            </tr>
+            <tr class="table-danger">
+              <td>3</td>
+              <td><code>pipeline-io.ts:185</code> — aceitar 2+ <code>default: true</code></td>
+              <td><strong>1.786 passam, exit 0</strong> ⇒ <strong>SOBREVIVEU</strong></td>
+            </tr>
+            <tr class="table-danger">
+              <td>4</td>
+              <td><code>integration-merge.ts:33</code> — o sort <strong>deletado</strong></td>
+              <td><strong>1.786 passam, exit 0</strong> ⇒ <strong>SOBREVIVEU</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="alert alert-danger">
+        <strong>Leia a mutação 1 devagar.</strong> Os dois guardas de
+        <code>maxNodeExecutions</code> são a <strong>única</strong> coisa entre um outcome de
+        <code>CheckStep</code> apontando para trás e um <strong>loop de gasto de LLM
+        ilimitado</strong>. Apagar os dois deixa o gate inteiro verde.
+      </div>
+
+      <p><strong>A mutação 2 é pior do que “morta”.</strong> O único teste que a pegou tem por
+        propósito o tratamento de <em>falha</em> de merge: ele stuba <code>merge</code> para
+        falhar no <code>callCount === 1</code> e asserta que o agente 1 é o perdedor. A ordem é
+        pega como <strong>efeito colateral de uma fixture</strong>. Reescreva aquele stub para
+        chavear por nome de branch — a refatoração mais natural do mundo — e o invariante fica
+        indetectável. A mutação 4 já prova isso para o sort em si.</p>
+
+      <h3 class="h5 mt-4">Os outros experimentos</h3>
+      <div class="row g-3">
+        <div class="col-md-6"><div class="card h-100"><div class="card-body">
+          <h4 class="h6 card-title"><span class="badge text-bg-danger">A13</span> O seletor que sai 0</h4>
+          <pre><code class="language-bash">$ npx vitest run -t "FiltroQueNaoExiste"
+126 skipped (126)
+1787 skipped (1787)
+$ echo $?
+0</code></pre>
+          <p class="small mb-0"><code>passWithNoTests</code> não está configurado. Filtro de
+            <em>arquivo</em> inexistente é corretamente vermelho; filtro de <em>nome</em> sem
+            casar é <strong>verde e silencioso</strong>.</p>
+        </div></div></div>
+
+        <div class="col-md-6"><div class="card h-100"><div class="card-body">
+          <h4 class="h6 card-title"><span class="badge text-bg-danger">A14</span> O typecheck é cego onde dói</h4>
+          <pre><code class="language-bash"># erro de tipo plantado em scripts/deploy.ts
+# + deref de global inexistente em card-state.js
+$ npm run typecheck
+TYPECHECK_WITH_2_PLANTED_ERRORS_EXIT=0</code></pre>
+          <p class="small mb-0">4.669 linhas de cliente web (3.723 só em <code>app.js</code>) +
+            todo o <code>scripts/</code> invisíveis. O <code>CHANGELOG</code> registra que
+            <code>smoke-dashboard.tsx</code> ficou quebrado em silêncio “since the backend
+            registry refactor” — exatamente este buraco.</p>
+        </div></div></div>
+
+        <div class="col-md-6"><div class="card h-100"><div class="card-body">
+          <h4 class="h6 card-title"><span class="badge text-bg-danger">A15</span> O gêmeo que não é gêmeo</h4>
+          <pre><code class="language-text">state=streaming phase=done:
+  TS  column=doing/RUNNING
+  WEB lane=done/done
+state=error phase=paused:
+  TS  column=done/FAILED
+  WEB lane=todo/paused
+… 18 discordâncias em 70 combinações</code></pre>
+          <p class="small mb-0"><code>card-state.ts</code> chaveia por <code>state</code>;
+            <code>card-state.js</code> chaveia por <code>phase</code>. O
+            <code>AGENTS.md</code> afirma que os testes “pin the same table so the mirrors can't
+            drift silently”. <strong>Não pinam</strong>: cada um importa só o seu módulo e
+            hard-coda a própria tabela, em vocabulários diferentes.</p>
+        </div></div></div>
+
+        <div class="col-md-6"><div class="card h-100"><div class="card-body">
+          <h4 class="h6 card-title"><span class="badge text-bg-warning text-dark">A16–A23</span> Ausência que não falha</h4>
+          <ul class="small mb-0">
+            <li>3 padrões de nome de teste <strong>não coletados</strong>:
+              <code>__tests__/x.ts</code>, <code>x.tests.ts</code> (o typo comum),
+              <code>x-test.ts</code></li>
+            <li><strong>Cobertura não é medida</strong> — logo não pode regredir</li>
+            <li><strong>43,5% dos arquivos de <code>src/</code> sem teste irmão</strong> (48,3%
+              das linhas). <code>src/ui/</code> — a TUI inteira — tem <strong>zero</strong></li>
+            <li><strong>535 asserções (12,4%) são substring em prosa.</strong> Inclui a garantia
+              CODE-FROZEN: verificada <em>grepando inglês num prompt</em></li>
+            <li><code>dist/</code> está 26 dias velho e <code>smoke-defaults.sh</code> o
+              abençoa — e valida <strong>6 de 7</strong> pipelines</li>
+            <li><strong>Nenhuma plataforma roda a suíte inteira</strong>; nenhum CI roda as duas</li>
+            <li>O release canônico (<code>deploy.ts</code>) roda <strong>zero smokes</strong>,
+              contra o que o <code>AGENTS.md</code> exige</li>
+          </ul>
+        </div></div></div>
+      </div>
+
+      <div class="alert alert-secondary mt-4">
+        <strong>A conclusão que só o experimento autoriza:</strong> dos nove invariantes críticos
+        testados um a um, <strong>os dois mais difíceis de recuperar são os dois sem nenhuma
+        asserção</strong> — o <em>never-rewind</em> da worktree de integração (zero cobertura) e
+        o backstop de loop ilimitado (mutação 1).
+      </div>
+
+      <h3 class="h5 mt-4">A pergunta que gera o catálogo</h3>
+      <blockquote class="blockquote fs-5 border-start border-4 border-danger ps-3 mb-0">
+        Se isto desaparecer, o que fica vermelho?
+      </blockquote>
+      <p class="text-body-secondary">…e a versão por critério: <em>o que este comando imprime se
+        a tarefa não fizer nada?</em> Se a resposta é “verde”, o critério é decorativo.</p>
+    </div>
+
+    <!-- ================= 3. AS ONDAS ================= -->
+    <div class="tab-pane fade" id="pane-ondas" role="tabpanel"
+         aria-labelledby="tab-ondas" tabindex="0" data-print-title="As ondas">
+
+      <h2 class="h4">A lei, e como ela se aplica aqui</h2>
+      <p>O playbook de origem descobriu que a onda declarada era exatamente o nível topológico
+        do grafo, 40 de 40. Aqui isso não é descoberta — <strong>é como o motor
+        funciona</strong>. Então este plano usa a lei como <em>formato de escrita</em>, com a
+        distinção que importa:</p>
+      <blockquote class="blockquote border-start border-4 border-primary ps-3">
+        O <strong>nível é uma restrição</strong>; a <strong>onda é uma decisão de
+        escalonamento</strong>. A onda nunca é menor que o nível, mas pode ser maior. Folga é
+        legítima — <strong>e tem de ser vista, não descoberta.</strong>
+      </blockquote>
+
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr><th>Onda</th><th class="text-end">Cards</th><th class="text-end">Nível</th><th class="text-end">Folga</th><th>Tipo</th></tr></thead>
+          <tbody>
+            <tr><td><strong>W0</strong></td><td class="text-end">1</td><td class="text-end">0</td><td class="text-end">0</td><td><strong>raiz</strong> — entrega vocabulário e precedência, não funcionalidade</td></tr>
+            <tr><td><strong>W1</strong></td><td class="text-end">6</td><td class="text-end">1</td><td class="text-end">0</td><td><strong>o fan-out da raiz</strong> — todo o ferramental de verificação</td></tr>
+            <tr class="table-secondary"><td><strong>W1.5</strong></td><td class="text-end">infra</td><td class="text-end">—</td><td class="text-end">—</td><td><strong>sem worktree</strong>, no branch principal: exige a máquina do humano</td></tr>
+            <tr><td><strong>W2</strong></td><td class="text-end">7</td><td class="text-end">2</td><td class="text-end">0</td><td><strong>composição</strong> sobre o gate — protocolo próprio. <strong>A mais larga</strong></td></tr>
+            <tr><td><strong>W3</strong></td><td class="text-end">4</td><td class="text-end">2–3</td><td class="text-end">0–1</td><td>grafo + propriedade de arquivo — <strong>o coração do plano</strong></td></tr>
+            <tr><td><strong>W4</strong></td><td class="text-end">4</td><td class="text-end">2–3</td><td class="text-end">1</td><td>memória, incerteza e ADR</td></tr>
+            <tr><td><strong>W5</strong></td><td class="text-end">1</td><td class="text-end">5</td><td class="text-end">0</td><td><strong>neck</strong>: <code>AGENTS.md</code> — sozinha de propósito</td></tr>
+            <tr><td><strong>W6</strong></td><td class="text-end">4</td><td class="text-end">4</td><td class="text-end">2</td><td>dev mode — herda write-set, <code>accept</code> e ledger</td></tr>
+            <tr><td><strong>W7</strong></td><td class="text-end">4</td><td class="text-end">6</td><td class="text-end">0–1</td><td>quebrar os singletons medidos</td></tr>
+            <tr><td><strong>W8</strong></td><td class="text-end">2</td><td class="text-end">3</td><td class="text-end">5</td><td><strong>dogfooding</strong> — preenchedor de paralelismo, folga grande</td></tr>
+            <tr><td><strong>W9</strong></td><td class="text-end">1</td><td class="text-end">7</td><td class="text-end">0</td><td><strong>join</strong> — estado derivado + catálogo vivo</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>W1 é larga de propósito e W5 é estreita de propósito.</strong> W1 é o nível de
+        <em>hubs</em>: seis ferramentas independentes que abrem tudo o que vem depois — e é por
+        isso que W2 nasce com 7 cards. <strong>Largura é fan-out do nível anterior</strong>: um
+        nível de hubs produz um nível largo, um nível depois. W5, ao contrário, é um arquivo que
+        34 commits já tocaram — dois cards ali garantiriam conflito.</p>
+
+      <h3 class="h5 mt-4">O teto de paralelismo: os singletons medidos</h3>
+      <p>O teto não é o modelo nem a CPU. É o <strong>número de recursos singleton que as
+        tarefas tocam</strong>. Medido por churn × tamanho:</p>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr><th>Arquivo</th><th class="text-end">Linhas</th><th class="text-end">Toques</th><th>Papel</th></tr></thead>
+          <tbody>
+            <tr class="table-danger"><td><code>src/web/client/app.js</code></td><td class="text-end">3.723</td><td class="text-end">46</td><td><strong>O pior.</strong> Cliente inteiro num arquivo, e <strong>fora do typecheck</strong></td></tr>
+            <tr class="table-danger"><td><code>src/orchestrator/index.ts</code></td><td class="text-end">3.815</td><td class="text-end">39</td><td>Loop de etapa + guard + requeue + retry. ~20 responsabilidades</td></tr>
+            <tr class="table-warning"><td><code>CHANGELOG.md</code></td><td class="text-end">1.553</td><td class="text-end">82</td><td><strong>O mais tocado.</strong> Append no topo ⇒ <strong>conflito garantido</strong> em toda onda</td></tr>
+            <tr><td><code>README.md</code> + <code>.en.md</code></td><td class="text-end">1.014+1.004</td><td class="text-end">53+45</td><td>Gêmeos que precisam sincronizar, zero verificação de paridade</td></tr>
+            <tr><td><code>src/lib/types.ts</code></td><td class="text-end">1.235</td><td class="text-end">24</td><td><strong>Singleton por decreto</strong>: a convenção manda tipo novo aqui. 49 commits o tocam junto com outro arquivo</td></tr>
+            <tr><td><code>AGENTS.md</code></td><td class="text-end">520</td><td class="text-end">34</td><td>Doc normativo único, <strong>~8,3k tokens por sessão</strong>, 72% duplicado de skills</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="mb-0"><strong>Como ler:</strong> cada linha é uma onda que não pode ter dois
+        cards, ou um refactor a fazer antes de alargar. O <code>CHANGELOG</code> é o caso mais
+        barato e mais grave — mesma mecânica do “fecho do array conflita sempre”, mesma solução:
+        <strong>um fragmento por card</strong>, consolidado depois do merge. Custo: um diretório
+        e ~40 linhas.</p>
+
+      <h3 class="h5 mt-4">Ordem de merge declarada</h3>
+      <p>Não é só o conjunto; é a ordem. <strong>Quem muda o gate mergeia por último</strong>,
+        porque o gate ganha uma etapa nova e todos os merges anteriores passaram pelo antigo.</p>
+      <pre><code class="language-text">W1:  M1-06 (typecheck) → M1-03 (schema) → M1-04 (juiz) → M1-05 (changelog)
+     → M1-02 (sonda)   → M1-01 (gate)                    ← muda o gate: último
+W2:  M2-05 → M2-04 → M2-03 → M2-02 → M2-01               ← CI por último
+W3:  M3-01 (validador) → M3-02 (write-set) → M3-04 (propagação) → M3-03 (gate/merge)
+W4:  M4-03 (ADR) → M4-01 (pins) → M4-02 (ledger) → M4-04 (governança)
+W7:  M7-03 (types) → M7-04 (gêmeos) → M7-01 (app.js) → M7-02 (index.ts)</code></pre>
+
+      <div class="alert alert-danger mt-4">
+        <h3 class="h6 alert-heading">Não comece pela W7</h3>
+        <p class="mb-0">Quebrar <code>app.js</code> (3.723 linhas) ou
+          <code>orchestrator/index.ts</code> (3.815) é a mudança mais tentadora e a mais
+          perigosa: hoje <strong>nada typecheca o primeiro</strong> e <strong>três invariantes do
+          segundo são deletáveis com a suíte verde</strong>. A única coisa que diria que o
+          refactor quebrou algo é justamente o gate que W1/W2/W3 constroem. Fazer W7 antes é
+          refatorar no escuro com a luz na mão.</p>
+      </div>
+    </div>
+
+    <!-- ================= 4. OS CARDS ================= -->
+    <div class="tab-pane fade" id="pane-cards" role="tabpanel"
+         aria-labelledby="tab-cards" tabindex="0" data-print-title="Os cards">
+
+      <h2 class="h4">34 cards, e uma regra dura</h2>
+      <blockquote class="blockquote border-start border-4 border-danger ps-3">
+        <strong>Todo critério de aceitação tem de falhar HOJE.</strong> Se já passa antes de a
+        tarefa escrever a primeira linha, é decorativo.
+      </blockquote>
+      <p>E ao menos um critério por onda tem de <strong>falhar por ausência</strong> — o tipo que
+        o resto não cobre: um arquivo novo sem o cabeçalho derruba, uma etapa nova sem gate
+        derruba. O texto completo de cada card, com dono, deps e comandos, está em
+        <code>METODO.md §6</code>.</p>
+
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr><th>Card</th><th>O que entrega</th><th>Aceitação que falha hoje</th></tr></thead>
+          <tbody>
+            <tr class="table-secondary"><td colspan="3"><strong>W0 — a raiz</strong></td></tr>
+            <tr><td><code>M0-01</code> 🔴</td><td>Vocabulário, regra de precedência por domínio, tabela de donos</td><td><code>rg -q 'Precedência' AGENTS.md</code></td></tr>
+
+            <tr class="table-secondary"><td colspan="3"><strong>W1 — o ferramental de verificação</strong></td></tr>
+            <tr><td><code>M1-01</code> 🔴</td><td>Gate local: 1 etapa por job, 3 estados, ferramenta ausente = <strong>vermelho</strong></td><td><code>PATH=/nonexistent bash scripts/gate.sh</code> → exit ≠ 0</td></tr>
+            <tr><td><code>M1-02</code></td><td>Sonda negativa da suíte: seletor exige ≥1 teste; impossível casa 0; cego = vermelho</td><td><code>check-acceptance --selector ZzNaoExiste</code> → exit ≠ 0</td></tr>
+            <tr><td><code>M1-03</code> 🔴</td><td><code>WorkStep.accept</code> no tipo + schema + assistant-schema</td><td>round-trip prova que o parse não descarta o campo</td></tr>
+            <tr><td><code>M1-04</code> 🔴</td><td>A linha que devolve o contrato report-only das 5 auditorias</td><td><code>rg -L 'baseCommit\.\.HEAD' pipelines/*audit*</code> → vazio</td></tr>
+            <tr><td><code>M1-05</code></td><td>Fragmentos <code>.changes/</code> + consolidador — mata o conflito garantido</td><td><code>changelog.ts --check</code></td></tr>
+            <tr><td><code>M1-06</code></td><td>Typecheck honesto: cliente web + <code>scripts/</code> entram</td><td><code>tsc -p tsconfig.client.json --noEmit</code></td></tr>
+            <tr class="table-secondary"><td><code>W1.5</code></td><td>infra: <code>core.hooksPath</code> + pre-push chamando o gate</td><td><code>test "$(git config core.hooksPath)" = ".githooks"</code></td></tr>
+
+            <tr class="table-secondary"><td colspan="3"><strong>W2 — composição sobre o gate</strong></td></tr>
+            <tr><td><code>M2-01</code></td><td>CI mínima, e o gate <strong>lê</strong> a definição dela (fonte única)</td><td><code>diff</code> das duas listas de etapas</td></tr>
+            <tr><td><code>M2-02</code></td><td>Autoteste adversarial: mutações <strong>calculadas</strong>, assertando a <strong>mensagem</strong></td><td><code>selfcheck/run.sh</code> → “N mutações, N acusadas”</td></tr>
+            <tr><td><code>M2-03</code> 🔴</td><td>Enforcement do <code>accept</code> pós-merge, fora de qualquer agente</td><td>teste “accept-gate <strong>reprova</strong>”</td></tr>
+            <tr><td><code>M2-04</code> 🔴</td><td>Sonda negativa dos juízes + fixtures quebradas</td><td>teste “report-contract <strong>rejeita</strong>”</td></tr>
+            <tr><td><code>M2-05</code></td><td>Ligar <code>validate-skills.sh</code>, fechar vocabulário, TTL de frescor</td><td>o validador sai 0 (hoje: vermelho e desligado)</td></tr>
+            <tr><td><code>M2-06</code> 🔴</td><td>Pinar os 4 invariantes que sobreviveram à mutação</td><td>as 4 mutações do experimento <strong>morrem</strong></td></tr>
+            <tr><td><code>M2-07</code></td><td>Cobertura, piso de contagem, excludes, smoke no release</td><td><code>npm test -- -t 'ZzNaoExiste'</code> → exit ≠ 0</td></tr>
+
+            <tr class="table-secondary"><td colspan="3"><strong>W3 — grafo e propriedade de arquivo</strong></td></tr>
+            <tr><td><code>M3-01</code> 🔴</td><td>O <code>Orchestrator</code> valida o próprio grafo (~4 linhas) + validador completo</td><td>“start recusa grafo inválido” construído <strong>em código</strong></td></tr>
+            <tr><td><code>M3-02</code> 🔴</td><td><code>WorkStep.writes</code> + disjunção intra-onda, estática <strong>e</strong> em runtime</td><td>“write-set sobreposto <strong>reprova</strong>”</td></tr>
+            <tr><td><code>M3-03</code></td><td>Gate depois de <strong>CADA</strong> merge, com rewind do próprio merge commit</td><td><code>integration-merge.test.ts</code> — <strong>arquivo que não existe hoje</strong></td></tr>
+            <tr><td><code>M3-04</code></td><td>Propagação de falha: o <code>done</code> que mente deixa de mentir</td><td>“dependência falhou” → dependente <strong>não</strong> roda</td></tr>
+
+            <tr class="table-secondary"><td colspan="3"><strong>W4 — memória, incerteza e decisão</strong></td></tr>
+            <tr><td><code>M4-01</code></td><td>Pin conteúdo-endereçado <code>arquivo:linha@sha1</code>, gerado por script</td><td><code>check-pins --fixture degenerado</code> → exit ≠ 0</td></tr>
+            <tr><td><code>M4-02</code></td><td>Ledger de incerteza, no gate desde já, <strong>verde com tudo aberto</strong></td><td>“fechado sem evidência” → exit ≠ 0</td></tr>
+            <tr><td><code>M4-03</code></td><td>ADRs com <strong>guarda executável</strong> + os 3 primeiros</td><td><code>rg -L 'Guarda executável' docs/adr/*</code> → vazio</td></tr>
+            <tr><td><code>M4-04</code></td><td>Governança: revogar a auto-promoção, purgar <code>copilot</code>, consolidar de verdade</td><td><code>rg -c copilot .agents/skills</code> → 0</td></tr>
+
+            <tr class="table-secondary"><td colspan="3"><strong>W5 · W6 · W7 · W8 · W9</strong></td></tr>
+            <tr><td><code>M5-01</code></td><td><code>AGENTS.md</code> 520 → ~120 linhas; ~7k tokens por sessão de volta</td><td><code>rg -c MAX_CONCURRENT_RUNS AGENTS.md</code> → 0</td></tr>
+            <tr><td><code>M6-01</code> 🔴</td><td>Partição de write-set no dev mode (o parser já existe)</td><td>“dois specs mesmo arquivo <strong>recusa</strong>”</td></tr>
+            <tr><td><code>M6-02</code></td><td><code>verifyCommands</code> deixa de ser código morto</td><td><code>rg -c verifyCommands dev-driver.ts</code> &gt; 0</td></tr>
+            <tr><td><code>M6-03</code></td><td>Honestidade do fim de época: <code>alreadyUpToDate</code>, <code>goalComplete</code>, <code>doneWhen</code></td><td>“época no-op não conta como landed”</td></tr>
+            <tr><td><code>M6-04</code></td><td>Flush periódico do manifesto; <code>journal.md</code> commitado</td><td>“manifest flush incremental” — existe em disco <em>meio</em> run</td></tr>
+            <tr><td><code>M7-01..04</code></td><td>Quebrar <code>app.js</code>, <code>index.ts</code>, <code>types.ts</code>; paridade dos gêmeos por script</td><td>tetos de linha + as 414 asserções do orquestrador verdes</td></tr>
+            <tr><td><code>M8-01..02</code></td><td>O huu roda o huu no CI do huu; <code>huu Test Suite</code> nos maiores sem teste</td><td>o relatório aparece em <code>.huu/audits/</code></td></tr>
+            <tr><td><code>M9-01</code></td><td>Estado <strong>derivado</strong> + catálogo de falso-verde vivo</td><td>mude um número à mão → exit ≠ 0</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="h5 mt-4">O plano se auto-hospeda no fim da W3</h3>
+      <p>O playbook de origem precisou de um registro HTML porque não tinha motor. Aqui existe
+        um, e o mapeamento é direto:</p>
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead><tr><th>Eixo do card</th><th>Onde vive no <code>huu</code></th></tr></thead>
+          <tbody>
+            <tr><td><strong>grafo</strong> (de onde saem as ondas)</td><td><code>WorkStep.dependsOn</code> — já validado como backward-only</td></tr>
+            <tr><td><strong>identidade e estado</strong></td><td><code>AgentStatus</code> + o contrato de verdade do kanban</td></tr>
+            <tr><td><strong>escalonamento</strong></td><td><code>computeWave</code> — derivado, não declarado</td></tr>
+            <tr><td class="text-warning"><strong>write-set</strong></td><td><code>WorkStep.writes</code> — <strong><code>M3-02</code> cria</strong></td></tr>
+            <tr><td class="text-warning"><strong>aceitação falsificável</strong></td><td><code>WorkStep.accept</code> — <strong><code>M1-03</code> cria, <code>M2-03</code> executa</strong></td></tr>
+            <tr><td><strong>revisão adversarial</strong></td><td><code>WorkStep.review</code> — <strong>já existe</strong></td></tr>
+            <tr><td class="text-warning"><strong>portão de onda</strong></td><td><code>CheckStep</code> + <code>Pipeline.mergeGate</code> — <strong><code>M3-03</code> cria</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="mb-0"><strong>Consequência operacional:</strong> depois de W1–W3 este plano pode
+        ser compilado num <code>huu-pipeline-v2</code> e <strong>executado pelo próprio
+        <code>huu</code></strong>. Antes, não pode — faltam exatamente os dois campos que o
+        tornam verificável.</p>
+    </div>
+
+    <!-- ================= 5. INDÚSTRIA ================= -->
+    <div class="tab-pane fade" id="pane-industria" role="tabpanel"
+         aria-labelledby="tab-industria" tabindex="0" data-print-title="Indústria">
+
+      <h2 class="h4">108 agentes, verificação adversarial</h2>
+      <p>Cada afirmação foi submetida a refutadores independentes; sobrevive quem tem ≥2 de 3
+        votos. O terceiro bloco é o mais importante, porque é onde a pesquisa
+        <strong>não achou nada</strong> — e onde a tentação de preencher com plausibilidade é
+        maior.</p>
+
+      <h3 class="h5">Confirmado</h3>
+      <div class="list-group mb-4">
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between"><strong>Worktree-por-agente virou primitiva de produto</strong><span class="badge text-bg-success">3-0</span></div>
+          <p class="small mb-0">Cursor 3.5 (<code>/worktree</code> + <code>.cursor/worktrees.json</code>),
+            Claude Code (<code>isolation: worktree</code>) e OpenAI Codex, todos como recurso de
+            primeira classe. <strong>A aposta arquitetural do <code>huu</code> é
+            mainstream</strong> — e não precisa mais ser defendida.</p>
+        </div>
+        <div class="list-group-item list-group-item-action border-danger">
+          <div class="d-flex justify-content-between"><strong>…e no Claude Code o isolamento é enforçado na camada de FERRAMENTA</strong><span class="badge text-bg-success">3-0</span></div>
+          <p class="small mb-1">Verificado nas versões 2.1.203 / 2.1.210 / 2.1.216:
+            <strong>um comando Bash que resolve de volta para o checkout principal
+            FALHA</strong>. Não é instrução no prompt — é a ferramenta recusando.</p>
+          <p class="small mb-0"><strong>É a corroboração mais direta do diagnóstico.</strong> O
+            <code>huu</code> hoje faz o oposto: a partição é prosa repetida em cinco lugares, e a
+            doc a anuncia como “Rules huu enforces”. Sobe a prioridade de <code>M3-02</code> e
+            <code>M6-01</code> — e sugere levá-los à camada de ferramenta do backend.</p>
+        </div>
+        <div class="list-group-item border-danger">
+          <div class="d-flex justify-content-between"><strong>O fan-in é onde os fornecedores param</strong><span class="badge text-bg-success">3-0</span></div>
+          <p class="small mb-1">Todo produto enviado transforma o merge-back num funil explícito
+            acionado por humano: <code>/apply-worktree</code>, Apply-or-discard, e o
+            <code>/best-of-n</code> que declara literalmente que <em>“does not merge changes back
+            … for you”</em>.</p>
+          <p class="small mb-0">Ou seja: o merge determinístico de N branches ao fim de cada
+            etapa — o diferencial nº 1 do <code>MANIFESTO</code> — é <strong>genuinamente
+            distintivo</strong>, e é <strong>exatamente o passo que nenhuma fonte externa
+            valida</strong>. Corta nas duas direções: o manifesto está certo, <em>e</em> o
+            componente mais original do produto é o menos verificado — zero verificação entre
+            merges, zero arquivo de teste em <code>integration-merge.ts</code>.</p>
+        </div>
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between"><strong>A academia já nomeou o defeito</strong><span class="badge text-bg-success">3-0</span></div>
+          <p class="small mb-0"><code>arXiv:2606.15376</code> (CoAgent, SJTU, jun/2026) sobre
+            orquestração fork-and-merge: <em>“weak isolation akin to read committed”</em>; um
+            merge em nível de linha <em>“catches textual conflicts but nothing beyond — the merged
+            code can fail to even compile.”</em> É a formulação acadêmica da frase que o
+            diagnóstico derivou do código.</p>
+        </div>
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between"><strong>Admissão: fail-fast numérico, não fila</strong><span class="badge text-bg-success">3-0</span></div>
+          <p class="small mb-0">O Claude Code usa portões numéricos duros com erros
+            “não-retentar”: <strong>20 spawns concorrentes, 200 por sessão</strong>. O
+            <code>huu</code> faz o oposto por decisão bem-fundamentada (o incidente de OOM).
+            <strong>Não troque o pacing pelo fail-fast</strong> — mas copie o que falta: um teto
+            <em>absoluto, por sessão</em>, que não depende de nenhum sinal dinâmico funcionar.</p>
+        </div>
+        <div class="list-group-item list-group-item-warning">
+          <div class="d-flex justify-content-between"><strong>Os 90,2% NÃO podem ser citados como projeção de ganho</strong><span class="badge text-bg-success">3-0</span></div>
+          <p class="small mb-0">Auto-relato de fornecedor sobre eval <strong>privado</strong>, sem
+            n, sem IC, avaliado por LLM-as-judge. E <strong>o mesmo post desqualifica o
+            domínio</strong>: <em>“most coding tasks involve fewer truly parallelizable tasks than
+            research”</em>. Custo volunteado contra si: ~4× tokens vs chat,
+            <strong>~15× para multi-agente</strong>. Data: 2025-06-13, modelos já superados.</p>
+        </div>
+      </div>
+
+      <h3 class="h5">Refutado — dois pressupostos a corrigir neste repo</h3>
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead><tr><th>Pressuposto comum</th><th>Realidade verificada</th></tr></thead>
+          <tbody>
+            <tr><td>“Sub-agentes não podem gerar sub-agentes” — citado em toda parte como justificativa de desenho</td><td><strong>Falso desde a v2.1.219.</strong> Aninham, profundidade default <strong>3</strong>, via <code>CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH</code>. Verificado no binário 2.1.220</td></tr>
+            <tr><td>“Controle de admissão de fleet é feito por fila”</td><td>No Claude Code é fail-fast numérico</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Qualquer decisão do <code>huu</code> tomada <em>“porque sub-agente não pode gerar
+        sub-agente”</em> está apoiada numa premissa morta. Item de ledger com verificação
+        executável — exatamente o que <code>M4-01</code> e <code>M4-02</code> existem para não
+        deixar apodrecer numa skill.</p>
+
+      <h3 class="h5 mt-4">O que a pesquisa NÃO confirmou — e por que isso não é “falso”</h3>
+      <div class="alert alert-secondary">
+        <p><strong>Dos cinco ângulos, três não produziram nenhuma afirmação sobrevivente:</strong>
+          verificação de código gerado por agente (falso-verde, mutação, LLM-as-judge, benchmarks);
+          quase toda a economia de contexto e memória; e praticamente tudo de PSI/AIMD, caching,
+          roteamento por papel e OpenTelemetry para agentes.</p>
+        <ol class="mb-0">
+          <li><strong>Ausência de literatura secundária ≠ refutação.</strong> O
+            <code>ROADMAP.md</code> já cita <em>fontes primárias</em> — docs do kernel, TMO
+            (ASPLOS'22), <code>senpai</code>/<code>oomd</code> da Meta,
+            <code>concurrency-limits</code> da Netflix. A pesquisa não achou ninguém escrevendo
+            sobre <em>aplicar isso a fleets de agentes de código</em>. Conclusão honesta: o
+            <code>huu</code> está fazendo algo que a indústria ainda não documentou, e a
+            validação vai ter de ser própria. É uma boa posição — <em>sem rede</em>.</li>
+          <li><strong>Para o ângulo da verificação, a ausência é mais interessante ainda:</strong>
+            este trabalho <em>produziu</em> a evidência que a pesquisa não achou. As quatro
+            mutações, os dois erros plantados, o teste cruzado dos gêmeos e as 14 citações
+            conferidas são medição de primeira mão. O catálogo de falso-verde é, na prática, um
+            artefato original.</li>
+          <li><strong>Nada aqui deve ser preenchido com plausibilidade.</strong> Se a verificação
+            não sustentou, entra no ledger como <code>ABERTO</code>, com o teste que fecha — não
+            no corpo do método.</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- ================= 6. TEMPLATES ================= -->
+    <div class="tab-pane fade" id="pane-templates" role="tabpanel"
+         aria-labelledby="tab-templates" tabindex="0" data-print-title="Templates">
+
+      <h2 class="h4">Revisão adversarial</h2>
+      <p>O card não pede “revise”. Pede <strong>refutação por um agente de contexto zero, antes
+        de concluir</strong> — porque o revisor não vê o histórico da conversa do implementador,
+        então não herda nem a pressa nem as premissas.</p>
+      <pre><code class="language-text">Antes de concluir, lance um subagente de CONTEXTO FRESCO que recebe APENAS
+o diff e este card, e tenta REFUTAR:
+
+  &lt;pergunta falsificável 1, específica do domínio&gt;
+  &lt;pergunta falsificável 2&gt;
+  &lt;pergunta falsificável 3&gt;
+
+Corrija o que ele derrubar antes de encerrar.</code></pre>
+
+      <p><strong>Perguntas calibradas para este repositório.</strong> O que faz uma pergunta boa:
+        ela nomeia um resultado observável que, se acontecer, <strong>derruba o
+        trabalho</strong>. “Está bom?” não é pergunta.</p>
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead><tr><th>Domínio</th><th>Pergunta</th></tr></thead>
+          <tbody>
+            <tr><td>qualquer critério</td><td><em>o que este comando imprime se a tarefa não fizer nada? Rode com o diff revertido</em></td></tr>
+            <tr><td>teste novo</td><td><em>o seletor casa ≥1 teste, ou sai 0 com tudo skipped?</em></td></tr>
+            <tr><td>validador novo</td><td><em>plante uma mutação CALCULADA: ele acusa, e a mensagem nomeia o quê?</em></td></tr>
+            <tr><td>condição de juiz</td><td><em>reprova uma fixture deliberadamente suja? <code>$baseCommit</code> chega expandido ou vira <code>HEAD..HEAD</code>?</em></td></tr>
+            <tr><td>write-set</td><td><em>dois cards da mesma onda escrevem no mesmo arquivo?</em></td></tr>
+            <tr><td>cliente web</td><td><em>isto passa pelo <code>tsc</code>? (até <code>M1-06</code>, a resposta honesta é “nada passa”)</em></td></tr>
+            <tr><td>gêmeos</td><td><em>as duas tabelas concordam em TODAS as combinações, não só nas testadas?</em></td></tr>
+            <tr><td>skill / LEARNINGS</td><td><em>a linha citada ainda existe E sustenta a afirmação?</em></td></tr>
+            <tr><td>busca no repo</td><td><em>você usou <code>--no-ignore</code>? zero resultado em <code>.huu/</code> é o default, não uma prova</em></td></tr>
+            <tr><td>refactor de arquivo quente</td><td><em>qual invariante deste arquivo tem teste? se nenhum, você está refatorando no escuro</em></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="alert alert-warning">
+        <strong>O limite, para não vender mais do que é.</strong> Quem escolhe as perguntas é o
+        implementador; quem decide o que “foi derrubado” também. A revisão adversarial reduz o
+        erro que o autor não <em>veria</em>; não corrige o que ele não <em>quer</em> ver. Para
+        fechar a brecha: <strong>as perguntas vêm do card</strong>, escritas por quem orquestra,
+        antes. E o próprio <code>huu</code> mediu e escreveu no código que o modo de falha
+        dominante de um crítico LLM é <strong>bloqueio espúrio de código correto</strong>
+        (22,5%–91,9% de falsa rejeição, ~87% alucinação semântica), não bug perdido — por isso
+        <strong>sem contraexemplo concreto, é <code>minor</code></strong>.
+      </div>
+
+      <h3 class="h5 mt-4">Item de ledger</h3>
+      <p>Não é registro de riscos. É <strong>fila de trabalho para um dia futuro</strong>. Sem os
+        dois últimos campos, é só um recado sem dono nem prazo.</p>
+      <pre><code class="language-json">{
+  "id": "HU-051",
+  "pergunta": "Todo provider expande $baseCommit antes do juiz ler a condição?",
+  "por_que_aberto": "Registrado como falha real: um juiz de modelo pequeno recebeu a var não-expandida e a cláusula passou vazia.",
+  "decisao_provisoria": "Assumir que a substituição do check-evaluator cobre todos.",
+  "origem": ["src/orchestrator/check-evaluator.ts:95-98"],
+  "verificacao": "Rodar huu Docs Audit com um modelo pequeno e conferir no run log a condição JÁ substituída; salvar a saída.",
+  "impacto_se_divergir": "As 5 auditorias voltam a ter cláusula vazia. Recapturar: judge-conditions.test.ts, os 5 JSONs, o card M8-01.",
+  "risco": "alto",
+  "interlocutor": "medição própria",
+  "status": "ABERTO",
+  "evidencia": "",
+  "data_resolucao": ""
+}</code></pre>
+      <p><strong>Validado por script, não por revisão.</strong> <code>ABERTO</code> exige os
+        quatro campos de contexto não-vazios e <code>evidencia</code> <em>vazia</em>; fechado
+        exige evidência <strong>citável por regex</strong> + data ISO. E a
+        <strong>lista negra</strong>, sem a qual a regra vira decorativa:
+        <code>"ok"</code>, <code>"conferido"</code>, <code>"conforme combinado"</code>,
+        <code>"funcionou aqui"</code>.</p>
+      <blockquote class="blockquote fs-6 border-start border-4 border-danger ps-3">
+        Item marcado CONFIRMADO sem evidência anexada é pior que item aberto: ele para de ser
+        reperguntado e vira <strong>premissa invisível</strong>.
+      </blockquote>
+      <p>Âncora no código, no ponto exato da suposição, para o catálogo achar o código e o código
+        achar o catálogo:</p>
+      <pre><code class="language-typescript">// ABERTO HU-051: assume $baseCommit expandido em todo provider; ver ledger.</code></pre>
+
+      <h3 class="h5 mt-4">Padrão de escrita de um gate</h3>
+      <pre><code class="language-markdown">### GATE &lt;ID&gt; — &lt;a asserção em uma frase, no afirmativo&gt;
+
+&lt;Por que existe: o dano CONCRETO se for pulado. Não "boas práticas".&gt;
+
+Antes de &lt;ação&gt;, numa sessão com &lt;quem, por papel&gt;:
+1. &lt;comando executável, literal, copiável&gt;
+2. &lt;como confrontar o resultado com o artefato do repositório&gt;
+3. **Registrar o resultado em &lt;caminho de ADR nominal&gt;** — item a item, com o
+   veredito (igual / divergente / NÃO_COLETADO) e o que muda se divergir.
+
+- [ ] &lt;artefato de saída&gt; existe e cobre todos os itens
+- [ ] Toda divergência corrigida **e** as fixtures recapturadas</code></pre>
+      <p><strong>Os quatro elementos obrigatórios:</strong> condição de entrada · evidência
+        exigida (saída de comando salva, nunca afirmação) · artefato nominal onde a evidência
+        mora · <strong>quem assina, por papel nomeado</strong> — nunca “o time”.</p>
+      <p class="mb-0"><strong>Um veredito que não pode existir:</strong> <code>CONFERE</code> sem
+        evidência anexada. Use <code>NÃO_COLETADO</code>, que nunca vira <code>CONFERE</code>
+        sozinho.</p>
+
+      <h3 class="h5 mt-4">A regra dos hooks: separe <em>nudge</em> de <em>gate</em></h3>
+      <blockquote class="blockquote fs-6 border-start border-4 border-primary ps-3">
+        Prosa numa skill é conselho; um hook é garantia.
+      </blockquote>
+      <p>O <code>huu</code> tem <strong>zero</strong> hooks e duas peças prontas e desligadas. A
+        tentação é ligar tudo. A regra que evita o desastre: <strong>gate mecânico só onde o erro
+        é irreversível ou auto-amplificante</strong> — memória persistida, segredo, história do
+        git. <strong>Nudge para o resto.</strong> E diga, no próprio arquivo, qual é qual.</p>
+      <ul>
+        <li><strong>Todo hook falha ABERTO</strong> — um hook quebrado reporta em vez de
+          inutilizar a sessão.</li>
+        <li><strong>Escopo estreito o bastante para não ser desligado.</strong> Uma proteção que
+          dispara em trabalho comum acaba desligada, o que é pior que não tê-la. E o corolário:
+          <em>um gate que só pode ser satisfeito contornando-o ensina a contornar.</em></li>
+        <li><strong>O nudge é honesto sobre si mesmo</strong> — escreve no próprio texto que é
+          lembrete, não garantia, e aponta onde vive o enforcement.</li>
+      </ul>
+      <p class="mb-0">Para este repo, os quatro certos: <strong>gate de escrita da memória</strong>
+        (bloqueia edição de <code>SKILL.md</code> sem token verde, TTL 30 min — um verde de 30
+        minutos atrás não autoriza mais uma escrita); <strong>gate de segurança</strong>;
+        <strong>gate de encerramento</strong> (o script que já existe e ninguém ligou); e
+        <strong>nudge de roteamento</strong> (~130 tokens, porque <code>AGENTS.md</code> é lido
+        uma vez e sai de atenção numa sessão longa).</p>
+    </div>
+
+  </div>
+
+  <footer class="text-body-secondary small border-top mt-5 pt-3">
+    <p class="mb-1"><strong>huu — Playbook de ondas.</strong> Diagnóstico medido no commit
+      <code>28364d6</code> em 2026-07-30. Texto integral, com todos os
+      <code>arquivo:linha</code> e os 34 cards completos: <code>METODO.md</code> na raiz do
+      repositório. Domínios vizinhos: <code>MANIFESTO.md</code> (identidade),
+      <code>ROADMAP.md</code> (recursos).</p>
+    <p class="mb-0">Documento de arquivo único — salve, mande por anexo, abra offline.
+      Imprime com todas as abas abertas.</p>
+  </footer>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+        crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"
+        integrity="sha384-RH2xi4eIQ/gjtbs9fUXM68sLSi99C7ZWBRX1vDrVv6GQXRibxXLbwO2NGZB74MbU"
+        crossorigin="anonymous"></script>
+
+<script>
+/* ── runtime do documento ────────────────────────────────────────────────────
+   Copie este bloco inteiro, sem editar. Ele faz três coisas:
+   1. guarda o código-fonte cru ANTES de qualquer transformação (para o copiar);
+   2. destaca a sintaxe e injeta o botão de copiar;
+   3. liga as abas ao #hash da URL, nos dois sentidos.
+   ────────────────────────────────────────────────────────────────────────── */
+(function () {
+  'use strict';
+
+  // 1. Fonte cru primeiro. Depois do highlight o DOM ganha <span>; textContent ainda
+  //    devolve o texto certo, mas plugins de numeração de linha o contaminam. Guardar
+  //    antes é a única versão que nunca mente.
+  var sources = new WeakMap();
+  document.querySelectorAll('pre > code').forEach(function (code) {
+    sources.set(code, code.textContent.replace(/\n$/, ''));
+  });
+
+  // 2. Highlight. Declare sempre a linguagem na classe: a auto-detecção erra em
+  //    trechos curtos (o mesmo snippet vira "ruby" numa aba e "perl" na outra).
+  if (window.hljs) hljs.highlightAll();
+
+  // Copiar. navigator.clipboard exige contexto seguro; em file:// o comportamento
+  // varia por navegador, então o fallback com execCommand não é opcional.
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text).then(function () { return true; },
+                                                      function () { return legacyCopy(text); });
+    }
+    return Promise.resolve(legacyCopy(text));
+  }
+
+  function legacyCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    // position:fixed + opacity:0 evita que a página role até o textarea.
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length); // iOS ignora select() sozinho
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  document.querySelectorAll('pre > code').forEach(function (code) {
+    var pre = code.parentElement;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm btn-outline-secondary copy-btn';
+    btn.innerHTML = '<i class="bi bi-clipboard"></i>';
+    btn.setAttribute('aria-label', 'Copiar código');
+    btn.addEventListener('click', function () {
+      copyText(sources.get(code) || code.textContent).then(function (ok) {
+        btn.innerHTML = ok ? '<i class="bi bi-check-lg"></i>' : '<i class="bi bi-x-lg"></i>';
+        btn.classList.toggle('btn-outline-success', ok);
+        btn.classList.toggle('btn-outline-danger', !ok);
+        btn.classList.remove('btn-outline-secondary');
+        setTimeout(function () {
+          btn.innerHTML = '<i class="bi bi-clipboard"></i>';
+          btn.className = 'btn btn-sm btn-outline-secondary copy-btn';
+        }, 1500);
+      });
+    });
+    pre.appendChild(btn);
+  });
+
+  // 3. Aba ↔ URL. Sem isto, mandar "olha a aba Armadilhas" exige explicar o clique.
+  var tabs = document.querySelectorAll('[data-bs-toggle="tab"]');
+  if (!tabs.length) return;
+
+  function activateFromHash() {
+    var hash = window.location.hash;
+    if (!hash || hash.length < 2) return;
+    var target = document.querySelector(hash);
+    if (!target) return;
+    // O #hash pode apontar para o painel OU para um título dentro dele.
+    var pane = target.closest('.tab-pane') || (target.classList.contains('tab-pane') ? target : null);
+    if (!pane) return;
+    var trigger = document.querySelector('[data-bs-target="#' + CSS.escape(pane.id) + '"]');
+    if (trigger) bootstrap.Tab.getOrCreateInstance(trigger).show();
+    // O navegador já tentou rolar até o alvo — e falhou, porque naquele instante o
+    // painel ainda era display:none. Agora que apareceu, role de novo: sem isto a
+    // página abre num scroll intermediário, com as abas escondidas atrás da navbar.
+    var scrollTo = target !== pane ? target : (trigger && trigger.closest('[role="tablist"]')) || pane;
+    requestAnimationFrame(function () { scrollTo.scrollIntoView({ block: 'start' }); });
+  }
+
+  tabs.forEach(function (t) {
+    t.addEventListener('shown.bs.tab', function (e) {
+      var id = (e.target.getAttribute('data-bs-target') || '').slice(1);
+      // replaceState, não location.hash: mudar o hash direto faz a página pular.
+      if (id) history.replaceState(null, '', '#' + id);
+    });
+  });
+
+  window.addEventListener('hashchange', activateFromHash);
+  activateFromHash();
+})();
+</script>
+</body>
+</html>
