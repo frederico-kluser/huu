@@ -147,6 +147,7 @@ import { runPruneCli } from './lib/prune.js';
 import { loadRunConfig, applyRunConfig } from './lib/run-config.js';
 import { runHeadless } from './lib/headless-run.js';
 import { runDevCli } from './lib/dev-mode/dev-cli.js';
+import { runGraphCli } from './lib/graph-cli.js';
 
 import { installCrashGuard } from './lib/crash-guard.js';
 import { resolveRamPercent } from './lib/budget.js';
@@ -173,7 +174,12 @@ import { EventEmitter, setMaxListeners } from 'node:events';
 // of the lifecycle logger (creating .huu/) or terminal restorers. We
 // detect them BEFORE initializing those layers — the user expects a
 // scaffolding command to be a quiet Unix citizen.
-const NON_TUI_SUBCOMMANDS = new Set(['init-docker', 'status', 'prune']);
+// NOTE: this set is about the TUI LIFECYCLE (debug logger, safe terminal,
+// active-run sentinel), NOT about Docker. `graph` is here because it is a quiet
+// file inspector that must not create `.huu/debug-*.log` just to print a
+// listing; where it RUNS is decided by `decideReexec`, which re-execs it into
+// the container exactly like `huu dev`.
+const NON_TUI_SUBCOMMANDS = new Set(['init-docker', 'status', 'prune', 'graph']);
 const firstNonFlagArg = process.argv.slice(2).find((a) => !a.startsWith('-'));
 const isNonTui = firstNonFlagArg !== undefined && NON_TUI_SUBCOMMANDS.has(firstNonFlagArg);
 
@@ -521,6 +527,16 @@ async function main(): Promise<void> {
 
   if (filtered[0] === 'prune') {
     const code = runPruneCli({ args: filtered.slice(1) });
+    process.exit(code);
+  }
+
+  // `huu graph <subcommand>` — inspect, validate and compile the DRAWN methods
+  // saved under `.huu/dev/graphs/`. Dispatched here, ahead of the git gate, on
+  // purpose: reading a drawing is a file operation, and refusing to show a
+  // method because the directory is not a repo would be a gate with nothing
+  // behind it. Running one still needs a repo — that is `huu dev --graph`.
+  if (filtered[0] === 'graph') {
+    const code = runGraphCli({ args: filtered.slice(1), cwd: process.cwd() });
     process.exit(code);
   }
 

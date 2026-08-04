@@ -59,6 +59,9 @@ Uso:
   huu dev "<objetivo>"      Modo desenvolvimento — cria as skills de agente do
                             projeto quando faltam, depois planeja e roda épocas de
                             FRENTES paralelas como um enxame de worktrees. Ver flags dev.
+  huu graph <sub> [...]     O método DESENHADO, pelo terminal: lista, desenha, valida,
+                            compila, cria e apaga os devgraphs salvos em
+                            .huu/dev/graphs/. Ver subcomandos do graph.
   huu init-docker [...]     Gera o compose.huu.yaml no repositório atual
   huu status [...]          Inspeciona a última execução via .huu/debug-*.log
   huu prune [...]           Lista/mata containers huu órfãos + cidfiles obsoletos
@@ -80,6 +83,12 @@ Uso:
 
 flags do dev:
   --model <id>              Modelo do planejador e do enxame (obrigatório, exceto com --stub)
+  --graph <id|arquivo.json> Roda um MÉTODO QUE VOCÊ DESENHOU em vez do planner LLM. Um slug
+                            puro (a-z, 0-9, hífens) é um grafo salvo em .huu/dev/graphs/;
+                            qualquer outra coisa é um caminho para um .json. Um desenho é o
+                            método COMPLETO, então a sessão é exatamente UMA época e
+                            --epochs > 1 é recusado. As 12 flags de metodologia e as flags
+                            de modelo por papel NÃO são compiladas num desenho (aviso).
   --epochs <n>              Teto de épocas (padrão 3). Cada época planeja, roda e aterrissa.
   --fronts <n>              Teto de frentes paralelas por época (padrão 4, máx 4)
   --max-cost <usd>          Para antes da época que passaria deste gasto (as duas runs contam)
@@ -90,6 +99,22 @@ flags do dev:
   metodologias (todas desligadas por padrão; rode 'huu dev' sem objetivo para a lista completa):
   --tdd --characterize --lint-gate --fitness --diff-budget --changelog
   --standards --checklist --write-set --plan-review --traceability --verify-claims
+
+subcomandos do graph (o método desenhado — sem navegador):
+  list                      Lista os desenhos salvos (id, nós/arestas, válido?)
+  show <id>                 Desenha a topologia em TEXTO: por nó o tipo, o bloco, o join
+                            (todos vs apenas X), os braços com o destino de cada um e as
+                            arestas de retrabalho que voltam
+  validate <id>             Reporta cada erro e aviso com seu código estável e sua âncora;
+                            sai com código != 0 quando houver qualquer erro
+  compile <id> [--out <a>]  Compila o desenho num huu-pipeline-v2. Sai no stdout, ou vai
+                            para --out. UM PIPELINE GRAVADO É UM ARTEFATO PORTÁTIL: rode-o
+                            com 'huu auto <a> --config <c.json>', em qualquer repositório,
+                            sem modo dev nenhum.
+  new <id> [--from <amostra>] [--name <n>] [--force]
+                            Cria um desenho vazio, ou a partir de uma amostra que vem junto
+  rm <id>                   Apaga o desenho salvo
+  (todo subcomando respeita o --dir=<repo> global)
 
 flags do init-docker:
   --force                   Sobrescreve arquivos que já existem

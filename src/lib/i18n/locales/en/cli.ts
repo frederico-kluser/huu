@@ -58,6 +58,9 @@ Usage:
   huu dev "<goal>"          Development mode — bootstraps the project's agent
                             skills when missing, then plans and runs epochs of
                             parallel FRONTS as a worktree swarm. See dev flags.
+  huu graph <sub> [...]     The DRAWN method, from a terminal: list, show, validate,
+                            compile, create and delete the devgraphs saved under
+                            .huu/dev/graphs/. See graph subcommands.
   huu init-docker [...]     Scaffold compose.huu.yaml into the current repo
   huu status [...]          Inspect the latest run via .huu/debug-*.log
   huu prune [...]           List/kill orphan huu containers + stale cidfiles
@@ -79,6 +82,12 @@ Usage:
 
 dev flags:
   --model <id>              Model for the planner and the swarm (required unless --stub)
+  --graph <id|file.json>    Run a METHOD YOU DREW instead of the LLM planner. A bare slug
+                            (a-z, 0-9, dashes) is a graph saved under .huu/dev/graphs/;
+                            anything else is a path to a .json file. A drawing is the
+                            COMPLETE method, so the session is exactly ONE epoch and
+                            --epochs > 1 is refused. The 12 methodology flags and the
+                            per-role model flags are NOT compiled into a drawing (warned).
   --epochs <n>              Ceiling on epochs (default 3). Each epoch plans, runs and lands.
   --fronts <n>              Ceiling on parallel fronts per epoch (default 4, max 4)
   --max-cost <usd>          Stop before the epoch that would exceed this spend (both runs counted)
@@ -89,6 +98,22 @@ dev flags:
   methodologies (all OFF by default; run 'huu dev' with no goal for the full list):
   --tdd --characterize --lint-gate --fitness --diff-budget --changelog
   --standards --checklist --write-set --plan-review --traceability --verify-claims
+
+graph subcommands (the drawn method — no browser needed):
+  list                      List the saved drawings (id, nodes/edges, valid?)
+  show <id>                 Draw the topology as TEXT: per node its kind, block, join
+                            (all vs only X), branch arms with their target, and the
+                            rework edges that go back
+  validate <id>             Report every error and warning with its stable code and
+                            anchor; exits non-zero when there is any error
+  compile <id> [--out <f>]  Compile the drawing into a huu-pipeline-v2. Written to
+                            stdout, or to --out. A WRITTEN PIPELINE IS A PORTABLE
+                            ARTEFACT: run it with 'huu auto <f> --config <c.json>',
+                            in any repo, with no dev mode involved.
+  new <id> [--from <sample>] [--name <n>] [--force]
+                            Create an empty drawing, or one from a shipped sample
+  rm <id>                   Delete the saved drawing
+  (every subcommand honors the global --dir=<repo>)
 
 init-docker flags:
   --force                   Overwrite files that already exist

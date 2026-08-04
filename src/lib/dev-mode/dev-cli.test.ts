@@ -12,9 +12,14 @@
 // start huu in its default configuration.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DEV_METHODOLOGIES, methodologyUsageBlock } from './methodology-registry.js';
 import {
   DEV_MODEL_ROLE_FLAGS,
+  classifyGraphRef,
+  describeEvent,
   formatModelRouting,
   formatPlan,
   offerOrphanLanding,
@@ -22,6 +27,9 @@ import {
   parseDevCliArgs,
   runDevCli,
 } from './dev-cli.js';
+import { GRAPHS_DIR } from '../dev-graph/graph-store.js';
+import { findSample } from '../dev-graph/graph-samples.js';
+import type { DevGraph } from '../dev-graph/graph-types.js';
 import { runDevMode, type DevModeResult } from './dev-driver.js';
 import { DEV_MODEL_ROLES, resolveDevModels } from './dev-model-policy.js';
 import type { OrphanBranch } from './orphan-branches.js';
@@ -33,10 +41,19 @@ import {
   type DevState,
 } from '../types.js';
 
-// The driver's only runtime export the CLI consumes — stubbed so the
-// `runDevCli` wiring tests can inspect the exact literal it is called with
-// instead of booting a session.
-vi.mock('./dev-driver.js', () => ({ runDevMode: vi.fn() }));
+// `runDevMode` is stubbed so the wiring tests can inspect the exact literal the
+// CLI calls it with instead of booting a session.
+//
+// EVERYTHING ELSE STAYS REAL, and `resolveDevGraph` is why. It is the driver's
+// border export: the CLI calls it to refuse a bad drawing BEFORE a session
+// opens, and a stub of it would make every `--graph` test assert against a
+// fake — including the refusals, which are the whole point. Spreading the
+// original also means a future driver export cannot silently vanish from this
+// module the way a hand-written factory would drop it.
+vi.mock('./dev-driver.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./dev-driver.js')>()),
+  runDevMode: vi.fn(),
+}));
 
 /** `parseDevCliArgs` or a thrown assertion — keeps the happy path unindented. */
 function parseOk(args: string[], backend: 'pi' | 'stub' | 'azure' = 'pi') {
@@ -483,5 +500,390 @@ describe('--max-cost', () => {
 
   it('is absent by default — no ceiling is still the default', () => {
     expect(parseOk(['goal', MODEL]).maxCostUsd).toBeUndefined();
+  });
+});
+
+// ─────────────────────────────── the drawn method ────────────────────────────
+
+const DRAWN_STAMP = '2026-08-03T00:00:00.000Z';
+
+/** A tiny drawing that validates: the root prompt plus one action node. */
+function drawing(id = 'auditoria', name = 'Auditoria'): DevGraph {
+  return {
+    _format: 'huu-devgraph-v1',
+    id,
+    name,
+    createdAt: DRAWN_STAMP,
+    updatedAt: DRAWN_STAMP,
+    meta: {},
+    nodes: [
+      { id: 'entrada', kind: 'prompt', label: 'Entrada', position: { x: 0, y: 0 }, goal: 'Auditar o repositório.' },
+      { id: 'auditar', kind: 'action', label: 'Auditar', position: { x: 1, y: 0 }, block: 'implement', join: { mode: 'all' } },
+    ],
+    edges: [{ id: 'e-1', source: 'entrada', target: 'auditar' }],
+  };
+}
+
+describe('parseDevCliArgs — --graph and the epoch-default TRAP', () => {
+  const MODEL = '--model=deepseek/deepseek-v4-pro';
+
+  // THE MOST IMPORTANT TEST IN THIS FILE.
+  //
+  // `parseDevCliArgs` sends `maxEpochs ?? DEV_DEFAULT_MAX_EPOCHS` (3), and the
+  // driver REFUSES any `maxEpochs > 1` on a drawn method (`graph-conflict`) —
+  // a devgraph is the COMPLETE method, so a graph session is exactly one epoch.
+  // Left alone, those two facts mean every single graph session launched from
+  // the command line dies on huu's own default, before an agent starts. Not a
+  // rare interaction: the DEFAULT path.
+  it('does NOT send the 3-epoch default with a drawing — it sends exactly 1', () => {
+    const opts = parseOk(['objetivo', MODEL, '--graph=auditoria']);
+    expect(opts.maxEpochs).toBe(1);
+    expect(opts.maxEpochs).not.toBe(DEV_DEFAULT_MAX_EPOCHS);
+    expect(opts.graphRef).toEqual({ kind: 'id', id: 'auditoria' });
+  });
+
+  it('keeps the 3-epoch default for a PLANNER session — the compatibility pin', () => {
+    const opts = parseOk(['objetivo', MODEL]);
+    expect(opts.maxEpochs).toBe(DEV_DEFAULT_MAX_EPOCHS);
+    expect(opts.graphRef).toBeUndefined();
+  });
+
+  it('refuses --epochs > 1 with --graph in the PARSE, before any file is read', () => {
+    for (const epochs of [2, 3, 12]) {
+      const message = parseFail(['objetivo', MODEL, '--graph=auditoria', `--epochs=${epochs}`]);
+      expect(message, String(epochs)).toContain(`--epochs=${epochs}`);
+      expect(message, String(epochs)).toContain('--graph');
+      // It says WHY, and what to do instead — a refusal nobody can act on is
+      // just a wall.
+      expect(message, String(epochs)).toContain('UMA época');
+      expect(message, String(epochs)).toContain('rode sem --graph');
+    }
+  });
+
+  it('accepts the redundant --epochs=1 next to --graph', () => {
+    // 1 is what a graph session means, so asking for it is not a contradiction.
+    expect(parseOk(['objetivo', MODEL, '--graph=auditoria', '--epochs=1']).maxEpochs).toBe(1);
+  });
+
+  it('reads --graph in both spellings', () => {
+    expect(parseOk(['objetivo', MODEL, '--graph=auditoria']).graphRef).toEqual({ kind: 'id', id: 'auditoria' });
+    expect(parseOk(['objetivo', MODEL, '--graph', 'auditoria']).graphRef).toEqual({ kind: 'id', id: 'auditoria' });
+  });
+
+  it('refuses an empty --graph instead of running the planner behind the human\'s back', () => {
+    expect(parseFail(['objetivo', MODEL, '--graph='])).toContain('--graph=<id|arquivo.json>');
+  });
+
+  it('leaves graphRef ABSENT with no --graph — the byte-identical promise', () => {
+    const opts = parseOk(['objetivo', MODEL]);
+    expect(opts).not.toHaveProperty('graphRef');
+  });
+
+  it('documents --graph in the usage line', () => {
+    const usage = parseFail([]);
+    expect(usage).toContain('--graph=');
+    expect(usage).toContain('huu graph');
+  });
+});
+
+describe('classifyGraphRef — id vs path, decided with no filesystem', () => {
+  it('reads a bare slug as a SAVED graph id', () => {
+    for (const id of ['auditoria', 'a', 'portao-de-qualidade', 'x9', 'a'.repeat(40)]) {
+      expect(classifyGraphRef(id), id).toEqual({ kind: 'id', id });
+    }
+  });
+
+  it('reads anything a slug cannot be as a PATH', () => {
+    // A slug can hold neither `/` nor `.`, so the two can never be confused —
+    // which is what lets the classification stay pure.
+    for (const path of [
+      './rascunhos/auditoria.json',
+      'auditoria.json',
+      '/tmp/auditoria.json',
+      'rascunhos/auditoria',
+      '../auditoria.json',
+      'Auditoria',
+      'a'.repeat(41),
+    ]) {
+      expect(classifyGraphRef(path), path).toEqual({ kind: 'path', path });
+    }
+  });
+
+  it('trims before deciding', () => {
+    expect(classifyGraphRef('  auditoria  ')).toEqual({ kind: 'id', id: 'auditoria' });
+  });
+});
+
+describe('parseDevCliArgs — --graph warns, never refuses, about what a drawing ignores', () => {
+  const MODEL = '--model=deepseek/deepseek-v4-pro';
+
+  it('warns that the methodology flags are NOT compiled into a drawing', () => {
+    const opts = parseOk(['objetivo', MODEL, '--graph=auditoria', '--tdd', '--lint-gate']);
+    const warnings = opts.warnings.join(' ');
+    expect(warnings).toContain('--tdd');
+    expect(warnings).toContain('--lint-gate');
+    expect(warnings).toContain('IGNORA');
+    // Warned, NOT refused: a flag left over from an alias must not kill a
+    // session whose drawing already carries a tdd block.
+    expect(opts.graphRef).toEqual({ kind: 'id', id: 'auditoria' });
+    expect(opts.methodology).toEqual({ tdd: true, lintGate: true });
+  });
+
+  it('warns that per-role model routing is NOT applied to a drawing', () => {
+    const opts = parseOk(['objetivo', MODEL, '--graph=auditoria', '--models=hetero']);
+    const warnings = opts.warnings.join(' ');
+    expect(warnings).toContain('roteamento por papel');
+    expect(warnings).toContain('meta.modelId');
+    expect(opts.models).toEqual(DEV_MODEL_PRESETS.hetero);
+  });
+
+  it('stays silent about both when neither was asked for', () => {
+    const opts = parseOk(['objetivo', MODEL, '--graph=auditoria']);
+    expect(opts.warnings.join(' ')).not.toContain('IGNORA');
+  });
+
+  it('does not warn about methodology on a PLANNER session — there it IS compiled', () => {
+    const opts = parseOk(['objetivo', MODEL, '--tdd']);
+    expect(opts.warnings.join(' ')).not.toContain('IGNORA');
+  });
+});
+
+describe('describeEvent — a graph session does not end at a ceiling', () => {
+  const stopped = { type: 'stopped', reason: 'max-epochs', detail: 'o desenho rodou' } as const;
+
+  it('reports max-epochs as a ceiling on a PLANNER session', () => {
+    const line = describeEvent(stopped);
+    expect(line).toContain('max-epochs');
+    expect(line).not.toContain('desenhado');
+  });
+
+  it('reports max-epochs as a COMPLETED DRAWING when the session ran one', () => {
+    // `max-epochs` IS the clean stop of a graph session (the drawing ran), and
+    // the default sentence for it claims a limit was hit. On a graph that is
+    // simply false, and it is how a successful run reads as a truncated one.
+    const line = describeEvent(stopped, { drawnMethod: { id: 'auditoria', name: 'Auditoria' } })!;
+    expect(line).toContain('auditoria');
+    expect(line).toContain('Auditoria');
+    expect(line).toContain('rodou de ponta a ponta');
+    expect(line).toContain('NÃO é teto de épocas');
+    expect(line).toContain('o desenho rodou');
+  });
+
+  it('leaves every other stop reason alone on a graph session', () => {
+    const line = describeEvent(
+      { type: 'stopped', reason: 'landing-failed', detail: 'conflito' },
+      { drawnMethod: { id: 'auditoria', name: 'Auditoria' } },
+    );
+    expect(line).toBe('sessão encerrada: landing-failed — conflito');
+  });
+
+  it('reports a drawn method by its NODES, and a plan by its fronts', () => {
+    const plan: DevPlan = {
+      epochGoal: 'época',
+      doneWhen: 'pronto',
+      goalComplete: false,
+      fronts: [
+        {
+          id: 'cli',
+          title: 'CLI',
+          rationale: 'porque sim',
+          dependsOnFronts: [],
+          reconPrompt: 'mapeie',
+          workPrompt: 'implemente',
+          verifyCondition: 'passa',
+          maxTasks: 1,
+        },
+      ],
+    };
+    expect(describeEvent({ type: 'planned', epoch: 1, plan, warnings: [] })).toContain('1 frente(s)');
+
+    const drawn = describeEvent({
+      type: 'planned',
+      epoch: 1,
+      plan,
+      warnings: [],
+      graph: {
+        id: 'auditoria',
+        name: 'Auditoria',
+        nodeOrder: ['recon', 'auditar'],
+        stepsByNode: { recon: ['1 · recon'], auditar: ['2 · auditar'] },
+        graphRoot: '.huu/dev/s/graph/epoch-1',
+      },
+    })!;
+    // A drawing has nodes, not fronts. Reporting fronts would credit a planner
+    // that never ran.
+    expect(drawn).toContain('método desenhado "auditoria"');
+    expect(drawn).toContain('recon, auditar');
+    expect(drawn).not.toContain('frente(s)');
+  });
+});
+
+describe('runDevCli — the drawing is resolved AT THE BORDER', () => {
+  const RESULT: DevModeResult = {
+    stoppedBecause: 'max-epochs',
+    epochs: [],
+    goalComplete: false,
+    knowledge: { present: false, skillCount: 0, skills: [], bootstrapMode: 'create', reason: 'sem skills' },
+    knowledgeBootstrapped: false,
+    sessionId: 'sess-graph',
+    resumed: false,
+  };
+
+  let repo: string;
+  let originalStdout: typeof process.stdout.write;
+  let originalStderr: typeof process.stderr.write;
+  let stderrLines: string[];
+
+  function seed(graph: DevGraph): void {
+    mkdirSync(join(repo, GRAPHS_DIR), { recursive: true });
+    writeFileSync(join(repo, GRAPHS_DIR, `${graph.id}.json`), JSON.stringify(graph, null, 2), 'utf8');
+  }
+
+  beforeEach(() => {
+    repo = mkdtempSync(join(tmpdir(), 'huu-dev-graph-'));
+    stderrLines = [];
+    vi.mocked(runDevMode).mockReset();
+    vi.mocked(runDevMode).mockResolvedValue(RESULT);
+    originalStdout = process.stdout.write.bind(process.stdout);
+    originalStderr = process.stderr.write.bind(process.stderr);
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    process.stderr.write = ((chunk: unknown): boolean => {
+      stderrLines.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+  });
+
+  afterEach(() => {
+    process.stdout.write = originalStdout;
+    process.stderr.write = originalStderr;
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  const stderr = (): string => stderrLines.join('');
+  const devArgs = () => vi.mocked(runDevMode).mock.calls[0]?.[0]?.dev;
+
+  it('passes a SAVED id through as graphId, with maxEpochs 1 — the trap, end to end', () => {
+    seed(drawing());
+    return runDevCli({ args: ['objetivo', '--graph=auditoria'], cwd: repo, backend: 'stub' }).then((code) => {
+      expect(code).toBe(0);
+      const dev = devArgs();
+      expect(dev?.graphId).toBe('auditoria');
+      expect(dev).not.toHaveProperty('graph');
+      // The literal the driver receives: 1, never DEV_DEFAULT_MAX_EPOCHS, or
+      // `resolveDevGraph` would refuse it as `graph-conflict`.
+      expect(dev?.maxEpochs).toBe(1);
+    });
+  });
+
+  it('loads a PATH itself and hands the drawing over inline', async () => {
+    const file = join(repo, 'rascunho.json');
+    writeFileSync(file, JSON.stringify(drawing('do-arquivo', 'Do arquivo')), 'utf8');
+    const code = await runDevCli({ args: ['objetivo', '--graph=./rascunho.json'], cwd: repo, backend: 'stub' });
+    expect(code).toBe(0);
+    const dev = devArgs();
+    expect(dev?.graph?.id).toBe('do-arquivo');
+    expect(dev).not.toHaveProperty('graphId');
+    expect(dev?.maxEpochs).toBe(1);
+  });
+
+  it('says the method is DESENHADO in the opening summary, and names the drawing', () => {
+    seed(drawing('auditoria', 'Auditoria de segurança'));
+    return runDevCli({ args: ['objetivo', '--graph=auditoria'], cwd: repo, backend: 'stub' }).then(() => {
+      const out = stderr();
+      expect(out).toContain('DESENHADO');
+      expect(out).toContain('auditoria');
+      expect(out).toContain('Auditoria de segurança');
+      expect(out).toContain('nenhum planner LLM');
+      // It also corrects the epoch line: "até 3" would be a lie here.
+      expect(out).toContain('épocas: 1');
+    });
+  });
+
+  it('refuses a --graph file that does not exist, WITHOUT starting a session', async () => {
+    const code = await runDevCli({ args: ['objetivo', '--graph=./nao-existe.json'], cwd: repo, backend: 'stub' });
+    expect(code).toBe(1);
+    expect(stderr()).toContain('arquivo não encontrado');
+    // The refusal has to happen before anything is written: a session that
+    // opens and immediately stops has already touched the repository.
+    expect(vi.mocked(runDevMode)).not.toHaveBeenCalled();
+  });
+
+  it('refuses a --graph id nothing was saved under, and points at `huu graph list`', async () => {
+    const code = await runDevCli({ args: ['objetivo', '--graph=fantasma'], cwd: repo, backend: 'stub' });
+    expect(code).toBe(1);
+    expect(stderr()).toContain('graph-not-found');
+    expect(stderr()).toContain('huu graph list');
+    expect(vi.mocked(runDevMode)).not.toHaveBeenCalled();
+  });
+
+  it('refuses a --graph file that is not JSON, and one that is not a devgraph', async () => {
+    writeFileSync(join(repo, 'lixo.json'), '{ nope', 'utf8');
+    expect(await runDevCli({ args: ['objetivo', '--graph=./lixo.json'], cwd: repo, backend: 'stub' })).toBe(1);
+    expect(stderr()).toContain('JSON inválido');
+
+    stderrLines = [];
+    writeFileSync(join(repo, 'outro.json'), JSON.stringify({ hello: 'world' }), 'utf8');
+    expect(await runDevCli({ args: ['objetivo', '--graph=./outro.json'], cwd: repo, backend: 'stub' })).toBe(1);
+    expect(stderr()).toContain('não é um huu-devgraph-v1');
+    expect(vi.mocked(runDevMode)).not.toHaveBeenCalled();
+  });
+
+  it('refuses a drawing that parses but does not compile, naming the defect', async () => {
+    // The store saves half-drawn work on purpose, so a graph with a product-rule
+    // error is an ordinary thing to find on disk — and never a thing to run.
+    const broken = drawing('quebrado');
+    seed({
+      ...broken,
+      nodes: broken.nodes.map((node) => (node.id === 'auditar' ? { ...node, block: 'bloco-inexistente' } : node)),
+    });
+    const code = await runDevCli({ args: ['objetivo', '--graph=quebrado'], cwd: repo, backend: 'stub' });
+    expect(code).toBe(1);
+    expect(stderr()).toContain('graph-invalid');
+    expect(stderr()).toContain('unknown-block');
+    expect(vi.mocked(runDevMode)).not.toHaveBeenCalled();
+  });
+
+  it('runs a shipped SAMPLE end to end from a file', async () => {
+    const sample = findSample('portao-de-qualidade')!;
+    writeFileSync(join(repo, 'amostra.json'), JSON.stringify(sample.build(DRAWN_STAMP)), 'utf8');
+    const code = await runDevCli({ args: ['objetivo', '--graph=amostra.json'], cwd: repo, backend: 'stub' });
+    expect(code).toBe(0);
+    expect(devArgs()?.graph?.id).toBe('portao-de-qualidade');
+  });
+
+  it('leaves the dev literal free of BOTH graph keys on a planner session', async () => {
+    const code = await runDevCli({ args: ['objetivo'], cwd: repo, backend: 'stub' });
+    expect(code).toBe(0);
+    const dev = devArgs();
+    // Not `undefined` under the keys — NO keys, so a planner session compiles
+    // exactly the session huu compiles today.
+    expect(dev).not.toHaveProperty('graph');
+    expect(dev).not.toHaveProperty('graphId');
+    expect(dev?.maxEpochs).toBe(DEV_DEFAULT_MAX_EPOCHS);
+    expect(stderr()).not.toContain('DESENHADO');
+  });
+
+  it('refuses --epochs=3 with --graph before it ever looks at the disk', async () => {
+    // No graph is seeded and no file exists: if the refusal came from the
+    // driver or from a file read, this would fail with a different message.
+    const code = await runDevCli({ args: ['objetivo', '--graph=auditoria', '--epochs=3'], cwd: repo, backend: 'stub' });
+    expect(code).toBe(1);
+    expect(stderr()).toContain('--epochs=3');
+    expect(stderr()).not.toContain('graph-not-found');
+    expect(vi.mocked(runDevMode)).not.toHaveBeenCalled();
+  });
+
+  it('carries the ignored-flag warnings to stderr before the session starts', async () => {
+    seed(drawing());
+    const code = await runDevCli({
+      args: ['objetivo', '--graph=auditoria', '--tdd'],
+      cwd: repo,
+      backend: 'stub',
+    });
+    expect(code).toBe(0);
+    expect(stderr()).toContain('IGNORA as flags de metodologia');
+    // Still passed through — the driver logs its own warning and the drawing
+    // decides. Refusing here would kill a session over a leftover flag.
+    expect(devArgs()?.methodology).toEqual({ tdd: true });
   });
 });
