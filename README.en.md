@@ -819,6 +819,42 @@ Full doc: [`docs/dev-mode.md`](docs/dev-mode.md) ·
 
 ---
 
+## The drawn method (`huu-devgraph-v1`)
+
+**The answer to the contradiction above.** Instead of letting an LLM planner
+write the topology, **you draw it**: which blocks run, in which order, where a
+decision branches, where the branches rejoin. huu compiles the drawing into an
+ordinary `huu-pipeline-v2` and runs it on the wave scheduler that already exists.
+Nothing in the format lets a model add a node, an edge or a route — the human
+underwrites the **method**, the model supplies the intelligence **inside** each
+node.
+
+Four node kinds: **prompt** (the objective, one per graph, the root), **action**
+(one of the 15 catalog blocks — `recon`, `tdd`, `tests`, `refactor`, `docs`,
+`security-review`, `security-findings`, `custom`…), **research** (a question
+answered on the web, optionally branching the path) and **gate** (an LLM judge
+evaluates your condition in the integration worktree and picks the outcome).
+
+```bash
+huu graph new audit --from portao-de-qualidade   # start from a worked example
+huu graph show audit                             # the topology, as text
+huu graph validate audit                         # the drawing's rules; exits non-zero on any error
+huu graph compile audit --out p.json             # a PORTABLE pipeline
+huu dev "audit the parser" --graph=audit         # run it — no LLM planner
+```
+
+Three surfaces over one core: the **canvas** at `/graph` in the browser (React
+Flow, a palette on every arm's dot, a full inspector, live validation), the
+**`huu graph`** family in a terminal, and the **`[G]`** screen in the TUI, which
+lists, inspects in ASCII, validates and launches. A session with a drawing is
+**exactly one epoch**: Phases A and B do not happen, because the plan already
+exists — you wrote it.
+
+Full doc: [`docs/dev-graph.md`](docs/dev-graph.md) ·
+[pt-BR](docs/dev-graph.pt-BR.md).
+
+---
+
 ## Headless / one-command mode
 
 For CI, cron, demos:

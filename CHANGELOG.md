@@ -15,6 +15,17 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 ## [Unreleased]
 
+### Added
+
+- **Método desenhado (`huu-devgraph-v1`) — o humano desenha a topologia, o huu compila.** Um formato de grafo em que o HUMANO desenha o método (quais blocos rodam, em que ordem, onde ramifica, onde os ramos se juntam) e um compilador o transforma num `huu-pipeline-v2` comum, rodado pelo escalonador de ondas, pelo leque de memória e pelo merge determinístico já existentes. Isto reforça o MANIFESTO §diferencial-2: no modo dev de hoje um planner LLM escreve a topologia em runtime; com um desenho, o planner **não é chamado** — o humano subscreve o método e o modelo só fornece a inteligência DENTRO de cada nó. Nada no formato deixa um modelo acrescentar um nó, uma aresta ou uma rota.
+  - **Formato** (`src/lib/dev-graph/`): 4 tipos de nó (`prompt` · `action` · `research` · `gate`), catálogo de **15 blocos** com o par `-review` (só relata) / `-findings` (escreve uma tarefa por achado, para o nó seguinte abrir um leque), **46 códigos de erro estáveis + 4 avisos**, e **6 amostras** prontas. O zod é dono da FORMA, o `validateGraph` é dono das regras de produto e **nunca lança** — o editor valida a cada tecla e um throw ali é um canvas em branco.
+  - **Retrabalho**: uma aresta marcada `rework: true` é uma rota de VOLTA sem ser um ciclo — o desenho tem duas camadas (dependência = arestas sem `rework`, ativação = todas), e `default-outcome-is-rework` impede que o default seja o laço, porque o default dispara quando o juiz FALHA.
+  - **Join `subset`**: relaxar um join tira a DEPENDÊNCIA (de dado e de sucesso), **não** a barreira de merge BSP da onda — dito no tipo, no compilador, no aviso `join-subset-drops-barrier` e na doc.
+  - **Pesquisa na web** (`huu-research-v1`): escada de degradação A (busca com chave) → B (busca keyless) → C (`curl` de URL conhecida), que desce por **FALHA**, não só por ausência — binário instalado não é binário utilizável.
+  - **Driver** (`dev-driver.ts`): com um desenho, as Fases A e B não acontecem, a sessão é **exatamente uma época** (`--epochs > 1` é recusado) e um resume sem o desenho é **recusado** em vez de cair no planner.
+  - **Superfícies**: canvas React Flow em `/graph` + `GET|POST|PUT|DELETE /api/graphs/*`; `huu graph list|show|validate|compile|new|rm` no terminal; tela `[G]` na TUI (lista, diagrama ASCII, validação, lançamento); `huu dev --graph=<id|arquivo.json>`.
+  - **Docs**: `docs/dev-graph.md` + gêmeo pt-BR (incluindo uma seção "Limites conhecidos" honesta), seção nova em `docs/dev-mode*.md`, `docs/KEYBOARD.md` e as duas READMEs.
+
 ## [5.3.0] — 2026-07-30
 
 ### Added

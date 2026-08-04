@@ -22,9 +22,18 @@
 - ✍️ **prescrito** — prescrição de engenharia, não extração. Pode estar errada.
 - ⚠️ **específico** — vale para *este* repo/máquina/data, não transfere.
 
-Data de escrita: **2026-08-02**. Todo número 📏 abaixo foi medido nesta data, no
-commit `9ef2398`, e é reverificado a cada push por `scripts/check-metodo.ts`
-dentro do gate.
+Data de escrita: **2026-08-04**. Todo número 📏 abaixo foi medido nesta data, no
+commit `f9a0d81`, e é reverificado a cada push por `scripts/check-metodo.ts`
+dentro do gate. (O cabeçalho aponta para o commit em que a medição foi feita, não
+para o commit que a introduz — um arquivo não pode conter o próprio hash, e por
+isso o verificador trata a divergência como **aviso**, nunca como erro.)
+
+⚠ **Duas colunas deixaram de ser re-deriváveis em 2026-08-04.** O histórico do
+repositório foi reiniciado no commit `26d093b` (`v1.0.0 — clean start`), então
+`git log` já não alcança os números de **idade, autoria e churn** medidos antes
+dessa data. Eles ficam abaixo como **registro histórico**, marcados onde
+aparecem; tudo o que o `scripts/check-metodo.ts` recalcula continua sendo medido
+a cada gate.
 
 ---
 
@@ -138,7 +147,7 @@ documentação — e o §7 propõe o verificador que o transforma em vermelho.
 
 # §1 — O programa, em números medidos
 
-Todos 📏, no commit `9ef2398` (2026-08-02). Verificados por
+Todos 📏, no commit `f9a0d81` (2026-08-04). Verificados por
 `npx tsx scripts/check-metodo.ts`, que roda no gate (`scripts/gate.sh`) e
 recalcula cada linha desta tabela a partir do repositório. A tolerância é de
 **10%**: o objetivo é pegar prosa materialmente errada (uma tabela 23% fora, como
@@ -147,26 +156,26 @@ falha de gate — número exato aqui envelhece em uma tarde.
 
 | | |
 |---|---|
-| Idade | **363 commits**, de 2026-05-20 a 2026-08-02 (~74 dias) |
-| Autores | 284 `fredericokluser` · 22 `Claude` · 19+2 nome completo · 15 `t` · 1 externo |
-| Total versionado | **171.599 linhas** (`git ls-files \| xargs wc -l`) |
-| `src/` | **458 arquivos, 108.204 linhas** (inclui client JS/CSS/HTML) |
-| `src/` TS+TSX **não-teste** | **62.275 linhas** |
-| Testes | **154 arquivos, 35.622 linhas** → razão teste:código **0,57 : 1** |
-| `docs/` | 34 arquivos, **11.385 linhas** (9 pares en/pt-BR) |
-| Skills | **22** `SKILL.md` + **22** `LEARNINGS.md` + `catalog.md` |
-| `AGENTS.md` | **145 linhas, 6.644 chars ≈ 1,7k tokens** — carregados em **toda** sessão |
-| Pipelines default | 7 pipelines, 13 módulos, **4.317 linhas** |
+| Idade ⚠ histórico | **363 commits**, de 2026-05-20 a 2026-08-02 (~74 dias) — medido antes do `v1.0.0 — clean start`; `git log` já não o alcança |
+| Autores ⚠ histórico | 284 `fredericokluser` · 22 `Claude` · 19+2 nome completo · 15 `t` · 1 externo — idem |
+| Total versionado | **199.520 linhas** (`git ls-files \| xargs wc -l`) |
+| `src/` | **432 arquivos, 134.297 linhas** (inclui client JS/CSS/HTML) |
+| `src/` TS+TSX **não-teste** | **67.842 linhas** |
+| Testes | **147 arquivos, 46.519 linhas** → razão teste:código **0,69 : 1** |
+| `docs/` | 36 arquivos, **14.554 linhas** (9 pares en/pt-BR) |
+| Skills | **21** `SKILL.md` + **21** `LEARNINGS.md` + `catalog.md` |
+| `AGENTS.md` | **152 linhas, 7.031 chars ≈ 1,8k tokens** — carregados em **toda** sessão |
+| Pipelines default | 7 pipelines, 14 módulos, **4.321 linhas** |
 | Verificação automática | gate local (`typecheck` + `test`) **e CI**: `.github/workflows/gate.yml` roda os **9 passos** de `scripts/gate.sh` em todo push/PR; `core.hooksPath` segue opt-in |
-| Dogfooding | **17 merges de onda** do próprio huu (`merge(w4…w6-…): wave N front`), todos em **2026-07-28** (45 commits nesse dia) |
+| Dogfooding ⚠ histórico | **17 merges de onda** do próprio huu (`merge(w4…w6-…): wave N front`), todos em **2026-07-28** (45 commits nesse dia) — anterior ao `clean start` |
 | Higiene de branch | **0** branches `huu/**` órfãos |
-| Marcadores | `TODO`/`FIXME`/`XXX` concentrados em `requeue.test.ts` (8), `orchestrator/index.ts` (5), `card-focus.test.ts` (5), `types/orchestrator.ts` (4) |
+| Marcadores | `TODO`/`FIXME`/`XXX` concentrados em `requeue.test.ts` (8), `dev-graph/node-catalog.ts` (6), `orchestrator/index.ts` (5), `card-focus.test.ts` (5), `types/orchestrator.ts` (4) |
 
-**A razão teste:código de 0,57 : 1 é o número mais informativo da tabela**, e
+**A razão teste:código de 0,69 : 1 é o número mais informativo da tabela**, e
 precisa de contexto para não ser lida como elogio nem como acusação. O playbook de
 origem chegou a 1,3 : 1 porque o oráculo dele era um sistema que ninguém podia
 executar — quase tudo que se escrevia era instrumento de medida. Aqui o oráculo é
-o próprio código, executável, e 0,57 : 1 com 154 arquivos de teste colocados ao
+o próprio código, executável, e 0,69 : 1 com 147 arquivos de teste colocados ao
 lado do módulo é uma cobertura respeitável **em quantidade**. A pergunta que o §7
 faz não é "tem teste suficiente?" e sim **"se isto desaparecer, o que fica
 vermelho?"** — e é aí que aparecem os buracos.
@@ -230,13 +239,19 @@ com `wc -l`) 📏:
 
 | Arquivo | Linhas | Toques | churn×linhas | Papel de singleton |
 |---|---:|---:|---:|---|
-| `CHANGELOG.md` | 1.610 | 84 | 135.240 | **O mais tocado do repositório** — mas o conflito garantido **foi resolvido**: escreve-se um fragmento por card em `.changes/`, consolidado por `scripts/changelog.ts` |
+| `CHANGELOG.md` | 1.621 | 84 | 136.164 | **O mais tocado do repositório** — mas o conflito garantido **foi resolvido**: escreve-se um fragmento por card em `.changes/`, consolidado por `scripts/changelog.ts` |
 | `src/orchestrator/index.ts` | 2.816 | 48 | 135.168 | **O pior hoje.** Loop de etapa + guard + requeue + retry num arquivo. Todo card de orquestração colide |
-| `README.md` + `README.en.md` | 1.068 + 1.058 | 56 + 48 | 58.632 + 49.776 | Gêmeos que precisam ficar em sincronia — agora com paridade **verificada** por `scripts/check-twins.ts` no gate |
-| `src/web/client/styles.css` | 1.523 | 27 | 37.989 | CSS único do cliente |
-| `src/web/server.ts` | 1.351 | 27 | 32.292 | Servidor HTTP+SSE único |
-| `src/web/client/index.html` | 722 | 30 | 21.660 | Markup único do cliente — herdou parte do churn que era do `app.js` |
+| `README.md` + `README.en.md` | 1.055 + 1.047 | 56 + 48 | 59.080 + 50.256 | Gêmeos que precisam ficar em sincronia — agora com paridade **verificada** por `scripts/check-twins.ts` no gate |
+| `src/web/client/styles.css` | 1.802 | 27 | 48.654 | CSS único do cliente |
+| `src/web/server.ts` | 1.242 | 27 | 33.534 | Servidor HTTP+SSE único |
+| `src/web/client/index.html` | 682 | 30 | 20.460 | Markup único do cliente — herdou parte do churn que era do `app.js` |
 | `src/web/run-manager.ts` | 923 | 20 | 18.460 | Dono do estado multi-run no servidor |
+
+⚠ **A coluna *Linhas* é medida a cada gate; as colunas *Toques* e *churn×linhas*
+não são.** Os toques vêm da medição de 2026-08-02, feita sobre o histórico
+anterior ao `v1.0.0 — clean start` (`26d093b`), que `git log` já não alcança —
+`churn×linhas` é o produto recalculado sobre as linhas de hoje. Trate a ORDEM
+como o sinal (ela não mudou), não a magnitude.
 
 **Como ler esta tabela.** Cada linha é uma onda que **não pode ter dois cards**, ou
 um refactor a fazer antes de alargar a onda. Três leituras não óbvias:

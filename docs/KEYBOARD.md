@@ -11,6 +11,8 @@ Portuguese, matching the recon prompts). Below is the complete map.
 - `M` saved pipelines
 - `P` **run across projects** — mark several project folders and run a pipeline
   once per folder (see *Project picker (multi-mark)* below)
+- `G` **drawn methods** — the devgraph library (`huu-devgraph-v1`): a method a
+  human drew, which compiles into a pipeline (see *Drawn methods* below)
 - `O` open **Options** — RAM budget dial + AI provider API keys (also opens automatically when a run aborts on an invalid key)
 - `↑↓` highlight a pipeline from the discovered list · `ENTER` load it
 - `0`–`9` jump straight to the labelled pipeline; `[0]` is the pinned **default** (unit-test suite), shown first and colored distinctly
@@ -51,6 +53,39 @@ and the screen warns when you leave it).
 Next comes the pipeline picker (`SPACE` to pick several, `ENTER` to take the
 highlighted one — either way each pipeline runs once per marked project), then the
 shared backend/model/timeout/resolver flow, then the run queue.
+
+## Drawn methods — `G` from Welcome
+
+The devgraph library. This screen is a **picker, not a canvas**: drawing needs a
+mouse, so that lives in the browser at `/graph`. Here you list the drawings, read
+one out loud, check it, and run it. A graph compiles into a `huu-pipeline-v2` and
+is handed to the ordinary backend → model → timeout → resolver → dashboard chain.
+Graphs are read from `<repo>/.huu/dev/graphs/`. Full doc:
+[dev-graph.md](dev-graph.md).
+
+### List
+
+- `↑↓` highlight a drawing · `ENTER` **inspect** it (opens the detail screen)
+- `R` **compile & run** the highlighted drawing. A graph flagged `needs fixing`
+  refuses here and says how many blocking problems it has — the compiler throws
+  on an invalid graph, so the run affordance never reaches it.
+- `S` open the **worked examples**; the example is saved as *your* graph, under
+  its own id (suffixed `-2`, `-3`… if that id is taken), so nothing is loaded
+  behind your back and you can throw it away
+- `ESC` back
+
+Inside the examples list: `↑↓` choose · `ENTER` save it · `ESC` back.
+
+### Detail (one drawing)
+
+Two panes over the same graph — the ASCII diagram, in the order the method
+actually runs, and the list of problems the validator found.
+
+- `↑↓` scroll the active pane one line at a time
+- `V` switch pane (diagram ↔ problems)
+- `R` **compile & run** this drawing
+- `L` reload it from disk (pick up an edit made in the browser)
+- `ESC` back to the list
 
 ## Run queue (review before starting)
 

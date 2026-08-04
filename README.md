@@ -826,6 +826,41 @@ Doc completa: [`docs/dev-mode.pt-BR.md`](docs/dev-mode.pt-BR.md) ·
 
 ---
 
+## Método desenhado (`huu-devgraph-v1`)
+
+**A resposta à contradição acima.** Em vez de deixar um planner LLM escrever a
+topologia, **você a desenha**: quais blocos rodam, em que ordem, onde uma decisão
+ramifica, onde os ramos voltam a se juntar. O huu compila o desenho num
+`huu-pipeline-v2` comum e o roda no escalonador de ondas que já existe. Nada no
+formato permite que um modelo acrescente um nó, uma aresta ou uma rota — o humano
+subscreve o **método**, o modelo fornece a inteligência **dentro** de cada nó.
+
+Quatro tipos de nó: **prompt** (o objetivo, um por grafo, a raiz), **ação** (um
+dos 15 blocos do catálogo — `recon`, `tdd`, `tests`, `refactor`, `docs`,
+`security-review`, `security-findings`, `custom`…), **pesquisa** (uma pergunta na
+internet que pode ramificar o caminho) e **verificação** (um juiz LLM avalia a
+sua condição no worktree de integração e escolhe a saída).
+
+```bash
+huu graph new auditoria --from portao-de-qualidade   # começa de uma amostra
+huu graph show auditoria                             # a topologia, em texto
+huu graph validate auditoria                         # as regras do desenho; sai != 0 se houver erro
+huu graph compile auditoria --out p.json             # um pipeline PORTÁTIL
+huu dev "auditar o parser" --graph=auditoria         # roda — sem planner LLM
+```
+
+Três superfícies sobre um núcleo só: o **canvas** em `/graph` no navegador
+(React Flow, paleta na bolinha de cada braço, inspector completo, validação ao
+vivo), a família **`huu graph`** no terminal, e a tela **`[G]`** na TUI, que lista,
+inspeciona em ASCII, valida e lança. Uma sessão com desenho é **exatamente uma
+época**: as Fases A e B não acontecem, porque o plano já existe — quem o escreveu
+foi você.
+
+Doc completa: [`docs/dev-graph.pt-BR.md`](docs/dev-graph.pt-BR.md) ·
+[EN](docs/dev-graph.md).
+
+---
+
 ## Modo headless / um-comando
 
 Pra CI, cron, demos:

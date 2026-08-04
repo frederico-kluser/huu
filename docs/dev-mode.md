@@ -92,6 +92,41 @@ reason: the evidence points at *the same cheap model as both author and
 reviewer* as the single most fragile assumption in the design, so the default
 preset breaks it and the `monoculture` preset exists to A/B against it.
 
+## The drawn method — when NOT to use the planner
+
+The contradiction above has an exit, and it is a first-class one: **draw the
+method yourself.** A [devgraph](dev-graph.md) (`huu-devgraph-v1`) is a graph a
+human draws — which blocks run, in which order, where a decision branches, where
+the branches rejoin — which huu compiles into the same `huu-pipeline-v2` this
+mode already emits. With one in hand the LLM planner is **never called**, and
+dev mode stops contradicting differential #2: the human underwrites the method,
+the model supplies the intelligence inside each node.
+
+```bash
+huu dev "<the objective>" --graph=<id>              # saved under .huu/dev/graphs/
+huu dev "<the objective>" --graph=./drafts/a.json   # a file
+```
+
+Which one to reach for:
+
+| | LLM planner (no `--graph`) | Drawn method (`--graph=…`) |
+|---|---|---|
+| **Use it when** | you know the goal but not the shape of the work; the repo is unfamiliar; you expect to learn between epochs | you already know the method — an audit, a test-generation pass, a migration you have run before |
+| Topology decided by | a model, at run time | you, before the run |
+| Epochs | replans until the goal is met, or the ceiling | **exactly one**; `--epochs > 1` with `--graph` is refused |
+| Knowledge phase (A) + planning (B) | both run | **neither runs** — there is no plan to write and nobody to brief |
+| Phase 0 (skills bootstrap) | runs | **runs too** |
+| Methodology flags · per-role model routing | compiled into the epoch | **ignored, with a warning** — a drawing has boxes, not roles |
+| Approval gate | signs the model's plan | signs your drawing, one front per node |
+
+Everything *after* the run is identical on both paths: the landing merge, the
+epoch evidence, the blackboard commit. Draw and inspect with `huu graph
+list|show|validate|compile|new|rm`, the `[G]` screen in the TUI, or the `/graph`
+canvas in the browser.
+
+Full documentation: [`docs/dev-graph.md`](dev-graph.md) ·
+[pt-BR](dev-graph.pt-BR.md).
+
 ## Usage
 
 ```bash

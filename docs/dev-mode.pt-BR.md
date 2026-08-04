@@ -95,6 +95,41 @@ pela mesma razão: a evidência aponta *o mesmo modelo barato como autor E
 revisor* como a suposição mais frágil do desenho, então o preset padrão a
 quebra e o preset `monoculture` existe para permitir o A/B contra ela.
 
+## O método desenhado — quando NÃO usar o planner
+
+A contradição acima tem uma saída, e ela é de primeira classe: **desenhe o método
+você mesmo.** Um [devgraph](dev-graph.pt-BR.md) (`huu-devgraph-v1`) é um grafo que
+um humano desenha — quais blocos rodam, em que ordem, onde uma decisão ramifica,
+onde os ramos voltam a se juntar — e que o huu compila no mesmo `huu-pipeline-v2`
+que este modo já emite. Com um em mãos o planner LLM **nunca é chamado**, e o modo
+de desenvolvimento deixa de contrariar o diferencial #2: o humano subscreve o
+método, o modelo fornece a inteligência dentro de cada nó.
+
+```bash
+huu dev "<o objetivo>" --graph=<id>              # salvo em .huu/dev/graphs/
+huu dev "<o objetivo>" --graph=./drafts/a.json   # um arquivo
+```
+
+Qual dos dois pegar:
+
+| | Planner LLM (sem `--graph`) | Método desenhado (`--graph=…`) |
+|---|---|---|
+| **Use quando** | você sabe o objetivo mas não a forma do trabalho; o repositório é desconhecido; você espera aprender entre épocas | você já conhece o método — uma auditoria, uma geração de testes, uma migração que você já fez antes |
+| Topologia decidida por | um modelo, em tempo de execução | você, antes do run |
+| Épocas | replaneja até o objetivo ser cumprido, ou até o teto | **exatamente uma**; `--epochs > 1` com `--graph` é recusado |
+| Fase de conhecimento (A) + planejamento (B) | as duas rodam | **nenhuma roda** — não há plano a escrever nem quem instruir |
+| Fase 0 (bootstrap de skills) | roda | **roda também** |
+| Flags de metodologia · roteamento de modelo por papel | compilados na época | **ignorados, com aviso** — um desenho tem caixas, não papéis |
+| Portão de aprovação | assina o plano do modelo | assina o seu desenho, uma frente por nó |
+
+Tudo o que vem *depois* do run é idêntico nos dois caminhos: o merge de
+aterrissagem, a evidência da época, o commit do quadro-negro. Desenhe e
+inspecione com `huu graph list|show|validate|compile|new|rm`, a tela `[G]` da
+TUI, ou o canvas `/graph` no navegador.
+
+Documentação completa: [`docs/dev-graph.pt-BR.md`](dev-graph.pt-BR.md) ·
+[EN](dev-graph.md).
+
 ## Uso
 
 ```bash
