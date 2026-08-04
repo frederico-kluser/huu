@@ -372,7 +372,11 @@ export function makeModelCombo(opts) {
     // A custom id the user typed isn't in the catalog — show the id verbatim so
     // they can see exactly what will run, instead of a blank field.
     input.value = md ? md.label : (get() || '');
-    input.placeholder = opts.placeholder
+    // `placeholder`/`emptyHint` arrive as FUNCTIONS, never as strings — see the
+    // comment on `resolverCombo` below: a `t()` evaluated in the options object
+    // would run at module-evaluation time, before `initI18n()` has a catalog.
+    const ph = typeof opts.placeholder === 'function' ? opts.placeholder() : opts.placeholder;
+    input.placeholder = ph
       || (S.models.length ? t('web.combo.search_placeholder') : t('web.combo.type_placeholder'));
   }
 
@@ -385,7 +389,7 @@ export function makeModelCombo(opts) {
       // Custom / free-typed id (or no pick yet): no catalog metadata to show.
       h.innerHTML = get()
         ? `<span class="custom">${esc(t('web.combo.custom_model_id'))}</span> · ${esc(t('web.combo.as_is'))}`
-        : (opts.emptyHint || '');
+        : ((typeof opts.emptyHint === 'function' ? opts.emptyHint() : opts.emptyHint) || '');
       return;
     }
     const price = md.inputPrice != null ? `$${md.inputPrice}/M in · $${md.outputPrice ?? '?'}/M out` : '';
@@ -524,8 +528,19 @@ const resolverCombo = makeModelCombo({
   inputId: 'resolverModelInput', listId: 'resolverModelList', hintId: 'resolverModelHint',
   get: () => S.conflictResolverModelId, set: (v) => { S.conflictResolverModelId = v; },
   allowEmpty: true,
-  placeholder: t('web.config.resolver_placeholder_value'),
-  emptyHint: t('web.config.resolver_hint'),
+  // LAZY, AND THAT IS NOT A STYLE CHOICE. These two used to be `t(...)` called
+  // right here, in a module-level object literal — so they ran at IMPORT time,
+  // before `boot()` ever awaited `initI18n()`, with the catalog still `{}`. The
+  // browser `t()` THROWS on a key it cannot find (deliberately: an untranslated
+  // string must never reach a screen), so the throw happened while the module
+  // graph was still being evaluated and took the WHOLE page down — every route,
+  // on first load, with nothing but a console error. Nothing caught it because
+  // no test imported this module. Keep every `t()` in this file inside a
+  // function; `editorNavHints()` in PipelineEditor.tsx is the same fix on the
+  // Ink side, and `dev.test.js` now imports the real entry so a relapse fails
+  // the suite.
+  placeholder: () => t('web.config.resolver_placeholder_value'),
+  emptyHint: () => t('web.config.resolver_hint'),
 });
 
 /* ---------------- Launch: concurrency mode ---------------- */

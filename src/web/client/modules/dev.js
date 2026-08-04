@@ -5,6 +5,8 @@ import { buildDevMethodologyPayload, parseStoredMethodology } from '../dev-metho
 import { esc, toast, shortDir, projectName } from './utils.js';
 import { $, S, api, DEFAULT_MODEL_ID, sessionKey, backendSpecName, providerInfoById, providerReady, providerBackend } from './state.js';
 import { showView, switchMode, refreshModelsAndKeys, wireModeSwitch } from './launch.js';
+import { makeGraphApi } from './graph/graph-api-client.js';
+import { RUN_GRAPH_EVENT } from './graph/canvas.js';
 import { saveSettings, SETTINGS_LS } from './settings.js';
 import { renderActiveRun } from './board.js';
 import { boot } from '../app.js';
@@ -60,6 +62,10 @@ export function initDevSurface() {
   // Open the browser where the user's projects live, and preselect the repo
   // the server is already running in.
   S.devDir = S.devDir || S.cwd || '';
+  // AFTER `S.devDir` is seeded: the method library lives inside the project, so
+  // listing it before the project is known would ask the server for its own cwd
+  // and then immediately re-ask for the real one.
+  initDevGraphPicker();
   loadDevFolder(devFolderState.path || S.boot?.workspace || S.cwd || '');
   renderDevGoalCount();
   // A session may already be running (started from the CLI, another tab, or
@@ -305,6 +311,245 @@ export function devMethodologyPayload() {
   return buildDevMethodologyPayload([...devMethods.on]);
 }
 
+/* ---------------- Dev: the METHOD — planner, or a drawing ----------------
+   The one decision MANIFESTO says the human must underwrite: who writes the
+   TOPOLOGY. `planner` is what dev mode has always done and stays the default,
+   byte for byte — with it selected this module contributes NOTHING to the POST
+   body. `graph` names a method saved under `.huu/dev/graphs/` inside the chosen
+   project, and adds exactly one field: `graphId`.
+
+   TWO THINGS THAT ARE NOT DETAILS.
+
+   1. `maxEpochs` IS NEVER SENT, and that is load-bearing rather than tidy: a
+      drawn session is exactly ONE epoch, and `resolveDevGraph` answers an
+      explicit `maxEpochs >= 2` with `graph-conflict` — a 400 before the session
+      exists. This form has never sent the field; the rule is to keep it that
+      way, not to special-case the graph path.
+
+   2. THE LIST IS PER PROJECT. `GET /api/graphs?dir=` reads the store inside the
+      run directory, so changing the project invalidates the list — and a
+      `graphId` that belonged to the old project would resolve to
+      `graph-not-found` on a server that is otherwise fine. `selectDevDir`
+      therefore clears the selection and refetches. */
+const devGraphPick = {
+  /** @type {'planner' | 'graph'} */
+  source: 'planner',
+  id: '',
+  /** @type {any[]} */
+  items: [],
+  /** The directory `items` was listed for — '' means "never listed". */
+  dir: '',
+  loading: false,
+  error: '',
+};
+
+/** The graph transport, built once over the app's own `api()`. */
+const devGraphApi = makeGraphApi(api);
+
+/** True only when the server advertised the graph catalog. */
+export function devGraphAvailable() {
+  const b = S.boot || {};
+  return Array.isArray(b.graphNodeKinds) && b.graphNodeKinds.length > 0;
+}
+
+/** `'planner'` (the default) or `'graph'`. */
+export function devMethodSource() {
+  return devGraphPick.source;
+}
+
+/** The summary of the selected drawing, or null. */
+export function devSelectedGraph() {
+  if (devGraphPick.source !== 'graph' || !devGraphPick.id) return null;
+  return devGraphPick.items.find((g) => g && g.id === devGraphPick.id) || null;
+}
+
+/**
+ * The `graphId` half of the POST body — `{}` on the planner path.
+ *
+ * Same additive contract as `devModelsPayload` / `devMethodologyPayload`: a
+ * form left on the planner posts the body it posted before this panel existed.
+ */
+export function devGraphPayload() {
+  if (devGraphPick.source !== 'graph') return {};
+  const id = (devGraphPick.id || '').trim();
+  return id ? { graphId: id } : {};
+}
+
+/** Render + wire the picker. Idempotent; called once from initDevSurface. */
+export function initDevGraphPicker() {
+  const panel = $('devMethodSourcePanel');
+  if (!panel) return;
+  // A server that doesn't advertise the graph catalog gets no panel and a POST
+  // body identical to today's — the same degradation as the role and
+  // methodology panels above.
+  panel.hidden = !devGraphAvailable();
+  if (panel.hidden) return;
+  // The canvas may have handed a method over BEFORE this surface ever booted
+  // (`/graph` → "Rodar este método" → switchMode('dev')), so adopt it here too
+  // rather than only in the event listener.
+  if (S.devGraphId) {
+    devGraphPick.source = 'graph';
+    devGraphPick.id = S.devGraphId;
+  }
+  renderDevMethodSource();
+  void loadDevGraphs();
+}
+
+/** Paint the segmented control, the hint and the picker row from module state. */
+export function renderDevMethodSource() {
+  const seg = $('devMethodSourceSeg');
+  if (seg) {
+    // Array.from: NodeListOf has no Symbol.iterator without the DOM.Iterable lib.
+    for (const b of Array.from(seg.querySelectorAll('[data-method-source]'))) {
+      b.classList.toggle('on', b.getAttribute('data-method-source') === devGraphPick.source);
+    }
+  }
+  const hint = $('devMethodSourceHint');
+  if (hint) {
+    hint.textContent =
+      devGraphPick.source === 'graph'
+        ? t('web.dev.method_source_hint_graph')
+        : t('web.dev.method_source_hint_planner');
+  }
+  const row = $('devGraphPickRow');
+  if (row) row.hidden = devGraphPick.source !== 'graph';
+  renderDevGraphOptions();
+  renderDevGraphMetaWarnings();
+}
+
+/**
+ * Fill the `<select>` from the listing, and say what the selection implies.
+ *
+ * An INVALID graph is listed rather than filtered out: it is the human's own
+ * drawing, hiding it would read as "it was deleted", and the repair is one
+ * click away on the canvas. It carries a tag, and the submit refuses it.
+ */
+export function renderDevGraphOptions() {
+  const sel = /** @type {HTMLSelectElement | null} */ ($('devGraphSelect'));
+  if (!sel) return;
+  const rows = [`<option value="">${esc(t('web.dev.graph_pick_placeholder'))}</option>`];
+  for (const g of devGraphPick.items) {
+    const label = `${g.name || g.id}${g.valid === false ? ' ⚠ ' + t('web.dev.graph_invalid_tag') : ''}`;
+    rows.push(
+      `<option value="${esc(g.id)}"${g.id === devGraphPick.id ? ' selected' : ''}>${esc(label)}</option>`,
+    );
+  }
+  sel.innerHTML = rows.join('');
+  sel.value = devGraphPick.id || '';
+
+  const picked = devSelectedGraph();
+  const name = $('devGraphPickedName');
+  if (name) name.textContent = picked ? picked.name || picked.id : '';
+  const hint = $('devGraphHint');
+  if (!hint) return;
+  hint.classList.remove('dev-graph-hint--bad');
+  if (devGraphPick.error) {
+    hint.textContent = devGraphPick.error;
+    hint.classList.add('dev-graph-hint--bad');
+  } else if (!devGraphPick.items.length) {
+    hint.textContent = t('web.dev.graph_pick_empty');
+  } else if (picked && picked.valid === false) {
+    hint.textContent = t('web.dev.err_graph_invalid');
+    hint.classList.add('dev-graph-hint--bad');
+  } else if (picked) {
+    hint.textContent = t('web.dev.graph_meta', {
+      nodes: Number(picked.nodeCount) || 0,
+      edges: Number(picked.edgeCount) || 0,
+    });
+  } else {
+    hint.textContent = '';
+  }
+}
+
+/**
+ * Say — never hide — that the routing and the methodology are metadata here.
+ *
+ * The driver records both on the session and warns
+ * (`graphSessionWarnings` → `planWarnings`), but compiles neither into a
+ * drawing: a devgraph expresses method by BEING drawn, and it has nodes rather
+ * than roles. Hiding the panels would teach the opposite lesson — that the
+ * choice does not exist — and would silently discard a selection the human
+ * still wants the moment they switch back to the planner.
+ */
+export function renderDevGraphMetaWarnings() {
+  const on = devGraphPick.source === 'graph';
+  for (const id of ['devModelsMetaWarn', 'devMethodMetaWarn']) {
+    const el = $(id);
+    if (el) el.hidden = !on;
+  }
+}
+
+/**
+ * List the project's saved methods.
+ *
+ * Cheap and idempotent: it re-lists only when the directory changed, or when
+ * forced (the picker was just opened, or a session refused the selection).
+ */
+export async function loadDevGraphs(force = false) {
+  if (!devGraphAvailable()) return;
+  const dir = S.devDir || '';
+  if (!force && devGraphPick.dir === dir && devGraphPick.items.length) return;
+  devGraphPick.loading = true;
+  try {
+    const res = await devGraphApi.list(dir);
+    devGraphPick.items = Array.isArray(res && res.graphs) ? res.graphs : [];
+    devGraphPick.dir = dir;
+    devGraphPick.error = '';
+    // A selection the new project does not hold is a `graph-not-found` waiting
+    // to happen — drop it here, where the human can see the picker go empty.
+    if (devGraphPick.id && !devGraphPick.items.some((g) => g && g.id === devGraphPick.id)) {
+      devGraphPick.id = '';
+    }
+  } catch (e) {
+    devGraphPick.items = [];
+    devGraphPick.dir = dir;
+    devGraphPick.error = t('web.dev.graph_pick_failed', { message: e.message });
+  } finally {
+    devGraphPick.loading = false;
+    renderDevGraphOptions();
+  }
+}
+
+/** Switch between the planner and a drawing. */
+export function setDevMethodSource(source) {
+  devGraphPick.source = source === 'graph' ? 'graph' : 'planner';
+  renderDevMethodSource();
+  if (devGraphPick.source === 'graph') void loadDevGraphs();
+}
+
+/** Pick (or clear) the drawing this session will run. */
+export function selectDevGraph(id) {
+  devGraphPick.id = (id || '').trim();
+  S.devGraphId = devGraphPick.id;
+  renderDevGraphOptions();
+}
+
+/**
+ * Adopt the method the CANVAS handed over, and show the form.
+ *
+ * The canvas deliberately does not POST: a session needs a goal, a project and
+ * a model routing, and this form already owns all three. So `/graph` names the
+ * method and this brings the human here with it selected.
+ */
+export function adoptDevGraphFromCanvas(id, name) {
+  const graphId = (id || '').trim();
+  if (!graphId) return;
+  S.devGraphId = graphId;
+  S.devGraphName = name || graphId;
+  devGraphPick.source = 'graph';
+  devGraphPick.id = graphId;
+  // The dev surface may never have booted (a direct /graph load) — booting it
+  // is what fills the folder browser, the models and this very picker.
+  if (!S.devBooted) initDevSurface();
+  switchMode('dev');
+  renderDevMethodSource();
+  // Force: the human may have saved this very method seconds ago, so a cached
+  // listing from before the save would not contain it.
+  void loadDevGraphs(true);
+  const goal = /** @type {HTMLTextAreaElement | null} */ ($('devGoal'));
+  if (goal) goal.focus();
+}
+
 /* ---------------- Dev: project selector ----------------
    The same filesystem browser the pipeline flow uses, but SINGLE-select: a dev
    session ends in a merge into one repo's working branch, so "one project" is
@@ -332,9 +577,14 @@ export async function loadDevFolder(path) {
 }
 
 export function selectDevDir(path) {
+  const changed = S.devDir !== path;
   S.devDir = path;
   $('devPickedName').textContent = projectName(path);
   if (devFolderState.listing) renderDevFolderList(devFolderState.listing);
+  // The method store lives INSIDE the project (`.huu/dev/graphs/`), so another
+  // project is another library. Re-listing here is what stops a `graphId` from
+  // the previous project reaching the server as a `graph-not-found`.
+  if (changed) void loadDevGraphs(true);
 }
 
 export function renderDevFolderList(d) {
@@ -513,6 +763,75 @@ export function devChips(pairs) {
     .join('')}</span>`;
 }
 
+/**
+ * The middle of the session panel: WHAT IS ABOUT TO RUN.
+ *
+ * Three blocks, in this order, and each independent of the others:
+ *
+ *   1. the METHOD — the drawing's node list when the session is a drawing, the
+ *      planner's fronts when it is not. A drawn session has no "fronts"; the
+ *      compiler emits nodes, and printing invented fronts over a drawing would
+ *      describe a plan nobody wrote;
+ *   2. `planWarnings`, ALWAYS. This used to hang off `plan` being truthy, which
+ *      made it disappear in exactly the states where it matters most — and it
+ *      is where a human discovers that their twelve methodology boxes and their
+ *      per-role routing were NOT compiled into the drawing;
+ *   3. nothing else. THIS STRING IS REWRITTEN ON EVERY SSE FRAME, so anything
+ *      interactive mounted in here would be destroyed a few times a second.
+ *      Buttons belong to the stable elements in index.html (`#devGate`,
+ *      `#devResumeGate`), which is why the resume recovery is wired there.
+ *
+ * Pure: a session in, HTML out. That is what lets the shapes be asserted.
+ */
+export function devPlanHtml(session) {
+  const out = [];
+  const drawn = session.drawnMethod;
+  const graph = session.graph;
+  if (drawn && drawn.id) {
+    out.push(`<div class="dev-plan__head">${esc(t('web.dev.method_head', { name: drawn.name || drawn.id }))}</div>`);
+    if (drawn.description) out.push(`<div class="muted dev-plan__done">${esc(drawn.description)}</div>`);
+    const order = graph && Array.isArray(graph.nodeOrder) ? graph.nodeOrder : [];
+    if (order.length) {
+      const steps = (graph && graph.stepsByNode) || {};
+      out.push(`<div class="muted dev-plan__done">${esc(t('web.dev.method_nodes'))}</div>`);
+      out.push(
+        `<div class="dev-graph-nodes">${order
+          .map((nodeId, i) => {
+            const n = Array.isArray(steps[nodeId]) ? steps[nodeId].length : 0;
+            return `<span class="dev-graph-node"><span class="dev-graph-node__order">${i + 1}</span>` +
+              `<span>${esc(nodeId)}</span>` +
+              `<span class="dev-graph-node__steps">${esc(t('web.dev.method_steps', { count: n }))}</span></span>`;
+          })
+          .join('')}</div>`,
+      );
+      if (graph.graphRoot) {
+        out.push(`<div class="dev-graph-root">${esc(t('web.dev.method_root', { path: graph.graphRoot }))}</div>`);
+      }
+    } else {
+      // `drawnMethod` lands at start(), `graph` only on the `planned` event.
+      out.push(`<div class="muted dev-plan__done">${esc(t('web.dev.method_compiling'))}</div>`);
+    }
+  } else if (session.plan) {
+    const plan = session.plan;
+    out.push(`<div class="dev-plan__head">${esc(plan.epochGoal)}</div>`);
+    out.push(`<div class="muted dev-plan__done">${esc(t('web.dev.done_when', { text: plan.doneWhen }))}</div>`);
+    for (const f of plan.fronts) {
+      out.push(
+        `<div class="dev-front"><div class="dev-front__title">${esc(f.title)} <span class="muted">[${esc(f.id)}]</span></div>` +
+        `<div class="muted">${esc(f.rationale)}</div>` +
+        `<div class="muted dev-front__meta">${esc(t('web.dev.front_max', { count: f.maxTasks }))}` +
+        `${f.dependsOnFronts.length ? ' · ' + esc(t('web.dev.front_after', { list: f.dependsOnFronts.join(', ') })) : ' · ' + esc(t('web.dev.front_parallel'))}</div></div>`,
+      );
+    }
+  }
+  const warnings = Array.isArray(session.planWarnings) ? session.planWarnings : [];
+  if (warnings.length) {
+    out.push(`<div class="dev-plan__head">${esc(t('web.dev.plan_warnings'))}</div>`);
+    for (const w of warnings) out.push(`<div class="dev-warn">⚠ ${esc(w)}</div>`);
+  }
+  return out.join('');
+}
+
 export function renderDevSession(session) {
   if (!session) return;
   S.devSession = session;
@@ -535,6 +854,18 @@ export function renderDevSession(session) {
     rows.push(
       `<div class="dev-row"><span class="muted">${esc(t('web.dev.row_session'))}</span><span><code>${esc(session.sessionId)}</code>` +
       `${session.resumed ? ` <span class="muted">(${esc(t('web.dev.resumed'))})</span>` : ''}</span></div>`,
+    );
+  }
+  // THE DRAWING, FROM THE FIRST FRAME. `drawnMethod` is set at start() — before
+  // the knowledge bootstrap, long before the compile — precisely so this row can
+  // say "this session is your method, not a model's" while everything else is
+  // still empty. Absent ⇒ a planner session, and this row simply is not there.
+  const drawn = session.drawnMethod;
+  if (drawn && drawn.id) {
+    rows.push(
+      `<div class="dev-row"><span class="muted">${esc(t('web.dev.row_method'))}</span>` +
+      `<span>${esc(drawn.name || drawn.id)} <code>${esc(drawn.id)}</code>` +
+      `${drawn.description ? `<br><span class="muted">${esc(drawn.description)}</span>` : ''}</span></div>`,
     );
   }
   // The models that ACTUALLY ran — the effective ids, after preset expansion
@@ -563,21 +894,7 @@ export function renderDevSession(session) {
   }
   $('devStatus').innerHTML = rows.join('');
 
-  const plan = session.plan;
-  $('devPlan').innerHTML = plan
-    ? `<div class="dev-plan__head">${esc(plan.epochGoal)}</div>` +
-      `<div class="muted dev-plan__done">${esc(t('web.dev.done_when', { text: plan.doneWhen }))}</div>` +
-      plan.fronts
-        .map(
-          (f) =>
-            `<div class="dev-front"><div class="dev-front__title">${esc(f.title)} <span class="muted">[${esc(f.id)}]</span></div>` +
-            `<div class="muted">${esc(f.rationale)}</div>` +
-            `<div class="muted dev-front__meta">${esc(t('web.dev.front_max', { count: f.maxTasks }))}` +
-            `${f.dependsOnFronts.length ? ' · ' + esc(t('web.dev.front_after', { list: f.dependsOnFronts.join(', ') })) : ' · ' + esc(t('web.dev.front_parallel'))}</div></div>`,
-        )
-        .join('') +
-      (session.planWarnings || []).map((w) => `<div class="dev-warn">⚠ ${esc(w)}</div>`).join('')
-    : '';
+  $('devPlan').innerHTML = devPlanHtml(session);
 
   $('devGate').hidden = !session.awaitingApproval;
   renderDevResumeGate(session);
@@ -617,6 +934,27 @@ export function renderDevSession(session) {
 /* Resume gate: a previous session with THIS goal stopped unfinished. Declining
    is not destructive — it just starts a fresh session (its own blackboard
    namespace), so the old epochs stay on disk. */
+/**
+ * The drawing the previous session ran, if any — `{graphId, graphName}`.
+ *
+ * NOTE THE SHAPE. `resumeOffer.drawnMethod` keeps `DevState`'s key names
+ * (`graphId`/`graphName`) because it describes what is ON DISK, while the LIVE
+ * session's `drawnMethod` is `{id, name}`. Reading one with the other's keys
+ * yields `undefined` and a resume that silently loses its method, so the two
+ * accessors are separated here and used nowhere else.
+ */
+export function resumeOfferGraph(session) {
+  const o = session && session.resumeOffer;
+  const d = o && o.drawnMethod;
+  return d && d.graphId ? { graphId: d.graphId, graphName: d.graphName || d.graphId } : null;
+}
+
+/** The drawing the LIVE start request resolved to — `{id, name}` shaped. */
+export function liveSessionGraphId(session) {
+  const d = session && session.drawnMethod;
+  return (d && d.id) || '';
+}
+
 export function renderDevResumeGate(session) {
   const gate = $('devResumeGate');
   if (!gate) return;
@@ -624,11 +962,104 @@ export function renderDevResumeGate(session) {
   const body = $('devResumeBody');
   if (!body) return;
   const o = session.resumeOffer;
-  body.innerHTML = o
-    ? `<div class="dev-row"><span class="muted">${esc(t('web.dev.row_session'))}</span><span><code>${esc(o.sessionId || '')}</code></span></div>` +
-      `<div class="dev-row"><span class="muted">${esc(t('web.dev.row_goal'))}</span><span>${esc(o.goal || '')}</span></div>` +
-      `<div class="dev-row"><span class="muted">${esc(t('web.dev.row_progress'))}</span><span>${esc(t('web.dev.progress', { done: Number(o.epochsDone) || 0, next: Number(o.nextEpoch) || 1 }))}</span></div>`
-    : `<div class="muted">${esc(t('web.dev.resume_generic'))}</div>`;
+  const drawn = resumeOfferGraph(session);
+  // THE TRAP THIS CLOSES. `dev-driver.ts` REFUSES a resume that does not bring
+  // the same drawing back (`graph-missing-on-resume`) — and it is right to: a
+  // session a human opened as a drawing must never continue as a model's plan.
+  // But the offer used to say only "resume session X", so the human clicked
+  // "continue" on a session whose next epoch could not start, with nothing on
+  // screen naming the method to re-select. Now the gate NAMES it, and says
+  // whether this attempt is already carrying it.
+  const carried = drawn && liveSessionGraphId(session) === drawn.graphId;
+  const rows = o
+    ? [
+        `<div class="dev-row"><span class="muted">${esc(t('web.dev.row_session'))}</span><span><code>${esc(o.sessionId || '')}</code></span></div>`,
+        `<div class="dev-row"><span class="muted">${esc(t('web.dev.row_goal'))}</span><span>${esc(o.goal || '')}</span></div>`,
+        `<div class="dev-row"><span class="muted">${esc(t('web.dev.row_progress'))}</span><span>${esc(t('web.dev.progress', { done: Number(o.epochsDone) || 0, next: Number(o.nextEpoch) || 1 }))}</span></div>`,
+      ]
+    : [`<div class="muted">${esc(t('web.dev.resume_generic'))}</div>`];
+  if (drawn) {
+    rows.push(
+      `<div class="dev-row"><span class="muted">${esc(t('web.dev.resume_method'))}</span>` +
+      `<span>${esc(drawn.graphName)} <code>${esc(drawn.graphId)}</code></span></div>`,
+    );
+    rows.push(
+      carried
+        ? `<div class="muted">${esc(t('web.dev.resume_method_ready'))}</div>`
+        : `<div class="dev-warn">⚠ ${esc(t('web.dev.resume_method_missing', { id: drawn.graphId }))}</div>`,
+    );
+  }
+  body.innerHTML = rows.join('');
+
+  // The accept BUTTON is a stable element in index.html — it survives this
+  // repaint, which is exactly why the recovery hangs off it and not off
+  // anything built here.
+  const accept = /** @type {HTMLButtonElement | null} */ ($('devResumeAccept'));
+  if (accept) {
+    accept.textContent = drawn
+      ? t('web.dev.resume_accept_with_graph', { name: drawn.graphName })
+      : t('web.dev.resume_accept');
+  }
+}
+
+/**
+ * Answer the resume gate — re-supplying the drawing when it is missing.
+ *
+ * `POST /api/dev/resume` carries ONE bit (`accept`); the drawing only ever
+ * reaches the driver through the START request, because `resolveDevGraph` reads
+ * `graph`/`graphId` off the params and a resume re-opens a session, not its
+ * arguments. So when this attempt is not already carrying the previous
+ * session's method there is nothing to add to the accept: the only honest fix
+ * is to stop this attempt and re-issue the START with `graphId` and
+ * `resume: 'auto'` — which is the same answer the human just clicked, spelled
+ * in the one place the server reads it.
+ *
+ * Nothing is lost by the restart: the refusal precedes every side effect
+ * (no worktree, no run id, no blackboard commit), and `resume: 'auto'` adopts
+ * the previous session's id and epoch numbering.
+ */
+export async function acceptDevResume() {
+  const session = S.devSession;
+  const drawn = resumeOfferGraph(session);
+  if (!drawn || liveSessionGraphId(session) === drawn.graphId) {
+    await api('/api/dev/resume', { method: 'POST', body: JSON.stringify({ accept: true }) });
+    return;
+  }
+  toast(t('web.dev.resume_restarting', { id: drawn.graphId }));
+  try {
+    await api('/api/dev/abort', { method: 'POST', body: '{}' });
+    await waitForDevIdle();
+    // Adopt it in the FORM too, so the panel and the request agree and a second
+    // start from the UI carries the same method.
+    devGraphPick.source = 'graph';
+    devGraphPick.id = drawn.graphId;
+    S.devGraphId = drawn.graphId;
+    renderDevMethodSource();
+    await api('/api/dev', {
+      method: 'POST',
+      body: JSON.stringify(
+        devStartBody(session.goal || '', session.modelId || devFallbackModelId(), {
+          runDirectory: session.runDirectory || S.devDir,
+          approval: session.approval || devApprovalMode(),
+          graphId: drawn.graphId,
+          resume: 'auto',
+        }),
+      ),
+    });
+  } catch (e) {
+    toast(t('web.dev.resume_restart_failed', { id: drawn.graphId, message: e.message }), true);
+  }
+}
+
+/** Poll until the manager reports no live session (abort is asynchronous). */
+export async function waitForDevIdle(tries = 40, waitMs = 100) {
+  for (let i = 0; i < tries; i += 1) {
+    let session = null;
+    try { session = (await api('/api/dev')).session; } catch { return false; }
+    if (!session || session.active === false) return true;
+    await new Promise((r) => setTimeout(r, waitMs));
+  }
+  return false;
 }
 
 /* Orphan gate: huu integration branches that are ahead of HEAD, i.e. work an
@@ -659,6 +1090,74 @@ export function devFrontsCap() {
   const on = /** @type {HTMLButtonElement | null} */ ($('devFrontsSeg').querySelector('button.on'));
   if (!on || on.dataset.frontsMode !== 'manual') return undefined;
   return Number(/** @type {HTMLInputElement} */ ($('devFronts')).value);
+}
+
+/**
+ * The whole `POST /api/dev` body, as one value.
+ *
+ * EXTRACTED SO THE BYTES ARE ASSERTABLE. The invariant this feature has to keep
+ * is "a dev session with no drawing is byte-identical to the one before the
+ * drawing existed", and the only honest way to pin that is to compare the
+ * object two configurations produce — not to read the handler and believe it.
+ *
+ * `maxEpochs` is absent, deliberately and on BOTH paths (see `devGraphPick`).
+ *
+ * @param {string} goal
+ * @param {string} modelId
+ * @param {Record<string, any>} [extra] resume-path overrides; nothing else uses it
+ */
+export function devStartBody(goal, modelId, extra = {}) {
+  // VERBATIM from the submit handler this replaced, `S.boot` included — i.e.
+  // NOT included. `backendSpecName(id, boot)` resolves the key-spec name out of
+  // `boot.backends`, so omitting the second argument makes it return
+  // `undefined` and `apiKey` always undefined here (queue.js passes it; this
+  // form never did). That is a pre-existing bug and it is left ALONE on
+  // purpose: "a session without a drawing posts the same bytes" is the
+  // invariant this wave has to keep, and quietly starting to send a key would
+  // break it in the one direction nobody would test for.
+  const specName = backendSpecName(S.backend);
+  return {
+    goal,
+    provider: S.provider,
+    modelId,
+    apiKey: sessionKey(specName) || undefined,
+    runDirectory: S.devDir,
+    approval: devApprovalMode(),
+    // No maxEpochs on purpose: the session runs until the planner reports
+    // the goal complete or the user aborts.
+    maxFronts: devFrontsCap(),
+    // `models` / `modelsPreset`, or NOTHING when no role is pinned —
+    // `modelId` above stays the fallback for every unset role, so an
+    // untouched panel POSTs the body this form has always posted.
+    ...devModelsPayload(),
+    // `methodology`, or NOTHING when every toggle is off — the same
+    // byte-identical contract as the routing fields above.
+    ...devMethodologyPayload(),
+    // `graphId`, or NOTHING on the planner path — same contract again.
+    ...devGraphPayload(),
+    ...extra,
+  };
+}
+
+/**
+ * Why the form cannot be submitted yet — a translated sentence, or null.
+ *
+ * The server refuses each of these too (`graph-not-found`, `graph-invalid`), so
+ * this is not the gate; it is the ANSWER, given before the round-trip and in
+ * terms of the repair rather than a stop code.
+ */
+export function devSubmitBlocker(goal, modelId) {
+  if (!goal) return { message: t('web.dev.err_no_goal'), focus: 'devGoal' };
+  if (!modelId) return { message: t('web.dev.err_no_model'), focus: '' };
+  if (!S.devDir) return { message: t('web.dev.err_no_dir'), focus: '' };
+  if (devMethodSource() === 'graph') {
+    const picked = devSelectedGraph();
+    if (!picked) return { message: t('web.dev.err_no_graph'), focus: 'devGraphSelect' };
+    if (picked.valid === false) {
+      return { message: t('web.dev.err_graph_invalid'), focus: 'devGraphSelect' };
+    }
+  }
+  return null;
 }
 
 export function wireDev() {
@@ -738,36 +1237,52 @@ export function wireDev() {
     renderDevMethodology();
   });
 
+  // The METHOD panel. Both hosts are stable, so the listeners are delegated and
+  // wired once; null-safe so a stale cached shell degrades to "planner only".
+  const sourceSeg = $('devMethodSourceSeg');
+  if (sourceSeg) sourceSeg.addEventListener('click', (ev) => {
+    const btn = ev.target instanceof Element ? ev.target.closest('[data-method-source]') : null;
+    if (!btn) return;
+    setDevMethodSource(btn.getAttribute('data-method-source'));
+  });
+  const graphSelect = $('devGraphSelect');
+  if (graphSelect) graphSelect.addEventListener('change', (ev) => {
+    const el = /** @type {HTMLSelectElement | null} */ (ev.target);
+    selectDevGraph(el ? el.value : '');
+  });
+  // Intercepted, not followed: a real navigation to /graph reloads the page —
+  // dropping the SSE stream and the live board — and its href never gets the
+  // `?token=` that `tokenizeNavLinks` only adds to the mode-switch anchors.
+  const openCanvas = $('devGraphOpenCanvas');
+  if (openCanvas) openCanvas.addEventListener('click', (ev) => {
+    const mouse = /** @type {MouseEvent} */ (ev);
+    if (mouse.metaKey || mouse.ctrlKey || mouse.shiftKey || mouse.altKey || mouse.button !== 0) return;
+    ev.preventDefault();
+    switchMode('graph');
+  });
+  // The canvas hands a saved method over through the document (see
+  // RUN_GRAPH_EVENT) rather than by importing this module — `launch.js` already
+  // imports the canvas, so the reverse import would close an ESM cycle.
+  document.addEventListener(RUN_GRAPH_EVENT, (ev) => {
+    const detail = /** @type {CustomEvent} */ (ev).detail || {};
+    adoptDevGraphFromCanvas(detail.id, detail.name);
+  });
+
   $('devForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const goal = /** @type {HTMLTextAreaElement} */ ($('devGoal')).value.trim();
-    if (!goal) { toast(t('web.dev.err_no_goal'), true); $('devGoal').focus(); return; }
     const modelId = devFallbackModelId();
-    if (!modelId) { toast(t('web.dev.err_no_model'), true); return; }
-    if (!S.devDir) { toast(t('web.dev.err_no_dir'), true); return; }
+    const blocked = devSubmitBlocker(goal, modelId);
+    if (blocked) {
+      toast(blocked.message, true);
+      if (blocked.focus) $(blocked.focus)?.focus();
+      return;
+    }
 
-    const specName = backendSpecName(S.backend);
     try {
       const res = await api('/api/dev', {
         method: 'POST',
-        body: JSON.stringify({
-          goal,
-          provider: S.provider,
-          modelId,
-          apiKey: sessionKey(specName) || undefined,
-          runDirectory: S.devDir,
-          approval: devApprovalMode(),
-          // No maxEpochs on purpose: the session runs until the planner reports
-          // the goal complete or the user aborts.
-          maxFronts: devFrontsCap(),
-          // `models` / `modelsPreset`, or NOTHING when no role is pinned —
-          // `modelId` above stays the fallback for every unset role, so an
-          // untouched panel POSTs the body this form has always posted.
-          ...devModelsPayload(),
-          // `methodology`, or NOTHING when every toggle is off — the same
-          // byte-identical contract as the routing fields above.
-          ...devMethodologyPayload(),
-        }),
+        body: JSON.stringify(devStartBody(goal, modelId)),
       });
       toast(t('web.dev.session_started', { id: res.sessionId }));
     } catch (e) {
@@ -799,7 +1314,14 @@ export function wireDev() {
       catch (e) { toast(e.message, true); }
     });
   };
-  wireGate('devResumeAccept', '/api/dev/resume', { accept: true });
+  // Accept is NOT a plain wireGate: when the previous session ran a drawing
+  // this attempt is not carrying, accepting has to re-issue the START with the
+  // `graphId` (see acceptDevResume). Reject stays one bit.
+  const resumeAccept = $('devResumeAccept');
+  if (resumeAccept) resumeAccept.addEventListener('click', async () => {
+    try { await acceptDevResume(); }
+    catch (e) { toast(e.message, true); }
+  });
   wireGate('devResumeReject', '/api/dev/resume', { accept: false });
   wireGate('devOrphanLand', '/api/dev/orphans', { action: 'land' });
   wireGate('devOrphanIgnore', '/api/dev/orphans', { action: 'ignore' });

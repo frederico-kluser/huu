@@ -15,6 +15,7 @@ determinístico ao fim de cada estágio.
 | Escrever meu próprio pipeline JSON | [Guia do schema](pipeline-json-guide.md) |
 | Fazer uma etapa descobrir os arquivos da próxima (scope `memory`) | [Scope memory](memory-scope.pt-BR.md) · [EN](memory-scope.md) |
 | Desenvolver com enxame de frentes paralelas a partir de um objetivo | [Modo de desenvolvimento](dev-mode.pt-BR.md) · [EN](dev-mode.md) |
+| Desenhar eu mesmo o método (nós, ramos e retrabalho) em vez de deixar o planner decidir | [Método desenhado](dev-graph.pt-BR.md) · [EN](dev-graph.md) |
 | Entender por que um run falhou (sintoma → causa → ação) | [Troubleshooting](troubleshooting.pt-BR.md) · [EN](troubleshooting.md) |
 | Rodar auditorias na esteira (GitHub Actions / GitLab) | [CI](ci.pt-BR.md) · [EN](ci.md) |
 | Trocar o idioma da interface (en / pt-BR) e adicionar traduções | [i18n](i18n.pt-BR.md) · [EN](i18n.md) |

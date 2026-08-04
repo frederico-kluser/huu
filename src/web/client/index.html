@@ -429,6 +429,34 @@
             <div class="folder-list" id="devFolderList"></div>
           </section>
 
+          <!-- METHOD: who writes the topology. Either the LLM planner
+               decomposes the goal (what dev mode has always done, and the
+               default), or huu compiles a method the human DREW at /graph.
+               Picking a drawing sends `graphId` on the POST and NOTHING else
+               changes shape — a session left on "planner" posts the exact body
+               it posted before this panel existed. The panel hides itself on a
+               server that doesn't advertise the graph catalog, same degradation
+               as the role and methodology panels below. -->
+          <section class="panel glass" id="devMethodSourcePanel" hidden>
+            <div class="panel__title">
+              <span data-i18n="web.dev.method_source">Method</span>
+              <span class="count" id="devGraphPickedName"></span>
+            </div>
+            <div class="field">
+              <div class="segmented" id="devMethodSourceSeg">
+                <button type="button" class="on" data-method-source="planner" data-i18n="web.dev.method_source_planner">LLM planner</button>
+                <button type="button" data-method-source="graph" data-i18n="web.dev.method_source_graph">Method you drew</button>
+              </div>
+              <p class="muted wizard-hint" id="devMethodSourceHint" data-i18n="web.dev.method_source_hint_planner">The planner decomposes your goal into parallel fronts, epoch after epoch.</p>
+            </div>
+            <div class="field" id="devGraphPickRow" hidden>
+              <label for="devGraphSelect" data-i18n="web.dev.graph_pick">Saved method</label>
+              <select id="devGraphSelect" class="combo__input"></select>
+              <p class="muted wizard-hint" id="devGraphHint"></p>
+              <a class="btn btn--ghost btn--sm" id="devGraphOpenCanvas" href="/graph" data-i18n="web.dev.graph_open_canvas">Open the canvas</a>
+            </div>
+          </section>
+
           <!-- MODEL -->
           <section class="panel glass">
             <div class="panel__title"><span data-i18n="web.config.model">Model</span></div>
@@ -459,6 +487,14 @@
                 <span data-i18n="web.dev.route_roles">Route each role to its own model</span>
                 <span class="muted" id="devModelsSummary">preset “hetero”</span>
               </div>
+              <!-- A DRAWN method has NODES, not roles. The driver records the
+                   routing on the session and warns (`graphSessionWarnings` →
+                   `planWarnings`), but compiles none of it. Announced, never
+                   hidden: a panel that vanishes teaches nothing. -->
+              <div class="dev-meta-warn" id="devModelsMetaWarn" hidden>
+                <span class="dev-meta-warn__tag" data-i18n="web.dev.graph_meta_only">not compiled into the drawing</span>
+                <span data-i18n-html="web.dev.graph_meta_warning">A drawn method is compiled from the <strong>drawing</strong>.</span>
+              </div>
               <div class="field">
                 <label data-i18n="web.dev.preset">Preset</label>
                 <div class="segmented segmented--sm" id="devPresetSeg"></div>
@@ -481,6 +517,15 @@
                catalog (a stale build), same degradation as the role panel. -->
           <section class="panel glass" id="devMethodPanel" hidden>
             <div class="panel__title"><span data-i18n="web.dev.methodology">Methodology</span></div>
+            <!-- Same story as the routing panel above: a devgraph expresses
+                 method by BEING drawn (drop the tdd block, draw a gate), so the
+                 twelve flags travel as session metadata and compile to nothing.
+                 The boxes stay usable — switching back to the planner must not
+                 cost the human their selection. -->
+            <div class="dev-meta-warn" id="devMethodMetaWarn" hidden>
+              <span class="dev-meta-warn__tag" data-i18n="web.dev.graph_meta_only">not compiled into the drawing</span>
+              <span data-i18n-html="web.dev.graph_meta_warning">A drawn method is compiled from the <strong>drawing</strong>.</span>
+            </div>
             <div class="method-list" id="devMethodList"></div>
             <div class="config-hint muted" data-i18n="web.dev.methodology_hint">All OFF by default — with nothing checked, the session compiles exactly the pipeline it compiles today. Each option changes the compiled STRUCTURE (steps, gates, rubrics); none gives the model new fields.</div>
           </section>

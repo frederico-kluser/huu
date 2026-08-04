@@ -124,6 +124,73 @@ function armLabelOf(arms, id) {
 }
 
 /**
+ * The name of the event the canvas fires when the human asks to RUN a drawing.
+ *
+ * A DOM event, and not a function call, for one structural reason: `launch.js`
+ * imports this module (`initGraphSurface`), so importing `dev.js` — or
+ * `launch.js` — from here would close an ESM cycle. The document is the one
+ * seam both surfaces already share. `detail` carries `{id, name}`; the same
+ * values are mirrored onto `S.devGraphId` / `S.devGraphName` so a listener that
+ * wires up later still finds the selection.
+ */
+export const RUN_GRAPH_EVENT = 'huu:run-graph';
+
+/**
+ * Hand a SAVED drawing over to development mode.
+ *
+ * The canvas deliberately does NOT post `/api/dev` itself. A dev session needs
+ * a goal, a project directory and a model routing, and all three already have
+ * one owner — the /dev form. Starting from here would mean a second folder
+ * browser, a second goal box and a second model panel that could disagree with
+ * the first. So this only NAMES the method; `dev.js` pre-selects it and the
+ * ordinary submit is what starts the session (carrying `graphId`, and never
+ * `maxEpochs` — a drawn session is exactly one epoch).
+ *
+ * @param {{id?: string, name?: string}} graph
+ */
+export function runGraphInDevMode(graph) {
+  const id = (graph && graph.id) || '';
+  const name = (graph && graph.name) || id;
+  if (!id) return false;
+  S.devGraphId = id;
+  S.devGraphName = name;
+  if (typeof document === 'undefined' || typeof CustomEvent !== 'function') return false;
+  document.dispatchEvent(new CustomEvent(RUN_GRAPH_EVENT, { detail: { id, name } }));
+  return true;
+}
+
+/**
+ * Why the drawing cannot be run yet — or `null` when it can.
+ *
+ * PURE, and exported, because "what does this button refuse and why" is a rule,
+ * not a pixel. Order matters: a broken method is a worse problem than an
+ * unsaved one, and saying "save it first" about a graph with six errors would
+ * send the human to the wrong repair.
+ *
+ * `saved` is REFERENCE equality against the last document that came off the
+ * wire (save/open/from-sample), which is exactly "unchanged since the server
+ * last saw it": every mutation in `graph-model.js` returns a new object. It
+ * errs toward "unsaved", which is the harmless direction — `huu dev --graph`
+ * reads the FILE, so running an edited-but-unsaved canvas would run the old
+ * method with the new drawing on screen.
+ *
+ * @param {{state?: string, errors?: any[], warnings?: any[], message?: string} | null} check
+ * @param {boolean} saved
+ * @returns {string | null} the translated reason, or null when it may run
+ */
+export function runBlockedReason(check, saved) {
+  const state = (check && check.state) || 'idle';
+  const errors = (check && Array.isArray(check.errors) && check.errors) || [];
+  if (state === 'idle' || state === 'pending') return t('web.graph.run_blocked_checking');
+  if (state === 'failed') {
+    return t('web.graph.run_blocked_check_failed', { message: (check && check.message) || '' });
+  }
+  if (errors.length > 0) return t('web.graph.run_blocked_invalid', { count: errors.length });
+  if (!saved) return t('web.graph.run_blocked_unsaved');
+  return null;
+}
+
+/**
  * The whole surface.
  *
  * Every dependency is INJECTED (`graphApi`, `toast`, `samples`, `initialGraph`,
@@ -152,6 +219,13 @@ export function GraphCanvasApp(props) {
   // edit, because a pipeline compiled from a drawing that has since changed is
   // a claim about a method nobody is looking at.
   const [compile, setCompile] = useState(EMPTY_COMPILE);
+  // The last document that came OFF THE WIRE — a save's answer, a graph opened
+  // from the library, a sample the server materialised. It is the only honest
+  // answer to "is what I see on disk?", and it starts as `null` on purpose: a
+  // canvas restored from `S.graphDoc` after a view swap cannot prove anything
+  // about the file, and "save it again" costs one click while running the wrong
+  // method costs an epoch.
+  const [savedDoc, setSavedDoc] = useState(null);
 
   // Latest-value refs so every handler below can be created ONCE. React Flow
   // remounts a node whose `nodeTypes` or callbacks change identity, and a
@@ -391,6 +465,9 @@ export function GraphCanvasApp(props) {
   const adoptGraph = useCallback((doc) => {
     if (!doc) return;
     setGraph(doc);
+    // It came from the store, so it IS the file — that is what makes "open it
+    // from the library, press Run" work without a pointless re-save.
+    setSavedDoc(doc);
     setSelectedId(null);
     setPalette(null);
   }, []);
@@ -429,7 +506,10 @@ export function GraphCanvasApp(props) {
     try {
       const res = await graphApi.save(graphRef.current, props.dir);
       // The STORE re-stamps `updatedAt`, so what came back is the truth.
-      if (res && res.graph) setGraph(res.graph);
+      if (res && res.graph) {
+        setGraph(res.graph);
+        setSavedDoc(res.graph);
+      }
       notifyRef.current(
         t('web.graph.saved', { name: (res && res.graph && res.graph.name) || '' }),
       );
@@ -450,6 +530,8 @@ export function GraphCanvasApp(props) {
         // and answers with the graph that actually reached the disk.
         if (res && res.graph) {
           setGraph(res.graph);
+          // `/from-sample` WRITES the graph before answering, so it is on disk.
+          setSavedDoc(res.graph);
           setSelectedId(null);
         }
       } catch (err) {
@@ -483,6 +565,14 @@ export function GraphCanvasApp(props) {
     ...grouped.global.map((issue, i) => issueItem(issue, i, 'err', 'gph-global__item')),
     ...groupedWarn.global.map((issue, i) => issueItem(issue, i, 'warn', 'gph-global__item')),
   ];
+
+  /* ── Running it ────────────────────────────────────────────────────────────
+     The refusal is computed on the CLIENT even though the server would refuse
+     too (`graph-not-found` / `graph-invalid` on `POST /api/dev`): a disabled
+     button with the reason under it answers before the round-trip, and names
+     the repair instead of a stop code. */
+  const runBlocked = runBlockedReason(check, savedDoc !== null && savedDoc === graph);
+  const onRun = typeof props.onRun === 'function' ? props.onRun : runGraphInDevMode;
 
   const selectedNode = nodeById(graph, selectedId);
   const paletteNode = palette ? nodeById(graph, palette.sourceId) : null;
@@ -615,6 +705,35 @@ export function GraphCanvasApp(props) {
               { className: 'gph-status', 'data-s': statusSeverity },
               h('span', { className: 'gph-status__dot' }),
               h('span', { className: 'gph-status__text' }, statusText),
+            ),
+            h(
+              'div',
+              { className: 'gph-run' },
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'btn btn--primary btn--sm gph-run__btn',
+                  disabled: runBlocked !== null,
+                  title: runBlocked || t('web.graph.run_title'),
+                  onClick: () => {
+                    const doc = graphRef.current;
+                    onRun(doc);
+                    notifyRef.current(
+                      t('web.graph.run_handoff', { name: doc.name || doc.id || '' }),
+                    );
+                  },
+                },
+                t('web.graph.run'),
+              ),
+              h(
+                'span',
+                {
+                  className: 'gph-run__why',
+                  'data-blocked': runBlocked === null ? '0' : '1',
+                },
+                runBlocked === null ? t('web.graph.run_ready') : runBlocked,
+              ),
             ),
             globalRows.length > 0
               ? h('ul', { className: 'gph-global' }, globalRows)

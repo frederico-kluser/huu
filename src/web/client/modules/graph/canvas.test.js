@@ -28,7 +28,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { messagesFor } from '../../../../lib/i18n/index.js';
 import { ACTION_BLOCKS, NODE_KINDS } from '../../../../lib/dev-graph/node-catalog.js';
 import { setCatalog } from '../../i18n.js';
-import { mountGraphCanvas } from './canvas.js';
+import { S } from '../state.js';
+import { RUN_GRAPH_EVENT, mountGraphCanvas, runBlockedReason, runGraphInDevMode } from './canvas.js';
 import { addNode, connect, edgesOf, emptyGraph, nodeById, nodesOf } from './graph-model.js';
 
 /* The catalog is the SERVER's own declaration surface, imported rather than
@@ -108,6 +109,7 @@ function mount(initialGraph, options = {}) {
     },
   };
 
+  const runs = [];
   const mounted = mountGraphCanvas(host, {
     graphApi,
     dir: '',
@@ -118,9 +120,23 @@ function mount(initialGraph, options = {}) {
     onGraphChange: (doc) => {
       latest.graph = doc;
     },
+    // The hand-off seam. Left injected (like every other dependency here) so
+    // the suite can read what the canvas would send to development mode; the
+    // DEFAULT path — the `huu:run-graph` document event — is exercised on its
+    // own below, with no `onRun` at all.
+    ...(options.onRun === null ? {} : { onRun: (doc) => runs.push(doc) }),
   });
 
-  return { host, mounted, toasts, calls, latest };
+  return { host, mounted, toasts, calls, latest, runs };
+}
+
+/** The "Rodar este método" button, and the sentence that explains it. */
+function runButton(host) {
+  return host.querySelector('.gph-run__btn');
+}
+
+function runWhy(host) {
+  return host.querySelector('.gph-run__why');
 }
 
 /** The clickable row of one outbound arm. `arm` is '' for a node that does not branch. */
@@ -653,5 +669,241 @@ describe('the panel — name, save and the sample library', () => {
     await flush();
     const options = Array.from(ctx.host.querySelectorAll('.gph-panel__select option'));
     expect(options.map((option) => option.value)).toEqual(['', 'recon-fanout']);
+  });
+});
+
+/* ──────────────────────────────────────────────────────────────────────────
+   RUNNING THE DRAWING — "Rodar este método".
+
+   The canvas does NOT post `/api/dev`. A dev session needs a goal, a project
+   directory and a model routing, and the /dev form already owns all three; a
+   second folder browser here could only disagree with the first. So this button
+   HANDS THE METHOD OVER and the ordinary /dev submit is what starts the
+   session. What this block pins is therefore: WHEN the hand-off is offered, WHY
+   it is refused, and WHAT travels with it.
+
+   WHAT IT CANNOT SEE: jsdom has no layout, so nothing here says the button is
+   visible, reachable by tab order, or not covered by the minimap. `disabled`
+   and the sentence beside it are asserted; pixels are not. */
+describe('the canvas — handing a method over to development mode', () => {
+  it('refuses to run while the validation has not answered', async () => {
+    // A validator that never answers pins the PENDING state: this is what every
+    // mount looks like for its first instants, and what an edit looks like
+    // while the debounced re-check is in flight.
+    const ctx = track(mount(seedGraph(), { validate: () => new Promise(() => {}) }));
+    await flush();
+    expect(runButton(ctx.host).disabled).toBe(true);
+    expect(runWhy(ctx.host).textContent).toContain('Checking');
+    expect(runWhy(ctx.host).getAttribute('data-blocked')).toBe('1');
+  });
+
+  it('refuses to run an INVALID drawing, and says how many problems', async () => {
+    const ctx = track(
+      mount(seedGraph(), {
+        validate: () => ({
+          ok: false,
+          errors: [
+            { code: 'prompt-missing', message: 'no prompt', nodeId: 'prompt-1' },
+            { code: 'node-unreachable', message: 'orphan', nodeId: 'prompt-1' },
+          ],
+          warnings: [],
+        }),
+      }),
+    );
+    await flush();
+    expect(runButton(ctx.host).disabled).toBe(true);
+    expect(runWhy(ctx.host).textContent).toContain('2 problem(s)');
+    // The REASON is visible, not just a tooltip — but it is also the tooltip.
+    expect(runButton(ctx.host).getAttribute('title')).toContain('2 problem(s)');
+  });
+
+  it('refuses to run when the validator itself did not answer', async () => {
+    const ctx = track(
+      mount(seedGraph(), {
+        validate: () => {
+          throw new Error('connection lost');
+        },
+      }),
+    );
+    await flush();
+    expect(runButton(ctx.host).disabled).toBe(true);
+    expect(runWhy(ctx.host).textContent).toContain('connection lost');
+  });
+
+  it('refuses to run a VALID drawing that was never saved', async () => {
+    const ctx = track(mount(seedGraph()));
+    await flush();
+    // Valid — the status line agrees.
+    expect(ctx.host.querySelector('.gph-status').getAttribute('data-s')).toBe('ok');
+    expect(runButton(ctx.host).disabled).toBe(true);
+    expect(runWhy(ctx.host).textContent).toContain('Save it first');
+  });
+
+  it('offers the run once the drawing is valid AND saved', async () => {
+    const ctx = track(mount(seedGraph()));
+    await flush();
+    click(ctx.host.querySelector('.gph-panel__save'));
+    await flush();
+
+    expect(ctx.calls.save).toBe(1);
+    expect(runButton(ctx.host).disabled).toBe(false);
+    expect(runWhy(ctx.host).getAttribute('data-blocked')).toBe('0');
+    expect(runWhy(ctx.host).textContent).toContain('ONE epoch');
+  });
+
+  it('takes the offer BACK the moment the drawing is edited again', async () => {
+    const ctx = track(mount(seedGraph()));
+    await flush();
+    click(ctx.host.querySelector('.gph-panel__save'));
+    await flush();
+    expect(runButton(ctx.host).disabled).toBe(false);
+
+    // One more node: the canvas now differs from the file on disk, and
+    // `huu dev --graph` reads the FILE.
+    await addFromArm(ctx, 'prompt-1', '', 'tdd');
+    await flush();
+    expect(runButton(ctx.host).disabled).toBe(true);
+    expect(runWhy(ctx.host).textContent).toContain('Save it first');
+  });
+
+  it('counts a graph OPENED from the store as saved — no pointless re-save', async () => {
+    const ctx = track(
+      mount(seedGraph(), { samples: [{ id: 'recon-fanout', name: 'Recon', description: '' }] }),
+    );
+    await flush();
+    expect(runButton(ctx.host).disabled).toBe(true);
+
+    const select = ctx.host.querySelector('.gph-panel__select');
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+    setter.call(select, 'recon-fanout');
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await flush();
+
+    expect(ctx.calls.fromSample).toBe(1);
+    // `/from-sample` writes before it answers, so the graph IS on disk.
+    expect(runButton(ctx.host).disabled).toBe(false);
+  });
+
+  it('hands the CURRENT document over, and says so', async () => {
+    const ctx = track(mount(seedGraph()));
+    await flush();
+    const name = ctx.host.querySelector('.gph-panel__name');
+    typeInto(name, 'Auditoria paralela');
+    await flush();
+    click(ctx.host.querySelector('.gph-panel__save'));
+    await flush();
+
+    click(runButton(ctx.host));
+    await flush();
+
+    expect(ctx.runs).toHaveLength(1);
+    expect(ctx.runs[0].id).toBe('teste');
+    expect(ctx.runs[0].name).toBe('Auditoria paralela');
+    // The human is told where the method went.
+    const last = ctx.toasts[ctx.toasts.length - 1];
+    expect(last.isErr).toBe(false);
+    expect(last.message).toContain('Auditoria paralela');
+  });
+
+  it('does nothing at all while the button is disabled', async () => {
+    const ctx = track(mount(seedGraph()));
+    await flush();
+    // A disabled <button> does not dispatch click handlers in the DOM either;
+    // the assertion is that the canvas relies on that rather than on a guard
+    // it could forget.
+    click(runButton(ctx.host));
+    await flush();
+    expect(ctx.runs).toEqual([]);
+  });
+});
+
+describe('the hand-off itself — runGraphInDevMode', () => {
+  it('fires huu:run-graph with the id and the name', () => {
+    const seen = [];
+    const listener = (ev) => seen.push(ev.detail);
+    document.addEventListener(RUN_GRAPH_EVENT, listener);
+    try {
+      expect(runGraphInDevMode({ id: 'auditoria', name: 'Auditoria' })).toBe(true);
+    } finally {
+      document.removeEventListener(RUN_GRAPH_EVENT, listener);
+    }
+    expect(seen).toEqual([{ id: 'auditoria', name: 'Auditoria' }]);
+  });
+
+  it('mirrors the selection onto S, for a listener that wires up later', () => {
+    S.devGraphId = '';
+    S.devGraphName = '';
+    runGraphInDevMode({ id: 'metodo-minimo', name: 'Método mínimo' });
+    expect(S.devGraphId).toBe('metodo-minimo');
+    expect(S.devGraphName).toBe('Método mínimo');
+  });
+
+  it('falls back to the id when the drawing has no name', () => {
+    const seen = [];
+    const listener = (ev) => seen.push(ev.detail);
+    document.addEventListener(RUN_GRAPH_EVENT, listener);
+    try {
+      runGraphInDevMode({ id: 'sem-nome' });
+    } finally {
+      document.removeEventListener(RUN_GRAPH_EVENT, listener);
+    }
+    expect(seen).toEqual([{ id: 'sem-nome', name: 'sem-nome' }]);
+  });
+
+  it('refuses a graph with no id — there would be nothing to select', () => {
+    const seen = [];
+    const listener = (ev) => seen.push(ev.detail);
+    document.addEventListener(RUN_GRAPH_EVENT, listener);
+    try {
+      expect(runGraphInDevMode({ name: 'só nome' })).toBe(false);
+      expect(runGraphInDevMode(null)).toBe(false);
+    } finally {
+      document.removeEventListener(RUN_GRAPH_EVENT, listener);
+    }
+    expect(seen).toEqual([]);
+  });
+
+  it('is what the canvas uses when nothing is injected', async () => {
+    const seen = [];
+    const listener = (ev) => seen.push(ev.detail);
+    document.addEventListener(RUN_GRAPH_EVENT, listener);
+    try {
+      const ctx = track(mount(seedGraph(), { onRun: null }));
+      await flush();
+      click(ctx.host.querySelector('.gph-panel__save'));
+      await flush();
+      click(runButton(ctx.host));
+      await flush();
+    } finally {
+      document.removeEventListener(RUN_GRAPH_EVENT, listener);
+    }
+    expect(seen).toEqual([{ id: 'teste', name: 'Teste' }]);
+  });
+});
+
+describe('runBlockedReason — the rule, without a canvas', () => {
+  it('ranks a broken method above an unsaved one', () => {
+    const reason = runBlockedReason({ state: 'done', errors: [{ code: 'x' }] }, false);
+    expect(reason).toContain('1 problem(s)');
+    expect(reason).not.toContain('Save it first');
+  });
+
+  it('lets a WARNING through — a note is not a defect', () => {
+    // `join-subset-drops-barrier` is the expected answer for the very method
+    // this screen exists to draw, and it must not block the run.
+    expect(runBlockedReason({ state: 'done', errors: [], warnings: [{ code: 'w' }] }, true)).toBeNull();
+  });
+
+  it('answers null only when the drawing is checked, clean and on disk', () => {
+    expect(runBlockedReason({ state: 'done', errors: [] }, true)).toBeNull();
+    expect(runBlockedReason({ state: 'done', errors: [] }, false)).toBeTruthy();
+    expect(runBlockedReason({ state: 'pending', errors: [] }, true)).toBeTruthy();
+    expect(runBlockedReason({ state: 'idle', errors: [] }, true)).toBeTruthy();
+  });
+
+  it('survives a malformed check object rather than taking the panel down', () => {
+    expect(runBlockedReason(null, true)).toBeTruthy();
+    expect(runBlockedReason({}, true)).toBeTruthy();
+    expect(runBlockedReason({ state: 'done' }, true)).toBeNull();
   });
 });

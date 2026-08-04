@@ -434,6 +434,33 @@ export const webEn = {
   'web.dev.method.chainOfVerification.label': 'Claim verification',
   'web.dev.method.chainOfVerification.desc':
     'In the knowledge phase, a second agent re-checks every claim against the repo and demotes what it cannot reproduce — nothing invented reaches the plan.',
+  /* WHO WRITES THE TOPOLOGY. Either the LLM planner decomposes the goal (what
+     dev mode has always done), or huu compiles a method the human DREW on the
+     canvas. The two are exclusive, and the drawing wins whenever it is set. */
+  'web.dev.method_source': 'Method',
+  'web.dev.method_source_planner': 'LLM planner',
+  'web.dev.method_source_graph': 'Method you drew',
+  'web.dev.method_source_hint_planner':
+    'The planner decomposes your goal into parallel fronts, epoch after epoch. It writes the topology; you underwrite the goal.',
+  'web.dev.method_source_hint_graph':
+    'huu compiles the drawing exactly as you drew it: one epoch, no planner, no invented step.',
+  'web.dev.graph_pick': 'Saved method',
+  'web.dev.graph_pick_placeholder': 'Choose a method…',
+  'web.dev.graph_pick_empty':
+    'This project has no saved method yet — draw one on the canvas and save it.',
+  'web.dev.graph_pick_failed': 'The saved methods could not be listed: {message}',
+  'web.dev.graph_invalid_tag': 'has problems',
+  'web.dev.graph_meta': '{nodes} node(s) · {edges} link(s)',
+  'web.dev.graph_open_canvas': 'Open the canvas',
+  'web.dev.err_no_graph': 'Choose the drawn method, or switch back to the LLM planner',
+  'web.dev.err_graph_invalid':
+    'That method still has problems — fix it on the canvas before running it',
+  /* NOT hidden, ANNOUNCED. The driver loads both as session metadata and neither
+     is compiled into a drawing, so the honest UI is the panel still standing
+     there with a sentence saying what it will and will not do. */
+  'web.dev.graph_meta_only': 'not compiled into the drawing',
+  'web.dev.graph_meta_warning':
+    'A drawn method is compiled from the <strong>drawing</strong>. huu records these choices on the session and shows them back to you, but it does not turn them into steps or gates — what runs is what you drew.',
   'web.dev.how_it_runs': 'How it runs',
   'web.dev.approval': 'Approval',
   'web.dev.autonomous': 'Autonomous',
@@ -481,6 +508,27 @@ export const webEn = {
     'An earlier session with this same goal can pick up where it stopped.',
   'web.dev.commits_ahead': '{count} commit(s) ahead',
   'web.dev.no_branches': 'No branches listed.',
+
+  /* The session panel, when the session is a DRAWING. `drawnMethod` arrives on
+     the first frame; `graph` only once the drawing compiled. */
+  'web.dev.row_method': 'Drawn method',
+  'web.dev.method_head': '{name} — your drawing, compiled as drawn',
+  'web.dev.method_nodes': 'Nodes, in the order they run',
+  'web.dev.method_root': 'Artifacts land under {path}',
+  'web.dev.method_steps': '{count} step(s)',
+  'web.dev.method_compiling': 'Compiling the drawing…',
+  'web.dev.plan_warnings': 'Read this before approving',
+
+  /* The resume gate, when the session on disk was a DRAWING. */
+  'web.dev.resume_method': 'Drawn method',
+  'web.dev.resume_method_ready':
+    'It is the method selected here, so continuing re-sends it.',
+  'web.dev.resume_method_missing':
+    'Continuing needs this exact method. huu will re-send “{id}” for you — otherwise the resume is refused (a session opened as a drawing is never handed to the planner).',
+  'web.dev.resume_accept_with_graph': 'Continue with “{name}”',
+  'web.dev.resume_restarting': 'Re-sending the drawn method “{id}”…',
+  'web.dev.resume_restart_failed':
+    'The session could not be re-started with “{id}”: {message}',
 
   'web.role.inherits': 'inherits the worker model',
   'web.role.planner': 'Planner',
@@ -596,6 +644,20 @@ export const webEn = {
   'web.graph.compile_default': 'default',
   'web.graph.compile_check': 'check',
   'web.graph.compile_work': 'work',
+
+  /* Running the drawing. The canvas does not start the session itself: it hands
+     the method to development mode, which owns the goal, the project and the
+     model routing. See `web.dev.method_source_*` for the other end. */
+  'web.graph.run': 'Run this method',
+  'web.graph.run_title': 'Open development mode with this method already selected',
+  'web.graph.run_ready': 'Runs as ONE epoch — the planner is never called.',
+  'web.graph.run_blocked_checking': 'Checking the drawing…',
+  'web.graph.run_blocked_check_failed':
+    'The check did not run ({message}) — check it again before running it.',
+  'web.graph.run_blocked_invalid': '{count} problem(s) to fix before this can run.',
+  'web.graph.run_blocked_unsaved':
+    'Save it first — huu runs the method that is on disk, not the one on screen.',
+  'web.graph.run_handoff': '“{name}” is selected — write the goal and start.',
 
   /* The research node: what it answers, and what each answer triggers. */
   'web.graph.inspector.use_context': 'Read what this repository already knows',

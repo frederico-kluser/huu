@@ -440,6 +440,33 @@ export const webPtBR = {
   'web.dev.method.chainOfVerification.label': 'Verificação de afirmações',
   'web.dev.method.chainOfVerification.desc':
     'Na fase de conhecimento, um segundo agente re-checa cada afirmação contra o repositório e rebaixa o que não consegue reproduzir — nada inventado chega ao plano.',
+  /* QUEM ESCREVE A TOPOLOGIA. Ou o planner LLM decompõe o objetivo (o que o
+     modo dev sempre fez), ou o huu compila um método que o humano DESENHOU no
+     canvas. Os dois são exclusivos, e o desenho vence sempre que estiver posto. */
+  'web.dev.method_source': 'Método',
+  'web.dev.method_source_planner': 'Planner LLM',
+  'web.dev.method_source_graph': 'Método que você desenhou',
+  'web.dev.method_source_hint_planner':
+    'O planner decompõe seu objetivo em frentes paralelas, época após época. Ele escreve a topologia; você assembla o objetivo.',
+  'web.dev.method_source_hint_graph':
+    'O huu compila o desenho exatamente como você desenhou: uma época, sem planner, sem passo inventado.',
+  'web.dev.graph_pick': 'Método salvo',
+  'web.dev.graph_pick_placeholder': 'Escolha um método…',
+  'web.dev.graph_pick_empty':
+    'Este projeto ainda não tem método salvo — desenhe um no canvas e salve.',
+  'web.dev.graph_pick_failed': 'Não deu para listar os métodos salvos: {message}',
+  'web.dev.graph_invalid_tag': 'com problemas',
+  'web.dev.graph_meta': '{nodes} nó(s) · {edges} ligação(ões)',
+  'web.dev.graph_open_canvas': 'Abrir o canvas',
+  'web.dev.err_no_graph': 'Escolha o método desenhado, ou volte para o planner LLM',
+  'web.dev.err_graph_invalid':
+    'Esse método ainda tem problemas — conserte no canvas antes de rodar',
+  /* NÃO escondido, AVISADO. O driver carrega os dois como metadado da sessão e
+     nenhum dos dois é compilado num desenho, então a interface honesta é o
+     painel continuar ali com uma frase dizendo o que ele faz e o que não faz. */
+  'web.dev.graph_meta_only': 'não é compilado no desenho',
+  'web.dev.graph_meta_warning':
+    'Um método desenhado é compilado a partir do <strong>desenho</strong>. O huu registra estas escolhas na sessão e devolve elas para você, mas não as transforma em passos nem em portões — o que roda é o que você desenhou.',
   'web.dev.how_it_runs': 'Como roda',
   'web.dev.approval': 'Aprovação',
   'web.dev.autonomous': 'Autônomo',
@@ -488,6 +515,27 @@ export const webPtBR = {
     'Uma sessão anterior com este mesmo objetivo pode continuar de onde parou.',
   'web.dev.commits_ahead': '{count} commit(s) à frente',
   'web.dev.no_branches': 'Nenhum branch listado.',
+
+  /* O painel de sessão, quando a sessão é um DESENHO. `drawnMethod` chega no
+     primeiro frame; `graph` só depois que o desenho compila. */
+  'web.dev.row_method': 'Método desenhado',
+  'web.dev.method_head': '{name} — seu desenho, compilado como você desenhou',
+  'web.dev.method_nodes': 'Nós, na ordem em que rodam',
+  'web.dev.method_root': 'Os artefatos caem em {path}',
+  'web.dev.method_steps': '{count} passo(s)',
+  'web.dev.method_compiling': 'Compilando o desenho…',
+  'web.dev.plan_warnings': 'Leia isto antes de aprovar',
+
+  /* O portão de retomada, quando a sessão em disco era um DESENHO. */
+  'web.dev.resume_method': 'Método desenhado',
+  'web.dev.resume_method_ready':
+    'É o método selecionado aqui, então continuar reenvia ele.',
+  'web.dev.resume_method_missing':
+    'Continuar exige exatamente este método. O huu vai reenviar “{id}” para você — sem ele a retomada é recusada (uma sessão aberta como desenho nunca é entregue ao planner).',
+  'web.dev.resume_accept_with_graph': 'Continuar com “{name}”',
+  'web.dev.resume_restarting': 'Reenviando o método desenhado “{id}”…',
+  'web.dev.resume_restart_failed':
+    'Não deu para reiniciar a sessão com “{id}”: {message}',
 
   'web.role.inherits': 'herda o modelo do worker',
   'web.role.planner': 'Planejador',
@@ -604,6 +652,20 @@ export const webPtBR = {
   'web.graph.compile_default': 'padrão',
   'web.graph.compile_check': 'verificação',
   'web.graph.compile_work': 'trabalho',
+
+  /* Rodar o desenho. O canvas não inicia a sessão sozinho: ele entrega o método
+     para o modo de desenvolvimento, que é dono do objetivo, do projeto e do
+     roteamento de modelos. A outra ponta está em `web.dev.method_source_*`. */
+  'web.graph.run': 'Rodar este método',
+  'web.graph.run_title': 'Abrir o modo de desenvolvimento com este método já selecionado',
+  'web.graph.run_ready': 'Roda como UMA época — o planner nunca é chamado.',
+  'web.graph.run_blocked_checking': 'Conferindo o desenho…',
+  'web.graph.run_blocked_check_failed':
+    'A conferência não rodou ({message}) — confira de novo antes de rodar.',
+  'web.graph.run_blocked_invalid': '{count} problema(s) para resolver antes de rodar.',
+  'web.graph.run_blocked_unsaved':
+    'Salve primeiro — o huu roda o método que está no disco, não o que está na tela.',
+  'web.graph.run_handoff': '“{name}” selecionado — escreva o objetivo e comece.',
 
   /* A pesquisa: o que ela devolve e o que cada resposta aciona. */
   'web.graph.inspector.use_context': 'Ler o que este repositório já sabe',

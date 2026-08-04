@@ -153,4 +153,12 @@ export const S = {
   graphDoc: null,
   graphCatalog: null,
   graphMount: null,
+  // THE HAND-OFF between the canvas and development mode. `/graph` never starts
+  // a session itself — it names the method here and dispatches `huu:run-graph`,
+  // and the /dev form (which owns the goal, the project and the model routing)
+  // pre-selects it. Kept on S rather than passed as an argument because the two
+  // surfaces must not import each other: `launch.js` already imports
+  // `graph/canvas.js`, so a canvas → dev import would close an ESM cycle.
+  devGraphId: '',
+  devGraphName: '',
 };

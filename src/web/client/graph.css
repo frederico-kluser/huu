@@ -157,6 +157,34 @@
   100% { opacity: 1; }
 }
 
+/* ── Running the drawing ──────────────────────────────────────────────────
+   THE REASON IS NOT A TOOLTIP. A disabled button whose only explanation lives
+   in `title=` is a dead end on touch and for anyone who does not hover, and
+   this button is disabled in the three most common states of a half-drawn
+   method. So the sentence sits beside it, always, and only its colour changes:
+   muted when the method is ready, red when it is not. */
+.gph-run {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gph-run__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.gph-run__why {
+  flex: 1 1 180px;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-3);
+}
+
+.gph-run__why[data-blocked='1'] { color: var(--red); }
+
 /* The `global` bucket: issues with NO node and NO edge to blame (the store's
    `invalid-schema` arrives with no anchor at all). Without a place of their
    own they would be dropped on the floor and the canvas would look green for
@@ -919,6 +947,85 @@ span.gph-armrow__label {
   text-transform: uppercase;
   color: var(--green);
   background: color-mix(in srgb, var(--green) 16%, transparent);
+}
+
+/* ── The drawn method, seen from /dev ─────────────────────────────────────────
+   These rules paint elements that live in the DEV form and the DEV session
+   panel, not on the canvas — but they belong to the drawn-method feature, and
+   `styles.css` is the design system, not this feature's file (same reasoning
+   as the `.mode-switch` override at the top). Tokens only, no colour of our
+   own. */
+
+/* The "we recorded this, we did not compile it" banner over the role-routing
+   and methodology panels. Amber, not red: nothing is broken — a choice was
+   demoted to metadata, and the human has to be able to read that without
+   feeling they must clear it. */
+.dev-meta-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 2px 0 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 12px);
+  border: 1px solid color-mix(in srgb, var(--yellow) 42%, transparent);
+  background: color-mix(in srgb, var(--yellow) 12%, transparent);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.dev-meta-warn__tag {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--yellow);
+  background: color-mix(in srgb, var(--yellow) 18%, transparent);
+}
+
+/* A saved method that still has validator problems is offered but never
+   silently: the option is tagged in the list and the submit refuses it. */
+.dev-graph-hint--bad { color: var(--red); }
+
+/* The session panel's node list — the drawing's emission order, which replaces
+   the planner's "fronts" when the session IS a drawing. */
+.dev-graph-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.dev-graph-node {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--separator);
+  background: var(--elev-2);
+  font-size: 11.5px;
+}
+
+.dev-graph-node__order {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.dev-graph-node__steps {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.dev-graph-root {
+  font-size: 11.5px;
+  color: var(--text-3);
 }
 
 @media (max-width: 900px) {
