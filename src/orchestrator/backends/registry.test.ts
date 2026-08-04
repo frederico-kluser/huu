@@ -14,7 +14,7 @@ import {
 describe('backend registry', () => {
   describe('ALL_BACKENDS', () => {
     it('lists exactly pi, azure, stub (copilot removed)', () => {
-      expect([...ALL_BACKENDS].sort()).toEqual(['azure', 'pi', 'stub']);
+      expect([...ALL_BACKENDS].sort()).toEqual(['azure', 'jcode', 'pi', 'stub']);
     });
 
     it('no longer contains copilot', () => {
@@ -40,6 +40,11 @@ describe('backend registry', () => {
     it('is case-insensitive and trims whitespace', () => {
       expect(parseBackendKind('  PI  ')).toBe('pi');
       expect(parseBackendKind('Azure')).toBe('azure');
+    });
+
+    it('accepts jcode and deepseek aliases', () => {
+      expect(parseBackendKind('jcode')).toBe('jcode');
+      expect(parseBackendKind('deepseek')).toBe('jcode');
     });
 
     it('returns null for unknown values (including the removed copilot)', () => {
@@ -80,8 +85,16 @@ describe('backend registry', () => {
       }
     });
 
+    it('jcode: requires API key, exposes resolver, points at deepseek spec', () => {
+      const b = selectBackend('jcode');
+      expect(b.requiresApiKey).toBe(true);
+      expect(b.apiKeySpecName).toBe('deepseek');
+      expect(b.conflictResolverFactory).toBe(b.agentFactory);
+    });
+
     it('only pi is user-selectable (azure reached via provider toggle, stub via CLI)', () => {
       expect(selectBackend('pi').userSelectable).toBe(true);
+      expect(selectBackend('jcode').userSelectable).toBe(true);
       expect(selectBackend('azure').userSelectable).toBe(false);
       expect(selectBackend('stub').userSelectable).toBe(false);
     });

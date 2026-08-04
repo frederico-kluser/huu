@@ -2,6 +2,7 @@ import type { AgentFactory } from '../types.js';
 import { piAgentFactory } from './pi/factory.js';
 import { stubAgentFactory } from './stub/factory.js';
 import { azureAgentFactory } from './azure/factory.js';
+import { jcodeAgentFactory } from './jcode/factory.js';
 
 /**
  * Single dispatch table from "what kind of agent is the user choosing"
@@ -17,9 +18,9 @@ import { azureAgentFactory } from './azure/factory.js';
  * the concrete dispatch kind by `src/lib/providers.ts` (`azure` is the kind
  * that serves the Azure provider). `stub` is the no-LLM smoke-test backend.
  */
-export type AgentBackendKind = 'pi' | 'azure' | 'stub';
+export type AgentBackendKind = 'pi' | 'azure' | 'stub' | 'jcode';
 
-export const ALL_BACKENDS: ReadonlyArray<AgentBackendKind> = ['pi', 'azure', 'stub'];
+export const ALL_BACKENDS: ReadonlyArray<AgentBackendKind> = ['pi', 'azure', 'stub', 'jcode'];
 
 export interface BackendBundle {
   /** Factory used for regular per-task agents. */
@@ -98,6 +99,18 @@ export function selectBackend(kind: AgentBackendKind): BackendBundle {
         // not exposed in the BackendSelector TUI.
         userSelectable: false,
       };
+    case 'jcode':
+      return {
+        agentFactory: jcodeAgentFactory,
+        conflictResolverFactory: jcodeAgentFactory,
+        label: 'jcode · DeepSeek V4 Pro',
+        description:
+          'Uses jcode CLI (subprocess) with DeepSeek V4 Pro. Stateless — zero embeddings, no memory across turns.',
+        requiresApiKey: true,
+        apiKeySpecName: 'deepseek',
+        // jcode is user-selectable: surfaced as an alternative LLM backend.
+        userSelectable: true,
+      };
     default: {
       const exhaustive: never = kind;
       throw new Error(`Unknown agent backend: ${String(exhaustive)}`);
@@ -115,5 +128,6 @@ export function parseBackendKind(s: string): AgentBackendKind | null {
   if (lower === 'pi' || lower === 'real' || lower === 'openrouter') return 'pi';
   if (lower === 'azure' || lower === 'azure-openai' || lower === 'azure-foundry') return 'azure';
   if (lower === 'stub' || lower === 'fake' || lower === 'mock') return 'stub';
+  if (lower === 'jcode' || lower === 'deepseek') return 'jcode';
   return null;
 }

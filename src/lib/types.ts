@@ -13,7 +13,7 @@
  * internal dispatch kind backing the Azure provider; `stub` is the no-LLM
  * smoke-test backend. (Copilot was removed in v2.2 — huu is pi-only.)
  */
-export type AgentBackendKind = 'pi' | 'azure' | 'stub';
+export type AgentBackendKind = 'pi' | 'azure' | 'stub' | 'jcode';
 
 /**
  * The LLM provider the (single, user-facing) pi backend talks to. This is
