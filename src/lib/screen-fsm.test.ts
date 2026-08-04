@@ -906,6 +906,214 @@ describe('screen-fsm', () => {
     });
   });
 
+  /**
+   * Hand-drawn methods (devgraphs). The reducer NEVER sees a `DevGraph`: the
+   * screen reads the disk and runs `compileGraphPipeline` (which THROWS on an
+   * invalid graph, by contract), so what arrives here is always a finished
+   * `Pipeline` heading into the launch config that already exists.
+   */
+  describe('graph screens', () => {
+    const compiled: Pipeline = {
+      name: 'graph: TDD em paralelo',
+      steps: [{ name: 's1', prompt: 'p1', files: [] }],
+    };
+
+    it('welcome.graphs opens the graph picker', () => {
+      expect(reduce(baseState(), { type: 'welcome.graphs' }).screen).toEqual({
+        kind: 'graph-picker',
+      });
+    });
+
+    it('graph.inspect carries the graph id on the SCREEN variant', () => {
+      const next = reduce(baseState({ screen: { kind: 'graph-picker' } }), {
+        type: 'graph.inspect',
+        graphId: 'tdd-seguranca-performance',
+      });
+      expect(next.screen).toEqual({
+        kind: 'graph-detail',
+        graphId: 'tdd-seguranca-performance',
+      });
+    });
+
+    it('graph.inspect stores nothing about the graph in FsmState', () => {
+      const before = baseState({ screen: { kind: 'graph-picker' } });
+      const next = reduce(before, { type: 'graph.inspect', graphId: 'g1' });
+      expect({ ...next, screen: before.screen }).toEqual(before);
+    });
+
+    it('graph.back returns from the detail to the list, not to welcome', () => {
+      const next = reduce(baseState({ screen: { kind: 'graph-detail', graphId: 'g1' } }), {
+        type: 'graph.back',
+      });
+      expect(next.screen).toEqual({ kind: 'graph-picker' });
+    });
+
+    it('graph.cancel leaves the library for welcome', () => {
+      const next = reduce(baseState({ screen: { kind: 'graph-picker' } }), {
+        type: 'graph.cancel',
+      });
+      expect(next.screen).toEqual({ kind: 'welcome' });
+    });
+
+    it('graph.launch adopts the compiled pipeline', () => {
+      const next = reduce(baseState({ screen: { kind: 'graph-detail', graphId: 'g1' } }), {
+        type: 'graph.launch',
+        pipeline: compiled,
+        graphName: 'TDD em paralelo',
+        initialBackendSet: false,
+      });
+      expect(next.pipeline).toBe(compiled);
+    });
+
+    it('graph.launch names the DRAWING, not the emitted pipeline', () => {
+      const next = reduce(baseState(), {
+        type: 'graph.launch',
+        pipeline: compiled,
+        graphName: 'TDD em paralelo',
+        initialBackendSet: false,
+      });
+      expect(next.pipelineSourceName).toBe('TDD em paralelo');
+    });
+
+    it('graph.launch goes to the backend selector when no backend is locked', () => {
+      const next = reduce(baseState(), {
+        type: 'graph.launch',
+        pipeline: compiled,
+        graphName: 'g',
+        initialBackendSet: false,
+      });
+      expect(next.screen).toEqual({ kind: 'backend-selector' });
+    });
+
+    it('graph.launch skips the provider picker when the CLI locked the backend', () => {
+      // Same rule as `saved.select`: the provider screen would OVERWRITE a
+      // backend the command line already chose (the `--stub` regression).
+      const next = reduce(baseState({ backendKind: 'stub' }), {
+        type: 'graph.launch',
+        pipeline: compiled,
+        graphName: 'g',
+        initialBackendSet: true,
+      });
+      expect(next.screen).toEqual({ kind: 'model-selector', backendKind: 'stub' });
+    });
+
+    it('graph.launch never routes through the pipeline editor', () => {
+      // The drawing is the design surface; hand-editing the emitted pipeline
+      // would desync it from the graph it claims to be.
+      for (const locked of [true, false]) {
+        const next = reduce(baseState(), {
+          type: 'graph.launch',
+          pipeline: compiled,
+          graphName: 'g',
+          initialBackendSet: locked,
+        });
+        expect(next.screen.kind).not.toBe('pipeline-editor');
+      }
+    });
+
+    it('graph.launch clears a stale multi-run batch', () => {
+      const next = reduce(baseState({ pipelines: [pipelineAllModels, pipelineWithoutModels] }), {
+        type: 'graph.launch',
+        pipeline: compiled,
+        graphName: 'g',
+        initialBackendSet: false,
+      });
+      expect(next.pipelines).toBeNull();
+      expect(next.projectDirs).toEqual([]);
+    });
+
+    it('graph.launch keeps marked projects and fans the graph out over them', () => {
+      // Mirrors `saved.select`: one pipeline × N projects is still a fan-out,
+      // and dropping the marks would silently discard folders just chosen.
+      const next = reduce(baseState({ projectDirs: ['/a', '/b'] }), {
+        type: 'graph.launch',
+        pipeline: compiled,
+        graphName: 'g',
+        initialBackendSet: false,
+      });
+      expect(next.pipelines).toEqual([compiled]);
+      expect(next.projectDirs).toEqual(['/a', '/b']);
+    });
+
+    it('a graph launched over marked projects lands on the run-queue review', () => {
+      const launched = reduce(baseState({ projectDirs: ['/a', '/b'] }), {
+        type: 'graph.launch',
+        pipeline: compiled,
+        graphName: 'g',
+        initialBackendSet: true,
+      });
+      const resolver = reduce(
+        {
+          ...launched,
+          screen: { kind: 'resolver-model-selector', backendKind: 'pi', modelId: 'm', apiKey: 'k' },
+        },
+        { type: 'resolverModelSelector.skip' },
+      );
+      expect(resolver.screen).toEqual({ kind: 'run-queue', modelId: 'm', apiKey: 'k' });
+    });
+
+    it('a graph launched without marked projects goes straight to the run', () => {
+      const launched = reduce(baseState(), {
+        type: 'graph.launch',
+        pipeline: compiled,
+        graphName: 'g',
+        initialBackendSet: true,
+      });
+      const resolver = reduce(
+        {
+          ...launched,
+          screen: { kind: 'resolver-model-selector', backendKind: 'pi', modelId: 'm', apiKey: 'k' },
+        },
+        { type: 'resolverModelSelector.skip' },
+      );
+      expect(resolver.screen).toEqual({ kind: 'run', modelId: 'm', apiKey: 'k' });
+    });
+
+    it('the whole launch chain reaches the run screen from the picker', () => {
+      // The point of the design: zero new run machinery — the compiled pipeline
+      // walks the SAME screens a saved pipeline walks.
+      let s = reduce(baseState(), { type: 'welcome.graphs' });
+      s = reduce(s, { type: 'graph.inspect', graphId: 'g1' });
+      s = reduce(s, {
+        type: 'graph.launch',
+        pipeline: compiled,
+        graphName: 'g',
+        initialBackendSet: false,
+      });
+      s = reduce(s, {
+        type: 'backend.select',
+        backendKind: 'stub',
+        requiresApiKey: false,
+        skipModelSelector: false,
+      });
+      s = reduce(s, {
+        type: 'modelSelector.select',
+        modelId: 'stub-model',
+        requiresApiKey: false,
+        backendKind: 'stub',
+        missingKeys: [],
+        resolvedApiKey: '',
+      });
+      s = reduce(s, { type: 'timeout.submit', minutes: 3 });
+      s = reduce(s, { type: 'resolverModelSelector.skip' });
+      expect(s.screen).toEqual({ kind: 'run', modelId: 'stub-model', apiKey: '' });
+      expect(s.pipeline?.cardTimeoutMs).toBe(180_000);
+    });
+
+    it('does not mutate the state it was handed', () => {
+      const s = baseState({ screen: { kind: 'graph-picker' }, projectDirs: ['/a'] });
+      const snapshot = JSON.parse(JSON.stringify(s));
+      reduce(s, { type: 'graph.inspect', graphId: 'g1' });
+      reduce(s, {
+        type: 'graph.launch',
+        pipeline: compiled,
+        graphName: 'g',
+        initialBackendSet: false,
+      });
+      expect(s).toEqual(snapshot);
+    });
+  });
+
   describe('purity', () => {
     it('does not mutate the input state', () => {
       const s = baseState({ pipeline: pipelineWithoutModels });

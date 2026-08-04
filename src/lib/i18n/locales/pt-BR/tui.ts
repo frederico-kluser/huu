@@ -213,4 +213,48 @@ export const tuiPtBR = {
   'tui.run_queue.hint_skip_all': 'pular todas',
   'tui.run_queue.hint_include_all': 'incluir todas',
   'tui.run_queue.hint_run': 'rodar {count}',
+
+  // Métodos desenhados (devgraph). A MOLDURA é traduzida; ids, tipos de nó, ids
+  // de bloco, ids de braço e os `GraphIssueCode` são a superfície estável do
+  // formato e ficam como estão — veja o cabeçalho de `src/lib/graph-render.ts`.
+  'tui.graph.menu': 'Métodos desenhados — um grafo compila para um pipeline',
+  'tui.graph.title': 'Métodos desenhados',
+  'tui.graph.subtitle':
+    'Você desenha o método; o agente entra com a inteligência dentro de cada nó. Um grafo compila para um pipeline e roda como qualquer outro.',
+  'tui.graph.dir': 'salvos em {dir}',
+  'tui.graph.empty': 'Nenhum grafo salvo ainda — S começa a partir de um exemplo pronto.',
+  'tui.graph.row_meta': 'nós: {nodes} · arestas: {edges} · atualizado {updated}',
+  'tui.graph.needs_fixing': 'precisa de conserto',
+  'tui.graph.samples_title': 'Comece a partir de um exemplo pronto',
+  'tui.graph.samples_subtitle':
+    'O exemplo é salvo como um grafo SEU — nada é carregado pelas suas costas, e você pode jogá-lo fora.',
+  'tui.graph.sample_saved': 'Salvo como "{id}" — já está na sua lista.',
+  'tui.graph.sample_failed': 'Não deu para salvar o exemplo: {reason}',
+  'tui.graph.sample_no_id':
+    'Todos os ids de "{id}" até "{id}-99" estão ocupados — apague um antes.',
+  'tui.graph.read_failed': 'Não deu para abrir este grafo: {reason}',
+  'tui.graph.compile_failed': 'O compilador recusou este grafo: {reason}',
+  'tui.graph.blocked_one':
+    'Não dá para rodar: {count} problema bloqueante. O compilador recusa grafo inválido — abra e conserte primeiro.',
+  'tui.graph.blocked_other':
+    'Não dá para rodar: {count} problemas bloqueantes. O compilador recusa grafo inválido — abra e conserte primeiro.',
+  'tui.graph.issues_title': 'Problemas ({count})',
+  'tui.graph.diagram_title': 'O método, na ordem em que ele roda',
+  'tui.graph.hint_inspect': 'inspecionar',
+  'tui.graph.hint_run': 'compilar e rodar',
+  'tui.graph.hint_samples': 'a partir de um exemplo',
+  'tui.graph.hint_issues': 'problemas',
+  'tui.graph.hint_diagram': 'diagrama',
+  'tui.graph.hint_reload': 'recarregar',
+  'tui.graph.summary_counts': '{id} · nós: {nodes} · arestas: {edges}',
+  'tui.graph.valid': '✓ compila',
+  'tui.graph.invalid': '✗ não compila',
+  'tui.graph.issue_counts': 'erros: {errors} · avisos: {warnings}',
+  'tui.graph.join_all': 'todos',
+  'tui.graph.join_only': 'apenas {ids}',
+  'tui.graph.fanout': 'leque a partir de {source}',
+  'tui.graph.max_files': 'teto {count}',
+  'tui.graph.in_cycle': 'em um ciclo',
+  'tui.graph.empty_tree': '(nada desenhado ainda)',
+  'tui.graph.no_issues': '✓ nenhum problema encontrado',
 } as const;

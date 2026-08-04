@@ -209,4 +209,47 @@ export const tuiEn = {
   'tui.run_queue.hint_skip_all': 'skip all',
   'tui.run_queue.hint_include_all': 'include all',
   'tui.run_queue.hint_run': 'run {count}',
+
+  // Drawn methods (devgraph). The FRAME is translated; ids, node kinds, block
+  // ids, arm ids and `GraphIssueCode`s are the format's stable surface and stay
+  // as they are — see the header of `src/lib/graph-render.ts`.
+  'tui.graph.menu': 'Drawn methods — a graph compiles into a pipeline',
+  'tui.graph.title': 'Drawn methods',
+  'tui.graph.subtitle':
+    'You draw the method; the agent supplies the intelligence inside each node. A graph compiles into a pipeline and then runs like any other.',
+  'tui.graph.dir': 'saved under {dir}',
+  'tui.graph.empty': 'No graph saved yet — S starts one from a worked example.',
+  'tui.graph.row_meta': 'nodes: {nodes} · edges: {edges} · updated {updated}',
+  'tui.graph.needs_fixing': 'needs fixing',
+  'tui.graph.samples_title': 'Start from a worked example',
+  'tui.graph.samples_subtitle':
+    'The example is saved as YOUR graph — nothing is loaded behind your back, and you can throw it away.',
+  'tui.graph.sample_saved': 'Saved as "{id}" — it is in your list now.',
+  'tui.graph.sample_failed': 'Could not save the example: {reason}',
+  'tui.graph.sample_no_id': 'Every id from "{id}" to "{id}-99" is taken — delete one first.',
+  'tui.graph.read_failed': 'Could not open this graph: {reason}',
+  'tui.graph.compile_failed': 'The compiler refused this graph: {reason}',
+  'tui.graph.blocked_one':
+    'Cannot run: {count} blocking problem. The compiler refuses an invalid graph — open it and fix that first.',
+  'tui.graph.blocked_other':
+    'Cannot run: {count} blocking problems. The compiler refuses an invalid graph — open it and fix those first.',
+  'tui.graph.issues_title': 'Problems ({count})',
+  'tui.graph.diagram_title': 'The method, in the order it runs',
+  'tui.graph.hint_inspect': 'inspect',
+  'tui.graph.hint_run': 'compile & run',
+  'tui.graph.hint_samples': 'from an example',
+  'tui.graph.hint_issues': 'problems',
+  'tui.graph.hint_diagram': 'diagram',
+  'tui.graph.hint_reload': 'reload',
+  'tui.graph.summary_counts': '{id} · nodes: {nodes} · edges: {edges}',
+  'tui.graph.valid': '✓ compiles',
+  'tui.graph.invalid': '✗ does not compile',
+  'tui.graph.issue_counts': 'errors: {errors} · warnings: {warnings}',
+  'tui.graph.join_all': 'all',
+  'tui.graph.join_only': 'only {ids}',
+  'tui.graph.fanout': 'fan-out from {source}',
+  'tui.graph.max_files': 'max {count}',
+  'tui.graph.in_cycle': 'in a cycle',
+  'tui.graph.empty_tree': '(nothing drawn yet)',
+  'tui.graph.no_issues': '✓ no problem found',
 } as const;

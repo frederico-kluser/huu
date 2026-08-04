@@ -26,6 +26,20 @@ export type Screen =
    * directory" behavior.
    */
   | { kind: 'directory-picker'; multi?: boolean }
+  /**
+   * The library of hand-drawn methods (`huu-devgraph-v1`). It is a PICKER, not a
+   * canvas: a graph compiles into a `Pipeline` and the TUI already knows how to
+   * run one of those, so this screen lists, inspects and LAUNCHES — it never
+   * opens a second run machine of its own.
+   */
+  | { kind: 'graph-picker' }
+  /**
+   * One graph, read out loud: the ASCII diagram plus every problem the validator
+   * found. The id rides on the VARIANT (not on `FsmState`) so the screen is
+   * self-describing — a stale "current graph" field could survive a screen
+   * change and make the next visit inspect the wrong drawing.
+   */
+  | { kind: 'graph-detail'; graphId: string }
   /** Review the (pipeline × project) fan-out before spending RAM and tokens. */
   | { kind: 'run-queue'; modelId: string; apiKey: string }
   | { kind: 'backend-selector' }
@@ -80,7 +94,27 @@ export type FsmEvent =
   | { type: 'welcome.directory' }
   /** Open the picker in MULTI-mark mode to run across several projects. */
   | { type: 'welcome.projects' }
+  /** Open the library of hand-drawn methods (devgraphs). */
+  | { type: 'welcome.graphs' }
   | { type: 'welcome.quit' }
+  // graph-picker / graph-detail (hand-drawn methods)
+  | { type: 'graph.inspect'; graphId: string }
+  /** Leave the detail view — back to the list, never to welcome. */
+  | { type: 'graph.back' }
+  | { type: 'graph.cancel' }
+  /**
+   * A graph COMPILED. The caller did the I/O (read the file, ran
+   * `compileGraphPipeline`, which THROWS on an invalid graph) and hands the
+   * finished `Pipeline` in; the reducer only routes it into the launch config
+   * that already exists. `graphName` names the drawing, not the emitted
+   * pipeline, so the run screen says which method is running.
+   */
+  | {
+      type: 'graph.launch';
+      pipeline: Pipeline;
+      graphName: string;
+      initialBackendSet: boolean;
+    }
   // options (provider/API-key editor)
   | { type: 'options.close' }
   // directory-picker (choose where to run)
@@ -273,6 +307,46 @@ export function reduce(state: FsmState, event: FsmEvent): FsmState {
       // Re-entering keeps the previous marks (projectDirs is passed to the
       // picker as initialMarked), so a mis-press doesn't lose the selection.
       return { ...state, screen: { kind: 'directory-picker', multi: true } };
+    case 'welcome.graphs':
+      return { ...state, screen: { kind: 'graph-picker' } };
+
+    // ── graph-picker / graph-detail ───────────────────────────────────────
+    // Listing, reading and compiling are the CALLER's job (this reducer is
+    // pure); what happens here is navigation and the hand-off of the compiled
+    // pipeline into the launch config that already exists.
+    case 'graph.inspect':
+      return { ...state, screen: { kind: 'graph-detail', graphId: event.graphId } };
+    case 'graph.back':
+      return { ...state, screen: { kind: 'graph-picker' } };
+    case 'graph.cancel':
+      return { ...state, screen: { kind: 'welcome' } };
+    case 'graph.launch': {
+      const p = event.pipeline;
+      // Deliberately NOT via the pipeline editor. The drawing is the design
+      // surface; the emitted pipeline is machine output, and hand-editing it
+      // would desync it from the graph it claims to be. Straight to the shared
+      // launch config, exactly like a batch.
+      if (state.projectDirs.length > 0) {
+        // Marked projects are still marked: one graph × N projects is a fan-out,
+        // mirroring `saved.select`. Dropping them here would silently discard
+        // folders the user just picked.
+        return {
+          ...state,
+          pipeline: p,
+          pipelines: [p],
+          pipelineSourceName: event.graphName,
+          screen: batchLaunchStart(state, event.initialBackendSet),
+        };
+      }
+      return {
+        ...state,
+        pipeline: p,
+        pipelines: null,
+        projectDirs: [],
+        pipelineSourceName: event.graphName,
+        screen: batchLaunchStart(state, event.initialBackendSet),
+      };
+    }
 
     // ── options ───────────────────────────────────────────────────────────
     case 'options.close':

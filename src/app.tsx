@@ -14,6 +14,7 @@ import { MultiRunDashboard } from './ui/components/MultiRunDashboard.js';
 import { ApiKeyPrompt } from './ui/components/ApiKeyPrompt.js';
 import { BackendSelector } from './ui/components/BackendSelector.js';
 import { DirectoryPicker } from './ui/components/DirectoryPicker.js';
+import { GraphScreen } from './ui/components/GraphScreen.js';
 import { RunQueueScreen } from './ui/components/RunQueueScreen.js';
 import { useTerminalResize } from './ui/hooks/useTerminalResize.js';
 import { SystemMetricsBar } from './ui/components/SystemMetricsBar.js';
@@ -334,6 +335,10 @@ export function App({
           dispatch({ type: 'welcome.projects' });
           return;
         }
+        if (input === 'g' || input === 'G') {
+          dispatch({ type: 'welcome.graphs' });
+          return;
+        }
         if (key.upArrow) {
           setSelectedPipelineIndex((prev) => Math.max(0, prev - 1));
           return;
@@ -408,6 +413,7 @@ export function App({
             <Text>  <Text bold color="cyan">[M]</Text>  {t('tui.home.menu_saved')}</Text>
             <Text>  <Text bold color="cyan">[D]</Text>  {t('tui.home.menu_dir')}</Text>
             <Text>  <Text bold color="cyan">[P]</Text>  {t('tui.home.menu_projects')}</Text>
+            <Text>  <Text bold color={theme.ai}>[G]</Text>  {t('tui.graph.menu')}</Text>
             <Text>  <Text bold color="cyan">[O]</Text>  {t('tui.home.menu_options')}</Text>
             <Text>  <Text bold color="cyan">[?]</Text>  {t('tui.home.menu_faq')}</Text>
             <Text>  <Text bold color="cyan">[Q]</Text>  {t('tui.home.menu_quit')}</Text>
@@ -672,6 +678,35 @@ export function App({
           dispatch({ type: 'directory.selectMany', dirs });
         }}
         onCancel={() => dispatch({ type: 'directory.cancel' })}
+      />
+    );
+  } else if (screen.kind === 'graph-picker' || screen.kind === 'graph-detail') {
+    // ONE component, two screen kinds: the FSM variant decides list vs detail
+    // and carries the id. All the I/O (listGraphs / readGraph /
+    // compileGraphPipeline) happens inside the component, so the reducer only
+    // ever sees the finished Pipeline — see `graph.launch` in screen-fsm.ts.
+    body = (
+      <GraphScreen
+        repoRoot={repoRoot}
+        mode={
+          screen.kind === 'graph-detail'
+            ? { kind: 'detail', graphId: screen.graphId }
+            : { kind: 'list' }
+        }
+        onInspect={(graphId) => dispatch({ type: 'graph.inspect', graphId })}
+        onLaunch={(compiled, graphName) =>
+          dispatch({
+            type: 'graph.launch',
+            pipeline: compiled,
+            graphName,
+            initialBackendSet: !!initialBackend,
+          })
+        }
+        onBack={() =>
+          dispatch(
+            screen.kind === 'graph-detail' ? { type: 'graph.back' } : { type: 'graph.cancel' },
+          )
+        }
       />
     );
   } else if (screen.kind === 'run-queue') {
