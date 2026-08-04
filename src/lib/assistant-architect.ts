@@ -151,7 +151,7 @@ export async function runArchitect(opts: RunArchitectOptions): Promise<Architect
     return runArchitectStub(opts);
   }
 
-  const ctx: LlmClientContext = opts.llmContext ?? { backend: 'pi', openrouterApiKey: opts.apiKey };
+  const ctx: LlmClientContext = opts.llmContext ?? { backend: 'jcode', deepseekApiKey: opts.apiKey };
   const invoke: ArchitectInvoker =
     opts.invoker ??
     (async <T>(

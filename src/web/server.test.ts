@@ -94,7 +94,7 @@ describe('web server', () => {
   it('bootstrap lists backends, defaults, and the preloaded pipeline', async () => {
     const json = await (await fetch(base + '/api/bootstrap')).json();
     expect(Array.isArray(json.backends)).toBe(true);
-    expect(json.backends.some((b: { id: string }) => b.id === 'pi')).toBe(true);
+    expect(json.backends.some((b: { id: string }) => b.id === 'jcode')).toBe(true);
     expect(json.backends.some((b: { id: string }) => b.id === 'stub')).toBe(true);
     expect(json.initialPipeline).toBe('web-test-pipe');
     // Multi-run bootstrap returns a runs[] array (empty before any run starts).
@@ -571,7 +571,7 @@ describe('web server — OpenRouter key management (⚙ Options)', () => {
       string,
       unknown
     >;
-    expect(st).toMatchObject({ name: 'openrouter', source: 'none', masked: null });
+    expect(st).toMatchObject({ name: 'deepseek', source: 'none', masked: null });
 
     // Ambient env var → the fallback tier.
     process.env.OPENROUTER_API_KEY = 'sk-or-envkey-12345678';
@@ -587,7 +587,7 @@ describe('web server — OpenRouter key management (⚙ Options)', () => {
     // the live in-session override — the status flips to 'options'.
     const save = await fetch(base + '/api/keys', {
       method: 'POST',
-      body: JSON.stringify({ name: 'openrouter', value: 'sk-or-saved-abcdefgh' }),
+      body: JSON.stringify({ name: 'deepseek', value: 'sk-or-saved-abcdefgh' }),
     });
     expect(save.status).toBe(200);
     expect((await save.json()) as Record<string, unknown>).toMatchObject({
@@ -686,20 +686,20 @@ describe('web server — key POOL endpoints (⚙ Settings, multi-key rotation)',
     }
   });
 
-  const getPool = async (name = 'openrouter'): Promise<any> =>
+  const getPool = async (name = 'deepseek'): Promise<any> =>
     (await fetch(`${base}/api/keys/pool?name=${name}`)).json();
 
   const addKey = async (value: string): Promise<{ status: number; json: any }> => {
     const res = await fetch(base + '/api/keys/pool', {
       method: 'POST',
-      body: JSON.stringify({ name: 'openrouter', value }),
+      body: JSON.stringify({ name: 'deepseek', value }),
     });
     return { status: res.status, json: await res.json() };
   };
 
   it('lists an empty pool and mirrors a legacy single key as a pool of one', async () => {
     let pool = await getPool();
-    expect(pool).toMatchObject({ name: 'openrouter', current: 0, keys: [] });
+    expect(pool).toMatchObject({ name: 'deepseek', current: 0, keys: [] });
     expect(typeof pool.label).toBe('string');
     expect(typeof pool.source).toBe('string');
 
@@ -707,7 +707,7 @@ describe('web server — key POOL endpoints (⚙ Settings, multi-key rotation)',
     // config (or an older huu writing one) must read back as a usable pool.
     await fetch(base + '/api/keys', {
       method: 'POST',
-      body: JSON.stringify({ name: 'openrouter', value: 'sk-or-legacy-11112222' }),
+      body: JSON.stringify({ name: 'deepseek', value: 'sk-or-legacy-11112222' }),
     });
     pool = await getPool();
     expect(pool.keys).toHaveLength(1);
@@ -744,7 +744,7 @@ describe('web server — key POOL endpoints (⚙ Settings, multi-key rotation)',
     probeStatus = 401;
     const res = await fetch(base + '/api/keys/pool', {
       method: 'POST',
-      body: JSON.stringify({ name: 'openrouter', value: 'sk-or-rejected-99998888' }),
+      body: JSON.stringify({ name: 'deepseek', value: 'sk-or-rejected-99998888' }),
     });
     expect(res.status).toBe(400);
     const json = (await res.json()) as { httpStatus: number; validation: { status: string } };
@@ -776,7 +776,7 @@ describe('web server — key POOL endpoints (⚙ Settings, multi-key rotation)',
     const bad = (await (
       await fetch(base + '/api/keys/pool/validate', {
         method: 'POST',
-        body: JSON.stringify({ name: 'openrouter', index: 0 }),
+        body: JSON.stringify({ name: 'deepseek', index: 0 }),
       })
     ).json()) as { validation: { status: string }; keys: { state: string; reason?: string }[] };
     expect(bad.validation.status).toBe('invalid');
@@ -787,7 +787,7 @@ describe('web server — key POOL endpoints (⚙ Settings, multi-key rotation)',
     const reset = (await (
       await fetch(base + '/api/keys/pool/reset', {
         method: 'POST',
-        body: JSON.stringify({ name: 'openrouter' }),
+        body: JSON.stringify({ name: 'deepseek' }),
       })
     ).json()) as { keys: { state: string }[] };
     expect(reset.keys[0]!.state).toBe('active');
@@ -796,14 +796,14 @@ describe('web server — key POOL endpoints (⚙ Settings, multi-key rotation)',
     probeStatus = 401;
     await fetch(base + '/api/keys/pool/validate', {
       method: 'POST',
-      body: JSON.stringify({ name: 'openrouter', index: 0 }),
+      body: JSON.stringify({ name: 'deepseek', index: 0 }),
     });
     expect((await getPool()).keys[0].state).toBe('burned');
     probeStatus = 200;
     const good = (await (
       await fetch(base + '/api/keys/pool/validate', {
         method: 'POST',
-        body: JSON.stringify({ name: 'openrouter', index: 0 }),
+        body: JSON.stringify({ name: 'deepseek', index: 0 }),
       })
     ).json()) as { validation: { status: string }; keys: { state: string }[] };
     expect(good.validation.status).toBe('valid');
@@ -823,7 +823,7 @@ describe('web server — key POOL endpoints (⚙ Settings, multi-key rotation)',
     // A well-known spec with nothing at that index is still a 400 (not a 500).
     const oob = await fetch(base + '/api/keys/pool/validate', {
       method: 'POST',
-      body: JSON.stringify({ name: 'openrouter', index: 7 }),
+      body: JSON.stringify({ name: 'deepseek', index: 7 }),
     });
     expect(oob.status).toBe(400);
   });

@@ -97,9 +97,6 @@ import { execFileSync } from 'node:child_process';
 import { join, dirname, isAbsolute } from 'node:path';
 import { log, scopedDebugLog } from '../lib/debug-logger.js';
 import { attachProcessLogSink } from '../lib/process-log-bridge.js';
-import { checkOpenRouterReachable } from '../lib/openrouter.js';
-import { AuthError } from '../lib/auth-error.js';
-import { findSpec, keyRemedyHint, resolveApiKeyWithSource } from '../lib/api-key.js';
 import type { KeyPoolHandle } from '../lib/api-key-pool.js';
 import { classifyProviderError } from '../lib/provider-error.js';
 import type { OrchCtx } from './context.js';
@@ -381,7 +378,7 @@ export class Orchestrator {
    */
   private pausedAgentIds: Set<number> = new Set();
   /**
-   * Fase 2.3 resume: agentId → the checkpoint path of its paused pi session.
+   * Fase 2.3 resume: agentId → the checkpoint path of its paused agent session.
    * Read + consumed by spawnAndRun's FIRST attempt to (a) reuse the preserved
    * worktree (skip createAgentWorktree) and (b) reconstruct the session via
    * {@link AgentRuntimeContext.restoreSessionPath} so the resumed agent
@@ -648,7 +645,7 @@ export class Orchestrator {
 
   /**
    * Live project cost = Σ per-agent cost. Each agent's `cost` accumulates the
-   * authoritative `usage.cost` the backend reports per turn (OpenRouter returns
+   * authoritative `usage.cost` the backend reports per turn (DeepSeek returns
    * it, in credits = USD, on every completion incl. the final streaming chunk),
    * so the web header AND the headless result's `totalCost` stay correct in
    * real time with no token×price estimate. (Merge/judge agents aren't in
@@ -1042,54 +1039,6 @@ export class Orchestrator {
       });
       if (!this.preflight.valid) {
         throw new Error(`Preflight failed: ${this.preflight.errors.join('; ')}`);
-      }
-      // Fast network probe — fail loudly in <8s instead of letting every
-      // agent burn 32s × 8 retries on an unreachable OpenRouter. Common
-      // failure: Docker bridge MTU (1500) > VPN tunnel MTU (~1420) drops
-      // TLS ClientHello packets silently.
-      if ((this.config.backend ?? 'pi') === 'pi') {
-        this.dlog('orch', 'network_probe_start');
-        const probeStartedAt = Date.now();
-        const reach = await checkOpenRouterReachable(this.config.apiKey);
-        this.dlog('orch', 'network_probe_end', {
-          durationMs: Date.now() - probeStartedAt,
-          kind: reach.kind,
-        });
-        if (reach.kind === 'unauthorized') {
-          // Name the source that actually supplied the rejected key. When the
-          // caller told us where the key came from (config.apiKeySource — the
-          // web sets it), trust THAT: re-running the resolver here would blame
-          // the saved/env key even when the run carried a browser-session key
-          // (the documented misattribution). Only without a declared source
-          // fall back to the resolver-based hint (saved store outranks env).
-          const spec = findSpec('openrouter');
-          const src = this.config.apiKeySource;
-          const hint =
-            src === 'request'
-              ? 'huu used the API key this browser tab sent with the run (the one validated in the web UI) — ' +
-                'NOT the key saved on disk or in your environment. Open the web ⚙ Options, paste a working ' +
-                'OpenRouter key and "Validate & save"; that also refreshes this tab.'
-              : src === 'options'
-                ? 'huu used the OpenRouter key saved via the web ⚙ Options — update it there ' +
-                  '("Validate & save") or clear it to fall back to the environment.'
-                : spec
-                  ? keyRemedyHint(spec, resolveApiKeyWithSource(spec))
-                  : 'Update OPENROUTER_API_KEY in the Options screen.';
-          throw new AuthError({
-            backendKind: 'pi',
-            specName: 'openrouter',
-            message: `OpenRouter rejected the API key (HTTP ${reach.status}). ${hint}`,
-          });
-        }
-        if (reach.kind === 'unreachable') {
-          const inContainer = process.env.HUU_IN_CONTAINER === '1';
-          const hint = inContainer
-            ? ' Hint: if you are on a VPN (WireGuard/OpenVPN), the docker bridge MTU (1500) is likely larger than your tunnel MTU (~1420), silently dropping TLS handshake packets. Workaround: `export HUU_DOCKER_NETWORK=host` and rerun. Permanent fix: edit /etc/docker/daemon.json with `{"mtu": 1420}` and restart dockerd.'
-            : '';
-          throw new Error(
-            `Cannot reach openrouter.ai (${reach.reason}). Aborting before agents spawn so you don't waste 30 minutes on retries.${hint}`,
-          );
-        }
       }
       const runId = this.externalRunId ?? generateRunId();
       this.dlog = scopedDebugLog(runId);
@@ -1704,26 +1653,12 @@ export class Orchestrator {
   /**
    * Record a provider failure against the key that produced it and report
    * whether the pool rotated to a different usable one.
-   *
-   * DOUBLE-GATED BURN: `classifyProviderError` is a string heuristic over the
-   * pi backend's message-only errors. A false negative just degrades to today's
-   * behavior (safe); a false positive on `auth` would BURN a good key, which is
-   * permanent. So an auth-looking message is confirmed by an independent live
-   * probe first, and only a probe that ALSO says unauthorized is allowed to
-   * burn. Rate limits need no gate — a cooldown self-heals.
    */
   private async reportKeyFailure(
     kind: ReturnType<typeof classifyProviderError>,
     key: string,
   ): Promise<boolean> {
     if (!this.keyPool) return false;
-    if (kind === 'auth') {
-      const probe = await checkOpenRouterReachable(key).catch(() => null);
-      if (!probe || probe.kind !== 'unauthorized') {
-        this.dlog('orch', 'key_burn_declined', { probe: probe?.kind ?? 'probe_failed' });
-        return false;
-      }
-    }
     return this.keyPool.report(kind, key);
   }
 

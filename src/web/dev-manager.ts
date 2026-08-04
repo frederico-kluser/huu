@@ -262,8 +262,7 @@ export interface StartDevParams {
   /**
    * Named starting point for the routing policy. Resolved HERE, at the
    * surface, never in the driver — that is what keeps heterogeneous routing an
-   * opt-in. Non-`pi` backends resolve to `{}`: every preset id is an
-   * OpenRouter id.
+   * opt-in. Non-`jcode` backends resolve to `{}`.
    */
   modelsPreset?: DevModelPreset;
   /**
@@ -435,14 +434,14 @@ export class WebDevManager {
     let apiKeySource: AppConfig['apiKeySource'];
     let keyPool: KeyPoolHandle | undefined;
     if (bundle.requiresApiKey) {
-      const specName = params.backend === 'azure' ? 'azureApiKey' : 'openrouter';
+      const specName = false ? 'deepseek' : 'deepseek';
       const spec = findSpec(specName);
       const picked = pickRunKey(params.apiKey, this.runs.getWebKey(specName), spec);
       apiKey = picked.value;
       apiKeySource = picked.source;
       if (!apiKey) {
         throw new Error(
-          `no API key available for ${params.backend === 'azure' ? 'Azure AI Foundry' : 'OpenRouter'} — add one in ⚙ Settings`,
+          `no API key available for ${false ? 'DeepSeek' : 'DeepSeek'} — add one in ⚙ Settings`,
         );
       }
       // Rotation is opt-in BY CONSTRUCTION: `createKeyPoolHandle` returns a
@@ -455,7 +454,7 @@ export class WebDevManager {
     }
 
     let endpoint = params.endpoint?.trim() || undefined;
-    if (params.backend === 'azure') {
+    if (false) {
       endpoint = endpoint ?? (this.runs.getWebKey('azureEndpoint') || undefined);
       if (!endpoint) throw new Error('the Azure provider requires an endpoint URL');
     }
@@ -464,8 +463,7 @@ export class WebDevManager {
       apiKey: apiKey || 'stub',
       modelId: params.modelId,
       backend: params.backend,
-      provider: params.provider ?? (params.backend === 'azure' ? 'azure' : 'openrouter'),
-      endpoint,
+            endpoint,
       apiKeySource,
     };
 

@@ -1,7 +1,5 @@
 import type { AgentFactory } from '../types.js';
-import { piAgentFactory } from './pi/factory.js';
 import { stubAgentFactory } from './stub/factory.js';
-import { azureAgentFactory } from './azure/factory.js';
 import { jcodeAgentFactory } from './jcode/factory.js';
 
 /**
@@ -13,14 +11,13 @@ import { jcodeAgentFactory } from './jcode/factory.js';
  * the `AppConfig.backend` field, so changing one means changing both
  * intentionally.
  *
- * Only `pi` is surfaced as a backend in the UI; the provider underneath it
- * (OpenRouter or Azure AI Foundry) is chosen via `LlmProvider` and mapped to
- * the concrete dispatch kind by `src/lib/providers.ts` (`azure` is the kind
- * that serves the Azure provider). `stub` is the no-LLM smoke-test backend.
+ * `jcode` is the only real backend (DeepSeek V4 Pro via subprocess).
+ * `stub` is the no-LLM smoke-test backend.
+ * (pi and azure — OpenRouter / Azure AI Foundry — were removed in v3.0.)
  */
-export type AgentBackendKind = 'pi' | 'azure' | 'stub' | 'jcode';
+export type AgentBackendKind = 'jcode' | 'stub';
 
-export const ALL_BACKENDS: ReadonlyArray<AgentBackendKind> = ['pi', 'azure', 'stub', 'jcode'];
+export const ALL_BACKENDS: ReadonlyArray<AgentBackendKind> = ['jcode', 'stub'];
 
 export interface BackendBundle {
   /** Factory used for regular per-task agents. */
@@ -39,7 +36,7 @@ export interface BackendBundle {
   /**
    * `true` when running this backend requires resolving an API key /
    * token before launch. Stub returns `false` so `--stub` can run
-   * without OPENROUTER_API_KEY. Used by the App to decide whether to
+   * without DEEPSEEK_API_KEY. Used by the App to decide whether to
    * open the api-key prompt screen.
    */
   requiresApiKey: boolean;
@@ -65,28 +62,16 @@ export interface BackendBundle {
  */
 export function selectBackend(kind: AgentBackendKind): BackendBundle {
   switch (kind) {
-    case 'pi':
+    case 'jcode':
       return {
-        agentFactory: piAgentFactory,
-        conflictResolverFactory: piAgentFactory,
-        label: 'Pi · OpenRouter',
-        description: 'Default. Uses @mariozechner/pi-coding-agent over OpenRouter; pay-per-token.',
-        requiresApiKey: true,
-        apiKeySpecName: 'openrouter',
-        userSelectable: true,
-      };
-    case 'azure':
-      return {
-        agentFactory: azureAgentFactory,
-        conflictResolverFactory: azureAgentFactory,
-        label: 'Pi · Azure AI Foundry',
+        agentFactory: jcodeAgentFactory,
+        conflictResolverFactory: jcodeAgentFactory,
+        label: 'jcode · DeepSeek V4 Pro',
         description:
-          'Azure AI Foundry endpoint (any deployment). Requires API key + endpoint URL from the portal.',
+          'Uses jcode CLI (subprocess) with DeepSeek V4 Pro. Stateless — zero embeddings, no memory across turns.',
         requiresApiKey: true,
-        apiKeySpecName: 'azureApiKey',
-        // Reached via the provider selector (LlmProvider='azure'), not as a
-        // standalone backend entry — the UI shows providers, not backends.
-        userSelectable: false,
+        apiKeySpecName: 'deepseek',
+        userSelectable: true,
       };
     case 'stub':
       return {
@@ -99,18 +84,6 @@ export function selectBackend(kind: AgentBackendKind): BackendBundle {
         // not exposed in the BackendSelector TUI.
         userSelectable: false,
       };
-    case 'jcode':
-      return {
-        agentFactory: jcodeAgentFactory,
-        conflictResolverFactory: jcodeAgentFactory,
-        label: 'jcode · DeepSeek V4 Pro',
-        description:
-          'Uses jcode CLI (subprocess) with DeepSeek V4 Pro. Stateless — zero embeddings, no memory across turns.',
-        requiresApiKey: true,
-        apiKeySpecName: 'deepseek',
-        // jcode is user-selectable: surfaced as an alternative LLM backend.
-        userSelectable: true,
-      };
     default: {
       const exhaustive: never = kind;
       throw new Error(`Unknown agent backend: ${String(exhaustive)}`);
@@ -120,14 +93,12 @@ export function selectBackend(kind: AgentBackendKind): BackendBundle {
 
 /**
  * Parse a string into an AgentBackendKind. Accepts canonical kinds plus
- * legacy aliases (e.g. `real` → `pi`). Returns null on unknown input so
- * the caller can produce a friendly error.
+ * legacy aliases. Returns null on unknown input so the caller can produce
+ * a friendly error.
  */
 export function parseBackendKind(s: string): AgentBackendKind | null {
   const lower = s.trim().toLowerCase();
-  if (lower === 'pi' || lower === 'real' || lower === 'openrouter') return 'pi';
-  if (lower === 'azure' || lower === 'azure-openai' || lower === 'azure-foundry') return 'azure';
-  if (lower === 'stub' || lower === 'fake' || lower === 'mock') return 'stub';
   if (lower === 'jcode' || lower === 'deepseek') return 'jcode';
+  if (lower === 'stub' || lower === 'fake' || lower === 'mock') return 'stub';
   return null;
 }

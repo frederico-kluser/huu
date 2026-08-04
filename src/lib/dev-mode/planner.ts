@@ -106,7 +106,7 @@ function shouldStub(opts: LlmAccess): boolean {
  */
 function buildInvoker(opts: LlmAccess): PlannerInvoker {
   if (opts.invoker) return opts.invoker;
-  const ctx: LlmClientContext = opts.llmContext ?? { backend: 'pi', openrouterApiKey: opts.apiKey };
+  const ctx: LlmClientContext = opts.llmContext ?? { backend: 'jcode', deepseekApiKey: opts.apiKey };
   return async (schema, name, prompt, temperature) => {
     const chat = buildChatClient(ctx, { modelId: opts.modelId, temperature });
     const structured = chat.withStructuredOutput(schema as z.ZodTypeAny, {

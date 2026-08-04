@@ -12,8 +12,8 @@ import {
   findSpec,
   type ApiKeySpec,
 } from './api-key-registry.js';
-import { providerToBackend } from './providers.js';
-import type { AgentBackendKind, LlmProvider } from './types.js';
+import { providerToBackend, type LlmProvider } from './providers.js';
+import type { AgentBackendKind } from './types.js';
 
 export { API_KEY_REGISTRY, findSpec };
 export type { ApiKeySpec };
@@ -289,14 +289,17 @@ export function maskKey(value: string): string {
 
 /**
  * Backwards-compat shim. New code should use
- *   resolveApiKey(findSpec('openrouter')!)
+ *   resolveApiKey(findSpec('deepseek')!)
  * but legacy call sites in app.tsx / orchestrator continue to work.
  */
-export function resolveOpenRouterApiKey(): string {
-  const spec = findSpec('openrouter');
+export function resolveDeepSeekApiKey(): string {
+  const spec = findSpec('deepseek');
   if (!spec) return '';
   return resolveApiKey(spec);
 }
+
+/** @deprecated Use resolveDeepSeekApiKey() instead. */
+export const resolveOpenRouterApiKey = resolveDeepSeekApiKey;
 
 /**
  * Read the whole global config store as a plain object. Missing/corrupt file

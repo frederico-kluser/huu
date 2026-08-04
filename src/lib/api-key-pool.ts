@@ -9,9 +9,9 @@
  *
  * ```jsonc
  * {
- *   "openrouter": "sk-or-PRIMARY",   // UNCHANGED single-key field
+ *   "deepseek": "sk-ds-PRIMARY",   // UNCHANGED single-key field
  *   "_pools": {                      // NEW; an older huu ignores unknown keys
- *     "openrouter": {
+ *     "deepseek": {
  *       "keys": ["sk-or-A", "sk-or-B"], "current": 0,
  *       "burned":    [{ "index": 1, "at": "…", "reason": "auth" }],
  *       "cooldowns": [{ "index": 0, "until": "…" }]
@@ -89,8 +89,8 @@ export interface KeyPoolHandle {
    * handle, or no other usable key left.
    *
    * NOTE the caller's obligation for `'auth'`: burning is permanent for the
-   * rest of the month, so only report `'auth'` after an independent probe
-   * (`checkOpenRouterReachable`) also says unauthorized. See
+   * rest of the month, so only report `'auth'` after confirming the key is
+   * genuinely invalid. See
    * `classifyProviderError`'s doc comment.
    */
   report(kind: ProviderErrorKind, key: string): boolean;

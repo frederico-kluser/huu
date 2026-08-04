@@ -27,11 +27,6 @@ import {
   loadKeyPool,
   type KeyPoolState,
 } from '../lib/api-key-pool.js';
-import {
-  checkOpenRouterReachable,
-  listAllModels,
-} from '../lib/openrouter.js';
-import { checkAzureReachable } from '../lib/azure.js';
 import { PROVIDERS, type ProviderInfo } from '../lib/providers.js';
 import { loadRecommendedModels } from '../models/catalog.js';
 import { supportsThinking } from '../lib/model-factory.js';
@@ -56,7 +51,7 @@ export interface BackendInfo {
   /** True when a usable key is already resolvable (env, mount, or saved). */
   hasKey: boolean;
   /**
-   * Registry name of this backend's primary credential (e.g. 'openrouter').
+   * Registry name of this backend's primary credential (e.g. 'deepseek').
    * The browser uses it to look up the per-session key it keeps in memory
    * and to send that key with each run — see the browser-only key flow.
    */
@@ -75,12 +70,12 @@ export interface ModelInfo {
   tier?: string;
   thinking: boolean;
   /**
-   * Whether the model advertises tool calling (live OpenRouter catalog only).
+   * Whether the model advertises tool calling.
    * huu's agents require it; surfaced so the picker can warn when it's absent
    * rather than silently hiding the model. Undefined for the static catalog.
    */
   tools?: boolean;
-  /** Context window in tokens, when known (live OpenRouter catalog only). */
+  /** Context window in tokens, when known. */
   contextLength?: number;
 }
 
@@ -122,12 +117,12 @@ export interface PipelineInfo {
 function backendHasKey(kind: AgentBackendKind): boolean {
   const bundle = selectBackend(kind);
   if (!bundle.requiresApiKey) return true;
-  if (kind === 'azure') {
+  if (false) {
     // Azure needs BOTH the key and the endpoint to actually run.
-    return findMissingKeysForBackend('azure').length === 0;
+    return false;
   }
-  if (kind === 'pi') {
-    return findMissingKeysForBackend('pi').length === 0;
+  if (kind === 'jcode') {
+    return findMissingKeysForBackend('jcode').length === 0;
   }
   return true;
 }
@@ -162,9 +157,7 @@ export type KeyValidation =
 
 /**
  * Validate a key value against its provider without persisting anything.
- * Backend-aware: OpenRouter (pi) and Azure have real reachability probes;
- * other specs (Copilot token, the Azure endpoint URL) have no cheap
- * check and come back `unverifiable`.
+ * DeepSeek has no cheap reachability probe, so it comes back `unverifiable`.
  */
 export async function validateKeyValue(
   spec: ApiKeySpec,
@@ -174,23 +167,7 @@ export async function validateKeyValue(
   const v = value.trim();
   if (!v) return { status: 'unverifiable', reason: 'empty value' };
 
-  if (spec.name === 'openrouter') {
-    const r = await checkOpenRouterReachable(v);
-    if (r.kind === 'ok') return { status: 'valid' };
-    if (r.kind === 'unauthorized') return { status: 'invalid', httpStatus: r.status };
-    return { status: 'unverifiable', reason: r.reason };
-  }
-
-  if (spec.name === 'azureApiKey') {
-    const endpoint = opts?.endpoint?.trim();
-    if (!endpoint) return { status: 'unverifiable', reason: 'endpoint required to validate' };
-    const r = await checkAzureReachable(v, endpoint);
-    if (r.kind === 'ok') return { status: 'valid' };
-    if (r.kind === 'unauthorized') return { status: 'invalid', httpStatus: r.status };
-    return { status: 'unverifiable', reason: r.reason };
-  }
-
-  // Copilot token / Azure endpoint URL / future specs: no cheap probe.
+  // DeepSeek and other specs: no cheap probe available.
   return { status: 'unverifiable', reason: 'no validator for this key' };
 }
 
@@ -215,47 +192,15 @@ export function listModelsInfo(
 /**
  * Models offered for a backend in the web UI.
  *
- * For OpenRouter (`pi`) this is the FULL LIVE catalog — every model, annotated
- * with `tools`/`thinking` so the picker can badge capability instead of hiding
- * models. OpenRouter's `GET /models` is PUBLIC, so the catalog is downloaded
- * even with NO key: the user sees all ~339 models the moment they open the
- * Model picker, not just the handful of static presets. (It used to require a
- * validated key AND hard-filter to tool+reasoning models, which left a key-less
- * user staring at the recommended shortlist.) Only on a real failure
- * (network/timeout/empty result) does it fall back to the static recommended
- * catalog, so the picker is never empty. Azure and stub always use the static
- * catalog.
- *
- * `openrouterKey` arrives via the browser-only flow (the `x-huu-key` header the
- * client sends once the user has validated it); OPTIONAL for listing — used in
- * memory only when present, never logged or persisted here.
+ * Uses the static recommended catalog loaded from `recommended-models.json`
+ * (or the in-code fallback). The live catalog from OpenRouter is no longer
+ * available — DeepSeek does not expose a public /models endpoint.
  */
 export async function listModelsForBackend(
   cwd: string,
   backend: AgentBackendKind,
-  openrouterKey: string,
-): Promise<{ models: ModelInfo[]; source: 'openrouter-live' | 'recommended' }> {
-  if (backend === 'pi') {
-    try {
-      const live = await listAllModels(openrouterKey.trim());
-      if (live.length > 0) {
-        return {
-          source: 'openrouter-live',
-          models: live.map((m) => ({
-            id: m.id,
-            label: m.name,
-            inputPrice: m.inputPricePerM,
-            outputPrice: m.outputPricePerM,
-            contextLength: m.contextLength,
-            thinking: Boolean(m.supportsReasoning),
-            tools: Boolean(m.supportsTools),
-          })),
-        };
-      }
-    } catch {
-      // network/timeout/HTTP error → fall back to the static catalog below
-    }
-  }
+  _key: string,
+): Promise<{ models: ModelInfo[]; source: 'recommended' }> {
   return { models: listModelsInfo(cwd, backend), source: 'recommended' };
 }
 
@@ -275,7 +220,7 @@ export function keyStatus(backend: AgentBackendKind): KeyStatus {
   if (!bundle.requiresApiKey || backend === 'stub') {
     return { ok: true, missing: [] };
   }
-  const missing = findMissingKeysForBackend(backend as 'pi' | 'azure').map(
+  const missing = findMissingKeysForBackend(backend).map(
     specToInfo,
   );
   return { ok: missing.length === 0, missing };
@@ -465,8 +410,8 @@ export interface ProviderUiInfo {
 }
 
 /**
- * The user-facing provider choices for the pi backend (OpenRouter / Azure AI
- * Foundry), each annotated with the credential specs it needs and whether
+ * The user-facing provider choices for the jcode backend (DeepSeek),
+ * each annotated with the credential specs it needs and whether
  * they're already resolvable. Drives the web provider selector.
  */
 export function listProvidersInfo(): ProviderUiInfo[] {

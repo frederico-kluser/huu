@@ -12,7 +12,7 @@ export class AuthError extends Error {
   /** Discriminator so callers can detect this across module/realm boundaries. */
   readonly code = 'AUTH' as const;
   readonly backendKind: AgentBackendKind;
-  /** `ApiKeySpec.name` of the credential that was rejected (e.g. 'openrouter'). */
+  /** `ApiKeySpec.name` of the credential that was rejected (e.g. 'deepseek'). */
   readonly specName?: string;
 
   constructor(opts: {

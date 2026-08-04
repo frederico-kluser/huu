@@ -26,7 +26,7 @@ export interface FeasibilityInput {
   apiKey: string;
   repoRoot: string;
   modelId?: string;
-  /** Backend-aware context. Required for `--backend=azure`. */
+  /** Backend-aware context. Required for correct backend routing. */
   llmContext?: LlmClientContext;
 }
 
@@ -55,14 +55,13 @@ export async function analyzeCheckFeasibility(
   }
 
   const apiKey = input.apiKey.trim();
-  const ctxBackend = input.llmContext?.backend ?? 'pi';
-  const fallbackModel =
-    ctxBackend === 'azure' ? defaultHelperModel('azure') : 'moonshotai/kimi-k2.6';
+  const ctxBackend = input.llmContext?.backend ?? 'jcode';
+  const fallbackModel = 'moonshotai/kimi-k2.6';
   const modelId = (input.modelId ?? fallbackModel).trim();
 
   const ctx: LlmClientContext = input.llmContext ?? {
-    backend: 'pi',
-    openrouterApiKey: apiKey,
+    backend: 'jcode',
+    deepseekApiKey: apiKey,
   };
   let chat;
   try {
@@ -133,6 +132,6 @@ function stubFeasibility(step: CheckStep): FeasibilityResult {
     feasible: true,
     reason: 'stub: feasibility analyzer unavailable; assuming runnable.',
     instructionDraft: `Stub draft — replace before running with a real model. Evaluate the condition "${step.condition.slice(0, 80)}" and return a label from {${labels}}.`,
-    warnings: ['stub mode — real analysis requires OPENROUTER_API_KEY'],
+    warnings: ['stub mode — real analysis requires DEEPSEEK_API_KEY'],
   };
 }

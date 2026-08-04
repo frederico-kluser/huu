@@ -64,7 +64,7 @@ describe('resolveDevModels — no hidden defaulting', () => {
 
 describe('defaultDevModelPolicy', () => {
   it('is EMPTY for azure and stub — the preset ids are OpenRouter-only', () => {
-    for (const backend of ['azure', 'stub'] as const) {
+    for (const backend of ['jcode', 'stub'] as const) {
       expect(defaultDevModelPolicy(backend)).toEqual({});
       // Even when a preset is asked for explicitly.
       expect(defaultDevModelPolicy(backend, 'hetero')).toEqual({});
@@ -76,7 +76,7 @@ describe('defaultDevModelPolicy', () => {
   });
 
   it('defaults to `hetero` on pi: cross-family critic, glm planner', () => {
-    const policy = defaultDevModelPolicy('pi');
+    const policy = defaultDevModelPolicy('jcode');
     expect(policy.critic).toBe('moonshotai/kimi-k2.6');
     expect(policy.planner).toBe('z-ai/glm-5.2');
     expect(policy.worker).toBe('deepseek/deepseek-v4-pro');
@@ -85,27 +85,27 @@ describe('defaultDevModelPolicy', () => {
   });
 
   it('`monoculture` puts the critic back on the worker model', () => {
-    const policy = defaultDevModelPolicy('pi', 'monoculture');
+    const policy = defaultDevModelPolicy('jcode', 'monoculture');
     expect(policy.critic).toBe('deepseek/deepseek-v4-pro');
     expect(policy.critic).toBe(policy.worker);
   });
 
   it('`thrifty` demotes only the reporter — the judge stays on the strong model', () => {
-    const policy = defaultDevModelPolicy('pi', 'thrifty');
+    const policy = defaultDevModelPolicy('jcode', 'thrifty');
     expect(policy.reporter).toBe('deepseek/deepseek-v4-flash');
     expect(policy.judge).toBe('deepseek/deepseek-v4-pro');
     expect(policy.critic).toBe('moonshotai/kimi-k2.6');
   });
 
   it('`uniform` on pi is still empty — every role falls back', () => {
-    expect(defaultDevModelPolicy('pi', 'uniform')).toEqual({});
+    expect(defaultDevModelPolicy('jcode', 'uniform')).toEqual({});
   });
 
   it('returns a fresh copy — mutating it cannot corrupt the preset table', () => {
-    const policy = defaultDevModelPolicy('pi');
+    const policy = defaultDevModelPolicy('jcode');
     policy.critic = 'mutated/id';
     expect(DEV_MODEL_PRESETS.hetero.critic).toBe('moonshotai/kimi-k2.6');
-    expect(defaultDevModelPolicy('pi').critic).toBe('moonshotai/kimi-k2.6');
+    expect(defaultDevModelPolicy('jcode').critic).toBe('moonshotai/kimi-k2.6');
   });
 });
 

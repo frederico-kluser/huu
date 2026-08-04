@@ -163,7 +163,8 @@ import {
   type AgentBackendKind,
 } from './orchestrator/backends/registry.js';
 import { parseProvider, providerToBackend } from './lib/providers.js';
-import type { AppConfig, Pipeline, LlmProvider } from './lib/types.js';
+import type { AppConfig, Pipeline } from './lib/types.js';
+import type { LlmProvider } from './lib/providers.js';
 import { installSafeTerminal } from './ui/safe-terminal.js';
 import { initDebugLogger, log as dlog } from './lib/debug-logger.js';
 import { enqueueProcessLog } from './lib/process-log-bridge.js';
@@ -441,7 +442,7 @@ async function main(): Promise<void> {
     process.env.HUU_RAM_PERCENT = String(resolveRamPercent(ramPercentArg));
   }
 
-  // --provider=<name> picks the LLM provider for pi (openrouter | azure).
+  // --provider=<name> picks the LLM provider for jcode (deepseek).
   const providerArg = args
     .filter((a) => a.startsWith('--provider='))
     .map((a) => a.slice('--provider='.length))
@@ -609,7 +610,7 @@ async function main(): Promise<void> {
     }
 
     // The `provider` field (when set) is the source of truth and overrides
-    // `backend`: openrouter → pi, azure → azure. Falls back to `backend`
+    // `backend`: deepseek → jcode. Falls back to `backend`
     // for configs written before provider selection existed.
     const effectiveBackend: AgentBackendKind = runConfig.provider
       ? providerToBackend(runConfig.provider)
@@ -618,13 +619,13 @@ async function main(): Promise<void> {
     let apiKey = '';
     let endpoint: string | undefined;
     if (bundle.requiresApiKey) {
-      const specName = effectiveBackend === 'azure' ? 'azureApiKey' : 'openrouter';
-      const spec = findSpec(specName);
+      const specName = 'deepseek';
+      const spec = findSpec('deepseek');
       if (spec) apiKey = resolveApiKey(spec);
       if (!apiKey) {
         console.error(
           t('cli.err_auto_no_key', {
-            provider: effectiveBackend === 'azure' ? 'Azure AI Foundry' : 'OpenRouter',
+            provider: 'DeepSeek',
             envVar: spec?.envVar ?? specName,
             secretPath: spec?.secretMountPath ?? '/run/secrets/<key>',
           }),
@@ -632,22 +633,13 @@ async function main(): Promise<void> {
         process.exit(1);
       }
 
-      // Azure also requires an endpoint URL.
-      if (effectiveBackend === 'azure') {
-        const endpointSpec = findSpec('azureEndpoint');
-        if (endpointSpec) endpoint = resolveApiKey(endpointSpec) || undefined;
-        if (!endpoint) {
-          console.error(t('cli.err_auto_no_endpoint'));
-          process.exit(1);
-        }
-      }
     }
 
     const appConfig: AppConfig = {
       apiKey: apiKey || 'stub',
       modelId: runConfig.modelId,
       backend: effectiveBackend,
-      provider: runConfig.provider ?? (effectiveBackend === 'azure' ? 'azure' : 'openrouter'),
+      /* provider removed from AppConfig */
       endpoint,
     };
 
@@ -676,7 +668,7 @@ async function main(): Promise<void> {
     const code = await runDevCli({
       args: filtered.slice(1),
       cwd: process.cwd(),
-      backend: backendKindFromCli ?? 'pi',
+      backend: backendKindFromCli ?? 'jcode',
       concurrency: concurrencyArg,
       autoScale,
     });
@@ -708,7 +700,7 @@ async function main(): Promise<void> {
   // When the user explicitly picked a backend on the CLI, lock it in.
   // When they didn't, defer to the App: it'll show the BackendSelector
   // screen so the choice is explicit before launch (avoids the foot-gun
-  // where someone runs `huu run` and silently burns OpenRouter quota).
+  // where someone runs `huu run` and silently burns API quota).
   const lockedBackend = backendKindFromCli ?? undefined;
 
   // Front-end fork: the BROWSER UI is the default; `--cli`/`--tui` (or
@@ -741,7 +733,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const initialBundle = selectBackend(lockedBackend ?? 'pi');
+  const initialBundle = selectBackend(lockedBackend ?? 'jcode');
 
   dlog('lifecycle', 'render_start', {
     useStub,

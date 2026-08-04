@@ -1489,7 +1489,7 @@ describe('runDevMode — orphan integration branches', () => {
 });
 
 describe('runDevMode — model routing preflight', () => {
-  const PI_CONFIG: AppConfig = { apiKey: 'stub', modelId: 'stub-model', backend: 'pi' };
+  const PI_CONFIG: AppConfig = { apiKey: 'stub', modelId: 'stub-model', backend: 'jcode' };
 
   // Left to itself this throws INSIDE the first agent, after its worktree and
   // branch already exist.

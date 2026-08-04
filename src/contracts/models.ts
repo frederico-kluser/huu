@@ -35,13 +35,12 @@ export const ModelTierSchema = z.enum(['planning', 'flagship', 'workhorse', 'fas
 export type ModelTier = z.infer<typeof ModelTierSchema>;
 
 /**
- * Which LLM provider can serve this model. `openrouter` is the default when
+ * Which LLM provider can serve this model. `deepseek` is the default when
  * omitted (matches existing recommended-models.json with no provider field).
- * `azure` models are deployment names served by an Azure AI Foundry endpoint.
  * The model selector filters the catalog by this field according to the
  * active provider (`AppConfig.backend` → provider).
  */
-export const ModelProviderSchema = z.enum(['openrouter', 'azure']);
+export const ModelProviderSchema = z.enum(['deepseek']);
 export type ModelProvider = z.infer<typeof ModelProviderSchema>;
 
 export const ModelEntrySchema = z.object({
@@ -56,7 +55,7 @@ export const ModelEntrySchema = z.object({
   /** Pricing/capability tier. Drives default biases in the assistant prompt. */
   tier: ModelTierSchema.optional(),
   /**
-   * Backend that can run this model. Defaults to `openrouter` when
+   * Backend that can run this model. Defaults to `deepseek` when
    * omitted to keep `recommended-models.json` files written before this
    * field existed parsing without churn.
    */

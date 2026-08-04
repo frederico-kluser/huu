@@ -352,23 +352,18 @@ export function createWebServer(opts: WebServerOptions): {
       return sendJson(res, 200, listDirs(target));
     }
     if (method === 'GET' && path === '/api/models') {
-      // Accept either a provider (openrouter|azure) or a raw backend kind.
+      // Accept either a provider or a raw backend kind.
       const provider = parseProvider(url.searchParams.get('provider') ?? '');
       const backend = provider
         ? providerToBackend(provider)
-        : parseBackendKind(url.searchParams.get('backend') ?? 'pi');
+        : parseBackendKind(url.searchParams.get('backend') ?? 'jcode');
       if (!backend) return sendJson(res, 400, { error: 'unknown backend' });
-      // OpenRouter's /models is public, so we return the FULL LIVE catalog
-      // (every model, capability-annotated) WITH OR WITHOUT a key. When the
-      // user has validated an OpenRouter key the client forwards it here
-      // (x-huu-key) for the per-account view; it's optional, used in memory
-      // only, never logged or persisted.
       const hk = req.headers['x-huu-key'];
-      const openrouterKey = (Array.isArray(hk) ? hk[0] : hk ?? '').toString();
+      const backendKey = (Array.isArray(hk) ? hk[0] : hk ?? '').toString();
       const { models, source } = await listModelsForBackend(
         opts.cwd,
         backend,
-        openrouterKey,
+        backendKey,
       );
       return sendJson(res, 200, { models, source });
     }
@@ -376,7 +371,7 @@ export function createWebServer(opts: WebServerOptions): {
       const provider = parseProvider(url.searchParams.get('provider') ?? '');
       const backend = provider
         ? providerToBackend(provider)
-        : parseBackendKind(url.searchParams.get('backend') ?? 'pi');
+        : parseBackendKind(url.searchParams.get('backend') ?? 'jcode');
       if (!backend) return sendJson(res, 400, { error: 'unknown backend' });
       return sendJson(res, 200, keyStatus(backend));
     }
@@ -384,7 +379,7 @@ export function createWebServer(opts: WebServerOptions): {
       // Per-spec key status for the ⚙ Options panel: which tier would supply
       // the key for a NEW run started WITHOUT a browser session key, masked.
       // Never returns the value itself.
-      const name = url.searchParams.get('name') ?? 'openrouter';
+      const name = url.searchParams.get('name') ?? 'deepseek';
       const spec = findKeySpec(name);
       if (!spec) return sendJson(res, 400, { error: `unknown key: ${name}` });
       const webKey = manager.getWebKey(name);
@@ -478,7 +473,7 @@ export function createWebServer(opts: WebServerOptions): {
     // state. Writes are always validate-then-persist, the same rule the
     // single-key panel follows.
     if (method === 'GET' && path === '/api/keys/pool') {
-      const spec = findKeySpec(url.searchParams.get('name') ?? 'openrouter');
+      const spec = findKeySpec(url.searchParams.get('name') ?? 'deepseek');
       if (!spec) return sendJson(res, 400, { error: `unknown key: ${url.searchParams.get('name')}` });
       return sendJson(res, 200, keyPoolInfo(spec, manager.getWebKey(spec.name)));
     }
@@ -700,7 +695,7 @@ export function createWebServer(opts: WebServerOptions): {
       const provider = typeof body.provider === 'string' ? (body.provider as LlmProvider) : undefined;
       const backend: AgentBackendKind = provider
         ? providerToBackend(provider)
-        : ((body.backend as AgentBackendKind) ?? 'pi');
+        : ((body.backend as AgentBackendKind) ?? 'jcode');
       // Per-role routing is ADDITIVE and defensively parsed: an unknown role,
       // a non-string value or an unknown preset name is dropped rather than
       // refused, and a body carrying NEITHER field leaves `models`/
@@ -829,7 +824,7 @@ export function createWebServer(opts: WebServerOptions): {
 
     if (method === 'POST' && path === '/api/dev/transcribe') {
       // Dictation for the goal field. The browser captures audio, re-encodes it
-      // as 16 kHz mono WAV (OpenRouter rejects the webm MediaRecorder produces)
+      // as 16 kHz mono WAV (the transcriber requires this format)
       // and posts the base64 here; the key follows the same precedence a run's
       // does, so a browser-session key works without ever touching disk.
       const body = await readJsonBodyOr400(req, res);
@@ -840,8 +835,8 @@ export function createWebServer(opts: WebServerOptions): {
       }
       const picked = pickRunKey(
         typeof body.apiKey === 'string' ? body.apiKey : undefined,
-        manager.getWebKey('openrouter'),
-        findSpec('openrouter'),
+        manager.getWebKey('deepseek'),
+        findSpec('deepseek'),
       );
       try {
         const result = await transcribeAudio({
@@ -919,7 +914,7 @@ export function createWebServer(opts: WebServerOptions): {
     const provider = parseProvider(String(body.provider ?? ''));
     const backend = provider
       ? providerToBackend(provider)
-      : parseBackendKind(String(body.backend ?? 'pi'));
+      : parseBackendKind(String(body.backend ?? 'jcode'));
     if (!backend) return sendJson(res, 400, { error: 'unknown backend' });
     const params: StartRunParams = {
       pipelineName: body.pipelineName ? String(body.pipelineName) : undefined,

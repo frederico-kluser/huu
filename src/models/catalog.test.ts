@@ -8,7 +8,7 @@ import { RecommendedModelsFileSchema } from '../contracts/models.js';
 describe('loadRecommendedModels (provider filter)', () => {
   // The catalog merges the OpenRouter defaults with the Azure built-ins.
   // With no backend arg, both lists are returned. With a backend arg
-  // ('pi'/'azure'), only matching entries; with 'stub', ALL entries because
+  // ('jcode'/'jcode'), only matching entries; with 'stub', ALL entries because
   // stub doesn't actually call any provider.
   let tmpDir: string;
 
@@ -22,9 +22,9 @@ describe('loadRecommendedModels (provider filter)', () => {
 
   it('without backend arg: returns OpenRouter + Azure models', () => {
     const all = loadRecommendedModels(tmpDir);
-    const providers = new Set(all.map((m) => m.provider ?? 'openrouter'));
-    expect(providers.has('openrouter')).toBe(true);
-    expect(providers.has('azure')).toBe(true);
+    const providers = new Set(all.map((m) => m.provider ?? 'jcode'));
+    expect(providers.has('deepseek')).toBe(true);
+    expect(providers.has('deepseek')).toBe(true);
   });
 
   it('never surfaces a copilot model (removed)', () => {
@@ -33,15 +33,15 @@ describe('loadRecommendedModels (provider filter)', () => {
   });
 
   it('backend=pi: filters to only OpenRouter models', () => {
-    const onlyPi = loadRecommendedModels(tmpDir, 'pi');
+    const onlyPi = loadRecommendedModels(tmpDir, 'jcode');
     expect(onlyPi.length).toBeGreaterThan(0);
-    expect(onlyPi.every((m) => (m.provider ?? 'openrouter') === 'openrouter')).toBe(true);
+    expect(onlyPi.every((m) => (m.provider ?? 'jcode') === 'jcode')).toBe(true);
   });
 
   it('backend=azure: filters to only Azure models', () => {
-    const onlyAzure = loadRecommendedModels(tmpDir, 'azure');
+    const onlyAzure = loadRecommendedModels(tmpDir, 'jcode');
     expect(onlyAzure.length).toBeGreaterThan(0);
-    expect(onlyAzure.every((m) => m.provider === 'azure')).toBe(true);
+    expect(onlyAzure.every((m) => m.provider === 'deepseek')).toBe(true);
   });
 
   it('backend=stub: returns all models (regression guard)', () => {
@@ -50,15 +50,15 @@ describe('loadRecommendedModels (provider filter)', () => {
     const all = loadRecommendedModels(tmpDir, 'stub');
     const fullList = loadRecommendedModels(tmpDir);
     expect(all.length).toBe(fullList.length);
-    const providers = new Set(all.map((m) => m.provider ?? 'openrouter'));
-    expect(providers.has('openrouter')).toBe(true);
-    expect(providers.has('azure')).toBe(true);
+    const providers = new Set(all.map((m) => m.provider ?? 'jcode'));
+    expect(providers.has('deepseek')).toBe(true);
+    expect(providers.has('deepseek')).toBe(true);
   });
 
   it('in-code fallback (no file) leads with the default model', () => {
     // tmpDir has no recommended-models.json, so this exercises
     // DEFAULT_RECOMMENDED_MODELS — the fallback must headline the default.
-    const fallback = loadRecommendedModels(tmpDir, 'pi');
+    const fallback = loadRecommendedModels(tmpDir, 'jcode');
     expect(fallback[0]?.id).toBe(DEFAULT_MODEL_ID);
   });
 });
@@ -79,7 +79,7 @@ describe('recommended-models.json (shipped catalog)', () => {
   });
 
   it('leads with the default model', () => {
-    const models = loadRecommendedModels(process.cwd(), 'pi');
+    const models = loadRecommendedModels(process.cwd(), 'jcode');
     expect(models[0]?.id).toBe(DEFAULT_MODEL_ID);
   });
 });

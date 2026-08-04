@@ -103,16 +103,14 @@ export function App({
   const { stdout } = useStdout();
   useTerminalResize();
 
-  const openrouterSpec = findSpec('openrouter');
-  const azureApiKeySpec = findSpec('azureApiKey');
-  const azureEndpointSpec = findSpec('azureEndpoint');
+  const deepseekSpec = findSpec('deepseek');
 
   const [fsm, setFsm] = useState<FsmState>(() =>
     initialState({
       initialPipeline,
       autoStart,
       initialBackend,
-      openrouterResolvedKey: openrouterSpec ? resolveApiKey(openrouterSpec) : '',
+      deepseekResolvedKey: deepseekSpec ? resolveApiKey(deepseekSpec) : '',
       requiresApiKey: requiresApiKey ?? true,
     }),
   );
@@ -183,38 +181,22 @@ export function App({
 
   // CLI-provided factory wins. When the user picks via TUI we set
   // `activeFactory` from selectBackend(). The fallback chain is:
-  // activeFactory → CLI-injected agentFactory → pi (registry default).
+  // activeFactory → CLI-injected agentFactory → jcode (registry default).
   // Memoize so re-renders don't allocate a new BackendBundle just to
   // read its agentFactory — selectBackend() returns a fresh object.
-  const piFallbackBundle = useMemo(() => selectBackend('pi'), []);
+  const jcodeFallbackBundle = useMemo(() => selectBackend('jcode'), []);
   const factory =
-    activeFactory ?? agentFactory ?? piFallbackBundle.agentFactory;
+    activeFactory ?? agentFactory ?? jcodeFallbackBundle.agentFactory;
   const resolverFactory = activeResolverFactory ?? conflictResolverFactory;
 
-  // Active spec used by the missing-key check. Backend determines which
-  // entry of API_KEY_REGISTRY is "the required one"; the others stay
-  // optional regardless of their `required` flag.
-  const activeSpec: ApiKeySpec | undefined =
-    backendKind === 'azure' ? azureApiKeySpec : openrouterSpec;
+  const activeSpec: ApiKeySpec | undefined = deepseekSpec;
 
-  // Provider-aware context passed to TUI helpers (Pipeline Assistant, Smart
-  // File Select, Project Recon). Without this, helpers used to hard-code
-  // OpenRouter even when the user picked the Azure provider — leaking
-  // charges to the wrong account.
   const helperLlmContext: import('./lib/llm-client-factory.js').LlmClientContext = useMemo(() => {
-    if (backendKind === 'azure') {
-      return {
-        backend: 'azure',
-        azureApiKey: azureApiKeySpec ? resolveApiKey(azureApiKeySpec) : '',
-        azureEndpoint: azureEndpointSpec ? resolveApiKey(azureEndpointSpec) : '',
-      };
-    }
-    // pi / stub → OpenRouter for the helper features.
     return {
       backend: backendKind,
-      openrouterApiKey: openrouterSpec ? resolveApiKey(openrouterSpec) : '',
+      deepseekApiKey: deepseekSpec ? resolveApiKey(deepseekSpec) : '',
     };
-  }, [backendKind, openrouterSpec, azureApiKeySpec, azureEndpointSpec]);
+  }, [backendKind, deepseekSpec]);
 
   // Side effects mirroring the legacy navigate() callback: full-screen
   // clear and dlog when screen.kind changes.
@@ -552,7 +534,7 @@ export function App({
           // Never skip for a multi-run batch — it picks ONE shared model.
           if (!isMulti && allStepsHaveModel(pipeline)) {
             const missing = kind === 'stub' ? [] : findMissingKeysForBackend(kind);
-            const spec = kind === 'azure' ? azureApiKeySpec : openrouterSpec;
+            const spec = deepseekSpec;
             const resolved = spec ? resolveApiKey(spec) : apiKey;
             dispatch({
               type: 'runDirect',
@@ -807,13 +789,7 @@ export function App({
       modelId: screen.modelId,
       backend: backendKind,
       provider: backendToProvider(backendKind),
-      // For Azure backend, resolve the endpoint from the registry.
-      // process.env was updated by the ApiKeyPrompt submit handler,
-      // so resolveApiKey picks it up without additional plumbing.
-      endpoint:
-        backendKind === 'azure' && azureEndpointSpec
-          ? resolveApiKey(azureEndpointSpec) || undefined
-          : undefined,
+      endpoint: undefined,
     };
     body = isMulti ? (
       // 2+ concurrent runs → one scheduler with LAZY admission and a project
