@@ -305,6 +305,250 @@ Consolidate what the previous steps produced into ONE report.
     readOnly: false,
     review: false,
   },
+
+  // ==========================================================================
+  // THE `-findings` FAMILY — audits that HAND OVER WORK, not audits that talk.
+  //
+  // READ THIS BEFORE "FIXING" ONE OF THESE INTO ITS `-review` TWIN.
+  //
+  // `security-review` and `security-findings` are NOT duplicates and neither is
+  // a stricter version of the other. They differ in the only dimension that
+  // matters to a graph: whether the node can hand DATA to the node after it.
+  //
+  //   security-review    readOnly: true,  produces: false  → REPORTS.
+  //   security-findings  readOnly: false, produces: true   → WRITES WORK ORDERS.
+  //
+  // Why the pair has to exist:
+  //
+  // 1. In huu the ONLY step→step data channel is the COMMITTED FILESYSTEM of
+  //    the integration worktree. `resolveMemoryFiles` (src/orchestrator/
+  //    memory-files.ts) reads the producer's list from there; a check judge's
+  //    `CheckEvaluationResult.reason` never reaches the next prompt. So a node
+  //    that writes nothing is a data DEAD END — it can route control (via a
+  //    gate) but it cannot tell the next node WHAT it found.
+  // 2. `WorkStep.readOnly` (src/lib/types/pipeline.ts:262-272) is enforced at
+  //    the HARNESS layer: the backend hands the session a tool allowlist with
+  //    no `edit` and no `write`. Its own doc spells out the consequence — "an
+  //    audit that writes its findings to a file needs `write` and must NOT set
+  //    this". readOnly and produces are therefore mutually exclusive, pinned by
+  //    a test in node-catalog.test.ts.
+  // 3. The validator's `fanout-source-not-producer` (graph-validate.ts:~725)
+  //    requires `findBlock(source.block)?.produces === true` for ANY
+  //    `fanOutFrom`. Before this family, `recon` was the single producer in the
+  //    catalog, so EVERY fan-out in every graph was forced to start at a
+  //    file-shortlist recon. The pattern "audit → one agent per PROBLEM" was
+  //    literally inexpressible.
+  //
+  // So: setting `readOnly: true` on a `-findings` block does not make it
+  // "safer", it makes it INERT — the fan-out below it stops validating and the
+  // agent loses the tool it needs to do its only job. If you want an audit that
+  // must not write, that block already exists: use the `-review` twin.
+  //
+  // Shape of the hand-over (same contract as `taskSpecContract` in
+  // src/lib/dev-mode/dev-protocol.ts, which the dev-mode planner already lives
+  // by): one markdown TASK FILE per finding, each declaring the files it OWNS,
+  // and a list whose entries point at the TASK FILES — not at source files. The
+  // consumer fans out one agent per entry, so `$file` there is the briefing and
+  // `$hint` is the one-line "what is broken". Each block writes into its OWN
+  // `.huu/findings/<axis>/` directory so two findings nodes in the same wave
+  // never contend for a path.
+  //
+  // No template spells the list FORMAT: huu appends the MEMORY CONTRACT
+  // (src/lib/memory-contract.ts) to the prompt at run time whenever the compiled
+  // step carries `produces`. Writing it by hand would drift from it.
+  // ==========================================================================
+  {
+    id: 'security-findings',
+    label: 'Achados de segurança',
+    description:
+      'Audita segurança e ESCREVE uma tarefa por achado (o par read-only `security-review` só relata).',
+    promptTemplate: `Objective of this run: $goal
+
+You are a security auditor whose deliverable is WORK ORDERS, not a report. Audit this project and turn every defect you can PROVE into one self-contained task file that a later agent will fix alone.
+
+=== STEP 1 — Find the defects ===
+Look for, in this order: injection into a shell/SQL/HTML sink, secrets or credentials in source, unvalidated external input reaching a privileged operation, missing authorization on a state change, unsafe deserialization, path traversal, and dependencies used in a way their docs call unsafe.
+Trace every candidate from the attacker-controlled input to the sink by READING the code. One you cannot trace is a suspicion, not a finding: drop it.
+
+=== STEP 2 — Write one task file per finding ===
+Create the directory, then write \`.huu/findings/security/001-<slug>.md\`, \`002-<slug>.md\`, … — zero-padded, most consequential first.
+Each file is the COMPLETE briefing for ONE agent that works alone, in its own worktree, with no access to you and no knowledge of the other tasks:
+
+# <NNN> — <imperative title>
+
+## Finding
+<the path and line, the attacker-controlled input, the sink it reaches, the concrete consequence>
+
+## Files this task OWNS
+- <repo-relative path> — <why this task needs to write it>
+(The agent may READ anything; it may WRITE only the files listed here.)
+
+## Fix
+1. <concrete action>
+2. …
+
+## Done when
+- <objectively checkable statement>
+
+=== STEP 3 — PARTITION BY FILE OWNERSHIP (the rule that decides whether this merges) ===
+The next step runs ONE AGENT PER TASK FILE, in parallel, and merges their branches deterministically. Two tasks that write the same file conflict and cost the whole stage.
+- Every file belongs to exactly ONE task. Two findings in the same file are ONE task, not two.
+- Fewer, well-partitioned tasks beat many overlapping ones. One task is a fine answer.
+- A shared file (a router, a barrel, a config) belongs to a single task; name that owner in the other tasks' Fix section.
+
+=== STEP 4 — Hand the list over ===
+Write the list described by the MEMORY CONTRACT appended at the end of this prompt: one entry per TASK FILE you wrote — its path, a one-line hint naming the defect and the file it fixes, and a higher priority for the ones that must land first (proven and exploitable before theoretical).
+List the task files, never the source files: the next agent's assignment is the briefing.
+
+=== STEP 5 — Commit, or none of it exists ===
+The next step reads the MERGED worktree, so an uncommitted file is invisible to it. \`git add\` the task files and the list, then commit them.
+If \`git check-ignore -q .huu\` says the path is ignored, replace the \`.huu/\` line in \`.gitignore\` with \`.huu/*\` and add \`!.huu/findings/\` on the next line — the one edit permitted outside \`.huu/findings/\`.
+
+=== HARD RULES ===
+- Fix NOTHING here. You write work orders; the next step does the work.
+- Invent NOTHING to fill the list. An empty list is a valid, honest result and simply runs zero agents.
+- Every path you name must exist in the repository — an entry whose path does not resolve is dropped at run time.
+
+=== SELF-CHECK (before finishing) ===
+- Every listed task file exists on disk and is committed.
+- No file is claimed by two tasks.
+- Every finding cites a path and a line that exist.
+- No task file contains a placeholder (\`TODO\`, \`TBD\`, an empty section).`,
+    defaultScope: 'project',
+    produces: true,
+    readOnly: false,
+    review: false,
+    judgeClause:
+      'The task list is committed and every path it names resolves to a committed markdown task file; each task file cites a path and a line that exist in the repository, names at least one file it owns, and contains no placeholder (TODO, TBD, an empty section); no file is owned by two tasks.',
+  },
+  {
+    id: 'performance-findings',
+    label: 'Achados de performance',
+    description:
+      'Audita performance e ESCREVE uma tarefa por achado (o par read-only `performance-review` só relata).',
+    promptTemplate: `Objective of this run: $goal
+
+You are a performance auditor whose deliverable is WORK ORDERS, not a report. Audit this project and turn every measurable cost into one self-contained task file that a later agent will fix alone.
+
+=== STEP 1 — Find the costs ===
+A finding must name a MEASURABLE cost: an N+1 query, a synchronous call on a hot path, an allocation inside a loop, a round-trip that could be batched, an O(n²) scan over data that grows, work repeated per request that could be cached.
+For each one, establish the path and line, the cost it pays, and the input size at which it starts to matter. "This looks slow" is not a finding: drop it.
+
+=== STEP 2 — Write one task file per finding ===
+Create the directory, then write \`.huu/findings/performance/001-<slug>.md\`, \`002-<slug>.md\`, … — zero-padded, most consequential first.
+Each file is the COMPLETE briefing for ONE agent that works alone, in its own worktree, with no access to you and no knowledge of the other tasks:
+
+# <NNN> — <imperative title>
+
+## Finding
+<the path and line, the cost it pays, the input size at which it starts to matter, how to measure it>
+
+## Files this task OWNS
+- <repo-relative path> — <why this task needs to write it>
+(The agent may READ anything; it may WRITE only the files listed here.)
+
+## Fix
+1. <concrete action>
+2. …
+
+## Done when
+- <objectively checkable statement, including the behavior that must stay identical>
+
+=== STEP 3 — PARTITION BY FILE OWNERSHIP (the rule that decides whether this merges) ===
+The next step runs ONE AGENT PER TASK FILE, in parallel, and merges their branches deterministically. Two tasks that write the same file conflict and cost the whole stage.
+- Every file belongs to exactly ONE task. Two findings in the same file are ONE task, not two.
+- Fewer, well-partitioned tasks beat many overlapping ones. One task is a fine answer.
+- A shared file (a router, a barrel, a config) belongs to a single task; name that owner in the other tasks' Fix section.
+
+=== STEP 4 — Hand the list over ===
+Write the list described by the MEMORY CONTRACT appended at the end of this prompt: one entry per TASK FILE you wrote — its path, a one-line hint naming the cost and the file it fixes, and a higher priority for the ones that must land first (measured cost on a hot path before a theoretical one).
+List the task files, never the source files: the next agent's assignment is the briefing.
+
+=== STEP 5 — Commit, or none of it exists ===
+The next step reads the MERGED worktree, so an uncommitted file is invisible to it. \`git add\` the task files and the list, then commit them.
+If \`git check-ignore -q .huu\` says the path is ignored, replace the \`.huu/\` line in \`.gitignore\` with \`.huu/*\` and add \`!.huu/findings/\` on the next line — the one edit permitted outside \`.huu/findings/\`.
+
+=== HARD RULES ===
+- Optimize NOTHING here. You write work orders; the next step does the work.
+- Invent NOTHING to fill the list. An empty list is a valid, honest result and simply runs zero agents.
+- Every path you name must exist in the repository — an entry whose path does not resolve is dropped at run time.
+
+=== SELF-CHECK (before finishing) ===
+- Every listed task file exists on disk and is committed.
+- No file is claimed by two tasks.
+- Every finding names a measurable cost at a path and a line that exist.
+- No task file contains a placeholder (\`TODO\`, \`TBD\`, an empty section).`,
+    defaultScope: 'project',
+    produces: true,
+    readOnly: false,
+    review: false,
+    judgeClause:
+      'The task list is committed and every path it names resolves to a committed markdown task file; each task file names a measurable cost at a path and a line that exist in the repository, names at least one file it owns, and contains no placeholder (TODO, TBD, an empty section); no file is owned by two tasks.',
+  },
+  {
+    id: 'review-findings',
+    label: 'Achados de revisão',
+    description:
+      'Revisa o código e ESCREVE uma tarefa por achado, para o passo seguinte corrigir um por agente.',
+    promptTemplate: `Objective of this run: $goal
+
+You are a code reviewer whose deliverable is WORK ORDERS, not a report. Review this project against the objective and turn every defect worth someone's time into one self-contained task file that a later agent will fix alone.
+
+=== STEP 1 — Find the defects ===
+Look for: logic that is wrong for an input the code accepts, an error path that is swallowed or cannot happen as written, a contract the code states and then violates (a doc comment, a type, a validation), duplicated logic that has already drifted between copies, dead code still wired in, and behavior with no test where a regression would go unnoticed.
+Judge against what the code CLAIMS, not against your taste. A style preference is not a finding: drop it.
+
+=== STEP 2 — Write one task file per finding ===
+Create the directory, then write \`.huu/findings/review/001-<slug>.md\`, \`002-<slug>.md\`, … — zero-padded, most consequential first.
+Each file is the COMPLETE briefing for ONE agent that works alone, in its own worktree, with no access to you and no knowledge of the other tasks:
+
+# <NNN> — <imperative title>
+
+## Finding
+<the path and line, what the code claims, what it actually does, and the consequence>
+
+## Files this task OWNS
+- <repo-relative path> — <why this task needs to write it>
+(The agent may READ anything; it may WRITE only the files listed here.)
+
+## Fix
+1. <concrete action>
+2. …
+
+## Done when
+- <objectively checkable statement>
+
+=== STEP 3 — PARTITION BY FILE OWNERSHIP (the rule that decides whether this merges) ===
+The next step runs ONE AGENT PER TASK FILE, in parallel, and merges their branches deterministically. Two tasks that write the same file conflict and cost the whole stage.
+- Every file belongs to exactly ONE task. Two findings in the same file are ONE task, not two.
+- Fewer, well-partitioned tasks beat many overlapping ones. One task is a fine answer.
+- A shared file (a router, a barrel, a config) belongs to a single task; name that owner in the other tasks' Fix section.
+
+=== STEP 4 — Hand the list over ===
+Write the list described by the MEMORY CONTRACT appended at the end of this prompt: one entry per TASK FILE you wrote — its path, a one-line hint naming the defect and the file it fixes, and a higher priority for the ones that must land first (wrong behavior before untested behavior before duplication).
+List the task files, never the source files: the next agent's assignment is the briefing.
+
+=== STEP 5 — Commit, or none of it exists ===
+The next step reads the MERGED worktree, so an uncommitted file is invisible to it. \`git add\` the task files and the list, then commit them.
+If \`git check-ignore -q .huu\` says the path is ignored, replace the \`.huu/\` line in \`.gitignore\` with \`.huu/*\` and add \`!.huu/findings/\` on the next line — the one edit permitted outside \`.huu/findings/\`.
+
+=== HARD RULES ===
+- Fix NOTHING here. You write work orders; the next step does the work.
+- Invent NOTHING to fill the list. An empty list is a valid, honest result and simply runs zero agents.
+- Every path you name must exist in the repository — an entry whose path does not resolve is dropped at run time.
+
+=== SELF-CHECK (before finishing) ===
+- Every listed task file exists on disk and is committed.
+- No file is claimed by two tasks.
+- Every finding cites a path and a line that exist.
+- No task file contains a placeholder (\`TODO\`, \`TBD\`, an empty section).`,
+    defaultScope: 'project',
+    produces: true,
+    readOnly: false,
+    review: false,
+    judgeClause:
+      'The task list is committed and every path it names resolves to a committed markdown task file; each task file cites a path and a line that exist in the repository, names at least one file it owns, and contains no placeholder (TODO, TBD, an empty section); no file is owned by two tasks.',
+  },
 ];
 
 /** The block with this id, or `undefined`. Used by the validator's `unknown-block`. */

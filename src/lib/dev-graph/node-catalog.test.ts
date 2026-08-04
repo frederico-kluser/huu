@@ -24,7 +24,15 @@ const EXPECTED_BLOCK_ORDER = [
   'lint-fix',
   'consolidate',
   'custom',
+  // Appended (never inserted): the `-findings` family, the blocks that WRITE a
+  // work-order list so a later node can fan out one agent per problem.
+  'security-findings',
+  'performance-findings',
+  'review-findings',
 ];
+
+/** The blocks that turn an audit into one task file per finding. */
+const FINDINGS_BLOCK_IDS = ['security-findings', 'performance-findings', 'review-findings'];
 
 describe('node-catalog / ACTION_BLOCKS', () => {
   it('ships exactly the contracted blocks, in the contracted order', () => {
@@ -76,12 +84,24 @@ describe('node-catalog / ACTION_BLOCKS', () => {
     }
   });
 
-  it('has exactly one producer of a fan-out list, and it is recon', () => {
+  it('ships exactly the producers a fan-out may start from', () => {
+    // `graph-validate.ts` rejects `fanOutFrom` pointing at any block whose
+    // `produces` is not true (`fanout-source-not-producer`), so THIS list is
+    // the set of legal fan-out sources in the whole editor. It used to be
+    // `['recon']` alone, which forced every fan-out to start at a file
+    // shortlist; the `-findings` family is what makes "one agent per PROBLEM"
+    // expressible at all.
     const producers = ACTION_BLOCKS.filter((block) => block.produces);
-    expect(producers.map((block) => block.id)).toEqual(['recon']);
+    expect(producers.map((block) => block.id)).toEqual(['recon', ...FINDINGS_BLOCK_IDS]);
   });
 
   it('never marks a producer read-only (writing a list needs the write tool)', () => {
+    // The invariant `produces === true ⇒ readOnly === false`, straight from the
+    // doc of `WorkStep.readOnly` (src/lib/types/pipeline.ts:262-272): readOnly
+    // is a HARNESS-level tool allowlist with no `write`, so "an audit that
+    // writes its findings to a file needs `write` and must NOT set this".
+    // A producer marked readOnly would be handed a session that cannot write
+    // the list it exists to write.
     for (const block of ACTION_BLOCKS) {
       if (block.produces) expect(block.readOnly, block.id).toBe(false);
     }
@@ -109,6 +129,103 @@ describe('node-catalog / ACTION_BLOCKS', () => {
     // a template that also spelled the format would drift from it.
     for (const block of ACTION_BLOCKS) {
       expect(block.promptTemplate.includes('huu-memory-v1'), block.id).toBe(false);
+    }
+  });
+});
+
+describe('node-catalog / the `-findings` family', () => {
+  const findingsBlocks = FINDINGS_BLOCK_IDS.map((id) => {
+    const block = findBlock(id);
+    if (!block) throw new Error(`missing findings block: ${id}`);
+    return block;
+  });
+
+  it('writes, produces a list, and is never read-only', () => {
+    for (const block of findingsBlocks) {
+      expect(block.produces, block.id).toBe(true);
+      expect(block.readOnly, block.id).toBe(false);
+      expect(block.review, block.id).toBe(false);
+      expect(block.defaultScope, block.id).toBe('project');
+    }
+  });
+
+  it('pairs every read-only review block with a writing `-findings` twin', () => {
+    // The pair is deliberate and the comment in node-catalog.ts says why:
+    // `<axis>-review` REPORTS (readOnly, data dead end), `<axis>-findings`
+    // hands work over. Turning one into the other deletes a capability.
+    for (const block of ACTION_BLOCKS) {
+      if (!block.readOnly) continue;
+      const axis = block.id.replace(/-review$/, '');
+      const twin = findBlock(`${axis}-findings`);
+      expect(twin, block.id).toBeDefined();
+      expect(twin?.produces, block.id).toBe(true);
+      expect(twin?.readOnly, block.id).toBe(false);
+    }
+  });
+
+  it('gives every findings block a mechanically checkable judge clause', () => {
+    for (const block of findingsBlocks) {
+      const clause = block.judgeClause ?? '';
+      expect(clause.length, block.id).toBeGreaterThan(0);
+      // The clause must be something a judge can run a command against, not a
+      // vibe: it names the list, the on-disk task files and the placeholder ban.
+      expect(clause.includes('committed'), block.id).toBe(true);
+      expect(clause.includes('placeholder'), block.id).toBe(true);
+      expect(clause.includes('owned by two tasks'), block.id).toBe(true);
+    }
+  });
+
+  it('anchors every promise the block makes in the prompt itself', () => {
+    // Each anchor is a contract the compiler, the judge or the NEXT step
+    // depends on. Losing one silently breaks the fan-out below the node.
+    const anchors = [
+      '$goal', // the graph objective reaches the auditor
+      '## Files this task OWNS', // per-task file ownership, as taskSpecContract does
+      'PARTITION BY FILE OWNERSHIP', // why ownership exists: parallel branches merge
+      'ONE AGENT PER TASK FILE',
+      'MEMORY CONTRACT appended at the end of this prompt', // format comes from run time
+      'git add', // an uncommitted file does not exist for the next step
+      'commit',
+      'SELF-CHECK',
+    ];
+    for (const block of findingsBlocks) {
+      for (const anchor of anchors) {
+        expect(block.promptTemplate.includes(anchor), `${block.id} / ${anchor}`).toBe(true);
+      }
+    }
+  });
+
+  it('tells the agent to list the TASK FILES, not the source files', () => {
+    // The fan-out substitutes `$file` with the listed path, so listing source
+    // files would hand the fixer a file instead of its briefing.
+    for (const block of findingsBlocks) {
+      expect(
+        block.promptTemplate.includes('List the task files, never the source files'),
+        block.id,
+      ).toBe(true);
+    }
+  });
+
+  it('keeps an empty result legitimate instead of inviting invented findings', () => {
+    for (const block of findingsBlocks) {
+      expect(block.promptTemplate.includes('An empty list is a valid'), block.id).toBe(true);
+    }
+  });
+
+  it('gives each findings block its OWN output directory', () => {
+    // Two findings nodes can sit in the same wave; a shared directory would put
+    // their branches in conflict on the very files the hand-over depends on.
+    const dirs = findingsBlocks.map((block) => {
+      const match = block.promptTemplate.match(/`\.huu\/findings\/([a-z-]+)\//);
+      expect(match, block.id).not.toBeNull();
+      return match?.[1];
+    });
+    expect(new Set(dirs).size).toBe(findingsBlocks.length);
+  });
+
+  it('states in pt-BR that the block WRITES, so nobody confuses it with the review twin', () => {
+    for (const block of findingsBlocks) {
+      expect(block.description.includes('ESCREVE'), block.id).toBe(true);
     }
   });
 });
