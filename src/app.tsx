@@ -106,6 +106,9 @@ export function App({
   const openrouterSpec = findSpec('openrouter');
   const azureApiKeySpec = findSpec('azureApiKey');
   const azureEndpointSpec = findSpec('azureEndpoint');
+  // jcode is picked DIRECTLY as a backend (no provider indirection), so its
+  // credential is the DeepSeek key — see `selectBackend('jcode')`.
+  const deepseekSpec = findSpec('deepseek');
 
   const [fsm, setFsm] = useState<FsmState>(() =>
     initialState({
@@ -195,7 +198,11 @@ export function App({
   // entry of API_KEY_REGISTRY is "the required one"; the others stay
   // optional regardless of their `required` flag.
   const activeSpec: ApiKeySpec | undefined =
-    backendKind === 'azure' ? azureApiKeySpec : openrouterSpec;
+    backendKind === 'azure'
+      ? azureApiKeySpec
+      : backendKind === 'jcode'
+        ? deepseekSpec
+        : openrouterSpec;
 
   // Provider-aware context passed to TUI helpers (Pipeline Assistant, Smart
   // File Select, Project Recon). Without this, helpers used to hard-code
@@ -552,7 +559,16 @@ export function App({
           // Never skip for a multi-run batch — it picks ONE shared model.
           if (!isMulti && allStepsHaveModel(pipeline)) {
             const missing = kind === 'stub' ? [] : findMissingKeysForBackend(kind);
-            const spec = kind === 'azure' ? azureApiKeySpec : openrouterSpec;
+            // The credential name comes from the bundle the user JUST picked,
+            // never from an `azure ? … : openrouter` ternary — `activeSpec`
+            // above is keyed on `backendKind`, which this dispatch has not
+            // updated yet. Picking `jcode` here used to resolve the OpenRouter
+            // key (or '' → the 'stub' sentinel at the run screen) into
+            // `AppConfig.apiKey`; since the jcode factory injects that value as
+            // DEEPSEEK_API_KEY into the subprocess env, it SHADOWED the user's
+            // real exported key and every agent died on a DeepSeek 401.
+            const specName = bundle.apiKeySpecName;
+            const spec = specName ? findSpec(specName) : undefined;
             const resolved = spec ? resolveApiKey(spec) : apiKey;
             dispatch({
               type: 'runDirect',

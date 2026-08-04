@@ -332,6 +332,49 @@ describe('web server — development mode', () => {
     expect(session.models.reporter).toBe('deepseek/deepseek-v4-flash'); // explicit wins
   });
 
+  // Credential routing: the spec name comes from `selectBackend(kind)`, never
+  // from a `azure ? azureApiKey : openrouter` ternary. With the ternary, a
+  // jcode session demanded the OPENROUTER key — refusing to start on a machine
+  // that only has DEEPSEEK_API_KEY, and (worse) starting with an OpenRouter key
+  // jcode never uses on a machine that has one.
+  it('a jcode session gates on the DeepSeek key, never the OpenRouter one', async () => {
+    // Isolated on purpose: the assertion must not depend on the developer's
+    // ambient keys — a real DEEPSEEK_API_KEY would start a real session, and an
+    // ambient OPENROUTER_API_KEY would let the OLD code through.
+    const TRACKED = [
+      'DEEPSEEK_API_KEY',
+      'DEEPSEEK_API_KEY_FILE',
+      'OPENROUTER_API_KEY',
+      'OPENROUTER_API_KEY_FILE',
+      'XDG_CONFIG_HOME',
+      'HUU_CONFIG_DIR',
+    ] as const;
+    const savedEnv: Record<string, string | undefined> = {};
+    for (const k of TRACKED) {
+      savedEnv[k] = process.env[k];
+      delete process.env[k];
+    }
+    const configHome = mkdtempSync(join(tmpdir(), 'huu-dev-keys-'));
+    process.env.XDG_CONFIG_HOME = configHome;
+    try {
+      const { status, json } = await post(base, '/api/dev', {
+        goal: 'sessao jcode sem chave',
+        modelId: 'deepseek-v4-pro',
+        backend: 'jcode',
+        skipKnowledgeBootstrap: true,
+      });
+      expect(status).toBe(400);
+      expect(String(json.error)).toContain('DeepSeek');
+      expect(String(json.error)).not.toContain('OpenRouter');
+    } finally {
+      for (const k of TRACKED) {
+        if (savedEnv[k] === undefined) delete process.env[k];
+        else process.env[k] = savedEnv[k];
+      }
+      rmSync(configHome, { recursive: true, force: true });
+    }
+  });
+
   // The strongest available proof that the policy REACHES `runDevMode`: the pi
   // model-registry preflight lives inside the driver and nowhere else, so only
   // a policy that actually got there can trip it.

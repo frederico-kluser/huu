@@ -618,13 +618,23 @@ async function main(): Promise<void> {
     let apiKey = '';
     let endpoint: string | undefined;
     if (bundle.requiresApiKey) {
-      const specName = effectiveBackend === 'azure' ? 'azureApiKey' : 'openrouter';
+      // The backend bundle OWNS the name of the credential it needs
+      // (`selectBackend(kind).apiKeySpecName`) — hard-coding
+      // `azure ? azureApiKey : openrouter` here asked a `--backend=jcode`
+      // headless run for the OpenRouter key and hard-exited when it was
+      // absent, even with DEEPSEEK_API_KEY set. Identical for pi/azure.
+      const specName = bundle.apiKeySpecName ?? 'openrouter';
       const spec = findSpec(specName);
       if (spec) apiKey = resolveApiKey(spec);
       if (!apiKey) {
         console.error(
           t('cli.err_auto_no_key', {
-            provider: effectiveBackend === 'azure' ? 'Azure AI Foundry' : 'OpenRouter',
+            provider:
+              effectiveBackend === 'azure'
+                ? 'Azure AI Foundry'
+                : effectiveBackend === 'pi'
+                  ? 'OpenRouter'
+                  : (spec?.label ?? bundle.label),
             envVar: spec?.envVar ?? specName,
             secretPath: spec?.secretMountPath ?? '/run/secrets/<key>',
           }),

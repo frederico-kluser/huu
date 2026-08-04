@@ -656,12 +656,15 @@ export async function runDevCli(input: RunDevCliArgs): Promise<number> {
   let apiKey = '';
   let endpoint: string | undefined;
   if (bundle.requiresApiKey) {
-    const specName = backend === 'azure' ? 'azureApiKey' : 'openrouter';
+    // Credential name comes from the bundle, never from a backend ternary:
+    // `huu dev --backend=jcode` used to demand the OpenRouter key (and refuse
+    // to start without it) because this branch hard-coded the pi/azure pair.
+    const specName = bundle.apiKeySpecName ?? 'openrouter';
     const spec = findSpec(specName);
     if (spec) apiKey = resolveApiKey(spec);
     if (!apiKey) {
       err(
-        `huu dev: the ${backend === 'azure' ? 'Azure AI Foundry' : 'OpenRouter'} provider requires an API key but ` +
+        `huu dev: the ${backend === 'azure' ? 'Azure AI Foundry' : backend === 'pi' ? 'OpenRouter' : (spec?.label ?? bundle.label)} provider requires an API key but ` +
           `${spec?.envVar ?? specName} is not set. Export it, mount a secret at ` +
           `${spec?.secretMountPath ?? '/run/secrets/<key>'}, or persist it via the TUI first.`,
       );

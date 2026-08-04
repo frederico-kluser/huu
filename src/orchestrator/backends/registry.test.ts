@@ -10,6 +10,7 @@ import {
   backendToProvider,
   parseProvider,
 } from '../../lib/providers.js';
+import { findSpec } from '../../lib/api-key-registry.js';
 
 describe('backend registry', () => {
   describe('ALL_BACKENDS', () => {
@@ -90,6 +91,22 @@ describe('backend registry', () => {
       expect(b.requiresApiKey).toBe(true);
       expect(b.apiKeySpecName).toBe('deepseek');
       expect(b.conflictResolverFactory).toBe(b.agentFactory);
+    });
+
+    it('every declared apiKeySpecName resolves to a REAL API_KEY_REGISTRY spec', () => {
+      // Regression pin: jcode declared `apiKeySpecName: 'deepseek'` while the
+      // registry had no such entry, so findSpec returned undefined and
+      // docker-reexec (which iterates API_KEY_REGISTRY to build secret mounts
+      // and the -e passthrough) never carried DEEPSEEK_API_KEY into the
+      // container. A dangling name must fail here, not at run time.
+      for (const kind of ALL_BACKENDS) {
+        const b = selectBackend(kind);
+        if (b.apiKeySpecName === undefined) {
+          expect(b.requiresApiKey, `${kind} has no key spec`).toBe(false);
+          continue;
+        }
+        expect(findSpec(b.apiKeySpecName), `${kind} → ${b.apiKeySpecName}`).toBeDefined();
+      }
     });
 
     it('only pi is user-selectable (azure reached via provider toggle, stub via CLI)', () => {

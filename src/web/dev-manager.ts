@@ -435,14 +435,18 @@ export class WebDevManager {
     let apiKeySource: AppConfig['apiKeySource'];
     let keyPool: KeyPoolHandle | undefined;
     if (bundle.requiresApiKey) {
-      const specName = params.backend === 'azure' ? 'azureApiKey' : 'openrouter';
+      // Same rule as the run path (`run-manager.ts`): the credential name is
+      // whatever the backend bundle declares, so a jcode dev session asks for
+      // the DeepSeek key instead of refusing to start without an OpenRouter
+      // one. Identical outcome for pi/azure.
+      const specName = bundle.apiKeySpecName ?? 'openrouter';
       const spec = findSpec(specName);
       const picked = pickRunKey(params.apiKey, this.runs.getWebKey(specName), spec);
       apiKey = picked.value;
       apiKeySource = picked.source;
       if (!apiKey) {
         throw new Error(
-          `no API key available for ${params.backend === 'azure' ? 'Azure AI Foundry' : 'OpenRouter'} — add one in ⚙ Settings`,
+          `no API key available for ${params.backend === 'azure' ? 'Azure AI Foundry' : params.backend === 'pi' ? 'OpenRouter' : (spec?.label ?? bundle.label)} — add one in ⚙ Settings`,
         );
       }
       // Rotation is opt-in BY CONSTRUCTION: `createKeyPoolHandle` returns a

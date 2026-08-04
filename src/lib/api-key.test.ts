@@ -38,6 +38,8 @@ describe('api-key registry', () => {
     'PARALLEL_API_KEY_FILE',
     'BRAVE_API_KEY',
     'BRAVE_API_KEY_FILE',
+    'DEEPSEEK_API_KEY',
+    'DEEPSEEK_API_KEY_FILE',
     'XDG_CONFIG_HOME',
     'HUU_CONFIG_DIR',
   ] as const;
@@ -97,6 +99,28 @@ describe('api-key registry', () => {
       expect(findSpec('parallel')?.envVar).toBe('PARALLEL_API_KEY');
       expect(findSpec('brave')?.envVar).toBe('BRAVE_API_KEY');
       expect(findSpec('tavily')?.validatePrefix).toBe('tvly-');
+    });
+
+    it('includes the deepseek spec the jcode backend points at', () => {
+      // `selectBackend('jcode').apiKeySpecName === 'deepseek'`. Without this
+      // entry findSpec returns undefined and docker-reexec — which iterates
+      // API_KEY_REGISTRY to build secret mounts and the -e passthrough —
+      // never carries DEEPSEEK_API_KEY into the container.
+      const spec = findSpec('deepseek')!;
+      expect(spec.envVar).toBe('DEEPSEEK_API_KEY');
+      expect(spec.envFileVar).toBe('DEEPSEEK_API_KEY_FILE');
+      expect(spec.secretMountPath).toBe('/run/secrets/deepseek_api_key');
+      expect(spec.hostSecretScope).toBe('huu-deepseek-key');
+      expect(spec.validatePrefix).toBe('sk-');
+    });
+
+    it('deepseek is bound to jcode and optional (never gates other backends)', () => {
+      const spec = findSpec('deepseek')!;
+      expect(spec.backendBound).toBe('jcode');
+      // `required: false` on purpose: an OpenRouter or Azure run must not
+      // block on a credential only the jcode backend consumes. The binding,
+      // not the flag, is what enforces it for jcode.
+      expect(spec.required).toBe(false);
     });
 
     it('the research specs are optional AND unbound — invisible to the run gate', () => {
@@ -388,6 +412,36 @@ describe('api-key registry', () => {
 
     it('stub backend: requires nothing', () => {
       expect(findMissingKeysForBackend('stub')).toEqual([]);
+    });
+
+    it('jcode backend: requires ONLY deepseek when nothing is configured', () => {
+      // The non-vacuous half of this pair: delete the deepseek spec and this
+      // returns [] instead, so the assertion actually pins the registry entry
+      // (and not just the resolver's ability to find nothing).
+      expect(findMissingKeysForBackend('jcode').map((s) => s.name)).toEqual(['deepseek']);
+    });
+
+    it('jcode backend: stops requiring deepseek once the key resolves', () => {
+      process.env.DEEPSEEK_API_KEY = 'sk-jcode-set';
+      expect(findMissingKeysForBackend('jcode')).toEqual([]);
+    });
+
+    it('jcode backend: the same key also resolves through the saved store', () => {
+      saveApiKey(findSpec('deepseek')!, 'sk-jcode-stored');
+      expect(findMissingKeysForBackend('jcode')).toEqual([]);
+      expect(resolveApiKey(findSpec('deepseek')!)).toBe('sk-jcode-stored');
+    });
+
+    it('deepseek never leaks into another backend\'s gate (and vice versa)', () => {
+      // Cross-backend isolation: a pi run must not ask for the DeepSeek key,
+      // and a jcode run must not ask for the OpenRouter one.
+      expect(findMissingKeysForBackend('pi').map((s) => s.name)).not.toContain('deepseek');
+      expect(findMissingKeysForBackend('azure').map((s) => s.name)).not.toContain('deepseek');
+      expect(findMissingKeysForBackend('jcode').map((s) => s.name)).not.toContain('openrouter');
+    });
+
+    it('deepseek does not gate a pi run even when unset (required: false)', () => {
+      expect(findMissingRequiredKeys().map((s) => s.name)).not.toContain('deepseek');
     });
 
     it('drops backend-bound spec when its key is set', () => {

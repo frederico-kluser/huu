@@ -62,9 +62,15 @@ export interface ApiKeySpec {
    * Specs without `backendBound` are universal — when `required: true`
    * they're enforced regardless of backend. The provider selector resolves
    * a provider to its backend (`openrouter` → `pi`, `azure` → `azure`)
-   * before checking, so this stays backend-keyed.
+   * before checking, so this stays backend-keyed. Backends the user picks
+   * DIRECTLY (`jcode`, via `--backend=jcode`) bind here by the same rule —
+   * there is no provider indirection for them.
+   *
+   * Kept as an explicit literal union rather than `AgentBackendKind`: `stub`
+   * is keyless by construction, so binding a credential to it would be a
+   * contradiction the type system should reject.
    */
-  backendBound?: 'pi' | 'azure';
+  backendBound?: 'pi' | 'azure' | 'jcode';
 }
 
 export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
@@ -125,6 +131,30 @@ export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
     hint: 'ex: https://my-resource.openai.azure.com/openai/v1/',
     required: false,
     backendBound: 'azure',
+  },
+  {
+    // DeepSeek API key — the credential the `jcode` backend needs. jcode is
+    // spawned as a CLI subprocess configured with the `deepseek-v4-pro`
+    // provider profile, and that profile reads the key from the
+    // DEEPSEEK_API_KEY env var (`api_key_env` in ~/.jcode/config.toml — see
+    // docs/jcode-setup-guide.md §3.1). Declaring it HERE is what makes the
+    // Docker wrapper mount/forward it: docker-reexec iterates this registry,
+    // so before this entry existed `selectBackend('jcode').apiKeySpecName`
+    // pointed at a spec `findSpec` couldn't resolve and the key never
+    // reached the container.
+    // `required: false` keeps OpenRouter/Azure runs from blocking on a key
+    // their backend never uses; `backendBound: 'jcode'` makes
+    // findMissingKeysForBackend enforce it exactly when jcode is active.
+    name: 'deepseek',
+    envVar: 'DEEPSEEK_API_KEY',
+    envFileVar: 'DEEPSEEK_API_KEY_FILE',
+    secretMountPath: '/run/secrets/deepseek_api_key',
+    hostSecretScope: 'huu-deepseek-key',
+    label: 'DeepSeek',
+    hint: 'API key from platform.deepseek.com (starts with sk-)',
+    validatePrefix: 'sk-',
+    required: false,
+    backendBound: 'jcode',
   },
   // ── Web-research providers (surf CLI) ────────────────────────────────
   // Consumed by `ensureSurfKeys()` (src/lib/surf-research.ts), which
