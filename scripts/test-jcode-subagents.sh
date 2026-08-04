@@ -186,8 +186,8 @@ fi
 
 for name in "${AGENT_NAMES[@]}"; do
   case "$name" in agent-readme) pid="$AGENT1_PID" ;; agent-counter) pid="$AGENT2_PID" ;; agent-listing) pid="$AGENT3_PID" ;; esac
-  log="${AGENT_LOGS[$name]}"
-  start_ts="${AGENT_START_TS[$name]}"
+  log="$SCRATCH/${name}.log"
+  start_ts=0  # bash 3.2 compat
 
   wait "$pid" || true
   exit_code=$?
