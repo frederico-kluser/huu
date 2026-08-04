@@ -1,4 +1,19 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  watch,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -112,6 +127,38 @@ describe('graph-store / writeGraph', () => {
     expect(stamped).toBeLessThanOrEqual(after + 1000);
   });
 
+  it('drops a `now` that is not an ISO instant and stamps the clock instead', () => {
+    // `now` is an INTERNAL parameter, so a bad one is a caller bug — and
+    // refusing the write would turn that bug into the human losing their
+    // drawing. The stamp is dropped, the work is saved.
+    for (const bad of ['not-a-date', 'undefined', '', '2026', 'August 3, 2026', '  ']) {
+      const before = Date.now();
+      const result = writeGraph(repoRoot, graph('alpha'), bad);
+      const after = Date.now();
+      expect(result.ok, JSON.stringify(bad)).toBe(true);
+      if (!result.ok) return;
+      expect(result.graph.updatedAt, JSON.stringify(bad)).not.toBe(bad);
+      const stamped = Date.parse(result.graph.updatedAt);
+      expect(stamped, JSON.stringify(bad)).toBeGreaterThanOrEqual(before - 1000);
+      expect(stamped, JSON.stringify(bad)).toBeLessThanOrEqual(after + 1000);
+      // And the value that reached the DISK is the one that came back.
+      const reloaded = readGraph(repoRoot, 'alpha');
+      expect(reloaded.ok && reloaded.graph.updatedAt, JSON.stringify(bad)).toBe(
+        result.graph.updatedAt,
+      );
+    }
+  });
+
+  it('keeps a rejected timestamp from poisoning the list order forever', () => {
+    // The consequence the validation exists for: `listGraphs` orders by
+    // `updatedAt.localeCompare`, and "undefined" sorts ABOVE every ISO string
+    // ("u" > "2"), so one bad stamp would pin that graph to the top of the
+    // picker for good. A clock stamp cannot outrank a graph saved in 2099.
+    writeGraph(repoRoot, graph('poisoned'), 'undefined');
+    writeGraph(repoRoot, graph('real'), '2099-01-01T00:00:00.000Z');
+    expect(listGraphs(repoRoot).map((row) => row.id)).toEqual(['real', 'poisoned']);
+  });
+
   it('returns the graph that actually reached the disk', () => {
     const result = writeGraph(repoRoot, graph('alpha'), NOW);
     expect(result.ok).toBe(true);
@@ -190,6 +237,81 @@ describe('graph-store / writeGraph', () => {
   });
 });
 
+describe('graph-store / writeGraph is atomic', () => {
+  // THE GUARD FOR THE MODULE'S CENTRAL ARGUMENT. `writeGraph`'s doc spends a
+  // paragraph on tmp + rename, and until this block existed the whole suite
+  // stayed green with the mechanism deleted (`writeFileSync` straight onto the
+  // target) — including "leaves no staging file behind", which is vacuously
+  // true when no staging file is ever created.
+  //
+  // Both assertions below observe the OBSERVABLE consequence of rename rather
+  // than the implementation: rename SWAPS IN a new inode, a truncating write
+  // reuses the old one. No timing, no watcher, no seam.
+
+  it('swaps in a new inode instead of truncating the file that is already there', () => {
+    // Truncate-then-write is exactly the window the doc refuses to accept: a
+    // crash between the two leaves the human's method as an empty file. Under
+    // rename, the target's inode is never the one that was being written into.
+    writeGraph(repoRoot, graph('alpha', 'First'), NOW);
+    const path = graphPath(repoRoot, 'alpha');
+    const firstInode = statSync(path).ino;
+    writeGraph(repoRoot, graph('alpha', 'Second'), NOW);
+    expect(statSync(path).ino).not.toBe(firstInode);
+    expect(readGraph(repoRoot, 'alpha').ok && readGraph(repoRoot, 'alpha')).toMatchObject({
+      graph: { name: 'Second' },
+    });
+  });
+
+  it('never shows a concurrent reader a half-written graph', () => {
+    // A reader that opened the file BEFORE the save (the HTTP handler serving
+    // the list while the editor autosaves) keeps reading the COMPLETE previous
+    // version through its descriptor: rename unlinks the old inode, it does not
+    // rewrite it. With a truncating write the same descriptor would follow the
+    // save into whatever bytes are there at that instant.
+    writeGraph(repoRoot, graph('alpha', 'First'), NOW);
+    const path = graphPath(repoRoot, 'alpha');
+    const previous = readFileSync(path, 'utf8');
+    const reader = openSync(path, 'r');
+    try {
+      writeGraph(repoRoot, graph('alpha', 'Second'), NOW);
+      const buffer = Buffer.alloc(previous.length * 4);
+      const read = readSync(reader, buffer, 0, buffer.length, 0);
+      expect(buffer.subarray(0, read).toString('utf8')).toBe(previous);
+    } finally {
+      closeSync(reader);
+    }
+    expect(readFileSync(path, 'utf8')).toContain('Second');
+  });
+
+  it.runIf(process.platform === 'linux')(
+    'stages inside the graph directory, where rename is atomic',
+    async () => {
+      // The OTHER half of the doc's claim: the staging file lives in the SAME
+      // directory, because `rename` is only atomic within one filesystem — a
+      // tmp in the OS temp dir would be an EXDEV failure on any machine whose
+      // repo is on a separate mount. inotify buffers events in the KERNEL, so
+      // a watcher started here still sees the names the synchronous write
+      // created and removed while the event loop was blocked. Linux only: the
+      // macOS/Windows backends do not promise per-name events.
+      mkdirSync(graphsDir(repoRoot), { recursive: true });
+      const seen: string[] = [];
+      const watcher = watch(graphsDir(repoRoot), (_event, name) => {
+        if (name) seen.push(name);
+      });
+      try {
+        writeGraph(repoRoot, graph('alpha'), NOW);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      } finally {
+        watcher.close();
+      }
+      expect(seen.some((name) => name.includes('.huu.tmp'))).toBe(true);
+      expect(seen).toContain('alpha.json');
+      // …and it is gone again by the time the call returns.
+      expect(readdirSync(graphsDir(repoRoot))).toEqual(['alpha.json']);
+    },
+  );
+});
+
 describe('graph-store / readGraph', () => {
   it('round-trips a saved graph', () => {
     const original = graph('alpha', 'Meu método');
@@ -238,6 +360,84 @@ describe('graph-store / readGraph', () => {
     mkdirSync(join(graphsDir(repoRoot), 'alpha.json'), { recursive: true });
     const result = readGraph(repoRoot, 'alpha');
     expect(result.ok === false && result.reason.startsWith('read-failed:')).toBe(true);
+  });
+});
+
+describe('graph-store / entries that are not regular files', () => {
+  // THE THIRD OUTCOME the module header does not name. "Never throws" and
+  // "one bad file never costs the others" both assume the reader RETURNS:
+  // `readFileSync` on a FIFO with no writer never does, and on a character
+  // device it may never stop. Both entry points are SYNCHRONOUS inside an HTTP
+  // handler and a TUI render, so one such name in the directory freezes the
+  // whole node event loop — every concurrent run's SSE stream with it.
+  //
+  // IF ONE OF THESE TESTS EVER HANGS INSTEAD OF FAILING, that IS the
+  // regression: the guard that answers before opening the path is gone.
+
+  function makeFifo(name: string): void {
+    mkdirSync(graphsDir(repoRoot), { recursive: true });
+    execFileSync('mkfifo', [join(graphsDir(repoRoot), name)]);
+  }
+
+  it('refuses a FIFO instead of blocking on it forever', () => {
+    makeFifo('fifo.json');
+    const started = Date.now();
+    const result = readGraph(repoRoot, 'fifo');
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.reason.startsWith('read-failed:')).toBe(true);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('skips a FIFO while listing, and still lists the graphs next to it', () => {
+    writeGraph(repoRoot, graph('good'), NOW);
+    makeFifo('fifo.json');
+    const started = Date.now();
+    expect(listGraphs(repoRoot).map((row) => row.id)).toEqual(['good']);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('refuses a symlink, even one pointing at a perfectly good graph', () => {
+    // `lstat`, not `stat`: a symlink is the one way a name INSIDE the graph
+    // directory can still address bytes outside it, and this module refuses
+    // that in id form already.
+    const outside = join(repoRoot, 'outside.json');
+    writeFileSync(outside, serializeDevGraph(graph('linked')), 'utf8');
+    mkdirSync(graphsDir(repoRoot), { recursive: true });
+    symlinkSync(outside, join(graphsDir(repoRoot), 'linked.json'));
+    const result = readGraph(repoRoot, 'linked');
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.reason.startsWith('read-failed:')).toBe(true);
+    expect(listGraphs(repoRoot)).toEqual([]);
+  });
+
+  it('refuses a broken symlink as read-failed, not as a missing graph', () => {
+    // It is not absent — something IS there. Saying "not-found" would invite a
+    // caller to create a graph whose write lands wherever the link points.
+    mkdirSync(graphsDir(repoRoot), { recursive: true });
+    symlinkSync(join(repoRoot, 'nowhere.json'), join(graphsDir(repoRoot), 'dangling.json'));
+    const result = readGraph(repoRoot, 'dangling');
+    expect(result.ok === false && result.reason.startsWith('read-failed:')).toBe(true);
+  });
+
+  it('refuses a character device instead of reading it until memory runs out', () => {
+    // `mknod` needs root, so the device is reached through a link — which is
+    // exactly how one would appear in a checked-out tree anyway.
+    mkdirSync(graphsDir(repoRoot), { recursive: true });
+    symlinkSync('/dev/zero', join(graphsDir(repoRoot), 'zero.json'));
+    const started = Date.now();
+    const result = readGraph(repoRoot, 'zero');
+    expect(result.ok === false && result.reason.startsWith('read-failed:')).toBe(true);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('lists the good graphs with a FIFO, a link and a directory all in the way', () => {
+    writeGraph(repoRoot, graph('good'), NOW);
+    makeFifo('fifo.json');
+    symlinkSync('/dev/zero', join(graphsDir(repoRoot), 'zero.json'));
+    mkdirSync(join(graphsDir(repoRoot), 'trap.json'), { recursive: true });
+    const started = Date.now();
+    expect(listGraphs(repoRoot).map((row) => row.id)).toEqual(['good']);
+    expect(Date.now() - started).toBeLessThan(2000);
   });
 });
 
@@ -309,9 +509,31 @@ describe('graph-store / listGraphs', () => {
     expect(listGraphs(repoRoot).map((row) => row.id)).toEqual(['good']);
   });
 
-  it('skips a file whose name is not a readable id', () => {
-    seedRaw('Weird Name.json', serializeDevGraph(graph('weird')));
-    expect(listGraphs(repoRoot)).toEqual([]);
+  it('skips a file whose name is not a readable id — at BOTH locks', () => {
+    // DEFENSE IN DEPTH, said out loud. `listGraphs` filters the stem and
+    // `readGraph` re-checks it, so removing EITHER guard alone leaves the
+    // other holding the door: no black-box test can kill one in isolation,
+    // and pretending otherwise is what made the old single-name version of
+    // this test tautological. What IS pinned here is that both locks answer
+    // the same way for the same name, which is the property that makes losing
+    // one of them survivable.
+    for (const stem of ['Weird Name', 'UPPER', 'dot.ted', '', 'a'.repeat(41)]) {
+      const path = seedRaw(`${stem}.json`, serializeDevGraph(graph('weird')));
+      expect(listGraphs(repoRoot), stem).toEqual([]);
+      const direct = readGraph(repoRoot, stem);
+      expect(direct.ok === false && direct.reason.startsWith('invalid-id:'), stem).toBe(true);
+      rmSync(path, { force: true });
+    }
+  });
+
+  it('lists every stem the slug pattern accepts — the filter is the pattern, not a second opinion', () => {
+    // The direction a test CAN kill: a listing guard that grows stricter than
+    // `DEVGRAPH_SLUG_PATTERN` (a minimum length, a required leading letter, no
+    // trailing dash) would hide saved work from the picker while `readGraph`
+    // still opens it happily — a graph that exists and cannot be found.
+    const ids = ['a', '9', 'trailing-', 'my-graph', 'a'.repeat(40)];
+    for (const id of ids) writeGraph(repoRoot, graph(id), NOW);
+    expect(listGraphs(repoRoot).map((row) => row.id).sort()).toEqual([...ids].sort());
   });
 
   it('skips a file whose name does not address the graph inside it', () => {

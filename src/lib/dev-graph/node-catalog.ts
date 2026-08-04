@@ -402,7 +402,8 @@ List the task files, never the source files: the next agent's assignment is the 
 
 === STEP 5 — Commit, or none of it exists ===
 The next step reads the MERGED worktree, so an uncommitted file is invisible to it. \`git add\` the task files and the list, then commit them.
-If \`git check-ignore -q .huu\` says the path is ignored, replace the \`.huu/\` line in \`.gitignore\` with \`.huu/*\` and add \`!.huu/findings/\` on the next line — the one edit permitted outside \`.huu/findings/\`.
+Probe the DELIVERABLE directory, never its parent: \`git check-ignore -q .huu/findings\`. A \`.gitignore\` carrying \`.huu/**\` leaves \`.huu\` itself un-ignored, so asking about the parent answers OK while every task file you wrote is dropped by \`git add\`.
+If it says the path is ignored, replace the line that ignores it — whichever form it takes, \`.huu/\`, \`.huu\`, \`/.huu/\` or \`.huu/**\` — with \`.huu/*\`, and add \`!.huu/findings/\` on the next line. That is the one edit permitted outside \`.huu/findings/\`. Re-run the probe: it must now say OK.
 
 === HARD RULES ===
 - Fix NOTHING here. You write work orders; the next step does the work.
@@ -466,7 +467,8 @@ List the task files, never the source files: the next agent's assignment is the 
 
 === STEP 5 — Commit, or none of it exists ===
 The next step reads the MERGED worktree, so an uncommitted file is invisible to it. \`git add\` the task files and the list, then commit them.
-If \`git check-ignore -q .huu\` says the path is ignored, replace the \`.huu/\` line in \`.gitignore\` with \`.huu/*\` and add \`!.huu/findings/\` on the next line — the one edit permitted outside \`.huu/findings/\`.
+Probe the DELIVERABLE directory, never its parent: \`git check-ignore -q .huu/findings\`. A \`.gitignore\` carrying \`.huu/**\` leaves \`.huu\` itself un-ignored, so asking about the parent answers OK while every task file you wrote is dropped by \`git add\`.
+If it says the path is ignored, replace the line that ignores it — whichever form it takes, \`.huu/\`, \`.huu\`, \`/.huu/\` or \`.huu/**\` — with \`.huu/*\`, and add \`!.huu/findings/\` on the next line. That is the one edit permitted outside \`.huu/findings/\`. Re-run the probe: it must now say OK.
 
 === HARD RULES ===
 - Optimize NOTHING here. You write work orders; the next step does the work.
@@ -530,7 +532,8 @@ List the task files, never the source files: the next agent's assignment is the 
 
 === STEP 5 — Commit, or none of it exists ===
 The next step reads the MERGED worktree, so an uncommitted file is invisible to it. \`git add\` the task files and the list, then commit them.
-If \`git check-ignore -q .huu\` says the path is ignored, replace the \`.huu/\` line in \`.gitignore\` with \`.huu/*\` and add \`!.huu/findings/\` on the next line — the one edit permitted outside \`.huu/findings/\`.
+Probe the DELIVERABLE directory, never its parent: \`git check-ignore -q .huu/findings\`. A \`.gitignore\` carrying \`.huu/**\` leaves \`.huu\` itself un-ignored, so asking about the parent answers OK while every task file you wrote is dropped by \`git add\`.
+If it says the path is ignored, replace the line that ignores it — whichever form it takes, \`.huu/\`, \`.huu\`, \`/.huu/\` or \`.huu/**\` — with \`.huu/*\`, and add \`!.huu/findings/\` on the next line. That is the one edit permitted outside \`.huu/findings/\`. Re-run the probe: it must now say OK.
 
 === HARD RULES ===
 - Fix NOTHING here. You write work orders; the next step does the work.

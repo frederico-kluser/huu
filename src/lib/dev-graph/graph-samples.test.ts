@@ -39,6 +39,17 @@ const EXPECTED_SAMPLE_ORDER = [
 
 const CASES = GRAPH_SAMPLES.map((sample) => [sample.id, sample] as const);
 
+/**
+ * The footprint a node occupies on the canvas, in the same units
+ * `NodePosition` uses — the estimated size of the chip the editor draws
+ * (~260×100). It is an ESTIMATE on purpose: overlap is about what the human
+ * sees, and two chips are unreadable long before their coordinates coincide.
+ * Widen it if the chip grows; the sample layouts space nodes 360 apart
+ * horizontally and at least 180 apart vertically, so they clear it with room.
+ */
+const NODE_WIDTH = 260;
+const NODE_HEIGHT = 100;
+
 function sampleById(id: string): GraphSample {
   const found = findSample(id);
   if (!found) throw new Error(`sample "${id}" is missing`);
@@ -145,13 +156,20 @@ describe('graph-samples / every sample', () => {
 
   it.each(CASES)('%s lays out on a canvas without overlapping', (_id, sample) => {
     const graph = sample.build(NOW);
-    const seen = new Set<string>();
+    const placed: { id: string; x: number; y: number }[] = [];
     for (const node of graph.nodes) {
       expect(Number.isFinite(node.position.x), node.id).toBe(true);
       expect(Number.isFinite(node.position.y), node.id).toBe(true);
-      const key = `${node.position.x}:${node.position.y}`;
-      expect(seen.has(key), `${sample.id} → ${node.id} sits on another node`).toBe(false);
-      seen.add(key);
+      const { x, y } = node.position;
+      // BOUNDING BOX, not coordinate equality. Two chips 20px apart do not
+      // share a coordinate and still cover each other on screen, so an exact
+      // `x:y` comparison passes a layout the user cannot read.
+      for (const other of placed) {
+        const overlaps =
+          Math.abs(x - other.x) < NODE_WIDTH && Math.abs(y - other.y) < NODE_HEIGHT;
+        expect(overlaps, `${sample.id} → ${node.id} overlaps ${other.id}`).toBe(false);
+      }
+      placed.push({ id: node.id, x, y });
     }
     // The root is the leftmost thing on the canvas — a method reads left to right.
     const root = graph.nodes.find((node) => node.kind === 'prompt');

@@ -30,6 +30,7 @@
 
 import {
   chmodSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -135,6 +136,34 @@ function invalidId(id: string): string {
   return `${REASON.invalidId}: "${id}" is not a slug (a-z, 0-9, dashes, 1-40) - refused before touching the filesystem`;
 }
 
+/**
+ * A timestamp is only accepted when it is an ISO-8601 instant.
+ *
+ * WHY THE SHAPE AND NOT JUST `Date.parse`: `updatedAt` is compared with
+ * `localeCompare` by {@link listGraphs}, so ordering is only meaningful while
+ * every stamp is the SAME lexicographically sortable shape. `Date.parse`
+ * happily accepts `"2026"` and `"August 3, 2026"`, which sort against real ISO
+ * strings as text, not as time.
+ */
+const ISO_INSTANT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
+/**
+ * The value that gets stamped into `updatedAt`.
+ *
+ * A `now` that is not an ISO-8601 instant FALLS BACK TO THE CLOCK instead of
+ * failing the write. `now` is an internal parameter (tests and reproducible
+ * callers pass it; the UI never does), so refusing would turn a caller's bug
+ * into the human losing their drawing — while a garbage stamp is a permanent
+ * corruption of the list order: `"undefined"` and `"not-a-date"` sort ABOVE
+ * every real ISO string, pinning that graph to the top of the picker forever.
+ * Dropping the bad value costs one field of provenance; refusing costs work.
+ */
+function stampedAt(now?: string): string {
+  return typeof now === 'string' && ISO_INSTANT_PATTERN.test(now) && !Number.isNaN(Date.parse(now))
+    ? now
+    : new Date().toISOString();
+}
+
 function summarize(graph: DevGraph): GraphSummary {
   return {
     id: graph.id,
@@ -198,13 +227,37 @@ export function listGraphs(repoRoot: string): GraphSummary[] {
  * whose contents disagree with its name cannot be saved back without either
  * moving it or renaming the method behind the human's back, so the honest
  * answer is to refuse and say why.
+ *
+ * ONLY A REGULAR FILE IS READ, and that check is not cosmetic: `readFileSync`
+ * on a FIFO with no writer NEVER RETURNS, and every caller here is synchronous
+ * inside an HTTP handler or a TUI render — one such entry in the directory
+ * would freeze the whole node event loop, taking every other run's SSE stream
+ * down with it. `lstat` (not `stat`) is deliberate: it also refuses a symlink,
+ * which is the one way a name inside the directory could still address bytes
+ * outside it, and it reports a broken link as "not a regular file" instead of
+ * as a missing graph.
  */
 export function readGraph(repoRoot: string, id: string): ReadGraphResult {
   if (!DEVGRAPH_SLUG_PATTERN.test(id)) return { ok: false, reason: invalidId(id) };
 
+  const path = graphPath(repoRoot, id);
+  try {
+    if (!lstatSync(path).isFile()) {
+      return {
+        ok: false,
+        reason: `${REASON.readFailed}: "${id}${JSON_SUFFIX}" is not a regular file - refused before opening it`,
+      };
+    }
+  } catch (err) {
+    if (isAbsent(err)) {
+      return { ok: false, reason: `${REASON.notFound}: no graph "${id}" under ${GRAPHS_DIR}` };
+    }
+    return { ok: false, reason: `${REASON.readFailed}: ${errText(err)}` };
+  }
+
   let raw: string;
   try {
-    raw = readFileSync(graphPath(repoRoot, id), 'utf8');
+    raw = readFileSync(path, 'utf8');
   } catch (err) {
     if (isAbsent(err)) {
       return { ok: false, reason: `${REASON.notFound}: no graph "${id}" under ${GRAPHS_DIR}` };
@@ -239,11 +292,13 @@ export function readGraph(repoRoot: string, id: string): ReadGraphResult {
  * graph with `validateGraph` errors saves exactly like a clean one, see the
  * module header.
  *
- * WHAT IS STAMPED: `updatedAt`, always, from `now` when given and otherwise from
- * the clock. That fallback is the one impurity in this module and it is
- * deliberate: every test and every reproducible caller passes `now`, and the
- * returned graph carries the value that actually reached the disk, so nobody has
- * to guess. `createdAt` is the caller's and is never touched.
+ * WHAT IS STAMPED: `updatedAt`, always, from `now` when it is an ISO-8601
+ * instant and otherwise from the clock (see {@link stampedAt} for why a bad
+ * `now` is dropped rather than refused). That fallback is the one impurity in
+ * this module and it is deliberate: every test and every reproducible caller
+ * passes `now`, and the returned graph carries the value that actually reached
+ * the disk, so nobody has to guess. `createdAt` is the caller's and is never
+ * touched.
  *
  * WHY tmp + rename: a `writeFileSync` straight onto the target truncates it
  * first, so a crash (or a full disk) between truncate and write leaves the
@@ -251,6 +306,10 @@ export function readGraph(repoRoot: string, id: string): ReadGraphResult {
  * `rename` is only atomic within a filesystem — and carries a per-call unique
  * suffix so two concurrent saves of the same graph cannot scribble over each
  * other's staging file. Same recipe as `surf-research.ts`.
+ *
+ * That paragraph is GUARDED, not merely asserted: `graph-store.test.ts` /
+ * "graph-store / writeGraph is atomic" fails if the staging file and the
+ * rename are ever replaced by a direct write onto the target.
  */
 export function writeGraph(repoRoot: string, graph: DevGraph, now?: string): WriteGraphResult {
   if (typeof graph !== 'object' || graph === null || Array.isArray(graph)) {
@@ -264,7 +323,7 @@ export function writeGraph(repoRoot: string, graph: DevGraph, now?: string): Wri
     return { ok: false, reason: invalidId(String(id)) };
   }
 
-  const stamped = { ...graph, updatedAt: now ?? new Date().toISOString() };
+  const stamped = { ...graph, updatedAt: stampedAt(now) };
   const parsed = parseDevGraph(stamped);
   if (!parsed.ok) {
     return { ok: false, reason: `${REASON.invalidSchema}: ${parsed.errors.join('; ')}` };

@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DEV_METHODOLOGIES } from '../dev-mode/methodology-registry.js';
 import { DEVGRAPH_SLUG_PATTERN } from './graph-types.js';
@@ -149,18 +153,49 @@ describe('node-catalog / the `-findings` family', () => {
     }
   });
 
-  it('pairs every read-only review block with a writing `-findings` twin', () => {
+  it('pairs every read-only review block with a writing `-findings` twin of its OWN', () => {
     // The pair is deliberate and the comment in node-catalog.ts says why:
     // `<axis>-review` REPORTS (readOnly, data dead end), `<axis>-findings`
     // hands work over. Turning one into the other deletes a capability.
+    //
+    // The axis is derived by stripping `-review`, so a read-only block NOT
+    // named `<axis>-review` would silently borrow another block's twin — a
+    // read-only block called plainly `security` used to map onto
+    // `security-findings` and pass this test without a twin of its own. The
+    // suffix assertion and the injectivity check below close that door.
+    const twins: string[] = [];
     for (const block of ACTION_BLOCKS) {
       if (!block.readOnly) continue;
-      const axis = block.id.replace(/-review$/, '');
+      expect(block.id.endsWith('-review'), block.id).toBe(true);
+      const axis = block.id.slice(0, -'-review'.length);
+      expect(axis.length, block.id).toBeGreaterThan(0);
       const twin = findBlock(`${axis}-findings`);
       expect(twin, block.id).toBeDefined();
       expect(twin?.produces, block.id).toBe(true);
       expect(twin?.readOnly, block.id).toBe(false);
+      twins.push(`${axis}-findings`);
     }
+    expect(new Set(twins).size, 'two read-only blocks share one twin').toBe(twins.length);
+  });
+
+  it('gives every `-findings` block a declared axis it actually writes into', () => {
+    // The OTHER direction of the pairing, which the loop above cannot reach:
+    // it only ever visits the two read-only blocks, so `review-findings` — the
+    // findings block with no `-review` twin — went unexercised. Every findings
+    // block must still declare an axis, and the axis in its ID must be the
+    // directory its prompt writes into, or the per-axis directory that keeps
+    // two findings nodes from colliding is decided by the prompt alone.
+    const axes: string[] = [];
+    for (const block of ACTION_BLOCKS) {
+      if (!block.id.endsWith('-findings')) continue;
+      expect(block.produces, block.id).toBe(true);
+      const axis = block.id.slice(0, -'-findings'.length);
+      expect(axis.length, block.id).toBeGreaterThan(0);
+      expect(block.promptTemplate.includes(`\`.huu/findings/${axis}/001-`), block.id).toBe(true);
+      axes.push(axis);
+    }
+    expect(axes).toEqual(FINDINGS_BLOCK_IDS.map((id) => id.slice(0, -'-findings'.length)));
+    expect(new Set(axes).size).toBe(axes.length);
   });
 
   it('gives every findings block a mechanically checkable judge clause', () => {
@@ -212,6 +247,32 @@ describe('node-catalog / the `-findings` family', () => {
     }
   });
 
+  it('probes the DELIVERABLE directory, never its parent', () => {
+    // `git check-ignore -q .huu` is a FALSE NEGATIVE under `.huu/**`: that
+    // pattern ignores everything INSIDE `.huu` without ignoring `.huu`
+    // itself, so the parent answers "OK" while every task file is dropped by
+    // `git add`. The real-git block below proves it.
+    for (const block of findingsBlocks) {
+      expect(block.promptTemplate.includes('git check-ignore -q .huu/findings'), block.id).toBe(
+        true,
+      );
+      expect(block.promptTemplate.includes('git check-ignore -q .huu`'), block.id).toBe(false);
+    }
+  });
+
+  it('names every .gitignore form the rewrite has to match', () => {
+    // The rewrite WORKS for all four; only the instruction used to name one,
+    // and an agent that cannot recognize the line it must replace does not
+    // apply a remedy that works.
+    for (const block of findingsBlocks) {
+      for (const form of ['`.huu/`', '`.huu`', '`/.huu/`', '`.huu/**`']) {
+        expect(block.promptTemplate.includes(form), `${block.id} / ${form}`).toBe(true);
+      }
+      expect(block.promptTemplate.includes('`.huu/*`'), block.id).toBe(true);
+      expect(block.promptTemplate.includes('`!.huu/findings/`'), block.id).toBe(true);
+    }
+  });
+
   it('gives each findings block its OWN output directory', () => {
     // Two findings nodes can sit in the same wave; a shared directory would put
     // their branches in conflict on the very files the hand-over depends on.
@@ -226,6 +287,100 @@ describe('node-catalog / the `-findings` family', () => {
   it('states in pt-BR that the block WRITES, so nobody confuses it with the review twin', () => {
     for (const block of findingsBlocks) {
       expect(block.description.includes('ESCREVE'), block.id).toBe(true);
+    }
+  });
+});
+
+describe('node-catalog / the `-findings` persistence instruction, against REAL git', () => {
+  // The instruction in STEP 5 is the difference between a fan-out of N agents
+  // and a fan-out of zero: the next step reads the MERGED worktree, so a task
+  // file `git add` refuses to stage does not exist. This block runs actual git
+  // in a throwaway repo — the house rule for anything git-adjacent — over the
+  // four `.gitignore` forms a real project writes.
+  const IGNORE_FORMS = ['.huu/', '.huu', '/.huu/', '.huu/**'];
+  const TASK_FILE = '.huu/findings/security/001-command-injection.md';
+  const LIST_FILE = '.huu/findings/mapear.json';
+
+  function git(cwd: string, args: string[]): string {
+    return execFileSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'huu test',
+        GIT_AUTHOR_EMAIL: 'test@huu.invalid',
+        GIT_COMMITTER_NAME: 'huu test',
+        GIT_COMMITTER_EMAIL: 'test@huu.invalid',
+      },
+    });
+  }
+
+  /** `git check-ignore -q <path>`: exit 0 = ignored, exit 1 = not ignored. */
+  function isIgnored(cwd: string, path: string): boolean {
+    try {
+      execFileSync('git', ['check-ignore', '-q', path], { cwd, stdio: 'ignore' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function makeRepo(ignoreLine: string): string {
+    const root = mkdtempSync(join(tmpdir(), 'huu-findings-gitignore-'));
+    git(root, ['init', '-q']);
+    writeFileSync(join(root, '.gitignore'), `node_modules/\n${ignoreLine}\ndist/\n`, 'utf8');
+    writeFileSync(join(root, 'README.md'), '# repo\n', 'utf8');
+    git(root, ['add', '.gitignore', 'README.md']);
+    git(root, ['commit', '-qm', 'seed']);
+    // What the agent writes in STEP 2 and STEP 4.
+    mkdirSync(join(root, '.huu/findings/security'), { recursive: true });
+    writeFileSync(join(root, TASK_FILE), '# 001 — fix it\n', 'utf8');
+    writeFileSync(join(root, LIST_FILE), '[]\n', 'utf8');
+    return root;
+  }
+
+  /** The MINIMAL rewrite the prompt prescribes, whatever form the line took. */
+  function applyPrescribedRewrite(root: string, ignoreLine: string): void {
+    const current = readFileSync(join(root, '.gitignore'), 'utf8');
+    expect(current.includes(`\n${ignoreLine}\n`)).toBe(true);
+    writeFileSync(
+      join(root, '.gitignore'),
+      current.replace(`\n${ignoreLine}\n`, '\n.huu/*\n!.huu/findings/\n'),
+      'utf8',
+    );
+  }
+
+  it.each(IGNORE_FORMS)('detects and repairs `%s`, so the task files reach the merge', (form) => {
+    const root = makeRepo(form);
+    try {
+      // 1. The probe the prompt tells the agent to run must SEE the problem.
+      expect(isIgnored(root, '.huu/findings'), `${form}: probe before the fix`).toBe(true);
+
+      // 2. The rewrite the prompt prescribes.
+      applyPrescribedRewrite(root, form);
+
+      // 3. The probe now says OK, and git actually stages the deliverables.
+      expect(isIgnored(root, '.huu/findings'), `${form}: probe after the fix`).toBe(false);
+      git(root, ['add', '.gitignore', '.huu/findings']);
+      git(root, ['commit', '-qm', 'findings']);
+      const tracked = git(root, ['ls-files', '--cached', '.huu']).split('\n').filter(Boolean);
+      expect(tracked.sort(), form).toEqual([LIST_FILE, TASK_FILE].sort());
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('would have been fooled by the old probe on the parent directory', () => {
+    // The regression this fix exists for, kept as a live demonstration: under
+    // `.huu/**` the parent is NOT ignored, so the old `git check-ignore -q
+    // .huu` reported OK while the deliverables were being dropped.
+    const root = makeRepo('.huu/**');
+    try {
+      expect(isIgnored(root, '.huu'), 'old probe (parent)').toBe(false);
+      expect(isIgnored(root, '.huu/findings'), 'new probe (deliverable)').toBe(true);
+      expect(isIgnored(root, TASK_FILE), 'the task file itself').toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });
