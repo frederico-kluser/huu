@@ -214,7 +214,17 @@ export interface DevEpochEvidence {
   waived: { agentId: number; stageName: string; findings: ReviewFinding[] }[];
   taskOutcomes: { done: number; noChanges: number; failed: number; unmerged: number };
   landing: { landed: boolean; commit?: string; error?: string };
-  /** A bounded slice of the epoch's consolidation report. */
+  /**
+   * A bounded slice of the epoch's consolidation report.
+   *
+   * ABSENT FOR EVERY EPOCH A DRAWING RAN, deliberately: huu reads the report
+   * from the path IT compiled (`.huu/dev/<session>/epoch-N/report.md`), and a
+   * devgraph's `consolidate` block names no output file, so there is no path to
+   * read. What that costs is the excerpt in `state.json` and in the browser
+   * snapshot; the only CONSUMER — the next epoch's planner prompt — is never
+   * reached on the drawn path. Full argument on `readEpochReportFor`
+   * (`dev-mode/dev-driver.ts`), which is the one place that fills this.
+   */
   reportExcerpt?: string;
   /**
    * DECLARED-vs-declared write-set check, run over the epoch's task specs
@@ -225,6 +235,12 @@ export interface DevEpochEvidence {
    * partitioned the tree. Advisory: violations are recorded here and logged,
    * never blocked on — the blocking role moves to a compiled step in a later
    * wave. Absent when the epoch produced no specs or the specs are disjoint.
+   *
+   * On a DRAWN epoch this comes only from the run's own pre-fan-out collision
+   * check (`OrchestratorState.declaredWriteCollisions`), never from the disk
+   * scan: a drawing's task specs live under `.huu/findings/<axis>/`, which is
+   * namespaced by axis and not by epoch, so scanning it would report a
+   * previous epoch's specs as today's violations. See `scanSpecs`.
    */
   declaredPartitionViolations?: { path: string; specs: string[] }[];
   /**

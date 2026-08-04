@@ -1443,3 +1443,93 @@ describe('web server — /api/dev runs the methods /api/graphs saves', () => {
     expect(session.maxEpochs).toBeNull();
   });
 });
+
+// ── A body huu cannot parse is the CALLER's error, on /api/dev too ──────────
+//
+// `/api/graphs` grew an explicit 400 for this; the `/api/dev` namespace did
+// not, so `{ not json` fell through to the server's catch-all and came back as
+// a 500. The status is the only handle a browser (or a log) has on "retry with
+// a different body" versus "huu broke", and 500 says the wrong one.
+
+describe('web server — a malformed body on /api/dev is a 400, never a 500', () => {
+  let repo: string;
+  let server: Server;
+  let base: string;
+
+  beforeEach(async () => {
+    repo = mkdtempSync(join(tmpdir(), 'huu-web-dev-badbody-'));
+    setupRepo(repo);
+    ({ server } = createWebServer({ cwd: repo, defaultAutoScale: true }));
+    base = await listenEphemeral(server);
+  });
+
+  afterEach(async () => {
+    await fetch(base + '/api/dev/abort', { method: 'POST' });
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  const postRaw = (path: string, body: string): Promise<Response> =>
+    fetch(base + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+
+  // EVERY route in the namespace that reads a body — the hole was never
+  // specific to `/api/dev`, it was specific to reading one without a guard.
+  const BODY_ROUTES = [
+    '/api/dev',
+    '/api/dev/approve',
+    '/api/dev/resume',
+    '/api/dev/orphans',
+    '/api/dev/transcribe',
+  ];
+
+  it('answers 400 with the reason for every unparseable body', async () => {
+    for (const path of BODY_ROUTES) {
+      for (const body of ['{', 'não é json', '[1,2,3', '{"a":']) {
+        const res = await postRaw(path, body);
+        expect(res.status, `${path} ← ${body}`).toBe(400);
+        expect(((await res.json()) as { error: string }).error).toMatch(/invalid JSON/);
+      }
+    }
+  });
+
+  // An EMPTY body is not malformed — `readJsonBody` reads it as `{}`, and the
+  // route's own validation decides. It must land on that validation's answer
+  // (400 "goal is required"), never on a 500 and never on a started session.
+  it('reads an empty body as {} and lets the route validate it', async () => {
+    const res = await postRaw('/api/dev', '');
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/goal is required/);
+    expect((await (await fetch(base + '/api/dev')).json()).session).toBeNull();
+  });
+
+  // The point of the guard is that it is UNREACHABLE for a body that parses:
+  // every valid request keeps the exact status it had before.
+  it('changes nothing for a body that parses', async () => {
+    // Gates with nothing waiting still answer 409, not 400.
+    for (const [path, body] of [
+      ['/api/dev/approve', { approved: true }],
+      ['/api/dev/resume', { accept: true }],
+      ['/api/dev/orphans', { action: 'land' }],
+    ] as const) {
+      const res = await postRaw(path, JSON.stringify(body));
+      expect(res.status, path).toBe(409);
+    }
+    // …and a well-formed start is still a 200 that opens a session.
+    const started = await postRaw(
+      '/api/dev',
+      JSON.stringify({
+        goal: 'corpo válido',
+        modelId: 'stub-model',
+        backend: 'stub',
+        approval: 'each-epoch',
+        skipKnowledgeBootstrap: true,
+      }),
+    );
+    expect(started.status).toBe(200);
+    expect((await started.json()).sessionId).toBeTruthy();
+  });
+});

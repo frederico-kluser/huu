@@ -557,6 +557,10 @@ describe('web server — development mode resume gate', () => {
       epochsDone: 0,
       nextEpoch: 1,
     });
+    // The other half of the additive contract (see the DRAWN block below): a
+    // session the LLM planner wrote carries no drawing, so the offer carries no
+    // `drawnMethod` — and the browser has nothing extra to ask the human for.
+    expect(session.resumeOffer.drawnMethod).toBeUndefined();
     // The gate is a QUESTION during probing — it does not claim a new phase.
     expect(session.phase).toBe('probing');
 
@@ -1236,6 +1240,45 @@ describe('web server — resuming a session that was DRAWN', () => {
     }
     return session;
   };
+
+  // THE TRAP THIS CLOSES: the driver refuses a resume that does not bring the
+  // drawing back, and it is right to — but the offer used to say only "resume
+  // session X". The human clicked "retomar" on a session whose next epoch could
+  // not start, with nothing on screen naming the drawing to re-select. The
+  // offer now carries the previous session's `drawnMethod` verbatim, so the
+  // button can both SAY which method it was and re-select it.
+  it('names the drawing the previous session ran, so the resume can bring it back', async () => {
+    expect((await startSession({ graphId: 'metodo-minimo' })).status).toBe(200);
+    const session = await waitFor((s) => s.awaitingResume === true);
+
+    expect(session.resumeOffer).toEqual({
+      sessionId: PREVIOUS,
+      goal: GOAL,
+      epochsDone: 0,
+      nextEpoch: 1,
+      drawnMethod: { graphId: 'metodo-minimo', graphName: 'Método mínimo' },
+    });
+    // Said in the log too, so a client that has not learned the field still
+    // shows the human what the accept depends on.
+    expect(
+      session.logs.some(
+        (l: { level: string; message: string }) =>
+          l.level === 'warn' && l.message.includes('metodo-minimo'),
+      ),
+    ).toBe(true);
+  });
+
+  // The offer describes the SESSION ON DISK, not the request: a browser that
+  // forgot the drawing is exactly the case the field exists for, so the offer
+  // must still name it (that is what lets the UI recover instead of failing).
+  it('names it even when the start request carried no drawing at all', async () => {
+    expect((await startSession({})).status).toBe(200);
+    const session = await waitFor((s) => s.awaitingResume === true);
+    expect(session.resumeOffer.drawnMethod).toEqual({
+      graphId: 'metodo-minimo',
+      graphName: 'Método mínimo',
+    });
+  });
 
   it('continues the session when the browser re-posts the same drawing', async () => {
     expect((await startSession({ graphId: 'metodo-minimo' })).status).toBe(200);

@@ -423,6 +423,24 @@ function safeSessionPaths(sessionId: string): DevSessionPaths | null {
  * Session-scoped first, because that is where a compiled epoch writes it. The
  * fallback reads the pre-namespacing location (`.huu/dev/epoch-N/report.md`),
  * which is all a blackboard left by an older huu ever had.
+ *
+ * A DRAWN EPOCH RETURNS `undefined` HERE, AND THAT IS NOT A BUG TO FIX BY
+ * REPOINTING THIS AT `graphRoot`. Both paths this reads belong to the PLANNER
+ * epoch, whose consolidation step huu compiles and whose output path huu
+ * therefore knows. A devgraph's `consolidate` block names no output file at all
+ * (`node-catalog.ts`) — the agent writes its report wherever the drawing's
+ * prose sends it — so there is no `<graphRoot>/report.md` to find either. The
+ * empty result is huu declining to guess, not huu looking in the wrong place.
+ *
+ * WHAT IS LOST, said out loud: `DevEpochEvidence.reportExcerpt` is absent for
+ * every epoch a drawing ran, so the excerpt is missing from `state.json` and
+ * from the session snapshot the browser renders. The one CONSUMER is unharmed:
+ * the excerpt only ever feeds the NEXT epoch's planner prompt
+ * (`planner-prompts.ts`), and a drawn session never reaches the planner — the
+ * graph branch of the epoch loop returns before Phase A, and a resume that
+ * drops the drawing is refused (`graph-missing-on-resume`) rather than handed
+ * to a model. If a future drawing gains a report at a path huu OWNS, teach that
+ * path to this function and delete this paragraph.
  */
 function readEpochReportFor(
   cwd: string,
@@ -454,6 +472,31 @@ function unlandedDetail(branch: string, why: string): string {
  * title names both "own(s)" and "file(s)", in either order, exactly the gate
  * {@link checkWritePartition}'s parser applies) and return them as
  * {@link TaskSpec} entries.
+ *
+ * ITS ONE CALLER SCANS THE EPOCH DIRECTORY, WHICH A DRAWN EPOCH LEAVES EMPTY —
+ * deliberately, and NOT repairable by pointing the scan at `graphRoot`:
+ *
+ *  - A drawing's producer blocks write their task files to `.huu/findings/
+ *    <axis>/`, hard-coded in the block prompt and deliberately OUTSIDE
+ *    `graphRoot` (the gitignore remedy those prompts carry re-includes exactly
+ *    that path — see `devGraphFanOutNamespace` and `graph-to-pipeline.ts`). So
+ *    `graphRoot` holds research artifacts and critic shards, never a task spec:
+ *    scanning it would find nothing, or worse, match an ownership-shaped
+ *    heading inside a research write-up.
+ *  - Scanning `.huu/findings/` instead would be worse than finding nothing.
+ *    That directory is namespaced by AXIS, not by session or epoch, and its
+ *    specs are committed — so epoch 2 of a resumed drawing would re-read epoch
+ *    1's task files and report violations that no longer exist. That is the
+ *    exact cross-epoch collision the epoch segment in `devGraphRoot` and
+ *    `devGraphFanOutNamespace` was added to make impossible.
+ *
+ * NOTHING IS ACTUALLY UNMEASURED. This scan is only the RECONCILIATION pass
+ * (see its call site): the authoritative source is the run itself, which
+ * collides declared ownership BEFORE each `memory` fan-out and across every
+ * step so far (`Orchestrator` → `OrchestratorState.declaredWriteCollisions` →
+ * `collectEpochEvidence`). That check is live on the drawn path too — a
+ * drawing's fan-out is an ordinary `memory`-scope step — and it is both earlier
+ * and cross-node, which is where the expensive conflicts are.
  */
 function scanSpecs(root: string): TaskSpec[] {
   const specs: TaskSpec[] = [];
@@ -1492,6 +1535,11 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
   // cases that check cannot reach: an epoch whose specs were written but
   // never fanned out, and a run whose state was lost. It therefore only
   // fills the field when the run reported nothing.
+  //
+  // A DRAWN epoch scans an empty directory here, on purpose: its task specs
+  // live under `.huu/findings/<axis>/`, and re-aiming this at them would read
+  // ACROSS epochs. `scanSpecs`'s own doc carries the full argument, and the
+  // run-level collision check above still covers the drawn path.
   const landedSpecs = scanSpecs(join(cwd, paths.epochDir(epoch)));
   if (landedSpecs.length > 0 && evidence.declaredPartitionViolations === undefined) {
     const partition = checkWritePartition(landedSpecs);

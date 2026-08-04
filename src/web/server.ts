@@ -691,7 +691,12 @@ export function createWebServer(opts: WebServerOptions): {
       return sendJson(res, 200, { session: devManager.snapshot() });
     }
     if (method === 'POST' && path === '/api/dev') {
-      const body = await readJsonBody(req);
+      // A body huu cannot even parse is a 400, exactly like `/api/graphs` —
+      // starting a session is the most expensive thing this server does, and
+      // "your JSON is broken" must never read as "huu failed" (see
+      // `readJsonBodyOr400`).
+      const body = await readJsonBodyOr400(req, res);
+      if (!body) return;
       const provider = typeof body.provider === 'string' ? (body.provider as LlmProvider) : undefined;
       const backend: AgentBackendKind = provider
         ? providerToBackend(provider)
@@ -787,7 +792,8 @@ export function createWebServer(opts: WebServerOptions): {
       }
     }
     if (method === 'POST' && path === '/api/dev/approve') {
-      const body = await readJsonBody(req);
+      const body = await readJsonBodyOr400(req, res);
+      if (!body) return;
       const approved = body.approved !== false;
       if (!devManager.approve(approved)) {
         return sendJson(res, 409, { error: 'no plan is awaiting approval' });
@@ -798,7 +804,8 @@ export function createWebServer(opts: WebServerOptions): {
       // Answer the resume gate: continue the previous session (same blackboard
       // namespace, epoch numbering continued) or start fresh. 409 when nothing
       // is waiting, so a stale click can never be mistaken for an answer.
-      const body = await readJsonBody(req);
+      const body = await readJsonBodyOr400(req, res);
+      if (!body) return;
       const accept = body.accept === true;
       if (!devManager.resumeSession(accept)) {
         return sendJson(res, 409, { error: 'no previous session is awaiting a resume decision' });
@@ -808,7 +815,8 @@ export function createWebServer(opts: WebServerOptions): {
     if (method === 'POST' && path === '/api/dev/orphans') {
       // Answer the orphan-branch gate. `land` merges them oldest epoch first;
       // `ignore` just names them. Anything else is `ignore` — the safe side.
-      const body = await readJsonBody(req);
+      const body = await readJsonBodyOr400(req, res);
+      if (!body) return;
       const action = body.action === 'land' ? 'land' : 'ignore';
       if (!devManager.resolveOrphans(action)) {
         return sendJson(res, 409, { error: 'no orphan branches are awaiting a decision' });
@@ -824,7 +832,8 @@ export function createWebServer(opts: WebServerOptions): {
       // as 16 kHz mono WAV (OpenRouter rejects the webm MediaRecorder produces)
       // and posts the base64 here; the key follows the same precedence a run's
       // does, so a browser-session key works without ever touching disk.
-      const body = await readJsonBody(req);
+      const body = await readJsonBodyOr400(req, res);
+      if (!body) return;
       const format = body.format ?? 'wav';
       if (!isTranscribeFormat(format)) {
         return sendJson(res, 400, { error: `unsupported audio format "${String(format)}"` });
@@ -855,13 +864,11 @@ export function createWebServer(opts: WebServerOptions): {
     if (isGraphApiPath(path)) {
       let body: Record<string, unknown> = {};
       if (method === 'POST' || method === 'PUT') {
-        try {
-          body = await readJsonBody(req);
-        } catch (err) {
-          // A malformed body is the caller's mistake — a 400 with the reason,
-          // never the catch-all 500 an uncaught throw would produce here.
-          return sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
-        }
+        // A malformed body is the caller's mistake — a 400 with the reason,
+        // never the catch-all 500 an uncaught throw would produce here.
+        const parsed = await readJsonBodyOr400(req, res);
+        if (!parsed) return;
+        body = parsed;
       }
       const result = handleGraphRequest({
         cwd: opts.cwd,
@@ -1160,6 +1167,33 @@ function writeSse(res: ServerResponse, event: string, data: string): void {
   // `event:` line omitted for the default 'message' type the client listens on.
   if (event && event !== 'message') res.write(`event: ${event}\n`);
   res.write(`data: ${data}\n\n`);
+}
+
+/**
+ * `readJsonBody`, but a body that cannot be read is answered as the CALLER's
+ * mistake instead of the server's.
+ *
+ * `readJsonBody` throws on a malformed (or oversized) body, and an uncaught
+ * throw inside `handleRequest` lands in the top-level `.catch` — which reports
+ * 500. A 500 says "huu broke"; `{ not json` says the client sent garbage, and
+ * the two must not be indistinguishable to anything reading the status: a
+ * browser cannot retry-vs-fix on a 500, and neither can a log.
+ *
+ * `/api/graphs` already did this inline; this is the same rule, hoisted so the
+ * routes that share it also share ONE implementation. Returns `null` AFTER
+ * writing the 400 — the caller's contract is `if (!body) return;`, which is
+ * unreachable for any body that parses, so no valid request changes shape.
+ */
+async function readJsonBodyOr400(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<Record<string, unknown> | null> {
+  try {
+    return await readJsonBody(req);
+  } catch (err) {
+    sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {

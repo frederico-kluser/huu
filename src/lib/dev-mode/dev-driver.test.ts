@@ -3003,6 +3003,57 @@ describe('runDevMode — approval on the drawn-method path', () => {
 
     expect(asked).toBe(0);
   });
+
+  // The three tests above pin WHETHER the epoch runs. This one pins WHAT the
+  // human was shown when they said yes: the gate must be asked with the very
+  // plan the `planned` event announced, and it must be announced FIRST. A gate
+  // handed a different (or a later) value would be asking the human to sign
+  // something other than what is on their screen — and on the drawn path the
+  // plan is SYNTHESIZED from the drawing (`graphDevPlan`), so there is a real
+  // second value it could have been built from.
+  it('asks the gate with the SAME synthetic plan the planned event announced, and announces it first', async () => {
+    let announced: DevPlan | undefined;
+    let announcedWarnings: string[] | undefined;
+    let gated: DevPlan | undefined;
+    let gatedWarnings: string[] | undefined;
+    let announcedBeforeGate = false;
+    let runs = 0;
+
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'each-epoch', skipKnowledgeBootstrap: true, graph: sampleGraph() },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      onEvent: (e) => {
+        if (e.type === 'planned') {
+          announced = e.plan;
+          announcedWarnings = e.warnings;
+        }
+      },
+      onApprove: (plan, _epoch, warnings) => {
+        announcedBeforeGate = announced !== undefined;
+        gated = plan;
+        gatedWarnings = warnings;
+        return true;
+      },
+      orchestratorFactory: (_p, epoch) => {
+        runs++;
+        return fakeRun({ runId: `graph-${epoch}` });
+      },
+    });
+
+    expect(announcedBeforeGate).toBe(true);
+    expect(gated).toBeDefined();
+    expect(gated).toEqual(announced);
+    expect(gatedWarnings).toEqual(announcedWarnings);
+    // …and it is a real DevPlan, not a shape only the gate would accept.
+    expect(DevPlanSchema.safeParse(gated).success).toBe(true);
+    // Approving RAN it — exactly one epoch, because a drawing is one epoch.
+    expect(runs).toBe(1);
+    expect(result.epochs).toHaveLength(1);
+    expect(result.stoppedBecause).toBe('max-epochs');
+  });
 });
 
 describe('runDevMode — what a drawing does NOT inherit from the session', () => {
@@ -3710,5 +3761,120 @@ describe('runDevMode — a graph session still pays Phase 0', () => {
   it('does NOT route them when the bootstrap was skipped on a bare repo', async () => {
     const { pipeline } = await captureDrawnSession(tinyGraph(), 'sessao-sem-router');
     expect(stepFor(pipeline, 'auditar').prompt).not.toContain(ROUTER_PREFIX.trim().slice(0, 40));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// What a DRAWN epoch's evidence deliberately leaves empty.
+//
+// `readEpochReportFor` and the `scanSpecs` reconciliation pass both address the
+// PLANNER epoch's blackboard (`.huu/dev/<session>/epoch-N/`), which a drawing
+// never writes into — it writes research artifacts and critic shards under
+// `<graphRoot>` and its task specs under `.huu/findings/<axis>/`. These tests
+// pin the emptiness as a DECISION rather than leaving the next reader to
+// rediscover it as a bug: both helpers carry the full argument in their doc
+// comments, and neither may be repointed without updating them.
+// ---------------------------------------------------------------------------
+describe('runDevMode — a drawn epoch reports no excerpt and scans no specs', () => {
+  const SESSION_E = 'sessao-evidencia';
+
+  /** Two specs claiming ONE file, in the exact shape `scanSpecs` looks for. */
+  const overlapping = (dir: string): Record<string, string> => ({
+    [`${dir}/T-001.md`]: specFixture('T-001 — A', ['src/shared.ts', 'src/a.ts']),
+    [`${dir}/T-002.md`]: specFixture('T-002 — B', ['src/shared.ts', 'src/b.ts']),
+  });
+
+  it('leaves reportExcerpt and the spec scan empty even when the drawing wrote both under the graph root', async () => {
+    const graphRoot = devGraphRoot(SESSION_E, 1);
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graph: tinyGraph() },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_E,
+      resume: 'never',
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      orchestratorFactory: (_p, epoch) =>
+        fakeRun({
+          runId: `desenho-${epoch}`,
+          files: {
+            [`${graphRoot}/report.md`]: '# Relatório do desenho\n\nTudo consolidado.\n',
+            ...overlapping(`${graphRoot}/consolidar`),
+          },
+        }),
+    });
+
+    // The epoch is normal in every other respect: it ran, it landed, it is
+    // recorded. Only these two fields are silent.
+    expect(result.stoppedBecause).toBe('max-epochs');
+    const evidence = result.epochs[0]!.evidence!;
+    expect(result.epochs[0]!.landedCommit).toBeTruthy();
+
+    // The report exists on disk, in the checkout, and is still not read: huu
+    // does not own that path, so it declines to guess at one.
+    expect(existsSync(join(repo, graphRoot, 'report.md'))).toBe(true);
+    expect(evidence.reportExcerpt).toBeUndefined();
+
+    // Same for the specs: overlapping ownership, committed, and NOT scanned —
+    // re-aiming the scan at them would read across epochs of one session.
+    expect(evidence.declaredPartitionViolations).toBeUndefined();
+  });
+
+  // The measurement is not lost, it moved earlier: the RUN collides declared
+  // ownership before its own fan-out and across every step, and a drawing's
+  // fan-out is an ordinary `memory`-scope step — so the drawn path is covered
+  // by the better source, not by the scan that skips it.
+  it('still carries the run-level ownership collisions into a drawn epoch', async () => {
+    const collidingState = {
+      agents: [{ agentId: 1, stageName: '[consolidar]', state: 'done', phase: 'done', filesModified: ['src/shared.ts'] }],
+      checkRuns: [],
+      declaredWriteCollisions: [
+        { path: 'src/shared.ts', specs: ['.huu/findings/security/001-a.md', '.huu/findings/security/002-b.md'] },
+      ],
+    } as unknown as OrchestratorState;
+
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graph: tinyGraph() },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_E,
+      resume: 'never',
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `desenho-${epoch}`, state: collidingState }),
+    });
+
+    const violations = result.epochs[0]!.evidence!.declaredPartitionViolations!;
+    expect(violations).toEqual([
+      { path: 'src/shared.ts', specs: ['.huu/findings/security/001-a.md', '.huu/findings/security/002-b.md'] },
+    ]);
+  });
+
+  // THE ADDITIVE HALF: the same two helpers, on the planner path, still do
+  // exactly what they always did. Whatever the drawn path leaves empty, it is
+  // not because these stopped working.
+  it('still reads the report and scans the specs on the planner path', async () => {
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', maxEpochs: 1, skipKnowledgeBootstrap: true },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION,
+      resume: 'never',
+      agentFactory: NOOP_FACTORY,
+      knowledgePlanner: async () => knowledgeFixture([]),
+      planner: async () => planFixture(),
+      orchestratorFactory: (_p, epoch) =>
+        fakeRun({
+          runId: `planejada-${epoch}`,
+          files: {
+            [paths.epochReport(epoch)]: '# Relatório da época\n\nO que foi entregue.\n',
+            ...overlapping(paths.frontDir(epoch, 'a')),
+          },
+        }),
+    });
+
+    const evidence = result.epochs[0]!.evidence!;
+    expect(evidence.reportExcerpt).toContain('O que foi entregue');
+    expect(evidence.declaredPartitionViolations?.[0]?.path).toBe('src/shared.ts');
   });
 });

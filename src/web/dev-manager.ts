@@ -81,6 +81,26 @@ export interface DevResumeOffer {
   goal: string;
   epochsDone: number;
   nextEpoch: number;
+  /**
+   * THE PREVIOUS SESSION RAN A METHOD A HUMAN DREW — verbatim from
+   * `DevState.drawnMethod`, which is why it keeps that record's key names
+   * instead of the `{id, name}` shape {@link DevSessionSnapshot.drawnMethod}
+   * uses for the LIVE session: this describes what is on disk, not what is
+   * running.
+   *
+   * Without it the offer was a trap. `dev-driver.ts` REFUSES a resume that does
+   * not bring the same drawing back (`graph-missing-on-resume`), and the driver
+   * is right to — a session a human opened as a drawing must never continue as
+   * a model's plan. But the only thing the browser was told was "resume session
+   * X", so the human clicked "retomar" on a session whose next epoch could not
+   * start, with nothing on screen saying which drawing to re-select. The
+   * `graphId` here is exactly what the resume request has to carry back.
+   *
+   * Additive and optional: a session the LLM planner wrote has none, which is
+   * what "this was never a drawing" means, and every existing planner-path
+   * caller reads the offer it always read.
+   */
+  drawnMethod?: { graphId: string; graphName: string };
 }
 
 /** An integration branch HEAD never absorbed, as offered to the browser. */
@@ -763,12 +783,26 @@ export class WebDevManager {
   private resumeGate(previous: DevState, nextEpoch: number): Promise<boolean> {
     if (!this.session || this.abortController?.signal.aborted) return Promise.resolve(false);
     this.session.awaitingResume = true;
+    const drawn = previous.drawnMethod;
     this.session.resumeOffer = {
       sessionId: previous.sessionId ?? '',
       goal: previous.goal,
       epochsDone: previous.epochs.length,
       nextEpoch,
+      // Copied FIELD BY FIELD, not spread: the offer is a browser payload and
+      // must not start carrying whatever a future `DevState.drawnMethod` gains.
+      ...(drawn ? { drawnMethod: { graphId: drawn.graphId, graphName: drawn.graphName } } : {}),
     };
+    // Said out loud as well as carried as data: a client that has not learned
+    // the new field yet still shows the human WHY the accept may be refused,
+    // and which drawing repairs it. Fires only for a drawn session — a planner
+    // session's gate is exactly the gate it always was.
+    if (drawn) {
+      this.log(
+        'warn',
+        `a sessão ${previous.sessionId ?? ''} rodava o método DESENHADO "${drawn.graphId}" (${drawn.graphName}) — para retomá-la, selecione esse mesmo método antes de aceitar; sem ele a retomada é recusada`,
+      );
+    }
     this.emit();
     return new Promise<boolean>((resolve) => {
       this.resumeResolve = resolve;
