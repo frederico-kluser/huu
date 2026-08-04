@@ -580,4 +580,106 @@ export const webPtBR = {
   'web.graph.inspector.join_root': 'A entrada do prompt é a raiz do método: ela não espera ninguém.',
   'web.graph.inspector.join_honest':
     'Relaxar o join tira a DEPENDÊNCIA — este passo deixa de esperar os braços que você desmarcou, e deixa de falhar quando eles falham. NÃO tira a barreira de merge da onda: o huu continua mesclando todos os braços do estágio antes de o próximo começar.',
+
+  /* A vida do método: a biblioteca, o id no disco, a compilação. */
+  'web.graph.library': 'Métodos',
+  'web.graph.library_empty': 'Nenhum método salvo neste projeto ainda.',
+  'web.graph.library_failed': 'Não foi possível listar os métodos: {message}',
+  'web.graph.open_failed': 'Não foi possível abrir “{id}”: {message}',
+  'web.graph.id_label': 'Id no disco',
+  'web.graph.rename': 'Trocar o id',
+  'web.graph.rename_warn':
+    'Renomear não existe: o huu vai APAGAR “{from}” e salvar “{to}”. Quem apontava para o arquivo antigo deixa de encontrá-lo.',
+  'web.graph.rename_apply': 'Apagar e salvar',
+  'web.graph.renamed': '“{from}” agora é “{to}”',
+  'web.graph.rename_orphan':
+    '“{to}” foi salvo, mas “{from}” não pôde ser apagado ({message}) — os dois existem agora.',
+  'web.graph.rename_failed': 'Não deu para trocar o id: {message}',
+  'web.graph.compile': 'Compilar',
+  'web.graph.compiling': 'Compilando…',
+  'web.graph.compile_ok': '{count} passo(s) — é isto que vai rodar',
+  'web.graph.compile_failed': 'Não compila: {message}',
+  'web.graph.compile_close': 'Fechar',
+  'web.graph.compile_depends': 'espera por',
+  'web.graph.compile_default': 'padrão',
+  'web.graph.compile_check': 'verificação',
+  'web.graph.compile_work': 'trabalho',
+
+  /* A pesquisa: o que ela devolve e o que cada resposta aciona. */
+  'web.graph.inspector.use_context': 'Ler o que este repositório já sabe',
+  'web.graph.inspector.use_context_hint':
+    'Ligado: o agente lê os artefatos que as etapas anteriores produziram — e o próprio repositório — ANTES de formular a busca, então a pergunta nasce ancorada. Desligado: ele responde só com o modelo e a web.',
+  'web.graph.inspector.output_kind': 'O que esta pesquisa devolve',
+  'web.graph.inspector.output_boolean': 'Sim / não',
+  'web.graph.inspector.output_choice': 'Múltipla escolha',
+  'web.graph.inspector.output_info': 'Informativa',
+  'web.graph.inspector.output_boolean_hint':
+    'Uma afirmação a definir. O juiz responde por um dos dois braços, e cada braço pode acionar um trabalho diferente.',
+  'web.graph.inspector.output_choice_hint':
+    'Uma resposta entre as opções que você cadastrar. Cada opção é um braço, e cada braço pode acionar um trabalho diferente.',
+  'web.graph.inspector.output_info_hint':
+    'Não há nada a configurar: uma pesquisa informativa não tem saída para rotear. O que ela descobrir entra como CONTEXTO na etapa seguinte.',
+
+  /* Os braços e o comportamento cadastrado em cada um. */
+  'web.graph.inspector.arms': 'Saídas, e o que cada uma aciona',
+  'web.graph.inspector.choices': 'Opções, e o que cada uma aciona',
+  'web.graph.inspector.outcomes': 'Vereditos, e o que cada um aciona',
+  'web.graph.inspector.arm_goes_to': 'Aciona “{label}”',
+  'web.graph.inspector.arm_goes_back_to': 'VOLTA para “{label}” — retrabalho',
+  'web.graph.inspector.arm_empty': 'Sem comportamento cadastrado',
+  'web.graph.inspector.arm_configure': 'Escolher o que ela aciona',
+  'web.graph.inspector.arm_add': 'Adicionar',
+  'web.graph.inspector.arm_add_label': 'Nome da nova opção',
+  'web.graph.inspector.arm_remove': 'Remover',
+  'web.graph.inspector.arm_min_two':
+    'Uma ramificação precisa de pelo menos duas saídas — com uma só não há o que decidir.',
+  'web.graph.inspector.arm_id_taken':
+    '“{id}” já é uma saída deste nó. Dê outro nome a esta.',
+  'web.graph.inspector.arm_id_invalid':
+    'Dê um nome com letras ou números: o id derivado dele é o que roteia a execução.',
+  'web.graph.inspector.arm_id_frozen':
+    'O id roteia a execução e toda ligação que o cita, então ele é definido uma vez. Renomeie o texto, não o id.',
+  'web.graph.inspector.default_outcome': 'Saída padrão',
+  'web.graph.inspector.default_hint':
+    'Ela dispara quando o juiz falha, estoura o tempo ou responde algo desconhecido — ninguém a escolhe. Por isso tem que ser a rota SEGURA para a frente, nunca o laço de volta.',
+  'web.graph.inspector.rework_tag': 'retrabalho',
+  'web.graph.inspector.rework_title': 'Mandar o trabalho de volta',
+  'web.graph.inspector.rework_hint':
+    'Escolha o veredito que volta e o passo para onde ele volta. Só um passo que já rodou pode receber, e a saída padrão nunca pode ser a que dá o laço.',
+  'web.graph.inspector.rework_arm': 'Do braço…',
+  'web.graph.inspector.rework_target': 'De volta para…',
+  'web.graph.inspector.rework_create': 'Desenhar o braço que volta',
+  'web.graph.inspector.rework_none': 'Nada roda antes deste nó, então não há para onde voltar.',
+  'web.graph.inspector.switch_warn':
+    '{count} ligação(ões) saem de braços que esta troca elimina. Elas vão junto.',
+  'web.graph.inspector.switch_apply': 'Trocar e remover as ligações',
+  'web.graph.inspector.switch_cancel': 'Cancelar',
+
+  /* A ação: o que ela roda, sobre o quê, e em que largura. */
+  'web.graph.inspector.template': 'O que este bloco roda',
+  'web.graph.inspector.template_missing': 'O catálogo não traz modelo para este bloco.',
+  'web.graph.inspector.fanout': 'Abrir em frentes sobre o que uma etapa anterior achou',
+  'web.graph.inspector.fanout_off': 'Não abrir em frentes',
+  'web.graph.inspector.fanout_none':
+    'Nenhum passo antes deste escreve uma lista para abrir em frentes. Um bloco que produz lista — o Reconhecimento, por exemplo — precisa rodar antes.',
+  'web.graph.inspector.fanout_implies':
+    'Escolher um define o escopo como “um agente por item achado”: é isso que abrir em frentes É, então o escopo deixa de ser uma escolha à parte.',
+  'web.graph.inspector.scope': 'Escopo',
+  'web.graph.inspector.scope_default': 'O do próprio bloco ({scope})',
+  'web.graph.inspector.scope_project': 'Uma tarefa sobre o projeto inteiro',
+  'web.graph.inspector.scope_per_file': 'Um agente por arquivo que você escolher',
+  'web.graph.inspector.scope_memory': 'Um agente por item achado',
+  'web.graph.inspector.scope_flexible': 'Livre',
+  'web.graph.inspector.files': 'Arquivos (um por linha)',
+  'web.graph.inspector.max_files': 'Teto das frentes',
+  'web.graph.inspector.max_files_hint': 'Cada item é um agente, então este é um limite que você subscreve.',
+  'web.graph.inspector.max_runs': 'Teto de visitas',
+  'web.graph.inspector.max_runs_hint':
+    'Quantas vezes esta verificação pode ser alcançada numa execução. É o que limita um braço que volta.',
+  'web.graph.inspector.review': 'Rodar o crítico em cada tarefa',
+  'web.graph.inspector.review_hint':
+    'Um segundo agente revisa o que o primeiro escreveu e devolve até os achados deixarem de ser graves.',
+  'web.graph.inspector.model': 'Modelo deste nó',
+  'web.graph.inspector.model_hint': 'Vazio: o modelo da própria execução.',
+  'web.graph.inspector.notes': 'Suas anotações (nunca vão para um agente)',
 } as const;

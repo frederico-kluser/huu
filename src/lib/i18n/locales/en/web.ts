@@ -572,4 +572,106 @@ export const webEn = {
   'web.graph.inspector.join_root': 'The prompt entry is the root of the method: it waits for nobody.',
   'web.graph.inspector.join_honest':
     'Relaxing the join drops the DEPENDENCY — this step stops waiting for the branches you unticked, and stops failing when they fail. It does NOT drop the wave’s merge barrier: huu still merges every branch of the stage before the next one starts.',
+
+  /* The method’s life cycle: the library, the id on disk, the compile. */
+  'web.graph.library': 'Methods',
+  'web.graph.library_empty': 'No method saved in this project yet.',
+  'web.graph.library_failed': 'Could not list the methods: {message}',
+  'web.graph.open_failed': 'Could not open “{id}”: {message}',
+  'web.graph.id_label': 'Id on disk',
+  'web.graph.rename': 'Change the id',
+  'web.graph.rename_warn':
+    'There is no rename: huu will DELETE “{from}” and save “{to}”. Anything pointing at the old file stops finding it.',
+  'web.graph.rename_apply': 'Delete and save',
+  'web.graph.renamed': '“{from}” is now “{to}”',
+  'web.graph.rename_orphan':
+    '“{to}” was saved, but “{from}” could not be deleted ({message}) — both exist now.',
+  'web.graph.rename_failed': 'The id could not be changed: {message}',
+  'web.graph.compile': 'Compile',
+  'web.graph.compiling': 'Compiling…',
+  'web.graph.compile_ok': '{count} step(s) — this is what will run',
+  'web.graph.compile_failed': 'It does not compile: {message}',
+  'web.graph.compile_close': 'Close',
+  'web.graph.compile_depends': 'waits for',
+  'web.graph.compile_default': 'default',
+  'web.graph.compile_check': 'check',
+  'web.graph.compile_work': 'work',
+
+  /* The research node: what it answers, and what each answer triggers. */
+  'web.graph.inspector.use_context': 'Read what this repository already knows',
+  'web.graph.inspector.use_context_hint':
+    'On: the agent reads the artefacts the earlier steps produced — and the repository itself — BEFORE writing its query, so the question is grounded. Off: it answers from the model and the web alone.',
+  'web.graph.inspector.output_kind': 'What this research hands back',
+  'web.graph.inspector.output_boolean': 'Yes / no',
+  'web.graph.inspector.output_choice': 'Multiple choice',
+  'web.graph.inspector.output_info': 'Informative',
+  'web.graph.inspector.output_boolean_hint':
+    'A statement to settle. The judge answers with one of the two arms, and each arm can trigger different work.',
+  'web.graph.inspector.output_choice_hint':
+    'One answer among the options you register. Each option is an arm, and each arm can trigger different work.',
+  'web.graph.inspector.output_info_hint':
+    'Nothing to configure: an informative research has no output to route on. What it finds enters the NEXT step as context.',
+
+  /* The arms, and the behaviour registered for each one. */
+  'web.graph.inspector.arms': 'Outputs, and what each one triggers',
+  'web.graph.inspector.choices': 'Options, and what each one triggers',
+  'web.graph.inspector.outcomes': 'Outcomes, and what each one triggers',
+  'web.graph.inspector.arm_goes_to': 'Triggers “{label}”',
+  'web.graph.inspector.arm_goes_back_to': 'Goes BACK to “{label}” — rework',
+  'web.graph.inspector.arm_empty': 'No behaviour registered',
+  'web.graph.inspector.arm_configure': 'Choose what it triggers',
+  'web.graph.inspector.arm_add': 'Add',
+  'web.graph.inspector.arm_add_label': 'Name of the new option',
+  'web.graph.inspector.arm_remove': 'Remove',
+  'web.graph.inspector.arm_min_two':
+    'A branch needs at least two outputs — with one, there is nothing to decide.',
+  'web.graph.inspector.arm_id_taken':
+    '“{id}” is already an output of this node. Give this one another name.',
+  'web.graph.inspector.arm_id_invalid':
+    'Name it with letters or digits: the id derived from the name is what routes the run.',
+  'web.graph.inspector.arm_id_frozen':
+    'The id routes the run and every link that names it, so it is set once. Rename the text, not the id.',
+  'web.graph.inspector.default_outcome': 'Default output',
+  'web.graph.inspector.default_hint':
+    'It fires when the judge fails, times out or answers something unknown — nobody chooses it. So it has to be the SAFE route forward, never the loop back.',
+  'web.graph.inspector.rework_tag': 'rework',
+  'web.graph.inspector.rework_title': 'Send the work back',
+  'web.graph.inspector.rework_hint':
+    'Pick the verdict that goes back and the step it returns to. Only a step that already ran can receive it, and the default output can never be the one that loops.',
+  'web.graph.inspector.rework_arm': 'From the output…',
+  'web.graph.inspector.rework_target': 'Back to…',
+  'web.graph.inspector.rework_create': 'Draw the arm that goes back',
+  'web.graph.inspector.rework_none': 'Nothing runs before this node, so there is nowhere to go back to.',
+  'web.graph.inspector.switch_warn':
+    '{count} link(s) leave outputs this change removes. They go with it.',
+  'web.graph.inspector.switch_apply': 'Change and remove the links',
+  'web.graph.inspector.switch_cancel': 'Cancel',
+
+  /* The action node: what it runs, over what, and how wide. */
+  'web.graph.inspector.template': 'What this block runs',
+  'web.graph.inspector.template_missing': 'The catalog carries no template for this block.',
+  'web.graph.inspector.fanout': 'Fan out over what an earlier step found',
+  'web.graph.inspector.fanout_off': 'Do not fan out',
+  'web.graph.inspector.fanout_none':
+    'No step before this one writes a list to fan out over. A block that produces one — Recon, say — has to run first.',
+  'web.graph.inspector.fanout_implies':
+    'Picking one sets the scope to “one agent per entry found”: that is what a fan-out IS, so the scope stops being a separate choice.',
+  'web.graph.inspector.scope': 'Scope',
+  'web.graph.inspector.scope_default': 'The block’s own ({scope})',
+  'web.graph.inspector.scope_project': 'One task over the whole project',
+  'web.graph.inspector.scope_per_file': 'One agent per file you pick',
+  'web.graph.inspector.scope_memory': 'One agent per entry found',
+  'web.graph.inspector.scope_flexible': 'Free-form',
+  'web.graph.inspector.files': 'Files (one per line)',
+  'web.graph.inspector.max_files': 'Cap on the fan-out',
+  'web.graph.inspector.max_files_hint': 'One entry is one agent, so this is a width you underwrite.',
+  'web.graph.inspector.max_runs': 'Visit cap',
+  'web.graph.inspector.max_runs_hint':
+    'How many times this check may be reached in one run. It is what bounds an arm that goes back.',
+  'web.graph.inspector.review': 'Run the critic loop on every task',
+  'web.graph.inspector.review_hint':
+    'A second agent reviews what the first wrote and sends it back until the findings stop being severe.',
+  'web.graph.inspector.model': 'Model for this node',
+  'web.graph.inspector.model_hint': 'Empty: the run’s own model.',
+  'web.graph.inspector.notes': 'Your notes (never sent to an agent)',
 } as const;

@@ -34,6 +34,14 @@
       answer for the very graph this screen exists to draw. It is reported in
       the advisory colour, counted separately, and never turns the status red.
 
+   WHAT LIVES NEXT DOOR: `inspector.js` owns everything the human CONFIGURES —
+   what a research node answers (`boolean`/`choice`/`info`), the behaviour tied
+   to each output, the gate's outcomes, the action node's fan-out, the arm that
+   goes back, and the method's life cycle (library, id, compile). This file owns
+   the CANVAS and hands that module the graph plus the four seams it needs
+   (`onPatch`, `onJoin`, `onGraph`, `onOpenPalette`). The split is what keeps
+   both files readable in one sitting.
+
    NO JSX, NO BUILD, ONE REACT. `h` is `React.createElement` and React comes out
    of `vendor/reactflow.js`; importing `react` from anywhere else would put a
    second instance in the page and break hooks with no error message. */
@@ -63,7 +71,6 @@ import { makeGraphApi } from './graph-api-client.js';
 import {
   canConnect,
   connect,
-  directPredecessors,
   edgesOf,
   emptyGraph,
   fromFlowChanges,
@@ -79,6 +86,7 @@ import {
 import { applyPaletteChoice } from './palette-model.js';
 import { createNodeTypes } from './node-views.js';
 import { PaletteMenu } from './palette.js';
+import { CompileReport, GraphLibrary, Inspector, issueItem } from './inspector.js';
 
 /**
  * The id a brand-new method opens with.
@@ -92,25 +100,13 @@ const NEW_GRAPH_ID = 'novo-metodo';
 /** How long the canvas sits still before it asks the server to re-validate. */
 const VALIDATE_DEBOUNCE_MS = 400;
 
-/**
- * Which field carries a node's own text, per kind. The devgraph schema
- * (`graph-types.ts`) gives each kind exactly one, and the inspector edits that
- * one — `prompt` on an action is the OPTIONAL override of the block's template,
- * which is why clearing it DELETES the field instead of writing an empty string.
- */
-const TEXT_FIELD = {
-  prompt: 'goal',
-  action: 'prompt',
-  research: 'query',
-  gate: 'condition',
-};
-
-/** Label for each of those fields. */
-const TEXT_LABEL_KEY = {
-  goal: 'web.graph.inspector.text_goal',
-  prompt: 'web.graph.inspector.text_prompt',
-  query: 'web.graph.inspector.text_query',
-  condition: 'web.graph.inspector.text_condition',
+/** No compile has been asked for (or the drawing changed since the last one). */
+const EMPTY_COMPILE = {
+  state: 'idle',
+  pipeline: null,
+  message: '',
+  errors: [],
+  warnings: [],
 };
 
 /** The catalog's human name for a node kind, falling back to the raw kind. */
@@ -125,207 +121,6 @@ function armLabelOf(arms, id) {
   if (!Array.isArray(arms) || !id) return '';
   const found = arms.find((arm) => arm && arm.id === id);
   return (found && (found.label || found.id)) || id;
-}
-
-/**
- * One issue row. `code` is shown small and monospaced next to the sentence: it
- * is the SAME string the server reports and the one thing worth quoting when
- * asking for help.
- */
-function issueItem(issue, index, sev, className) {
-  return h(
-    'li',
-    { key: `${sev}:${index}`, className, 'data-sev': sev, 'data-code': issue.code || '' },
-    issue.code ? h('code', { className: 'gph-global__code' }, issue.code) : null,
-    issue.message || '',
-  );
-}
-
-/**
- * The minimum inspector: rename a node, edit its own text, and set the JOIN.
- *
- * The full one (outcomes, fanOutFrom, live per-field validation) belongs to a
- * later wave; what is here is what makes the two things the user asked for
- * EDITABLE — the text of a step and what it waits for.
- *
- * @param {Record<string, any>} props
- */
-function Inspector(props) {
-  const { graph, node, errors, warnings, onPatch, onJoin, onDelete } = props;
-
-  if (!node) {
-    return h(
-      'aside',
-      { className: 'gph-inspector', 'data-empty': 'true' },
-      h('div', { className: 'gph-inspector__title' }, t('web.graph.inspector.title')),
-      h('div', { className: 'gph-inspector__empty' }, t('web.graph.inspector.empty')),
-    );
-  }
-
-  const field = TEXT_FIELD[node.kind];
-  const preds = directPredecessors(graph, node.id);
-  const join = node.join && node.join.mode === 'subset' ? node.join : { mode: 'all' };
-  const chosen = Array.isArray(join.of) ? join.of : [];
-
-  /** Toggle one predecessor. Emptying the subset falls back to `all`, never to
-   *  an empty subset — which is its own validator error (`join-subset-empty`)
-   *  and the same repair `pruneDanglingRefs` performs server-side. */
-  function togglePred(id) {
-    const next = chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id];
-    onJoin(next.length > 0 ? { mode: 'subset', of: next } : { mode: 'all' });
-  }
-
-  const joinBody = [];
-  if (node.kind === 'prompt') {
-    joinBody.push(
-      h('div', { className: 'gph-join__note', key: 'root' }, t('web.graph.inspector.join_root')),
-    );
-  } else if (preds.length === 0) {
-    joinBody.push(
-      h('div', { className: 'gph-join__note', key: 'none' }, t('web.graph.inspector.join_none')),
-    );
-  } else {
-    joinBody.push(
-      h(
-        'label',
-        { className: 'gph-join__opt', key: 'all' },
-        h('input', {
-          type: 'radio',
-          name: 'gph-join',
-          className: 'gph-join__all',
-          checked: join.mode === 'all',
-          onChange: () => onJoin({ mode: 'all' }),
-        }),
-        h('span', null, t('web.graph.inspector.join_all')),
-      ),
-      h(
-        'label',
-        { className: 'gph-join__opt', key: 'subset' },
-        h('input', {
-          type: 'radio',
-          name: 'gph-join',
-          className: 'gph-join__subset',
-          checked: join.mode === 'subset',
-          // Opening the subset with EVERY predecessor ticked changes nothing on
-          // its own: the human then unticks what this step must not wait for,
-          // so the relaxation is always something they did deliberately.
-          onChange: () => onJoin({ mode: 'subset', of: preds.slice() }),
-        }),
-        h('span', null, t('web.graph.inspector.join_subset')),
-      ),
-      h(
-        'div',
-        { className: 'gph-join__preds', key: 'preds' },
-        preds.map((id) => {
-          const pred = nodeById(graph, id);
-          return h(
-            'label',
-            { className: 'gph-join__pred', key: id },
-            h('input', {
-              type: 'checkbox',
-              'data-pred': id,
-              disabled: join.mode !== 'subset',
-              checked: join.mode === 'all' || chosen.includes(id),
-              onChange: () => togglePred(id),
-            }),
-            h('span', null, (pred && pred.label) || id, ' ', h('code', null, id)),
-          );
-        }),
-      ),
-    );
-    if (join.mode === 'subset') {
-      joinBody.push(
-        h(
-          'div',
-          { className: 'gph-join__honest', key: 'honest' },
-          t('web.graph.inspector.join_honest'),
-        ),
-      );
-    }
-  }
-
-  const issueRows = [
-    ...(errors || []).map((issue, i) => issueItem(issue, i, 'err', '')),
-    ...(warnings || []).map((issue, i) => issueItem(issue, i, 'warn', '')),
-  ];
-
-  return h(
-    'aside',
-    { className: 'gph-inspector', 'data-node-id': node.id },
-    h('div', { className: 'gph-inspector__title' }, t('web.graph.inspector.title')),
-
-    h(
-      'div',
-      { className: 'gph-field' },
-      h('label', { htmlFor: 'gphLabel' }, t('web.graph.inspector.label')),
-      h('input', {
-        id: 'gphLabel',
-        type: 'text',
-        className: 'gph-inspector__label',
-        value: node.label || '',
-        onChange: (ev) => onPatch({ label: ev.target.value }),
-      }),
-    ),
-
-    field
-      ? h(
-          'div',
-          { className: 'gph-field' },
-          h('label', { htmlFor: 'gphText' }, t(TEXT_LABEL_KEY[field])),
-          h('textarea', {
-            id: 'gphText',
-            className: 'gph-inspector__text',
-            'data-field': field,
-            value: typeof node[field] === 'string' ? node[field] : '',
-            onChange: (ev) => {
-              const value = ev.target.value;
-              // An action's `prompt` is optional: emptying it must REMOVE the
-              // override so the block's own template runs again. `updateNode`
-              // deletes a field handed `undefined`.
-              const optional = node.kind === 'action' && field === 'prompt';
-              onPatch({ [field]: optional && value.trim() === '' ? undefined : value });
-            },
-          }),
-        )
-      : null,
-
-    node.kind === 'action'
-      ? h(
-          'div',
-          { className: 'gph-field' },
-          h('label', null, t('web.graph.inspector.block')),
-          h('div', { className: 'gph-panel__id' }, node.block || ''),
-        )
-      : null,
-
-    h(
-      'div',
-      { className: 'gph-field' },
-      h('label', null, t('web.graph.inspector.join')),
-      h('div', { className: 'gph-join' }, joinBody),
-    ),
-
-    issueRows.length > 0
-      ? h(
-          'div',
-          { className: 'gph-field' },
-          h('label', null, t('web.graph.inspector.issues')),
-          h('ul', { className: 'gph-issues' }, issueRows),
-        )
-      : null,
-
-    node.kind === 'prompt'
-      ? null
-      : h(
-          'button',
-          {
-            type: 'button',
-            className: 'btn btn--danger btn--sm gph-inspector__delete',
-            onClick: () => onDelete(node.id),
-          },
-          t('web.graph.inspector.delete'),
-        ),
-  );
 }
 
 /**
@@ -351,6 +146,12 @@ export function GraphCanvasApp(props) {
   const [palette, setPalette] = useState(null);
   const [busy, setBusy] = useState('');
   const [check, setCheck] = useState({ state: 'idle', errors: [], warnings: [], message: '' });
+  // The compile answer is a SECOND source of anchored errors, and the reason
+  // `/compile` bothers to return `errors[]` on a 400: the canvas paints the very
+  // nodes that blocked it with no second round-trip. It is invalidated by any
+  // edit, because a pipeline compiled from a drawing that has since changed is
+  // a claim about a method nobody is looking at.
+  const [compile, setCompile] = useState(EMPTY_COMPILE);
 
   // Latest-value refs so every handler below can be created ONCE. React Flow
   // remounts a node whose `nodeTypes` or callbacks change identity, and a
@@ -422,8 +223,19 @@ export function GraphCanvasApp(props) {
     if (props.onGraphChange) props.onGraphChange(graph);
   }, [graph]);
 
+  // Any edit retires the compile answer, errors included.
+  useEffect(() => {
+    setCompile((prev) => (prev.state === 'idle' ? prev : EMPTY_COMPILE));
+  }, [graph]);
+
   /* ── Derived: the drawing ──────────────────────────────────────────────── */
-  const grouped = useMemo(() => groupIssues(check.errors, graph), [check.errors, graph]);
+  // The two error sources are ONE list before grouping, so a node blamed by both
+  // the validator and the compiler is still one chip with one badge count.
+  const allErrors = useMemo(
+    () => (compile.errors.length > 0 ? [...check.errors, ...compile.errors] : check.errors),
+    [check.errors, compile.errors],
+  );
+  const grouped = useMemo(() => groupIssues(allErrors, graph), [allErrors, graph]);
   const groupedWarn = useMemo(() => groupIssues(check.warnings, graph), [check.warnings, graph]);
   const flow = useMemo(() => toFlow(graph, catalog), [graph, catalog]);
   const nodeTypes = useMemo(() => createNodeTypes(), []);
@@ -562,6 +374,55 @@ export function GraphCanvasApp(props) {
     setGraph((current) => removeNode(current, id));
     setSelectedId(null);
   }, []);
+
+  /**
+   * A whole new graph, from the inspector's composite edits.
+   *
+   * Switching a research node's output kind is `updateNode` PLUS one `removeEdge`
+   * per orphaned arm; the inspector composes them off the graph it was rendered
+   * with and hands the result back here. Every one of those steps is still a
+   * `graph-model.js` mutation — this seam only carries the result.
+   */
+  const applyGraph = useCallback((next) => {
+    setGraph(next);
+  }, []);
+
+  /** Adopt a graph that came off the wire (the library, a sample). */
+  const adoptGraph = useCallback((doc) => {
+    if (!doc) return;
+    setGraph(doc);
+    setSelectedId(null);
+    setPalette(null);
+  }, []);
+
+  const onCompile = useCallback(async () => {
+    if (!graphApi || typeof graphApi.compile !== 'function') return;
+    setCompile({ ...EMPTY_COMPILE, state: 'busy' });
+    try {
+      const res = await graphApi.compile(graphRef.current, {});
+      if (res && res.ok) {
+        setCompile({
+          state: 'ok',
+          pipeline: res.pipeline || null,
+          message: '',
+          errors: [],
+          warnings: Array.isArray(res.warnings) ? res.warnings : [],
+        });
+        return;
+      }
+      // `errors[]` is ADDITIVE on the 400 exactly so the culprits can be painted
+      // instead of summarised in a sentence nobody can locate on the canvas.
+      setCompile({
+        state: 'failed',
+        pipeline: null,
+        message: (res && res.error) || '',
+        errors: Array.isArray(res && res.errors) ? res.errors : [],
+        warnings: Array.isArray(res && res.warnings) ? res.warnings : [],
+      });
+    } catch (err) {
+      setCompile({ ...EMPTY_COMPILE, state: 'failed', message: err.message || '' });
+    }
+  }, [graphApi]);
 
   const onSave = useCallback(async () => {
     setBusy('save');
@@ -704,6 +565,18 @@ export function GraphCanvasApp(props) {
                 t('web.graph.validate'),
               ),
               h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'btn btn--ghost btn--sm gph-panel__compile',
+                  disabled: compile.state === 'busy',
+                  onClick: () => {
+                    void onCompile();
+                  },
+                },
+                compile.state === 'busy' ? t('web.graph.compiling') : t('web.graph.compile'),
+              ),
+              h(
                 'select',
                 {
                   className: 'gph-panel__select',
@@ -730,6 +603,13 @@ export function GraphCanvasApp(props) {
                 }),
               ),
             ),
+            h(GraphLibrary, {
+              graph,
+              graphApi,
+              dir: props.dir,
+              onOpenGraph: adoptGraph,
+              onNotify: (message, isErr) => notifyRef.current(message, isErr),
+            }),
             h(
               'div',
               { className: 'gph-status', 'data-s': statusSeverity },
@@ -742,6 +622,10 @@ export function GraphCanvasApp(props) {
           ),
         ),
       ),
+      h(CompileReport, {
+        result: compile,
+        onClose: () => setCompile(EMPTY_COMPILE),
+      }),
       palette && paletteNode
         ? h(PaletteMenu, {
             graph,
@@ -757,11 +641,15 @@ export function GraphCanvasApp(props) {
     h(Inspector, {
       graph,
       node: selectedNode,
+      catalog,
       errors: selectedNode ? grouped.byNode[selectedNode.id] || [] : [],
       warnings: selectedNode ? groupedWarn.byNode[selectedNode.id] || [] : [],
       onPatch: patchNode,
       onJoin: joinNode,
+      onGraph: applyGraph,
       onDelete: deleteNode,
+      onNotify: (message, isErr) => notifyRef.current(message, isErr),
+      onOpenPalette: openPalette,
     }),
   );
 }

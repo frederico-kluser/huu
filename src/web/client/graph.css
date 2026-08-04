@@ -558,6 +558,369 @@
   background: color-mix(in srgb, var(--yellow) 14%, transparent);
 }
 
+/* ── The inspector, second half: outputs, behaviour and the rework arm ───────
+   Everything below configures what the drawing DECIDES — which output a
+   research node hands back, what each output triggers, and where a verdict
+   sends the work back to. Same rule as the rest of this file: tokens only. */
+
+.gph-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+.gph-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.gph-select,
+.gph-field input[type='number'] {
+  width: 100%;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--elev);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-xs);
+}
+
+.gph-select:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* The three answers a research node can hand back, as one control: the choice
+   is exclusive and changing it is consequential, so it reads as one object
+   rather than three loose buttons. */
+.gph-seg {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--radius-xs);
+  background: var(--elev-2);
+  border: 1px solid var(--separator);
+}
+
+.gph-seg__btn {
+  flex: 1 1 0;
+  padding: 6px 4px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.gph-seg__btn:hover { color: var(--text); background: var(--accent-soft); }
+.gph-seg__btn.is-on { color: var(--accent-ink); background: var(--accent); }
+
+/* One row per output: the name, the frozen id, and THE BEHAVIOUR registered
+   for it. Reading and doing sit together, so "what happens if the answer is
+   no" never means tracing an edge across the canvas. */
+.gph-arms { display: flex; flex-direction: column; gap: 7px; }
+
+.gph-armrow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--separator);
+  background: var(--elev);
+}
+
+.gph-armrow__head { display: flex; align-items: center; gap: 6px; }
+
+.gph-armrow__head input.gph-armrow__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  padding: 5px 7px;
+  font-size: 12px;
+}
+
+span.gph-armrow__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.gph-armrow__id {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.gph-armrow__behavior {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-2);
+}
+
+.gph-armrow__empty { color: var(--text-3); font-style: italic; }
+.gph-armrow__target { color: var(--text); }
+
+.gph-armrow__tag {
+  margin-left: 5px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--orange);
+  background: color-mix(in srgb, var(--orange) 16%, transparent);
+}
+
+.gph-addarm { display: flex; gap: 6px; margin-top: 2px; }
+
+.gph-addarm__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--elev);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-xs);
+}
+
+/* A refusal the human can act on: which id is taken, why the last one cannot
+   go. Yellow, not red — nothing is broken yet, the edit simply did not apply. */
+.gph-addarm__issue {
+  font-size: 11px;
+  line-height: 1.35;
+  padding: 6px 8px;
+  border-radius: var(--radius-xs);
+  border-left: 3px solid var(--yellow);
+  background: color-mix(in srgb, var(--yellow) 14%, transparent);
+  color: var(--text);
+}
+
+.gph-default { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.gph-default__opt {
+  padding: 5px 9px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--elev-2);
+  border: 1px solid var(--separator);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.gph-default__opt:hover { color: var(--text); border-color: var(--accent); }
+.gph-default__opt.is-on { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+/* THE FORWARD DEFAULT. An arm that loops back cannot be the route taken when
+   the judge fails, so the option is visibly not takeable. */
+.gph-default__opt[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
+
+.gph-rework { display: flex; flex-direction: column; gap: 6px; }
+
+/* The wall in front of a destructive change: how many links go, and which. */
+.gph-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 10px;
+  border-radius: var(--radius-xs);
+  border-left: 3px solid var(--red);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+}
+
+.gph-confirm__text { font-size: 12px; line-height: 1.4; color: var(--text); }
+
+.gph-confirm__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.gph-confirm__row {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+
+.gph-confirm__actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* The block's own template, read-only. The human overriding a prompt has to be
+   able to read the one they are replacing. */
+.gph-tpl {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: var(--text-2);
+  background: var(--elev-2);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-xs);
+}
+
+/* ── The library and the id on disk ──────────────────────────────────────── */
+.gph-lib { display: flex; flex-direction: column; gap: 6px; }
+.gph-lib__row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.gph-lib__id {
+  flex: 1 1 140px;
+  min-width: 110px;
+  padding: 6px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--text);
+  background: var(--elev);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-xs);
+}
+
+.gph-lib__issue {
+  font-size: 11px;
+  line-height: 1.35;
+  padding: 6px 8px;
+  border-radius: var(--radius-xs);
+  border-left: 3px solid var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  color: var(--text);
+}
+
+.gph-lib__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-xs);
+  background: var(--elev);
+}
+
+.gph-lib__open {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 9px;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.gph-lib__open:hover { background: var(--accent-soft); }
+.gph-lib__meta { font-size: 10.5px; color: var(--text-3); white-space: nowrap; }
+.gph-lib__empty { padding: 8px 9px; font-size: 11.5px; color: var(--text-3); }
+
+/* ── The compiled pipeline ───────────────────────────────────────────────────
+   What the drawing BECOMES. It floats over the canvas rather than replacing
+   it, because the point is comparing the two. */
+.gph-compile {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 40;
+  width: min(420px, calc(100% - 28px));
+  max-height: min(52vh, 460px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-sm);
+  background: var(--glass-strong);
+  border: 1px solid var(--separator);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(22px) saturate(165%);
+  -webkit-backdrop-filter: blur(22px) saturate(165%);
+  overflow: hidden;
+}
+
+.gph-compile__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.gph-compile__title { flex: 1 1 auto; font-size: 12px; font-weight: 620; color: var(--text); }
+.gph-compile[data-state='failed'] .gph-compile__title { color: var(--red); }
+.gph-compile[data-state='ok'] .gph-compile__title { color: var(--green); }
+
+.gph-compile__steps {
+  margin: 0;
+  padding: 6px 10px 10px 26px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.gph-compile__step { font-size: 11.5px; color: var(--text-2); }
+.gph-compile__srow { display: flex; align-items: baseline; gap: 6px; }
+
+.gph-compile__kind {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+}
+
+.gph-compile__name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.gph-compile__dep { font-size: 10.5px; color: var(--text-3); }
+
+.gph-compile__outs {
+  margin: 3px 0 0;
+  padding: 0 0 0 10px;
+  list-style: none;
+  border-left: 2px solid var(--separator);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gph-compile__out { font-size: 10.5px; }
+
+.gph-compile__default {
+  margin-left: 5px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 16%, transparent);
+}
+
 @media (max-width: 900px) {
   .gph-inspector { width: 260px; }
   .gph-panel { max-width: calc(100vw - 300px); }
