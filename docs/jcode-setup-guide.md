@@ -92,6 +92,14 @@ refreshenv
 
 ## 3. Configuracao do Provider DeepSeek
 
+> **Para usar o jcode DENTRO do huu voce nao precisa fazer nada nesta secao.**
+> O modo hermetico materializa exatamente este conteudo em
+> `~/.huu/jcode-home/config.toml` e aponta `JCODE_HOME` para esse diretorio em
+> todo spawn (`src/orchestrator/backends/jcode/hermetic.ts`), o que faz o
+> `~/.jcode/config.toml` do host ser **ignorado** nas execucoes do huu. O
+> arquivo escrito pelo huu e dele: qualquer edicao manual ali e revertida no
+> proximo spawn. Siga a secao apenas para rodar o `jcode` na mao, fora do huu.
+
 Crie (ou edite) o arquivo `~/.jcode/config.toml` com o conteudo abaixo. Este
 e exatamente o mesmo arquivo de configuracao usado no projeto t-8000.
 
@@ -158,7 +166,8 @@ que o huu dispara, as seguintes variaveis sao injetadas automaticamente:
 |-----------------------------|---------|-----------------------------------------|
 | `JCODE_MEMORY_ENABLED`      | `false` | Zero embeddings -- execucao stateless   |
 | `JCODE_NO_TELEMETRY`        | `1`     | Sem telemetria externa                  |
-| `JCODE_AGENT_DIR`           | `~/.huu/jcode-agent` | Runtime isolado, nunca toca `~/.jcode` |
+| `JCODE_AGENT_DIR`           | `~/.huu/jcode-agent` | Runtime isolado -- **nao** muda onde o `config.toml` e procurado |
+| `JCODE_HOME`                | `~/.huu/jcode-home` | Config isolado: o jcode le `<JCODE_HOME>/config.toml` (sem segmento `.jcode`), escrito pelo proprio huu -- ver §3 |
 
 Voce nao precisa exportar essas variaveis manualmente ao usar o huu -- ele faz
 isso em toda sessao jcode. Porem, para testes manuais com `jcode run` diretamente
@@ -231,15 +240,32 @@ npm run build
 ### 6.2 Rodar com backend jcode
 
 ```bash
-# Via flag explicita
-npm start -- --backend jcode --model deepseek-v4-pro
+# Via flag explicita (o flag exige o sinal de igual)
+npm start -- --backend=jcode
 
 # Ou via alias (parseBackendKind aceita "deepseek" como sinonimo)
-npm start -- --backend deepseek --model deepseek-v4-pro
+npm start -- --backend=deepseek
 ```
 
-O huu usa `jcode run --no-update --provider-profile deepseek-v4-pro --model <model>` internamente. Voce nao precisa passar essas flags -- o backend factory
-as injeta automaticamente.
+> **O CLI de topo nao tem flag `--model`.** Os unicos flags com valor que
+> `src/cli.tsx` le sao `--backend=`, `--provider=`, `--dir=`,
+> `--concurrency=` e `--ram-percent=` (mais `--port=`, consumido por
+> `src/web/interface-mode.ts`) -- todos por `startsWith`, portanto **so** na
+> forma com sinal de igual. Um flag desconhecido nao e validado: sobra no
+> array de argumentos, onde apenas o primeiro elemento vira subcomando
+> (`run`, `auto`, `dev`, `status`, ...). Um `--model deepseek-v4-pro` solto
+> seria, entao, ignorado em silencio. O unico `--model=<id>` do repositorio
+> pertence ao subcomando `huu dev` (`src/lib/dev-mode/dev-cli.ts`).
+>
+> O modelo vem de dentro do huu: pelo seletor de modelo da TUI/web, ou pelo
+> campo `modelId` do JSON em `huu auto <pipeline> --config <config.json>`.
+
+O huu usa `jcode run --no-update --provider-profile deepseek-v4-pro --model <modelId>` internamente -- `<modelId>` e exatamente o id escolhido acima,
+repassado verbatim ao subprocesso
+(`src/orchestrator/backends/jcode/factory.ts`), entao use o id que o perfil
+`deepseek-v4-pro` do seu `config.toml` serve. Voce nao precisa passar
+`--no-update` nem `--provider-profile` -- o backend factory as injeta
+automaticamente.
 
 ### 6.3 Testar sub-agentes manualmente
 
@@ -299,7 +325,7 @@ echo $DEEPSEEK_API_KEY
 export DEEPSEEK_API_KEY="sk-..."
 
 # Confirme que o huu a recebe (o processo filho herda o env do pai)
-npm start -- --backend jcode --model deepseek-v4-pro
+npm start -- --backend=jcode
 ```
 
 ### 7.3 Sub-agentes nao spawnam
@@ -386,7 +412,7 @@ huu:
 
 ```bash
 export DEEPSEEK_API_KEY="sk-..."
-npm start -- --backend jcode --model deepseek-v4-pro
+npm start -- --backend=jcode
 ```
 
 ---
@@ -398,7 +424,8 @@ npm start -- --backend jcode --model deepseek-v4-pro
 | `DEEPSEEK_API_KEY`           | Voce (usuario)      | Chave de API do DeepSeek                      |
 | `JCODE_MEMORY_ENABLED=false` | huu (automatico)    | Desabilita embeddings -- execucao stateless    |
 | `JCODE_NO_TELEMETRY=1`       | huu (automatico)    | Desabilita telemetria externa                 |
-| `JCODE_AGENT_DIR`            | huu (automatico)    | Diretorio isolado `~/.huu/jcode-agent`        |
+| `JCODE_AGENT_DIR`            | huu (automatico)    | Diretorio de runtime isolado `~/.huu/jcode-agent` |
+| `JCODE_HOME`                 | huu (automatico)    | Diretorio de config isolado `~/.huu/jcode-home` (o huu escreve o `config.toml` la) |
 | `HUU_JCODE_HERMETIC=0`       | Voce (debug apenas) | Escape hatch -- volta ao config global do host |
 | `JCODE_BIN`                  | Scripts de teste    | Caminho customizado para o binario jcode      |
 
