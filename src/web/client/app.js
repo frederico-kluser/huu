@@ -92,6 +92,10 @@ export async function boot() {
   // VIEW was already chosen synchronously at parse time (see below) so there
   // is no flash; this only fills it in.
   if (location.pathname.replace(/\/+$/, '') === '/dev') switchMode('dev', { push: false });
+  // Same deal for the method canvas: the VIEW was already picked synchronously
+  // below, and this is what actually mounts it — the palette needs the sample
+  // list `/api/bootstrap` carries, so the mount waits for boot to have it.
+  if (location.pathname.replace(/\/+$/, '') === '/graph') switchMode('graph', { push: false });
 }
 
 /* Pick the surface SYNCHRONOUSLY, before /api/bootstrap is even requested.
@@ -100,6 +104,7 @@ export async function boot() {
    pure DOM toggle; `initDevSurface()` still runs later, once boot() has the
    providers and models it needs. */
 if (location.pathname.replace(/\/+$/, '') === '/dev') showView('dev');
+if (location.pathname.replace(/\/+$/, '') === '/graph') showView('graph');
 
 boot().catch((e) => {
   // The catalog may not have loaded — fall back to the English literal so the

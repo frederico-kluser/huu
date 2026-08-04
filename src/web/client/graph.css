@@ -1,0 +1,564 @@
+/* huu web UI — the method canvas (/graph).
+   ========================================
+
+   EVERY rule the graph surface needs lives here and NOWHERE else. `styles.css`
+   is the app's design system and is not this feature's to edit; this file is
+   loaded after it, reuses its tokens (`--accent`, `--glass`, `--separator`,
+   `--radius*`, the semantic `--green/--red/--yellow`) and hardcodes no colour
+   of its own. Two consequences worth stating out loud:
+
+     • a token renamed in styles.css breaks this file loudly (an unresolved
+       var() falls back to nothing), which is the failure mode we want — a
+       hardcoded hex would just silently drift off-theme;
+     • `vendor/reactflow.css` must be linked BEFORE this file. React Flow
+       positions the pane, the viewport and the handles from its own rules; the
+       overrides below assume they already applied.
+
+   The one rule here that reaches OUTSIDE the graph surface is the
+   `.mode-switch` column count: the switch is declared `1fr 1fr` in styles.css
+   because it had two options, and this surface is the third. It is a
+   single-line override, kept next to the feature that needs it. */
+
+/* The switch now carries three surfaces, not two. */
+.mode-switch {
+  grid-template-columns: repeat(3, 1fr);
+  width: min(880px, calc(100% - 32px));
+}
+
+/* ── The view ───────────────────────────────────────────────────────────────
+   `overflow: hidden` + `position: relative` follow `.view--run`, NOT
+   `.view--dev`: the canvas OWNS its scrolling (React Flow pans and zooms
+   inside the pane), so a scrolling view would put a second, competing
+   scrollbar around a surface that already moves under the cursor. */
+.view--graph {
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  min-height: 0;
+}
+
+.gph-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.gph-shell {
+  flex: 1 1 auto;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.gph-flow {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+
+/* React Flow paints its own light/dark surface; ours is the app's. */
+.gph-flow .react-flow {
+  background: transparent;
+}
+
+/* ── The top panel ───────────────────────────────────────────────────────── */
+.gph-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(560px, calc(100vw - 380px));
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--glass-strong);
+  border: 1px solid var(--separator);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: var(--shadow-sm);
+}
+
+.gph-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gph-panel__name {
+  flex: 1 1 180px;
+  min-width: 120px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 620;
+  color: var(--text);
+  background: var(--elev);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-xs);
+}
+
+.gph-panel__id {
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.gph-panel__select {
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--elev-2);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-xs);
+  max-width: 200px;
+}
+
+.gph-panel__count {
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* ── Validation status ───────────────────────────────────────────────────── */
+.gph-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.gph-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--text-3);
+  flex: 0 0 auto;
+}
+
+.gph-status[data-s='ok'] .gph-status__dot { background: var(--green); }
+.gph-status[data-s='ok'] { color: var(--green); }
+/* WARNING IS NOT A DEFECT. `join-subset-drops-barrier` is the EXPECTED answer
+   for a method that deliberately relaxes a join, so it gets the advisory
+   colour and never the red one — a yellow line the human can read and keep,
+   not a failure they feel they must clear. */
+.gph-status[data-s='warn'] .gph-status__dot { background: var(--yellow); }
+.gph-status[data-s='warn'] { color: var(--yellow); }
+.gph-status[data-s='err'] .gph-status__dot { background: var(--red); }
+.gph-status[data-s='err'] { color: var(--red); }
+.gph-status[data-s='pending'] .gph-status__dot { animation: gph-pulse 1.2s ease-out infinite; }
+
+@keyframes gph-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.25; }
+  100% { opacity: 1; }
+}
+
+/* The `global` bucket: issues with NO node and NO edge to blame (the store's
+   `invalid-schema` arrives with no anchor at all). Without a place of their
+   own they would be dropped on the floor and the canvas would look green for
+   a graph the server refuses to save. */
+.gph-global {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 130px;
+  overflow-y: auto;
+}
+
+.gph-global__item {
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 5px 8px;
+  border-radius: var(--radius-xs);
+  border-left: 3px solid var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  color: var(--text);
+}
+
+.gph-global__item[data-sev='warn'] {
+  border-left-color: var(--yellow);
+  background: color-mix(in srgb, var(--yellow) 14%, transparent);
+}
+
+.gph-global__code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--text-3);
+  display: block;
+}
+
+/* ── Nodes ───────────────────────────────────────────────────────────────── */
+.gph-node {
+  position: relative;
+  min-width: 190px;
+  max-width: 240px;
+  padding: 9px 11px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--glass-strong);
+  border: 1px solid var(--separator);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  font-size: 12.5px;
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+}
+
+.gph-node.is-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.gph-node.is-warn { border-color: color-mix(in srgb, var(--yellow) 60%, var(--separator)); }
+.gph-node.is-error { border-color: var(--red); box-shadow: 0 0 0 2px color-mix(in srgb, var(--red) 22%, transparent); }
+
+.gph-node--prompt { border-left: 3px solid var(--accent); }
+.gph-node--action { border-left: 3px solid var(--teal); }
+.gph-node--research { border-left: 3px solid var(--accent-2); }
+.gph-node--gate { border-left: 3px solid var(--yellow); }
+
+.gph-node__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: var(--text-3);
+}
+
+.gph-node__kind { flex: 1 1 auto; min-width: 0; }
+
+.gph-node__badge {
+  flex: 0 0 auto;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--accent-ink);
+  background: var(--red);
+}
+
+.gph-node__badge[data-sev='warn'] { background: var(--yellow); color: #000; }
+
+.gph-node__label {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 620;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.gph-node__sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Handles ─────────────────────────────────────────────────────────────────
+   THE BOLINHA. React Flow's own handle is a 6px dot pinned to the middle of
+   the card's edge; a node that branches needs ONE PER ARM, each labelled and
+   each clickable, so the source handles are taken out of that absolute
+   placement and laid out in a column of rows. The inbound handle keeps the
+   default treatment — there is only ever one. */
+.gph-node .react-flow__handle {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--elev);
+  background: var(--accent);
+  box-shadow: 0 1px 4px -1px rgb(0 0 0 / 0.35);
+}
+
+.gph-node__in.react-flow__handle {
+  left: -7px;
+  top: 18px;
+  transform: none;
+  background: var(--text-3);
+}
+
+.gph-node__arms {
+  margin: 7px -11px -7px;
+  border-top: 1px solid var(--separator);
+  display: flex;
+  flex-direction: column;
+}
+
+.gph-arm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+  transition: background .15s ease;
+}
+
+.gph-arm + .gph-arm { border-top: 1px solid var(--separator); }
+.gph-arm:hover { background: var(--accent-soft); }
+
+.gph-arm__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gph-arm:hover .gph-arm__label { color: var(--text); }
+
+.gph-arm__plus {
+  flex: 0 0 auto;
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* The arm's own dot, pulled out of React Flow's edge-pinned placement so it
+   sits at the end of its row. */
+.gph-arm .react-flow__handle {
+  position: relative;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  transform: none;
+  flex: 0 0 auto;
+}
+
+/* ── Edges ───────────────────────────────────────────────────────────────────
+   A REWORK ARM IS NOT A DEPENDENCY — it is the route BACK when a judge sends
+   work to be redone. Drawing it like every other edge would make the canvas
+   claim a cycle that the format specifically does not have, so it gets the
+   dashed stroke and its own colour. `toFlow` already stamps `className:
+   'rework'`; everything below is the styling of that one word. */
+.react-flow__edge.rework .react-flow__edge-path {
+  stroke: var(--orange);
+  stroke-dasharray: 6 4;
+  stroke-width: 1.6;
+}
+
+.react-flow__edge.rework marker path,
+.react-flow__edge.rework .react-flow__arrowhead path {
+  fill: var(--orange);
+}
+
+.react-flow__edge.gph-edge-error .react-flow__edge-path {
+  stroke: var(--red);
+  stroke-width: 2;
+}
+
+.react-flow__edge.gph-edge-warn .react-flow__edge-path {
+  stroke: var(--yellow);
+}
+
+.react-flow__edge-text { font-size: 10px; fill: var(--text-2); }
+.react-flow__edge-textbg { fill: var(--elev); }
+
+/* ── The palette popover (the bolinha's menu) ────────────────────────────── */
+.gph-palette {
+  position: fixed;
+  z-index: 60;
+  width: 320px;
+  max-height: min(60vh, 460px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-sm);
+  background: var(--glass-strong);
+  border: 1px solid var(--separator);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  overflow: hidden;
+}
+
+.gph-palette__head {
+  padding: 9px 12px 7px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.gph-palette__title { font-size: 13px; font-weight: 650; color: var(--text); }
+.gph-palette__from { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+
+.gph-palette__body { overflow-y: auto; padding: 4px 0; flex: 1 1 auto; }
+
+.gph-palette__glabel {
+  padding: 7px 12px 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+
+.gph-palette__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.gph-palette__item:hover,
+.gph-palette__item.is-active { background: var(--accent-soft); }
+
+.gph-palette__label { display: block; font-size: 12.5px; font-weight: 600; }
+.gph-palette__desc { display: block; font-size: 11px; color: var(--text-2); line-height: 1.3; }
+
+/* A BLOCKED ITEM STAYS ON SCREEN. A menu that empties itself teaches nothing;
+   a greyed row that says "this arm already goes to X, branch from there
+   instead" teaches the rule the drawing broke. */
+.gph-palette__item.is-disabled { cursor: not-allowed; opacity: 0.55; }
+.gph-palette__item.is-disabled .gph-palette__label { color: var(--text-3); }
+
+.gph-palette__reason {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-2);
+  border-left: 2px solid var(--yellow);
+  padding-left: 6px;
+}
+
+.gph-palette__empty { padding: 14px 12px; font-size: 12px; color: var(--text-2); }
+
+.gph-palette__foot {
+  padding: 6px 12px;
+  border-top: 1px solid var(--separator);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+/* ── The inspector ───────────────────────────────────────────────────────── */
+.gph-inspector {
+  flex: 0 0 auto;
+  width: 320px;
+  max-width: 42vw;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 14px 24px;
+  overflow-y: auto;
+  border-left: 1px solid var(--separator);
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+
+.gph-inspector__title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-2);
+}
+
+.gph-inspector__empty { font-size: 12.5px; color: var(--text-3); line-height: 1.45; }
+
+.gph-field { display: flex; flex-direction: column; gap: 5px; }
+
+.gph-field > label {
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+
+.gph-field input[type='text'],
+.gph-field textarea {
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--elev);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-xs);
+  resize: vertical;
+}
+
+.gph-field textarea { min-height: 92px; line-height: 1.4; }
+
+.gph-join { display: flex; flex-direction: column; gap: 6px; }
+
+.gph-join__opt,
+.gph-join__pred {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.gph-join__preds {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 2px 0 0 20px;
+  padding-left: 8px;
+  border-left: 2px solid var(--separator);
+}
+
+.gph-join__pred code {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+/* THE HONEST SENTENCE. Relaxing a join removes the DEPENDENCY; it does not
+   remove the wave's merge barrier. A UI that let the human believe otherwise
+   would be selling a speed-up huu does not deliver. */
+.gph-join__honest {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-2);
+  padding: 7px 9px;
+  border-radius: var(--radius-xs);
+  border-left: 3px solid var(--yellow);
+  background: color-mix(in srgb, var(--yellow) 12%, transparent);
+}
+
+.gph-join__note { font-size: 11.5px; color: var(--text-3); line-height: 1.4; }
+
+.gph-issues { display: flex; flex-direction: column; gap: 5px; margin: 0; padding: 0; list-style: none; }
+
+.gph-issues li {
+  font-size: 11.5px;
+  line-height: 1.35;
+  padding: 5px 8px;
+  border-radius: var(--radius-xs);
+  border-left: 3px solid var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.gph-issues li[data-sev='warn'] {
+  border-left-color: var(--yellow);
+  background: color-mix(in srgb, var(--yellow) 14%, transparent);
+}
+
+@media (max-width: 900px) {
+  .gph-inspector { width: 260px; }
+  .gph-panel { max-width: calc(100vw - 300px); }
+}

@@ -46,6 +46,8 @@ export const webEn = {
   'web.mode.pipelines_sub': 'You already have the method',
   'web.mode.development': 'Development',
   'web.mode.development_sub': 'You have a goal instead',
+  'web.mode.graph': 'Method canvas',
+  'web.mode.graph_sub': 'You draw the method yourself',
 
   'web.launch.title': 'Run a pipeline',
   'web.launch.subtitle':
@@ -512,4 +514,62 @@ export const webEn = {
   'web.preset.uniform': 'Uniform',
   'web.preset.uniform_hint':
     'Every role on the same model — whatever the worker field holds. The pre-routing behavior.',
+
+  /* ── The method canvas (/graph) ────────────────────────────────────────────
+     Chrome only. Every RULE the canvas states — why a connection was refused,
+     what a validator issue means — arrives as a SENTENCE from `graph-model.js`
+     or from the server and is shown verbatim, so those messages are not keys
+     here. One table, one voice: a second copy of the 45 issue codes would be a
+     second authority the moment either side is edited. */
+  'web.graph.untitled': 'Untitled method',
+  'web.graph.name_label': 'Method name',
+  'web.graph.id_title': 'The id that names this method on disk',
+  'web.graph.save': 'Save',
+  'web.graph.saving': 'Saving…',
+  'web.graph.saved': 'Saved “{name}”',
+  'web.graph.save_failed': 'Save refused: {message}',
+  'web.graph.validate': 'Check',
+  'web.graph.validate_failed': 'Cannot check right now: {message}',
+  'web.graph.sample_label': 'Open a worked example',
+  'web.graph.sample_placeholder': 'Open an example…',
+  'web.graph.sample_failed': 'Could not open the example: {message}',
+  'web.graph.catalog_failed': 'The block catalog did not load: {message}',
+  'web.graph.node_count': '{nodes} nodes · {edges} links',
+  'web.graph.status_checking': 'Checking…',
+  'web.graph.status_ok': 'Nothing to fix',
+  'web.graph.status_errors': '{count} problem(s)',
+  'web.graph.status_warnings': '{count} note(s) — nothing broken',
+
+  'web.graph.node.next': 'Next step',
+  'web.graph.node.next_open': 'Open the palette: what comes after this step',
+  'web.graph.node.arm_open': 'Open the palette for the “{arm}” branch',
+  'web.graph.node.in': 'Incoming connections',
+  'web.graph.node.issues': '{count} problem(s) on this node',
+  'web.graph.node.warnings': '{count} note(s) on this node',
+
+  'web.graph.palette.title': 'What comes next?',
+  'web.graph.palette.from': 'From “{label}”',
+  'web.graph.palette.from_arm': 'From “{label}” · branch “{arm}”',
+  'web.graph.palette.empty':
+    'The catalog served no blocks, so there is nothing to offer. Reopen this view to fetch it again.',
+  'web.graph.palette.hint': '↑↓ to move · Enter to add · Esc to close',
+  'web.graph.palette.blocked': 'Nothing can be added at this point.',
+
+  'web.graph.inspector.title': 'Node',
+  'web.graph.inspector.empty': 'Pick a node on the canvas to edit it.',
+  'web.graph.inspector.label': 'Label',
+  'web.graph.inspector.block': 'Block',
+  'web.graph.inspector.issues': 'Reported here',
+  'web.graph.inspector.delete': 'Delete node',
+  'web.graph.inspector.text_goal': 'Goal of this method',
+  'web.graph.inspector.text_prompt': 'Prompt (overrides the block’s own template)',
+  'web.graph.inspector.text_query': 'Question this research answers',
+  'web.graph.inspector.text_condition': 'Condition the judge checks',
+  'web.graph.inspector.join': 'Waits for',
+  'web.graph.inspector.join_all': 'Wait for all of them',
+  'web.graph.inspector.join_subset': 'Wait only for the ones I tick',
+  'web.graph.inspector.join_none': 'Nothing flows into this node yet.',
+  'web.graph.inspector.join_root': 'The prompt entry is the root of the method: it waits for nobody.',
+  'web.graph.inspector.join_honest':
+    'Relaxing the join drops the DEPENDENCY — this step stops waiting for the branches you unticked, and stops failing when they fail. It does NOT drop the wave’s merge barrier: huu still merges every branch of the stage before the next one starts.',
 } as const;

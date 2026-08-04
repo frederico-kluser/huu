@@ -9,6 +9,14 @@
     <title>huu · web</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
+    <!-- React Flow's own stylesheet, verbatim from the package. The method
+         canvas does not position ANYTHING without it — pane, viewport, node
+         transforms and handles all come from these rules — so it is linked
+         before graph.css, which overrides a handful of them. -->
+    <link rel="stylesheet" href="vendor/reactflow.css" />
+    <!-- Every rule the /graph surface needs. It lives in its own file so the
+         design system in styles.css stays untouched by this feature. -->
+    <link rel="stylesheet" href="graph.css" />
   </head>
   <body>
     <!-- Ambient depth: gooey accent blobs drifting behind the glass, theme-aware. -->
@@ -91,6 +99,10 @@
         <a class="mode-switch__opt" id="modeDev" href="/dev" data-mode="dev">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 17l-5-5 5-5M16 7l5 5-5 5M14 4l-4 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span class="mode-switch__t"><strong data-i18n="web.mode.development">Development</strong><span class="muted" data-i18n="web.mode.development_sub">You have a goal instead</span></span>
+        </a>
+        <a class="mode-switch__opt" id="modeGraph" href="/graph" data-mode="graph">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="5" cy="12" r="2.4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="19" cy="6" r="2.4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="19" cy="18" r="2.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7.2 11l9.6-4M7.2 13l9.6 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <span class="mode-switch__t"><strong data-i18n="web.mode.graph">Method canvas</strong><span class="muted" data-i18n="web.mode.graph_sub">You draw the method yourself</span></span>
         </a>
       </nav>
 
@@ -544,6 +556,15 @@
             <button type="button" class="btn btn--danger btn--sm" id="devAbort" data-i18n="web.dev.abort">Abort session</button>
           </div>
         </section>
+      </section>
+
+      <!-- METHOD CANVAS VIEW (/graph) — the hand-drawn devgraph.
+           Deliberately EMPTY markup: the canvas is a React Flow tree rendered
+           by modules/graph/canvas.js into the host below, and the surface is
+           only mounted the first time the human switches into it (switchMode →
+           initGraphSurface, guarded by S.graphBooted). -->
+      <section class="view view--graph" id="viewGraph" hidden>
+        <div class="gph-host" id="graphCanvasHost"></div>
       </section>
 
     </main>

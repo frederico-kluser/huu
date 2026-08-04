@@ -46,6 +46,8 @@ export const webPtBR = {
   'web.mode.pipelines_sub': 'Você já tem o método',
   'web.mode.development': 'Desenvolvimento',
   'web.mode.development_sub': 'Você tem um objetivo',
+  'web.mode.graph': 'Desenho do método',
+  'web.mode.graph_sub': 'Você desenha o método',
 
   'web.launch.title': 'Rodar um pipeline',
   'web.launch.subtitle':
@@ -519,4 +521,63 @@ export const webPtBR = {
   'web.preset.uniform': 'Uniforme',
   'web.preset.uniform_hint':
     'Todo papel no mesmo modelo — o que estiver no campo do worker. O comportamento anterior ao roteamento.',
+
+  /* ── O desenho do método (/graph) ──────────────────────────────────────────
+     Só chrome. Toda REGRA que a tela enuncia — por que uma ligação foi
+     recusada, o que um problema do validador significa — chega como FRASE
+     pronta de `graph-model.js` ou do servidor e é mostrada literalmente, então
+     essas mensagens não são chaves daqui. Uma tabela, uma voz: uma segunda
+     cópia dos 45 códigos seria uma segunda autoridade no instante em que um
+     dos lados fosse editado. */
+  'web.graph.untitled': 'Método sem nome',
+  'web.graph.name_label': 'Nome do método',
+  'web.graph.id_title': 'O id que nomeia este método no disco',
+  'web.graph.save': 'Salvar',
+  'web.graph.saving': 'Salvando…',
+  'web.graph.saved': '“{name}” salvo',
+  'web.graph.save_failed': 'Salvamento recusado: {message}',
+  'web.graph.validate': 'Conferir',
+  'web.graph.validate_failed': 'Não dá para conferir agora: {message}',
+  'web.graph.sample_label': 'Abrir um exemplo pronto',
+  'web.graph.sample_placeholder': 'Abrir um exemplo…',
+  'web.graph.sample_failed': 'Não foi possível abrir o exemplo: {message}',
+  'web.graph.catalog_failed': 'O catálogo de blocos não carregou: {message}',
+  'web.graph.node_count': '{nodes} nós · {edges} ligações',
+  'web.graph.status_checking': 'Conferindo…',
+  'web.graph.status_ok': 'Nada a corrigir',
+  'web.graph.status_errors': '{count} problema(s)',
+  'web.graph.status_warnings': '{count} observação(ões) — nada quebrado',
+
+  'web.graph.node.next': 'Próximo passo',
+  'web.graph.node.next_open': 'Abrir a paleta: o que vem depois deste passo',
+  'web.graph.node.arm_open': 'Abrir a paleta do braço “{arm}”',
+  'web.graph.node.in': 'Ligações que chegam',
+  'web.graph.node.issues': '{count} problema(s) neste nó',
+  'web.graph.node.warnings': '{count} observação(ões) neste nó',
+
+  'web.graph.palette.title': 'O que vem agora?',
+  'web.graph.palette.from': 'A partir de “{label}”',
+  'web.graph.palette.from_arm': 'A partir de “{label}” · braço “{arm}”',
+  'web.graph.palette.empty':
+    'O catálogo não serviu bloco nenhum, então não há o que oferecer. Reabra esta tela para buscá-lo de novo.',
+  'web.graph.palette.hint': '↑↓ para mover · Enter para adicionar · Esc para fechar',
+  'web.graph.palette.blocked': 'Nada pode ser adicionado neste ponto.',
+
+  'web.graph.inspector.title': 'Nó',
+  'web.graph.inspector.empty': 'Escolha um nó no desenho para editá-lo.',
+  'web.graph.inspector.label': 'Rótulo',
+  'web.graph.inspector.block': 'Bloco',
+  'web.graph.inspector.issues': 'Relatado aqui',
+  'web.graph.inspector.delete': 'Excluir nó',
+  'web.graph.inspector.text_goal': 'Objetivo deste método',
+  'web.graph.inspector.text_prompt': 'Prompt (substitui o modelo do próprio bloco)',
+  'web.graph.inspector.text_query': 'Pergunta que esta pesquisa responde',
+  'web.graph.inspector.text_condition': 'Condição que o juiz verifica',
+  'web.graph.inspector.join': 'Espera por',
+  'web.graph.inspector.join_all': 'Esperar todos',
+  'web.graph.inspector.join_subset': 'Esperar apenas os que eu marcar',
+  'web.graph.inspector.join_none': 'Ainda não chega nada neste nó.',
+  'web.graph.inspector.join_root': 'A entrada do prompt é a raiz do método: ela não espera ninguém.',
+  'web.graph.inspector.join_honest':
+    'Relaxar o join tira a DEPENDÊNCIA — este passo deixa de esperar os braços que você desmarcou, e deixa de falhar quando eles falham. NÃO tira a barreira de merge da onda: o huu continua mesclando todos os braços do estágio antes de o próximo começar.',
 } as const;

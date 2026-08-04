@@ -20,7 +20,17 @@ export async function api(path, opts = {}) {
     ...rest,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  // The BODY travels with the failure. `POST /api/graphs/compile` answers 400
+  // with `{ok:false, error, errors[], warnings[]}` — the array being
+  // deliberately additive so the canvas can highlight the offending nodes with
+  // no second round-trip. Keeping only `data.error` threw that array away and
+  // left every caller with a sentence (see the CAVEAT in graph-api-client.js,
+  // which reads `err.body`). The cast is because `Error` has no `body`.
+  if (!res.ok) {
+    const err = /** @type {any} */ (new Error(data.error || `HTTP ${res.status}`));
+    err.body = data;
+    throw err;
+  }
   return data;
 }
 
@@ -133,4 +143,14 @@ export const S = {
   devDir: '',
   devSession: null,
   lastBudget: null,
+  // Method canvas (/graph). Same shape as the dev surface above: one boolean
+  // that makes the lazy init idempotent, plus what has to SURVIVE a view swap.
+  // `graphDoc` is the devgraph currently on the canvas — kept here so switching
+  // to Pipelines and back does not hand the human an empty drawing; the React
+  // root itself is torn down and rebuilt from it.
+  graphBooted: false,
+  graphDir: '',
+  graphDoc: null,
+  graphCatalog: null,
+  graphMount: null,
 };

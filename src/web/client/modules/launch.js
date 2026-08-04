@@ -9,6 +9,7 @@ import { $, S, api, pipeIcon, sessionKey, setSessionKey, backendSpecName, provid
 import { renderQueue, commitBatch, setAddBtnLabel, addLabel, renderLaunchRunning } from './queue.js';
 import { renderActiveRun } from './board.js';
 import { initDevSurface } from './dev.js';
+import { initGraphSurface } from './graph/canvas.js';
 import { t } from '../i18n.js';
 
 /* ---------------- Guided-launch wizard (steps) ----------------
@@ -736,12 +737,13 @@ export function showView(which) {
   $('viewRun').hidden = which !== 'run';
   $('viewSim').hidden = which !== 'sim';
   $('viewDev').hidden = which !== 'dev';
+  $('viewGraph').hidden = which !== 'graph';
   // The mode switch only makes sense while CHOOSING work. On the board (or the
   // synthetic /simulation surface) it would be a way to silently navigate away
   // from a live run, so it hides.
   const sw = $('modeSwitch');
   if (sw) {
-    sw.hidden = !(which === 'launch' || which === 'dev');
+    sw.hidden = !(which === 'launch' || which === 'dev' || which === 'graph');
     // The mode-switch options are elements carrying data-mode.
     for (const opt of /** @type {HTMLElement[]} */ (Array.from(sw.querySelectorAll('[data-mode]')))) {
       const on = opt.dataset.mode === which;
@@ -761,7 +763,7 @@ export function showView(which) {
    through to the browser so "open in new tab" still works. */
 /* Every choosing-surface mode ⇄ its route. The single table both switchMode()
    and popstate read, so adding a surface is one row here. */
-export const MODE_PATHS = { launch: '/', dev: '/dev' };
+export const MODE_PATHS = { launch: '/', dev: '/dev', graph: '/graph' };
 export function pathToMode(p) {
   const norm = (p || '').replace(/\/+$/, '') || '/';
   return Object.keys(MODE_PATHS).find((m) => MODE_PATHS[m] === norm) || 'launch';
@@ -769,6 +771,10 @@ export function pathToMode(p) {
 
 export function switchMode(mode, { push = true } = {}) {
   if (mode === 'dev' && !S.devBooted) initDevSurface();
+  // Same lazy contract as the dev surface: the React root (and the vendored
+  // React Flow bundle it drives) is only built the first time the human opens
+  // the canvas, and `initGraphSurface` is a no-op on every later switch.
+  if (mode === 'graph' && !S.graphBooted) initGraphSurface();
   showView(mode);
   if (!push) return;
   const path = MODE_PATHS[mode] || '/';
