@@ -501,7 +501,7 @@ export function RunDashboard({
   const elapsed = Math.floor(state.elapsedMs / 1000);
   const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
   const ss = String(elapsed % 60).padStart(2, '0');
-  const providerLabel = config.provider === 'azure' ? 'Azure AI Foundry' : 'OpenRouter';
+  const providerLabel = false ? 'Azure AI Foundry' : 'OpenRouter';
 
   return (
     <Box flexDirection="column" width="100%">

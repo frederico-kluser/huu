@@ -53,16 +53,16 @@ export const DEV_MODEL_ROLES: readonly DevModelRole[] = Object.keys(ALL_ROLES) a
  * case and stays exactly what it was; a chain says "use the first of these the
  * registry actually has".
  *
- * WHY A CHAIN AT ALL. A role was one id, and an id the pi registry has never
+ * WHY A CHAIN AT ALL. A role was one id, and an id the registry has never
  * heard of throws inside the first agent — after its worktree and branch
- * already exist. `preflightDevModelPolicy` moved that failure to the border,
+ * already exist. Model preflight moved that failure to the border,
  * which is better, but the answer was still "refuse the session". A provider
  * dropping a model, or a registry lagging a rename, should cost a rung, not a
  * run.
  *
  * Commas are the separator because the same rule then works for a CLI flag, a
  * web text field and a JSON string with no per-surface parsing. No id in the
- * OpenRouter registry contains a comma (`vendor/model[:variant]`), so nothing
+ * model registry contains a comma (`vendor/model[:variant]`), so nothing
  * is ambiguous — and an id that somehow did would split into rungs that simply
  * fail the preflight, loudly, rather than misbehaving quietly.
  */
@@ -77,7 +77,7 @@ export function modelRungs(value: string | undefined): string[] {
 /**
  * Collapse a chain to the rung that will actually run.
  *
- * `isKnown` is injected rather than imported so this module stays pure — the pi
+ * `isKnown` is injected rather than imported so this module stays pure — the
  * registry lives behind `model-registry-check.ts`, and a policy resolver that
  * needs a registry is a policy resolver nobody can unit-test. With no predicate
  * the first rung wins, which is the pre-chain behavior exactly.
@@ -143,11 +143,10 @@ export function collapseDevModelPolicy(
  * The policy a surface should offer for `backend`, defaulting to the `hetero`
  * preset.
  *
- * Returns `{}` for `azure` and `stub`: every id in the presets is an
- * OpenRouter id served by the pi backend. Stamping `z-ai/glm-5.2` onto an
- * Azure deployment name — or onto the stub, which has no catalog at all —
- * would break a run that works fine today, so those backends keep the uniform
- * fallback behavior.
+ * Returns `{}` for `stub`: every id in the presets is served by the
+ * jcode (deepseek) backend. Stamping a preset id onto the stub — which has
+ * no catalog at all — would break a run that works fine today, so the stub
+ * keeps the uniform fallback behavior.
  *
  * The returned object is a fresh mutable copy; mutating it cannot corrupt
  * {@link DEV_MODEL_PRESETS}.
@@ -156,7 +155,7 @@ export function defaultDevModelPolicy(
   backend: AgentBackendKind,
   preset: DevModelPreset = 'hetero',
 ): DevModelPolicy {
-  if (backend !== 'pi') return {};
+  if (backend !== 'jcode') return {};
   return { ...DEV_MODEL_PRESETS[preset] };
 }
 

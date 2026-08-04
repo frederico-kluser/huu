@@ -63,8 +63,7 @@ export interface RunSelectorOptions {
   signal?: AbortSignal;
   /**
    * Backend-aware context. When provided, routes through the user's chosen
-   * backend (e.g. Azure). Required when `--backend=azure` is in use,
-   * otherwise selector calls leak charges to OpenRouter.
+   * backend (jcode/DeepSeek). Required for correct backend routing.
    */
   llmContext?: LlmClientContext;
 }
@@ -147,14 +146,13 @@ export async function runReconSelector(
   if (stub) return runStubSelector(opts);
 
   const apiKey = opts.apiKey.trim();
-  const ctxBackend = opts.llmContext?.backend ?? 'pi';
-  const fallbackModel =
-    ctxBackend === 'azure' ? defaultHelperModel('azure') : SELECTOR_MODEL;
+  const ctxBackend = opts.llmContext?.backend ?? 'jcode';
+  const fallbackModel = SELECTOR_MODEL;
   const modelId = (opts.modelId ?? fallbackModel).trim();
 
   const ctx: LlmClientContext = opts.llmContext ?? {
-    backend: 'pi',
-    openrouterApiKey: apiKey,
+    backend: 'jcode',
+    deepseekApiKey: apiKey,
   };
   const chat = buildChatClient(ctx, { modelId, temperature: 0, maxTokens: 800 });
   const structured = chat.withStructuredOutput(SelectorOutputSchema, {

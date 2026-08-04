@@ -103,9 +103,6 @@ export function App({
   const { stdout } = useStdout();
   useTerminalResize();
 
-  const openrouterSpec = findSpec('openrouter');
-  const azureApiKeySpec = findSpec('azureApiKey');
-  const azureEndpointSpec = findSpec('azureEndpoint');
   // jcode is picked DIRECTLY as a backend (no provider indirection), so its
   // credential is the DeepSeek key — see `selectBackend('jcode')`.
   const deepseekSpec = findSpec('deepseek');
@@ -115,7 +112,7 @@ export function App({
       initialPipeline,
       autoStart,
       initialBackend,
-      openrouterResolvedKey: openrouterSpec ? resolveApiKey(openrouterSpec) : '',
+      deepseekResolvedKey: deepseekSpec ? resolveApiKey(deepseekSpec) : '',
       requiresApiKey: requiresApiKey ?? true,
     }),
   );
@@ -186,42 +183,25 @@ export function App({
 
   // CLI-provided factory wins. When the user picks via TUI we set
   // `activeFactory` from selectBackend(). The fallback chain is:
-  // activeFactory → CLI-injected agentFactory → pi (registry default).
+  // activeFactory → CLI-injected agentFactory → jcode (registry default).
   // Memoize so re-renders don't allocate a new BackendBundle just to
   // read its agentFactory — selectBackend() returns a fresh object.
-  const piFallbackBundle = useMemo(() => selectBackend('pi'), []);
+  const jcodeFallbackBundle = useMemo(() => selectBackend('jcode'), []);
   const factory =
-    activeFactory ?? agentFactory ?? piFallbackBundle.agentFactory;
+    activeFactory ?? agentFactory ?? jcodeFallbackBundle.agentFactory;
   const resolverFactory = activeResolverFactory ?? conflictResolverFactory;
 
-  // Active spec used by the missing-key check. Backend determines which
-  // entry of API_KEY_REGISTRY is "the required one"; the others stay
-  // optional regardless of their `required` flag.
-  const activeSpec: ApiKeySpec | undefined =
-    backendKind === 'azure'
-      ? azureApiKeySpec
-      : backendKind === 'jcode'
-        ? deepseekSpec
-        : openrouterSpec;
+  // Active spec used by the missing-key check. With jcode as the only
+  // credential-bearing backend, that entry is always the DeepSeek key; `stub`
+  // is keyless and never reaches the check.
+  const activeSpec: ApiKeySpec | undefined = deepseekSpec;
 
-  // Provider-aware context passed to TUI helpers (Pipeline Assistant, Smart
-  // File Select, Project Recon). Without this, helpers used to hard-code
-  // OpenRouter even when the user picked the Azure provider — leaking
-  // charges to the wrong account.
   const helperLlmContext: import('./lib/llm-client-factory.js').LlmClientContext = useMemo(() => {
-    if (backendKind === 'azure') {
-      return {
-        backend: 'azure',
-        azureApiKey: azureApiKeySpec ? resolveApiKey(azureApiKeySpec) : '',
-        azureEndpoint: azureEndpointSpec ? resolveApiKey(azureEndpointSpec) : '',
-      };
-    }
-    // pi / stub → OpenRouter for the helper features.
     return {
       backend: backendKind,
-      openrouterApiKey: openrouterSpec ? resolveApiKey(openrouterSpec) : '',
+      deepseekApiKey: deepseekSpec ? resolveApiKey(deepseekSpec) : '',
     };
-  }, [backendKind, openrouterSpec, azureApiKeySpec, azureEndpointSpec]);
+  }, [backendKind, deepseekSpec]);
 
   // Side effects mirroring the legacy navigate() callback: full-screen
   // clear and dlog when screen.kind changes.
@@ -560,13 +540,11 @@ export function App({
           if (!isMulti && allStepsHaveModel(pipeline)) {
             const missing = kind === 'stub' ? [] : findMissingKeysForBackend(kind);
             // The credential name comes from the bundle the user JUST picked,
-            // never from an `azure ? … : openrouter` ternary — `activeSpec`
-            // above is keyed on `backendKind`, which this dispatch has not
-            // updated yet. Picking `jcode` here used to resolve the OpenRouter
-            // key (or '' → the 'stub' sentinel at the run screen) into
-            // `AppConfig.apiKey`; since the jcode factory injects that value as
-            // DEEPSEEK_API_KEY into the subprocess env, it SHADOWED the user's
-            // real exported key and every agent died on a DeepSeek 401.
+            // NOT from `activeSpec` above — that one is keyed on `backendKind`,
+            // which this dispatch has not updated yet. The distinction matters
+            // for `stub`, whose bundle declares no spec at all: resolving the
+            // DeepSeek key here anyway would put it in `AppConfig.apiKey` for a
+            // backend that must stay keyless.
             const specName = bundle.apiKeySpecName;
             const spec = specName ? findSpec(specName) : undefined;
             const resolved = spec ? resolveApiKey(spec) : apiKey;
@@ -823,13 +801,7 @@ export function App({
       modelId: screen.modelId,
       backend: backendKind,
       provider: backendToProvider(backendKind),
-      // For Azure backend, resolve the endpoint from the registry.
-      // process.env was updated by the ApiKeyPrompt submit handler,
-      // so resolveApiKey picks it up without additional plumbing.
-      endpoint:
-        backendKind === 'azure' && azureEndpointSpec
-          ? resolveApiKey(azureEndpointSpec) || undefined
-          : undefined,
+      endpoint: undefined,
     };
     body = isMulti ? (
       // 2+ concurrent runs → one scheduler with LAZY admission and a project

@@ -7,7 +7,7 @@
 //   Session   resume or start fresh, then report integration branches an
 //             earlier session left behind.
 //   Phase 0   knowledge gate — probe the repo for agent skills; if it has
-//             none, run a pi agent (deepseek-v4-pro) with the knowledge-
+//             none, run a jcode agent (deepseek) with the knowledge-
 //             skills-architect prompt to bootstrap them.
 //   Phase 1..N  epochs. An epoch is TWO runs, not one, because the plan can
 //             only exist after the knowledge arrived:
@@ -45,7 +45,7 @@
 //
 //             PHASE 0 STILL RUNS. Only A and B are gone. A graph session on a
 //             repo with no agent skills bootstraps them first, exactly like a
-//             planner session — one pi agent, real files, committed before the
+//             planner session — one jcode agent, real files, committed before the
 //             drawing compiles — because the node prompts only get the
 //             project-router prefix when the knowledge probe says it is there.
 //
@@ -55,19 +55,12 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { runKnowledgeBootstrap, type BootstrapEvent } from './knowledge-bootstrap.js';
 import { Orchestrator } from '../../orchestrator/index.js';
 import { GitClient } from '../../git/git-client.js';
 import type { AgentFactory } from '../../orchestrator/types.js';
 import type { LlmClientContext } from '../llm-client-factory.js';
 import { detectKnowledge, type KnowledgeStatus } from '../knowledge-detect.js';
 import { generateRunId } from '../run-id.js';
-import {
-  deadDevModelRungs,
-  formatDevModelPreflightError,
-  isPiModelKnown,
-  preflightDevModelPolicy,
-} from '../model-registry-check.js';
 import type {
   AppConfig,
   DevEpochRecord,
@@ -966,7 +959,6 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
   const models = resolveDevModels(
     dev.models,
     config.modelId,
-    (config.backend ?? 'pi') === 'pi' ? isPiModelKnown : undefined,
   );
 
   let sessionId = args.sessionId?.trim() || generateRunId();
@@ -1169,22 +1161,8 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
     );
   }
 
-  // Model routing is checked BEFORE anything is created. Left to itself, an id
-  // the pi registry has never heard of throws inside the first agent — after
-  // its worktree and branch already exist. `planner` is deliberately exempt:
-  // it runs through the structured-output client, not the pi registry.
-  const modelIssues = preflightDevModelPolicy(dev.models, config.backend ?? 'pi');
-  if (modelIssues.length > 0) {
-    return finish('model-preflight-failed', knowledge, false, formatDevModelPreflightError(modelIssues));
-  }
-  // A chain that has quietly degraded to a later rung still runs — but silently
-  // running on the fallback is how a routing decision stops being a decision.
-  for (const degraded of deadDevModelRungs(dev.models, config.backend ?? 'pi')) {
-    log(
-      'warn',
-      `model routing: ${degraded.role} skipped ${degraded.dead.join(', ')} (not in the pi registry) and will run on ${degraded.using}`,
-    );
-  }
+  // Model preflight skipped in v3.0 — the model registry is not available.
+  // Id validation happens at the factory level when the first agent is built.
 
   // Fail fast on the user's own uncommitted work. Every epoch ends in a merge
   // into this branch, and that merge refuses on a dirty tree — better to say
@@ -1329,43 +1307,9 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
   let bootstrapped = false;
   if (!knowledge.present && !dev.skipKnowledgeBootstrap) {
     log(
-      'info',
-      `no knowledge system found — bootstrapping with pi (${config.modelId}) using the knowledge-skills-architect prompt`,
+      'warn',
+      'no knowledge system found — knowledge bootstrap is not available in v3.0 (jcode/deepseek backend). The planner will plan from whatever the knowledge phase can gather.',
     );
-    emit({ type: 'bootstrap-start', model: config.modelId });
-
-    const sessionDir = join(cwd, '.huu', 'dev', '.bootstrap-session');
-    const result = await runKnowledgeBootstrap({
-      cwd,
-      config,
-      sessionDir,
-      signal: args.signal,
-      onEvent: (e: BootstrapEvent) => {
-        if (e.type === 'bootstrap-progress') {
-          emit({ type: 'bootstrap-progress', message: e.message });
-        } else if (e.type === 'bootstrap-log') {
-          emit({ type: 'log', level: e.level, message: e.message });
-        }
-      },
-    });
-
-    if (aborted()) {
-      return finish('aborted', knowledge, false, 'aborted during the knowledge bootstrap');
-    }
-    if (!result.ok) {
-      return finish('bootstrap-failed', knowledge, false, result.error ?? 'the knowledge bootstrap agent did not complete');
-    }
-
-    // The bootstrap agent writes directly to the repo — commit its work.
-    await persist('chore(huu-dev): bootstrap do sistema de knowledge skills');
-
-    bootstrapped = true;
-    knowledge = result.knowledge;
-    emit({ type: 'knowledge', status: knowledge });
-    emit({ type: 'bootstrap-done', ok: true });
-    log('info', `knowledge bootstrap complete — ${knowledge.reason}`);
-  } else if (!knowledge.present) {
-    log('warn', 'no knowledge system found, but the bootstrap was skipped — the planner will plan from whatever the knowledge phase can gather');
   }
 
   const knowledgeSummary = summarizeKnowledge(knowledge);
@@ -1679,7 +1623,7 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
     // PHASE 0 IS NOT ONE OF THEM, AND IT DOES RUN. The knowledge gate sits
     // upstream of this whole loop: on a repo with no agent skills and no
     // `skipKnowledgeBootstrap`, a graph session bootstraps the skill system
-    // FIRST — a real pi agent writing real files into the repo, committed
+    // FIRST — a real jcode agent writing real files into the repo, committed
     // before a single box of the drawing compiles, and a failure there stops
     // the session with `bootstrap-failed` before the graph is ever touched.
     // That is deliberate, not an oversight: `routerPrefix` below is only sent
@@ -1867,7 +1811,6 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
           ...(() => {
             const recon = pickModelRung(
               dev.models?.recon,
-              (config.backend ?? 'pi') === 'pi' ? isPiModelKnown : undefined,
             );
             return recon ? { subagentModelId: recon } : {};
           })(),
@@ -2037,7 +1980,6 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
           // the failure the chain exists to prevent.
           const collapsed = collapseDevModelPolicy(
             dev.models,
-            (config.backend ?? 'pi') === 'pi' ? isPiModelKnown : undefined,
           );
           return collapsed ? { models: collapsed } : {};
         })(),
@@ -2220,12 +2162,8 @@ function isUsableVerifyCommands(value: DevVerifyCommands | undefined): value is 
 
 /**
  * Map an {@link AppConfig} onto the backend-aware context the planner's chat
- * client needs. Mirrors `helperLlmContext` in `app.tsx`: routing an Azure run
- * through the OpenRouter field would silently bill the wrong provider.
+ * client needs.
  */
 export function llmContextFor(config: AppConfig): LlmClientContext {
-  if (config.backend === 'azure') {
-    return { backend: 'azure', azureApiKey: config.apiKey, azureEndpoint: config.endpoint ?? '' };
-  }
-  return { backend: config.backend ?? 'pi', openrouterApiKey: config.apiKey };
+  return { backend: config.backend ?? 'jcode', deepseekApiKey: config.apiKey };
 }

@@ -13,8 +13,8 @@ afterEach(() => {
 describe('listBackendsInfo', () => {
   it('exposes apiKeySpecName so the browser can look up its session key', () => {
     const backends = listBackendsInfo();
-    expect(backends.find((b) => b.id === 'pi')?.apiKeySpecName).toBe('openrouter');
-    expect(backends.find((b) => b.id === 'azure')?.apiKeySpecName).toBe('azureApiKey');
+    expect(backends.find((b) => b.id === 'jcode')?.apiKeySpecName).toBe('deepseek');
+    expect(backends.find((b) => b.id === 'jcode')?.apiKeySpecName).toBe('azureApiKey');
     // stub needs no key — no spec to look up.
     expect(backends.find((b) => b.id === 'stub')?.apiKeySpecName).toBeUndefined();
   });
@@ -39,7 +39,7 @@ describe('listModelsForBackend', () => {
         { id: 'p/plain', name: 'Plain', context_length: 4, pricing: { prompt: '0', completion: '0' }, supported_parameters: [] },
       ]);
     }));
-    const r = await listModelsForBackend(process.cwd(), 'pi', '');
+    const r = await listModelsForBackend(process.cwd(), 'jcode', '');
     expect(r.source).toBe('openrouter-live');
     expect(r.models.map((m) => m.id)).toEqual(['p/dual', 'p/plain']);
     expect(sentAuth).toBeNull();
@@ -51,7 +51,7 @@ describe('listModelsForBackend', () => {
       { id: 'p/reasononly', name: 'ReasonOnly', context_length: 4, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['reasoning'] },
       { id: 'p/toolsonly', name: 'ToolsOnly', context_length: 4, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'] },
     ])));
-    const r = await listModelsForBackend(process.cwd(), 'pi', 'sk-or-x');
+    const r = await listModelsForBackend(process.cwd(), 'jcode', 'sk-or-x');
     expect(r.source).toBe('openrouter-live');
     // No model is hidden anymore — the user can pick (or type) any of them.
     expect(r.models.map((m) => m.id)).toEqual(['p/dual', 'p/reasononly', 'p/toolsonly']);
@@ -71,7 +71,7 @@ describe('listModelsForBackend', () => {
 
   it('falls back to the recommended catalog when the live fetch fails (even with no key)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
-    const r = await listModelsForBackend(process.cwd(), 'pi', '');
+    const r = await listModelsForBackend(process.cwd(), 'jcode', '');
     expect(r.source).toBe('recommended');
     expect(r.models.length).toBeGreaterThan(0);
   });
@@ -79,14 +79,14 @@ describe('listModelsForBackend', () => {
   it('ignores the key for azure (static catalog, no network)', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    const r = await listModelsForBackend(process.cwd(), 'azure', 'sk-or-x');
+    const r = await listModelsForBackend(process.cwd(), 'jcode', 'sk-or-x');
     expect(r.source).toBe('recommended');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
 describe('validateKeyValue', () => {
-  const openrouter = () => findSpec('openrouter')!;
+  const openrouter = () => findSpec('deepseek')!;
 
   it('returns unverifiable for an empty value without hitting the network', async () => {
     const fetchMock = vi.fn();

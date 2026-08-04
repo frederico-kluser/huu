@@ -31,7 +31,7 @@ export interface AssistantChat {
 
 export interface CreateAssistantChatOptions {
   /**
-   * Legacy: OpenRouter API key. Used when `llmContext` is not provided
+   * Legacy: DeepSeek API key. Used when `llmContext` is not provided
    * (back-compat for older call sites).
    */
   apiKey: string;
@@ -39,9 +39,7 @@ export interface CreateAssistantChatOptions {
   temperature?: number;
   /**
    * Backend-aware context. When provided, routes through the user's chosen
-   * backend (Azure/OpenRouter) instead of always hitting OpenRouter.
-   * REQUIRED for correctness when `--backend=azure` is in use, otherwise
-   * helper calls leak charges to OpenRouter.
+   * backend (jcode/DeepSeek). REQUIRED for correctness.
    */
   llmContext?: LlmClientContext;
 }
@@ -66,18 +64,17 @@ export function createAssistantChat(opts: CreateAssistantChatOptions): Assistant
   }
 
   // Pick the right default model for the backend.
-  const ctxBackend = opts.llmContext?.backend ?? 'pi';
-  const fallbackModel =
-    ctxBackend === 'azure' ? defaultHelperModel('azure') : DEFAULT_ASSISTANT_MODEL;
+  const ctxBackend = opts.llmContext?.backend ?? 'jcode';
+  const fallbackModel = DEFAULT_ASSISTANT_MODEL;
   const modelId = (opts.modelId ?? fallbackModel).trim();
   if (!modelId) throw new Error('assistant modelId is empty.');
 
   // Build a backend-aware ChatOpenAI client. If a context was passed, use it
-  // — that's the correctness path. Otherwise, fall back to OpenRouter with
+  // — that's the correctness path. Otherwise, fall back to DeepSeek with
   // the legacy apiKey field (back-compat for call sites we haven't migrated).
   const ctx: LlmClientContext = opts.llmContext ?? {
-    backend: 'pi',
-    openrouterApiKey: opts.apiKey,
+    backend: 'jcode',
+    deepseekApiKey: opts.apiKey,
   };
   const chat = buildChatClient(ctx, {
     modelId,

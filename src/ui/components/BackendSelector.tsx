@@ -4,7 +4,7 @@ import SelectInput from 'ink-select-input';
 import type { AgentBackendKind } from '../../orchestrator/backends/registry.js';
 import { PROVIDERS, providerToBackend } from '../../lib/providers.js';
 import { findMissingKeysForProvider } from '../../lib/api-key.js';
-import type { LlmProvider } from '../../lib/types.js';
+import type { LlmProvider } from '../../lib/providers.js';
 import { log as dlog } from '../../lib/debug-logger.js';
 import { t, translate } from '../../lib/i18n/index.js';
 
@@ -20,11 +20,10 @@ interface SelectItem {
 }
 
 /**
- * Provider picker. huu exposes a single backend — pi — so this screen lets
- * the user choose the LLM provider underneath it: OpenRouter or Azure AI
- * Foundry. The choice is mapped to a concrete {@link AgentBackendKind} before
- * being handed back to the app, which keeps the rest of the run flow
- * backend-keyed and unchanged.
+ * Provider picker. huu exposes a single backend — jcode — backed by
+ * the DeepSeek provider. The choice is mapped to a concrete
+ * {@link AgentBackendKind} before being handed back to the app, which
+ * keeps the rest of the run flow backend-keyed and unchanged.
  */
 export function BackendSelector({
   onSelect,

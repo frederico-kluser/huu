@@ -5,11 +5,6 @@ import {
   renderRamDoctorText,
   resolveRamDoctorReport,
 } from './ram-doctor.js';
-import {
-  gatherPiRuntimeInputs,
-  renderPiRuntimeText,
-  resolvePiRuntimeReport,
-} from './jcode-doctor.js';
 
 /**
  * Headless status reporter for huu runs. Parses the NDJSON debug log
@@ -375,17 +370,13 @@ export function runStatusCli(opts: RunStatusCliOptions): number {
     return report.phase === 'stalled' || report.phase === 'crashed' ? 1 : 0;
   }
 
-  // Doctor sections (pi runtime + RAM containment). Gathered ONLY on the
-  // human-facing paths — never on --liveness, which must stay cheap for the
-  // Docker HEALTHCHECK (gathering shells `npm root -g`).
-  const piRuntime = resolvePiRuntimeReport({ env: process.env, ...gatherPiRuntimeInputs() });
+  // Doctor section (RAM containment only — jcode runtime doctor was removed)
   const ram = resolveRamDoctorReport({ env: process.env, ...gatherRamDoctorInputs() });
 
   if (json) {
-    stdout(JSON.stringify({ ...report, piRuntime, ram }, null, 2));
+    stdout(JSON.stringify({ ...report, ram }, null, 2));
   } else {
     stdout(renderStatusText(report, now, opts.cwd));
-    for (const line of renderPiRuntimeText(piRuntime)) stdout(line);
     for (const line of renderRamDoctorText(ram)) stdout(line);
   }
 

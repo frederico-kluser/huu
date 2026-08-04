@@ -246,7 +246,7 @@ export interface InitialStateOpts {
   initialPipeline?: Pipeline;
   autoStart?: boolean;
   initialBackend?: AgentBackendKind;
-  openrouterResolvedKey: string;
+  deepseekResolvedKey: string;
   requiresApiKey: boolean;
 }
 
@@ -261,8 +261,8 @@ export function initialState(opts: InitialStateOpts): FsmState {
     projectDirs: [],
     modelId: '',
     conflictResolverModelId: '',
-    backendKind: opts.initialBackend ?? 'pi',
-    apiKey: opts.openrouterResolvedKey,
+    backendKind: opts.initialBackend ?? 'jcode',
+    apiKey: opts.deepseekResolvedKey,
     requiresApiKey: opts.requiresApiKey,
     pipelineSourceName: null,
   };

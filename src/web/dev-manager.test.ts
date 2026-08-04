@@ -318,8 +318,8 @@ describe('web server — development mode', () => {
     await post(base, '/api/dev', {
       goal: 'com preset',
       modelId: 'fallback-model',
-      backend: 'pi',
-      provider: 'openrouter',
+      backend: 'jcode',
+      provider: 'deepseek',
       apiKey: 'sk-or-test-key-0000',
       approval: 'each-epoch',
       skipKnowledgeBootstrap: true,
@@ -382,8 +382,8 @@ describe('web server — development mode', () => {
     await post(base, '/api/dev', {
       goal: 'preflight de modelo',
       modelId: 'deepseek/deepseek-v4-pro',
-      backend: 'pi',
-      provider: 'openrouter',
+      backend: 'jcode',
+      provider: 'deepseek',
       apiKey: 'sk-or-test-key-0000',
       approval: 'each-epoch',
       skipKnowledgeBootstrap: true,

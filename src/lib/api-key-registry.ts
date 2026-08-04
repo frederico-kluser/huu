@@ -43,7 +43,7 @@ export interface ApiKeySpec {
   hostSecretScope: string;
   /** Human-friendly title shown in the TUI prompt. */
   label: string;
-  /** Short hint shown above the input ("starts with sk-or-"). */
+  /** Short hint shown above the input ("starts with sk-"). */
   hint?: string;
   /**
    * Optional prefix used for cheap client-side validation (warns the
@@ -61,30 +61,37 @@ export interface ApiKeySpec {
    * App should only enforce its presence when that backend is active.
    * Specs without `backendBound` are universal — when `required: true`
    * they're enforced regardless of backend. The provider selector resolves
-   * a provider to its backend (`openrouter` → `pi`, `azure` → `azure`)
-   * before checking, so this stays backend-keyed. Backends the user picks
-   * DIRECTLY (`jcode`, via `--backend=jcode`) bind here by the same rule —
-   * there is no provider indirection for them.
-   *
-   * Kept as an explicit literal union rather than `AgentBackendKind`: `stub`
-   * is keyless by construction, so binding a credential to it would be a
-   * contradiction the type system should reject.
+   * a provider to its backend (`deepseek` → `jcode`) before checking, so
+   * this stays backend-keyed.
    */
-  backendBound?: 'pi' | 'azure' | 'jcode';
+  backendBound?: 'jcode';
 }
 
 export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
   {
+    name: 'deepseek',
+    envVar: 'DEEPSEEK_API_KEY',
+    envFileVar: 'DEEPSEEK_API_KEY_FILE',
+    secretMountPath: '/run/secrets/deepseek_api_key',
+    hostSecretScope: 'huu-deepseek-key',
+    label: 'DeepSeek',
+    hint: 'starts with sk-',
+    validatePrefix: 'sk-',
+    required: true,
+    backendBound: 'jcode',
+  },
+  {
+    // Legacy OpenRouter key — kept for backwards compat with stored configs.
+    // No longer required; not bound to any backend.
     name: 'openrouter',
     envVar: 'OPENROUTER_API_KEY',
     envFileVar: 'OPENROUTER_API_KEY_FILE',
     secretMountPath: '/run/secrets/openrouter_api_key',
     hostSecretScope: 'huu-openrouter-key',
-    label: 'OpenRouter',
+    label: 'OpenRouter (legacy)',
     hint: 'starts with sk-or-',
     validatePrefix: 'sk-or-',
-    required: true,
-    backendBound: 'pi',
+    required: false,
   },
   {
     // AA is purely informational — it enriches the model selector with
@@ -101,60 +108,6 @@ export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
     label: 'Artificial Analysis',
     hint: 'API key from artificialanalysis.ai',
     required: false,
-  },
-  {
-    // Azure API key — used when the Azure AI Foundry provider is selected.
-    // The value is the API key shown in "Keys and Endpoints" in the
-    // Azure AI Foundry portal. `required: false` keeps OpenRouter runs
-    // unblocked. `backendBound: 'azure'` makes findMissingKeysForBackend
-    // enforce it whenever the azure backend is active.
-    name: 'azureApiKey',
-    envVar: 'AZURE_OPENAI_API_KEY',
-    envFileVar: 'AZURE_OPENAI_API_KEY_FILE',
-    secretMountPath: '/run/secrets/azure_openai_api_key',
-    hostSecretScope: 'huu-azure-api-key',
-    label: 'Azure OpenAI',
-    hint: 'API key do portal Azure AI Foundry (Chaves e Endpoints)',
-    required: false,
-    backendBound: 'azure',
-  },
-  {
-    // Azure endpoint URL — the full URL copied from the Azure AI Foundry
-    // portal overview (e.g. https://my-resource.openai.azure.com/openai/v1/).
-    // Stored alongside the API key so the user only enters it once.
-    name: 'azureEndpoint',
-    envVar: 'AZURE_OPENAI_BASE_URL',
-    envFileVar: 'AZURE_OPENAI_BASE_URL_FILE',
-    secretMountPath: '/run/secrets/azure_openai_base_url',
-    hostSecretScope: 'huu-azure-endpoint',
-    label: 'Azure Endpoint URL',
-    hint: 'ex: https://my-resource.openai.azure.com/openai/v1/',
-    required: false,
-    backendBound: 'azure',
-  },
-  {
-    // DeepSeek API key — the credential the `jcode` backend needs. jcode is
-    // spawned as a CLI subprocess configured with the `deepseek-v4-pro`
-    // provider profile, and that profile reads the key from the
-    // DEEPSEEK_API_KEY env var (`api_key_env` in ~/.jcode/config.toml — see
-    // docs/jcode-setup-guide.md §3.1). Declaring it HERE is what makes the
-    // Docker wrapper mount/forward it: docker-reexec iterates this registry,
-    // so before this entry existed `selectBackend('jcode').apiKeySpecName`
-    // pointed at a spec `findSpec` couldn't resolve and the key never
-    // reached the container.
-    // `required: false` keeps OpenRouter/Azure runs from blocking on a key
-    // their backend never uses; `backendBound: 'jcode'` makes
-    // findMissingKeysForBackend enforce it exactly when jcode is active.
-    name: 'deepseek',
-    envVar: 'DEEPSEEK_API_KEY',
-    envFileVar: 'DEEPSEEK_API_KEY_FILE',
-    secretMountPath: '/run/secrets/deepseek_api_key',
-    hostSecretScope: 'huu-deepseek-key',
-    label: 'DeepSeek',
-    hint: 'API key from platform.deepseek.com (starts with sk-)',
-    validatePrefix: 'sk-',
-    required: false,
-    backendBound: 'jcode',
   },
   // ── Web-research providers (surf CLI) ────────────────────────────────
   // Consumed by `ensureSurfKeys()` (src/lib/surf-research.ts), which

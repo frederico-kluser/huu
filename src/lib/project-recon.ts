@@ -21,8 +21,8 @@ import {
 } from './llm-client-factory.js';
 
 /**
- * Default recon model — minimax is fast, cheap, and supports function calling
- * on OpenRouter, so we can fan out up to 10 parallel agents without blowing up
+ * Default recon model — minimax is fast, cheap, and supports function calling,
+ * so we can fan out up to 10 parallel agents without blowing up
  * the user's wallet on the pre-flight stage.
  */
 export const RECON_MODEL = 'minimax/minimax-m2.7';
@@ -59,8 +59,7 @@ export interface RunProjectReconOptions {
   signal?: AbortSignal;
   /**
    * Backend-aware context. When provided, routes through the user's chosen
-   * backend (e.g. Azure). Required when `--backend=azure` is in use,
-   * otherwise recon agents leak charges to OpenRouter.
+   * backend (jcode/DeepSeek). Required for correct backend routing.
    */
   llmContext?: LlmClientContext;
 }
@@ -133,30 +132,20 @@ export async function runProjectRecon(
   if (stub) return runStubRecon(opts, items);
 
   const apiKey = opts.apiKey.trim();
-  const ctxBackend = opts.llmContext?.backend ?? 'pi';
+  const ctxBackend = opts.llmContext?.backend ?? 'jcode';
 
   // Validate credentials up-front so we fail fast with a single, clear
   // error instead of N parallel per-item failures.
-  const hasAzureCreds =
-    ctxBackend === 'azure' &&
-    Boolean(opts.llmContext?.azureApiKey) &&
-    Boolean(opts.llmContext?.azureEndpoint);
-  const hasOpenRouterCreds =
-    ctxBackend !== 'azure' && (apiKey.length > 0 || Boolean(opts.llmContext?.openrouterApiKey));
-  if (!hasAzureCreds && !hasOpenRouterCreds) {
-    const message =
-      ctxBackend === 'azure'
-        ? 'Azure API key/endpoint missing.'
-        : 'OpenRouter API key missing. Set OPENROUTER_API_KEY or mount /run/secrets/openrouter_api_key.';
+  const hasCreds = apiKey.length > 0 || Boolean(opts.llmContext?.deepseekApiKey);
+  if (!hasCreds) {
+    const message = 'DeepSeek API key missing. Set DEEPSEEK_API_KEY or mount /run/secrets/deepseek_api_key.';
     for (const item of items) {
       opts.onUpdate({ agentId: item.tag, status: 'error', error: message });
     }
     throw new Error(message);
   }
 
-  const ctxBackendFinal = ctxBackend;
-  const fallbackModel =
-    ctxBackendFinal === 'azure' ? defaultHelperModel('azure') : RECON_MODEL;
+  const fallbackModel = RECON_MODEL;
   const modelId = (opts.modelId ?? fallbackModel).trim();
 
   // Digest is built once and shared across all items — both faster and more
@@ -164,8 +153,8 @@ export async function runProjectRecon(
   const digest = buildProjectDigest(opts.repoRoot);
 
   const ctx: LlmClientContext = opts.llmContext ?? {
-    backend: 'pi',
-    openrouterApiKey: apiKey,
+    backend: 'jcode',
+    deepseekApiKey: apiKey,
   };
 
   const promises = items.map(async (item): Promise<ReconAgentResult> => {
@@ -271,7 +260,7 @@ const STUB_BULLETS: Partial<Record<ReconCatalogId, string[]>> = {
   ],
   libraries: [
     'ink — React rendering in the terminal.',
-    'langchain + @langchain/openai — LLM calls via OpenRouter.',
+    'langchain + @langchain/openai — LLM calls via DeepSeek API.',
     'zod — structured schema validation.',
     'commander — CLI flag parsing.',
   ],

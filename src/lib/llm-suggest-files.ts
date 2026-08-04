@@ -28,7 +28,7 @@ export interface SuggestFilesInput {
   currentStep: PromptStep;
   /** Repo-relative paths from the file scanner (already gitignore-filtered). */
   availableFiles: string[];
-  /** OpenRouter API key. '' or 'stub' triggers a deterministic stub. */
+  /** DeepSeek API key. '' or 'stub' triggers a deterministic stub. */
   apiKey: string;
   modelId?: string;
   signal?: AbortSignal;
@@ -36,8 +36,7 @@ export interface SuggestFilesInput {
   onProgress?: (message: string) => void;
   /**
    * Backend-aware context. When provided, routes through the user's chosen
-   * backend (e.g. Azure) instead of OpenRouter. Required when `--backend=azure`
-   * is in use, otherwise file-suggestion calls leak charges to OpenRouter.
+   * backend (jcode/DeepSeek). Required for correct backend routing.
    */
   llmContext?: LlmClientContext;
 }
@@ -211,14 +210,13 @@ export async function suggestFilesForStep(
   );
   const { system, user } = buildPrompt(input, filesForPrompt);
 
-  const ctxBackend = input.llmContext?.backend ?? 'pi';
-  const fallbackModel =
-    ctxBackend === 'azure' ? defaultHelperModel('azure') : DEFAULT_ASSISTANT_MODEL;
+  const ctxBackend = input.llmContext?.backend ?? 'jcode';
+  const fallbackModel = DEFAULT_ASSISTANT_MODEL;
   const modelId = (input.modelId ?? fallbackModel).trim();
   progress(`Sending request to ${modelId.replace(/^.*\//, '')}…`);
   const ctx: LlmClientContext = input.llmContext ?? {
-    backend: 'pi',
-    openrouterApiKey: apiKey,
+    backend: 'jcode',
+    deepseekApiKey: apiKey,
   };
   const chat = buildChatClient(ctx, { modelId, temperature: 0.2 });
   const structured = chat.withStructuredOutput(SuggestFilesResponseSchema, {

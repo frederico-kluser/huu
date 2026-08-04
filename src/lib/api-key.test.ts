@@ -66,7 +66,7 @@ describe('api-key registry', () => {
   describe('registry shape', () => {
     it('includes openrouter + artificialAnalysis specs', () => {
       const names = API_KEY_REGISTRY.map((s) => s.name);
-      expect(names).toContain('openrouter');
+      expect(names).toContain('deepseek');
       expect(names).toContain('artificialAnalysis');
     });
 
@@ -86,7 +86,7 @@ describe('api-key registry', () => {
     });
 
     it('findSpec returns by name', () => {
-      const s = findSpec('openrouter');
+      const s = findSpec('deepseek');
       expect(s?.envVar).toBe('OPENROUTER_API_KEY');
     });
 
@@ -114,13 +114,13 @@ describe('api-key registry', () => {
       expect(spec.validatePrefix).toBe('sk-');
     });
 
-    it('deepseek is bound to jcode and optional (never gates other backends)', () => {
+    it('deepseek is bound to jcode and required', () => {
       const spec = findSpec('deepseek')!;
       expect(spec.backendBound).toBe('jcode');
-      // `required: false` on purpose: an OpenRouter or Azure run must not
-      // block on a credential only the jcode backend consumes. The binding,
-      // not the flag, is what enforces it for jcode.
-      expect(spec.required).toBe(false);
+      // `required: true` since the pi removal: jcode is the only backend that
+      // actually talks to a model, so its credential gates every real run.
+      // The binding is what keeps `stub` — the one keyless backend — exempt.
+      expect(spec.required).toBe(true);
     });
 
     it('the research specs are optional AND unbound — invisible to the run gate', () => {
@@ -137,18 +137,18 @@ describe('api-key registry', () => {
 
   describe('resolveApiKey', () => {
     it('returns empty when nothing is set anywhere', () => {
-      const spec = findSpec('openrouter')!;
+      const spec = findSpec('deepseek')!;
       expect(resolveApiKey(spec)).toBe('');
     });
 
     it('reads the env var when set', () => {
-      const spec = findSpec('openrouter')!;
+      const spec = findSpec('deepseek')!;
       process.env.OPENROUTER_API_KEY = '  sk-or-plain  ';
       expect(resolveApiKey(spec)).toBe('sk-or-plain');
     });
 
     it('reads via _FILE env var (trimmed)', () => {
-      const spec = findSpec('openrouter')!;
+      const spec = findSpec('deepseek')!;
       const path = join(tmpDir, 'key.txt');
       writeFileSync(path, 'sk-or-from-file\n');
       process.env.OPENROUTER_API_KEY_FILE = path;
@@ -156,7 +156,7 @@ describe('api-key registry', () => {
     });
 
     it('_FILE wins over plain env when both are set', () => {
-      const spec = findSpec('openrouter')!;
+      const spec = findSpec('deepseek')!;
       const path = join(tmpDir, 'key.txt');
       writeFileSync(path, 'sk-or-from-file');
       process.env.OPENROUTER_API_KEY_FILE = path;
@@ -165,20 +165,20 @@ describe('api-key registry', () => {
     });
 
     it('falls back to plain env when _FILE points at a missing path', () => {
-      const spec = findSpec('openrouter')!;
+      const spec = findSpec('deepseek')!;
       process.env.OPENROUTER_API_KEY_FILE = join(tmpDir, 'does-not-exist');
       process.env.OPENROUTER_API_KEY = 'sk-or-fallback';
       expect(resolveApiKey(spec)).toBe('sk-or-fallback');
     });
 
     it('falls back to the global store when env is empty', () => {
-      const spec = findSpec('openrouter')!;
+      const spec = findSpec('deepseek')!;
       saveApiKey(spec, 'sk-or-from-store');
       expect(resolveApiKey(spec)).toBe('sk-or-from-store');
     });
 
     it('the saved store wins over the env var (explicit beats ambient)', () => {
-      const spec = findSpec('openrouter')!;
+      const spec = findSpec('deepseek')!;
       saveApiKey(spec, 'sk-or-from-store');
       process.env.OPENROUTER_API_KEY = 'sk-or-from-env';
       expect(resolveApiKey(spec)).toBe('sk-or-from-store');
@@ -192,7 +192,7 @@ describe('api-key registry', () => {
   });
 
   describe('resolveApiKeyWithSource', () => {
-    const spec = () => findSpec('openrouter')!;
+    const spec = () => findSpec('deepseek')!;
 
     it('reports source "none" when nothing is set', () => {
       const r = resolveApiKeyWithSource(spec());
@@ -253,7 +253,7 @@ describe('api-key registry', () => {
   });
 
   describe('keyRemedyHint', () => {
-    const spec = () => findSpec('openrouter')!;
+    const spec = () => findSpec('deepseek')!;
 
     it('the stored-overrides-env case names the ignored env var and points at Options', () => {
       const hint = keyRemedyHint(spec(), {
@@ -298,7 +298,7 @@ describe('api-key registry', () => {
 
   describe('saveApiKey', () => {
     it('writes the global store with mode 0600 in a 0700 dir', () => {
-      const spec = findSpec('openrouter')!;
+      const spec = findSpec('deepseek')!;
       saveApiKey(spec, 'sk-or-saved');
       const path = configFilePath();
       expect(path.startsWith(configHome)).toBe(true);
@@ -309,7 +309,7 @@ describe('api-key registry', () => {
     });
 
     it('preserves other keys when saving one', () => {
-      const or = findSpec('openrouter')!;
+      const or = findSpec('deepseek')!;
       const aa = findSpec('artificialAnalysis')!;
       saveApiKey(or, 'sk-or-1');
       saveApiKey(aa, 'aa-2');
@@ -318,7 +318,7 @@ describe('api-key registry', () => {
     });
 
     it('ignores empty values (doesn’t pollute the store)', () => {
-      const spec = findSpec('openrouter')!;
+      const spec = findSpec('deepseek')!;
       saveApiKey(spec, '   ');
       expect(loadStoredApiKey(spec)).toBe('');
     });
@@ -328,7 +328,7 @@ describe('api-key registry', () => {
     it('returns openrouter when nothing is set', () => {
       const missing = findMissingRequiredKeys();
       const names = missing.map((s) => s.name);
-      expect(names).toContain('openrouter');
+      expect(names).toContain('deepseek');
     });
 
     it('does not return artificialAnalysis (required: false)', () => {
@@ -342,15 +342,15 @@ describe('api-key registry', () => {
       process.env.OPENROUTER_API_KEY = 'sk-or-set';
       const missing = findMissingRequiredKeys();
       const names = missing.map((s) => s.name);
-      expect(names).not.toContain('openrouter');
+      expect(names).not.toContain('deepseek');
     });
 
     it('drops a spec once its key is in the global store', () => {
-      const spec = findSpec('openrouter')!;
+      const spec = findSpec('deepseek')!;
       saveApiKey(spec, 'sk-or-stored');
       const missing = findMissingRequiredKeys();
       const names = missing.map((s) => s.name);
-      expect(names).not.toContain('openrouter');
+      expect(names).not.toContain('deepseek');
     });
 
     it('the removed copilot spec is gone from the registry', () => {
@@ -378,9 +378,9 @@ describe('api-key registry', () => {
 
   describe('findMissingKeysForBackend (backend-aware)', () => {
     it('pi backend: requires openrouter (AA + azure optional)', () => {
-      const missing = findMissingKeysForBackend('pi');
+      const missing = findMissingKeysForBackend('jcode');
       const names = missing.map((s) => s.name);
-      expect(names).toContain('openrouter');
+      expect(names).toContain('deepseek');
       // AA is `required: false` — the run flow no longer gates on it.
       // The model selector still uses it when present (graceful degrade).
       expect(names).not.toContain('artificialAnalysis');
@@ -391,22 +391,22 @@ describe('api-key registry', () => {
       // Regression pin for the tavily/parallel/brave additions: they carry no
       // `backendBound` and `required: false`, so with nothing configured the
       // pi gate must still name exactly one missing credential.
-      expect(findMissingKeysForBackend('pi').map((s) => s.name)).toEqual(['openrouter']);
+      expect(findMissingKeysForBackend('jcode').map((s) => s.name)).toEqual(['deepseek']);
     });
 
     it('azure backend: requires the azure key + endpoint (not openrouter)', () => {
-      const missing = findMissingKeysForBackend('azure');
+      const missing = findMissingKeysForBackend('jcode');
       const names = missing.map((s) => s.name);
       expect(names).toContain('azureApiKey');
       expect(names).toContain('azureEndpoint');
-      expect(names).not.toContain('openrouter');
+      expect(names).not.toContain('deepseek');
     });
 
     it('azure backend: still requires the key even though spec is required:false', () => {
       // backend-bound specs are enforced regardless of `required` flag
       // when the matching backend is active — choosing a provider IS
       // the implicit "I need this credential" signal.
-      const missing = findMissingKeysForBackend('azure');
+      const missing = findMissingKeysForBackend('jcode');
       expect(missing.find((s) => s.name === 'azureApiKey')).toBeDefined();
     });
 
@@ -432,43 +432,43 @@ describe('api-key registry', () => {
       expect(resolveApiKey(findSpec('deepseek')!)).toBe('sk-jcode-stored');
     });
 
-    it('deepseek never leaks into another backend\'s gate (and vice versa)', () => {
-      // Cross-backend isolation: a pi run must not ask for the DeepSeek key,
-      // and a jcode run must not ask for the OpenRouter one.
-      expect(findMissingKeysForBackend('pi').map((s) => s.name)).not.toContain('deepseek');
-      expect(findMissingKeysForBackend('azure').map((s) => s.name)).not.toContain('deepseek');
+    it('the legacy openrouter key never gates a jcode run', () => {
+      // OpenRouter survives the pi removal only as a `required: false` entry
+      // kept for stored configs. It carries no `backendBound`, so it must stay
+      // invisible to every backend gate — a jcode run asks for DeepSeek alone.
       expect(findMissingKeysForBackend('jcode').map((s) => s.name)).not.toContain('openrouter');
+      expect(findMissingRequiredKeys().map((s) => s.name)).not.toContain('openrouter');
     });
 
-    it('deepseek does not gate a pi run even when unset (required: false)', () => {
-      expect(findMissingRequiredKeys().map((s) => s.name)).not.toContain('deepseek');
+    it('stub is keyless: no backend-bound spec ever gates it', () => {
+      expect(findMissingKeysForBackend('stub').map((s) => s.name)).not.toContain('deepseek');
     });
 
     it('drops backend-bound spec when its key is set', () => {
       process.env.OPENROUTER_API_KEY = 'sk-or-set';
-      const missing = findMissingKeysForBackend('pi');
+      const missing = findMissingKeysForBackend('jcode');
       const names = missing.map((s) => s.name);
-      expect(names).not.toContain('openrouter');
+      expect(names).not.toContain('deepseek');
     });
 
     it('does not include other backend\'s spec', () => {
       // Even with openrouter set, switching to azure shouldn't list
       // openrouter as still-needed.
       process.env.OPENROUTER_API_KEY = 'sk-or-set';
-      const missing = findMissingKeysForBackend('azure');
+      const missing = findMissingKeysForBackend('jcode');
       const names = missing.map((s) => s.name);
-      expect(names).not.toContain('openrouter');
+      expect(names).not.toContain('deepseek');
     });
   });
 
   describe('findMissingKeysForProvider', () => {
     it('openrouter provider needs the openrouter key', () => {
-      const names = findMissingKeysForProvider('openrouter').map((s) => s.name);
-      expect(names).toContain('openrouter');
+      const names = findMissingKeysForProvider('deepseek').map((s) => s.name);
+      expect(names).toContain('deepseek');
     });
 
     it('azure provider needs the azure key + endpoint', () => {
-      const names = findMissingKeysForProvider('azure').map((s) => s.name);
+      const names = findMissingKeysForProvider('deepseek').map((s) => s.name);
       expect(names).toContain('azureApiKey');
       expect(names).toContain('azureEndpoint');
     });
@@ -495,7 +495,7 @@ describe('api-key registry', () => {
 
     it('save + load + resolve go through the HUU_CONFIG_DIR store', () => {
       process.env.HUU_CONFIG_DIR = join(tmpDir, 'hostcfg');
-      const spec = findSpec('openrouter')!;
+      const spec = findSpec('deepseek')!;
       saveApiKey(spec, 'sk-or-host');
       expect(loadStoredApiKey(spec)).toBe('sk-or-host');
       expect(resolveApiKeyWithSource(spec)).toMatchObject({
@@ -510,7 +510,7 @@ describe('api-key registry', () => {
 
   describe('clearStoredApiKey', () => {
     it('removes the entry so resolution falls back to the env var', () => {
-      const spec = findSpec('openrouter')!;
+      const spec = findSpec('deepseek')!;
       saveApiKey(spec, 'sk-or-stale');
       process.env.OPENROUTER_API_KEY = 'sk-or-fresh';
       expect(resolveApiKeyWithSource(spec).source).toBe('stored');
@@ -522,7 +522,7 @@ describe('api-key registry', () => {
     });
 
     it('keeps OTHER specs untouched and returns false when nothing was stored', () => {
-      const or = findSpec('openrouter')!;
+      const or = findSpec('deepseek')!;
       const az = findSpec('azureApiKey')!;
       saveApiKey(or, 'sk-or-keep');
       saveApiKey(az, 'az-keep');

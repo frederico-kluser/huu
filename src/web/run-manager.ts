@@ -170,7 +170,7 @@ const IDLE_SNAPSHOT: RunSnapshot = {
   runId: '',
   pipelineName: '',
   runDirectory: '',
-  backend: 'pi',
+  backend: 'jcode',
   modelId: '',
   startedAt: 0,
   state: null,
@@ -490,8 +490,8 @@ export class WebRunManager {
             `Clear the saved key in ⚙ Options to fall back to ${spec.envVar}.`,
         );
       }
-      if (params.backend === 'azure') {
-        const endpointSpec = findSpec('azureEndpoint');
+      if (false) {
+        const endpointSpec = findSpec('deepseek')!;
         endpoint =
           params.endpoint?.trim() ||
           (endpointSpec ? resolveApiKey(endpointSpec) : '') ||
@@ -508,8 +508,7 @@ export class WebRunManager {
       apiKey: apiKey || 'stub',
       modelId: params.modelId,
       backend: params.backend,
-      provider: params.provider ?? backendToProvider(params.backend),
-      endpoint,
+            endpoint,
       apiKeySource: keySource,
     };
 

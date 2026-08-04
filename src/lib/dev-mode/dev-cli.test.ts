@@ -56,13 +56,13 @@ vi.mock('./dev-driver.js', async (importOriginal) => ({
 }));
 
 /** `parseDevCliArgs` or a thrown assertion — keeps the happy path unindented. */
-function parseOk(args: string[], backend: 'pi' | 'stub' | 'azure' = 'pi') {
+function parseOk(args: string[], backend: 'jcode' | 'stub' = 'jcode') {
   const parsed = parseDevCliArgs(args, backend);
   if (!parsed.ok) throw new Error(`expected a parse, got refusal: ${parsed.message}`);
   return parsed.options;
 }
 
-function parseFail(args: string[], backend: 'pi' | 'stub' | 'azure' = 'pi'): string {
+function parseFail(args: string[], backend: 'jcode' | 'stub' = 'jcode'): string {
   const parsed = parseDevCliArgs(args, backend);
   if (parsed.ok) throw new Error('expected a refusal, got a parse');
   return parsed.message;
@@ -224,13 +224,13 @@ describe('parseDevCliArgs — pi registry preflight', () => {
 
   it('every shipped preset survives its own preflight', () => {
     for (const name of Object.keys(DEV_MODEL_PRESETS)) {
-      const parsed = parseDevCliArgs(['g', '--model=deepseek/deepseek-v4-pro', `--models=${name}`], 'pi');
+      const parsed = parseDevCliArgs(['g', '--model=deepseek/deepseek-v4-pro', `--models=${name}`], 'jcode');
       expect(parsed.ok, `preset ${name}: ${parsed.ok ? '' : parsed.message}`).toBe(true);
     }
   });
 
   it('does not preflight non-pi backends against the pi registry', () => {
-    const opts = parseOk(['g', `--${DEV_MODEL_ROLE_FLAGS.worker}=my-azure-deployment`, '--model=m'], 'azure');
+    const opts = parseOk(['g', `--${DEV_MODEL_ROLE_FLAGS.worker}=my-azure-deployment`, '--model=m'], 'jcode');
     expect(opts.models?.worker).toBe('my-azure-deployment');
   });
 });

@@ -33,7 +33,7 @@ function baseState(overrides: Partial<FsmState> = {}): FsmState {
     projectDirs: [],
     modelId: '',
     conflictResolverModelId: '',
-    backendKind: 'pi',
+    backendKind: 'jcode',
     apiKey: '',
     requiresApiKey: true,
     pipelineSourceName: null,
@@ -65,7 +65,7 @@ describe('screen-fsm', () => {
 
     it('options.close returns to welcome', () => {
       const next = reduce(
-        baseState({ screen: { kind: 'options', focusSpecName: 'openrouter' } }),
+        baseState({ screen: { kind: 'options', focusSpecName: 'deepseek' } }),
         { type: 'options.close' },
       );
       expect(next.screen).toEqual({ kind: 'welcome' });
@@ -73,25 +73,25 @@ describe('screen-fsm', () => {
 
     it('run.authError opens options focused on the rejected provider', () => {
       const next = reduce(
-        baseState({ screen: { kind: 'run', modelId: 'm', apiKey: 'k' }, backendKind: 'pi' }),
-        { type: 'run.authError', backendKind: 'azure', specName: 'azureApiKey' },
+        baseState({ screen: { kind: 'run', modelId: 'm', apiKey: 'k' }, backendKind: 'jcode' }),
+        { type: 'run.authError', backendKind: 'jcode', specName: 'azureApiKey' },
       );
       expect(next.screen).toEqual({ kind: 'options', focusSpecName: 'azureApiKey' });
       // Backend is carried over so a follow-up run uses the right backend.
-      expect(next.backendKind).toBe('azure');
+      expect(next.backendKind).toBe('deepseek');
     });
   });
 
   describe('initialState', () => {
     it('starts on welcome when autoStart is false', () => {
       const s = initialState({
-        openrouterResolvedKey: 'KEY',
+        deepseekResolvedKey: 'KEY',
         requiresApiKey: true,
       });
       expect(s.screen).toEqual({ kind: 'welcome' });
       expect(s.pipeline).toBeNull();
       expect(s.apiKey).toBe('KEY');
-      expect(s.backendKind).toBe('pi');
+      expect(s.backendKind).toBe('jcode');
       expect(s.requiresApiKey).toBe(true);
     });
 
@@ -99,7 +99,7 @@ describe('screen-fsm', () => {
       const s = initialState({
         autoStart: true,
         initialPipeline: pipelineWithoutModels,
-        openrouterResolvedKey: '',
+        deepseekResolvedKey: '',
         requiresApiKey: false,
       });
       expect(s.screen).toEqual({ kind: 'pipeline-editor' });
@@ -109,7 +109,7 @@ describe('screen-fsm', () => {
     it('falls back to welcome when autoStart is true but no pipeline', () => {
       const s = initialState({
         autoStart: true,
-        openrouterResolvedKey: '',
+        deepseekResolvedKey: '',
         requiresApiKey: false,
       });
       expect(s.screen).toEqual({ kind: 'welcome' });
@@ -117,11 +117,11 @@ describe('screen-fsm', () => {
 
     it('uses provided initialBackend', () => {
       const s = initialState({
-        initialBackend: 'azure',
-        openrouterResolvedKey: '',
+        initialBackend: 'jcode',
+        deepseekResolvedKey: '',
         requiresApiKey: true,
       });
-      expect(s.backendKind).toBe('azure');
+      expect(s.backendKind).toBe('deepseek');
     });
   });
 
@@ -214,7 +214,7 @@ describe('screen-fsm', () => {
       }
       expect(next.screen).toEqual({
         kind: 'resolver-model-selector',
-        backendKind: 'pi',
+        backendKind: 'jcode',
         modelId: 'm',
         apiKey: 'k',
       });
@@ -268,7 +268,7 @@ describe('screen-fsm', () => {
       const s = baseState({
         projectDirs: dirs,
         pipelines: [pipelineAllModels],
-        screen: { kind: 'resolver-model-selector', backendKind: 'pi', modelId: 'm', apiKey: 'k' },
+        screen: { kind: 'resolver-model-selector', backendKind: 'jcode', modelId: 'm', apiKey: 'k' },
       });
       expect(reduce(s, { type: 'resolverModelSelector.skip' }).screen).toEqual({
         kind: 'run-queue',
@@ -282,7 +282,7 @@ describe('screen-fsm', () => {
 
     it('without marked dirs the launch config still goes straight to the run', () => {
       const s = baseState({
-        screen: { kind: 'resolver-model-selector', backendKind: 'pi', modelId: 'm', apiKey: 'k' },
+        screen: { kind: 'resolver-model-selector', backendKind: 'jcode', modelId: 'm', apiKey: 'k' },
       });
       expect(reduce(s, { type: 'resolverModelSelector.skip' }).screen).toEqual({
         kind: 'run',
@@ -422,7 +422,7 @@ describe('screen-fsm', () => {
         pipeline: pipelineWithoutModels,
         initialBackendSet: true,
       });
-      expect(next.screen).toEqual({ kind: 'model-selector', backendKind: 'pi' });
+      expect(next.screen).toEqual({ kind: 'model-selector', backendKind: 'jcode' });
     });
   });
 
@@ -455,13 +455,13 @@ describe('screen-fsm', () => {
         baseState({ screen: { kind: 'backend-selector' }, apiKey: 'AK' }),
         {
           type: 'backend.select',
-          backendKind: 'azure',
+          backendKind: 'jcode',
           requiresApiKey: false,
           skipModelSelector: true,
           firstStepModelId: 'gpt-z',
         },
       );
-      expect(next.backendKind).toBe('azure');
+      expect(next.backendKind).toBe('deepseek');
       expect(next.requiresApiKey).toBe(false);
       expect(next.modelId).toBe('gpt-z');
       expect(next.screen).toEqual({ kind: 'run', modelId: 'gpt-z', apiKey: 'AK' });
@@ -469,12 +469,12 @@ describe('screen-fsm', () => {
     it('backend.select skipModelSelector=false → model-selector', () => {
       const next = reduce(baseState({ screen: { kind: 'backend-selector' } }), {
         type: 'backend.select',
-        backendKind: 'pi',
+        backendKind: 'jcode',
         requiresApiKey: true,
         skipModelSelector: false,
       });
-      expect(next.screen).toEqual({ kind: 'model-selector', backendKind: 'pi' });
-      expect(next.backendKind).toBe('pi');
+      expect(next.screen).toEqual({ kind: 'model-selector', backendKind: 'jcode' });
+      expect(next.backendKind).toBe('jcode');
       expect(next.requiresApiKey).toBe(true);
     });
     it('backend.cancel → pipeline-editor', () => {
@@ -598,7 +598,7 @@ describe('screen-fsm', () => {
   describe('modelSelector transitions', () => {
     const fakeMissing: ApiKeySpec[] = [
       {
-        name: 'openrouter',
+        name: 'deepseek',
         envVar: 'OPENROUTER_API_KEY',
         label: 'OpenRouter',
         required: true,
@@ -607,12 +607,12 @@ describe('screen-fsm', () => {
 
     it('select with requiresApiKey=false → timeout-prompt (uses state.apiKey)', () => {
       const next = reduce(
-        baseState({ screen: { kind: 'model-selector', backendKind: 'pi' }, apiKey: 'OLD' }),
+        baseState({ screen: { kind: 'model-selector', backendKind: 'jcode' }, apiKey: 'OLD' }),
         {
           type: 'modelSelector.select',
           modelId: 'm1',
           requiresApiKey: false,
-          backendKind: 'pi',
+          backendKind: 'jcode',
           missingKeys: [],
           resolvedApiKey: '',
         },
@@ -627,7 +627,7 @@ describe('screen-fsm', () => {
 
     it('select with backend=stub → timeout-prompt regardless of requiresApiKey', () => {
       const next = reduce(
-        baseState({ screen: { kind: 'model-selector', backendKind: 'pi' }, apiKey: 'OLD' }),
+        baseState({ screen: { kind: 'model-selector', backendKind: 'jcode' }, apiKey: 'OLD' }),
         {
           type: 'modelSelector.select',
           modelId: 'm1',
@@ -642,11 +642,11 @@ describe('screen-fsm', () => {
     });
 
     it('select with missingKeys → api-key', () => {
-      const next = reduce(baseState({ screen: { kind: 'model-selector', backendKind: 'pi' } }), {
+      const next = reduce(baseState({ screen: { kind: 'model-selector', backendKind: 'jcode' } }), {
         type: 'modelSelector.select',
         modelId: 'm1',
         requiresApiKey: true,
-        backendKind: 'pi',
+        backendKind: 'jcode',
         missingKeys: fakeMissing,
         resolvedApiKey: '',
       });
@@ -654,11 +654,11 @@ describe('screen-fsm', () => {
     });
 
     it('select with no missing → timeout-prompt with resolved key', () => {
-      const next = reduce(baseState({ screen: { kind: 'model-selector', backendKind: 'pi' } }), {
+      const next = reduce(baseState({ screen: { kind: 'model-selector', backendKind: 'jcode' } }), {
         type: 'modelSelector.select',
         modelId: 'm1',
         requiresApiKey: true,
-        backendKind: 'pi',
+        backendKind: 'jcode',
         missingKeys: [],
         resolvedApiKey: 'NEW',
       });
@@ -671,7 +671,7 @@ describe('screen-fsm', () => {
     });
 
     it('cancel with initialBackendSet=true → pipeline-editor', () => {
-      const next = reduce(baseState({ screen: { kind: 'model-selector', backendKind: 'pi' } }), {
+      const next = reduce(baseState({ screen: { kind: 'model-selector', backendKind: 'jcode' } }), {
         type: 'modelSelector.cancel',
         initialBackendSet: true,
       });
@@ -679,7 +679,7 @@ describe('screen-fsm', () => {
     });
 
     it('cancel with initialBackendSet=false → backend-selector', () => {
-      const next = reduce(baseState({ screen: { kind: 'model-selector', backendKind: 'pi' } }), {
+      const next = reduce(baseState({ screen: { kind: 'model-selector', backendKind: 'jcode' } }), {
         type: 'modelSelector.cancel',
         initialBackendSet: false,
       });
@@ -708,7 +708,7 @@ describe('screen-fsm', () => {
         baseState({ screen: { kind: 'api-key', missing: [] } }),
         { type: 'apiKey.cancel' },
       );
-      expect(next.screen).toEqual({ kind: 'model-selector', backendKind: 'pi' });
+      expect(next.screen).toEqual({ kind: 'model-selector', backendKind: 'jcode' });
     });
   });
 
@@ -727,7 +727,7 @@ describe('screen-fsm', () => {
       expect(pipelineWithoutModels.cardTimeoutMs).toBeUndefined();
       expect(next.screen).toEqual({
         kind: 'resolver-model-selector',
-        backendKind: 'pi',
+        backendKind: 'jcode',
         modelId: 'm1',
         apiKey: 'AK',
       });
@@ -742,7 +742,7 @@ describe('screen-fsm', () => {
       expect(next.pipeline).toBeNull();
       expect(next.screen).toEqual({
         kind: 'resolver-model-selector',
-        backendKind: 'pi',
+        backendKind: 'jcode',
         modelId: 'm1',
         apiKey: 'AK',
       });
@@ -754,7 +754,7 @@ describe('screen-fsm', () => {
         }),
         { type: 'timeout.cancel' },
       );
-      expect(next.screen).toEqual({ kind: 'model-selector', backendKind: 'pi' });
+      expect(next.screen).toEqual({ kind: 'model-selector', backendKind: 'jcode' });
     });
   });
 
@@ -762,7 +762,7 @@ describe('screen-fsm', () => {
     it('select pins integrationModelId on the pipeline and goes to run', () => {
       const next = reduce(
         baseState({
-          screen: { kind: 'resolver-model-selector', backendKind: 'pi', modelId: 'm1', apiKey: 'AK' },
+          screen: { kind: 'resolver-model-selector', backendKind: 'jcode', modelId: 'm1', apiKey: 'AK' },
           pipeline: pipelineWithoutModels,
         }),
         { type: 'resolverModelSelector.select', modelId: 'deepseek/deepseek-v4-pro' },
@@ -776,7 +776,7 @@ describe('screen-fsm', () => {
     it('select applies integrationModelId to every pipeline in a batch', () => {
       const next = reduce(
         baseState({
-          screen: { kind: 'resolver-model-selector', backendKind: 'pi', modelId: 'm1', apiKey: 'AK' },
+          screen: { kind: 'resolver-model-selector', backendKind: 'jcode', modelId: 'm1', apiKey: 'AK' },
           pipelines: [pipelineWithoutModels, pipelineAllModels],
         }),
         { type: 'resolverModelSelector.select', modelId: 'resolver-x' },
@@ -789,7 +789,7 @@ describe('screen-fsm', () => {
     it('skip goes to run without touching the pipeline (resolver inherits run model)', () => {
       const next = reduce(
         baseState({
-          screen: { kind: 'resolver-model-selector', backendKind: 'pi', modelId: 'm1', apiKey: 'AK' },
+          screen: { kind: 'resolver-model-selector', backendKind: 'jcode', modelId: 'm1', apiKey: 'AK' },
           pipeline: pipelineWithoutModels,
         }),
         { type: 'resolverModelSelector.skip' },
@@ -841,11 +841,11 @@ describe('screen-fsm', () => {
   describe('runDirect (skip-model fast path)', () => {
     const missing: ApiKeySpec[] = [
       {
-        name: 'openrouter',
+        name: 'deepseek',
         envVar: 'OPENROUTER_API_KEY',
         envFileVar: 'OPENROUTER_API_KEY_FILE',
         secretMountPath: '/run/secrets/openrouter',
-        hostSecretScope: 'openrouter',
+        hostSecretScope: 'deepseek',
         required: true,
         label: 'OpenRouter',
       },
@@ -886,7 +886,7 @@ describe('screen-fsm', () => {
         missingKeys: missing,
         resolvedApiKey: '',
         requiresApiKey: true,
-        backendKind: 'pi',
+        backendKind: 'jcode',
       });
       expect(next.screen).toEqual({ kind: 'api-key', missing });
       expect(next.modelId).toBe('gpt-x');
@@ -899,7 +899,7 @@ describe('screen-fsm', () => {
         missingKeys: [],
         resolvedApiKey: 'RESOLVED',
         requiresApiKey: true,
-        backendKind: 'pi',
+        backendKind: 'jcode',
       });
       expect(next.screen).toEqual({ kind: 'run', modelId: 'gpt-x', apiKey: 'RESOLVED' });
       expect(next.apiKey).toBe('RESOLVED');
@@ -1045,7 +1045,7 @@ describe('screen-fsm', () => {
       const resolver = reduce(
         {
           ...launched,
-          screen: { kind: 'resolver-model-selector', backendKind: 'pi', modelId: 'm', apiKey: 'k' },
+          screen: { kind: 'resolver-model-selector', backendKind: 'jcode', modelId: 'm', apiKey: 'k' },
         },
         { type: 'resolverModelSelector.skip' },
       );
@@ -1062,7 +1062,7 @@ describe('screen-fsm', () => {
       const resolver = reduce(
         {
           ...launched,
-          screen: { kind: 'resolver-model-selector', backendKind: 'pi', modelId: 'm', apiKey: 'k' },
+          screen: { kind: 'resolver-model-selector', backendKind: 'jcode', modelId: 'm', apiKey: 'k' },
         },
         { type: 'resolverModelSelector.skip' },
       );

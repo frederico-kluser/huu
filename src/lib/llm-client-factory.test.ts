@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { buildChatClient, type LlmClientContext } from './llm-client-factory.js';
 
 const openrouterCtx: LlmClientContext = {
-  backend: 'pi',
-  openrouterApiKey: 'sk-or-test-key',
+  backend: 'jcode',
+  deepseekApiKey: 'sk-or-test-key',
 };
 
 const azureCtx: LlmClientContext = {
-  backend: 'azure',
-  azureApiKey: 'az-test-key',
-  azureEndpoint: 'https://example.openai.azure.com/openai/v1/',
+  backend: 'jcode',
+  deepseekApiKey: 'az-test-key',
+  deepseekEndpoint: 'https://example.openai.azure.com/openai/v1/',
 };
 
 describe('buildChatClient reasoningEffort', () => {

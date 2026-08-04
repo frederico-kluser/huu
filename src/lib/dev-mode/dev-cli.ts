@@ -21,7 +21,6 @@ import { resolve as resolvePath } from 'node:path';
 import { findSpec, resolveApiKey } from '../api-key.js';
 import { parseDevGraph } from '../dev-graph/graph-schema.js';
 import { DEVGRAPH_SLUG_PATTERN, type DevGraph } from '../dev-graph/graph-types.js';
-import { formatDevModelPreflightError, preflightDevModelPolicy } from '../model-registry-check.js';
 import { selectBackend, type AgentBackendKind } from '../../orchestrator/backends/registry.js';
 import {
   DEV_DEFAULT_MAX_EPOCHS,
@@ -56,7 +55,7 @@ export interface RunDevCliArgs {
   /** Argv after the `dev` subcommand, with CLI-global flags already filtered. */
   args: string[];
   cwd: string;
-  /** Backend chosen via `--backend=` / `--provider=` / `--stub`; defaults to pi. */
+  /** Backend chosen via `--backend=` / `--provider=` / `--stub`; defaults to jcode. */
   backend?: AgentBackendKind;
   concurrency?: number;
   autoScale?: boolean;
@@ -211,7 +210,7 @@ export function formatPlan(plan: DevPlan, epoch: number, warnings: readonly stri
  * actually run on.
  *
  * All SEVEN roles are listed, including `planner`. It is the one id that does
- * NOT go through the pi registry (it is a structured-output call), which is
+ * NOT go through the model registry (it is a structured-output call), which is
  * exactly why an operator needs to see it next to the six that do — otherwise
  * the one id the preflight deliberately cannot vouch for is also the one id
  * nobody is shown. Roles the policy does not name are marked as inheriting
@@ -228,7 +227,7 @@ export function formatModelRouting(
     const routed = Boolean(policy?.[role]?.trim());
     const note = routed
       ? role === 'planner'
-        ? '  ← orquestrador cego (structured output, fora do registry do pi)'
+        ? '  ← orquestrador cego (structured output, outside model registry)'
         : ''
       : '  ← --model';
     lines.push(`    ${role.padEnd(width)}  ${resolved[role]}${note}`);
@@ -333,7 +332,7 @@ export function describeEvent(event: DevEvent, ctx: DevEventContext = {}): strin
     case 'knowledge':
       return `knowledge: ${event.status.present ? 'presente' : 'ausente'} — ${event.status.reason}`;
     case 'bootstrap-start':
-      return `bootstrap de knowledge com pi (${event.model})…`;
+      return `bootstrap de knowledge com jcode (deepseek) (${event.model})…`;
     case 'bootstrap-done':
       return `bootstrap ${event.ok ? 'concluído' : 'FALHOU'}`;
     case 'bootstrap-progress':
@@ -439,13 +438,13 @@ function parseModelFlags(
     preset = rawPreset as DevModelPreset;
   }
 
-  // `defaultDevModelPolicy` returns {} for azure/stub on purpose: every id in
-  // the presets is an OpenRouter id served by pi. Say so instead of silently
+  // `defaultDevModelPolicy` returns {} for stub on purpose: every id in
+  // the presets is served by jcode (deepseek). Say so instead of silently
   // dropping a flag the user typed.
   const policy: DevModelPolicy = preset ? defaultDevModelPolicy(backend, preset) : {};
-  if (preset && backend !== 'pi' && Object.keys(policy).length === 0 && Object.keys(DEV_MODEL_PRESETS[preset]).length > 0) {
+  if (preset && backend !== 'jcode' && Object.keys(policy).length === 0 && Object.keys(DEV_MODEL_PRESETS[preset]).length > 0) {
     warnings.push(
-      `--models=${preset} ignorado no backend ${backend}: os ids do preset são da OpenRouter, servidos pelo backend pi.`,
+      `--models=${preset} ignorado no backend ${backend}: os ids do preset são servidos pelo backend jcode (deepseek).`,
     );
   }
 
@@ -457,7 +456,7 @@ function parseModelFlags(
     const id = raw.trim();
     if (!id) return { error: `huu dev: --${flag}=<id> expects a model id` };
     // Explicit per-role flags apply on ANY backend — unlike the preset, the
-    // user named this id for this role, and an Azure deployment name in a
+    // user named this id for this role explicitly, and a custom model id in a
     // worker slot is a legitimate thing to want.
     policy[role] = id;
     anyRoleFlag = true;
@@ -471,7 +470,7 @@ function parseModelFlags(
  * Parse argv into a runnable option set, or into the message that refuses it.
  * Pure: no fs, no network, no process state — the whole surface the tests need.
  */
-export function parseDevCliArgs(args: readonly string[], backend: AgentBackendKind = 'pi'): DevCliParse {
+export function parseDevCliArgs(args: readonly string[], backend: AgentBackendKind = 'jcode'): DevCliParse {
   const goal = args.find((a) => !a.startsWith('--'));
   if (!goal || goal.trim().length === 0) return { ok: false, message: USAGE };
 
@@ -571,14 +570,8 @@ export function parseDevCliArgs(args: readonly string[], backend: AgentBackendKi
     }
   }
 
-  // Border preflight: an id the pi registry has never heard of throws inside
-  // the first agent, AFTER its worktree and branch exist. `planner` is
-  // deliberately never checked — it runs through the structured-output client
-  // (LangChain → OpenRouter), not the pi registry, which is why the factory
-  // default can route it to `z-ai/glm-5.2`, an id the registry does not carry.
-  // Checking it would make huu refuse to start in its own default config.
-  const issues = preflightDevModelPolicy(policy, backend);
-  if (issues.length > 0) return { ok: false, message: `huu dev: ${formatDevModelPreflightError(issues)}` };
+  // Model preflight skipped in v3.0 — the model registry is not available.
+  // Id validation happens at the factory level when the first agent is built.
 
   const methodology = parseMethodologyFlags(args);
 
@@ -641,7 +634,7 @@ export function parseDevCliArgs(args: readonly string[], backend: AgentBackendKi
  */
 export async function runDevCli(input: RunDevCliArgs): Promise<number> {
   const { args, cwd } = input;
-  const backend: AgentBackendKind = input.backend ?? 'pi';
+  const backend: AgentBackendKind = input.backend ?? 'jcode';
 
   const parsed = parseDevCliArgs(args, backend);
   if (!parsed.ok) {
@@ -656,27 +649,19 @@ export async function runDevCli(input: RunDevCliArgs): Promise<number> {
   let apiKey = '';
   let endpoint: string | undefined;
   if (bundle.requiresApiKey) {
-    // Credential name comes from the bundle, never from a backend ternary:
+    // Credential name comes from the bundle, never hard-coded here:
     // `huu dev --backend=jcode` used to demand the OpenRouter key (and refuse
-    // to start without it) because this branch hard-coded the pi/azure pair.
-    const specName = bundle.apiKeySpecName ?? 'openrouter';
+    // to start without it) because this branch pinned the name itself.
+    const specName = bundle.apiKeySpecName ?? 'deepseek';
     const spec = findSpec(specName);
     if (spec) apiKey = resolveApiKey(spec);
     if (!apiKey) {
       err(
-        `huu dev: the ${backend === 'azure' ? 'Azure AI Foundry' : backend === 'pi' ? 'OpenRouter' : (spec?.label ?? bundle.label)} provider requires an API key but ` +
+        `huu dev: the ${spec?.label ?? bundle.label} provider requires an API key but ` +
           `${spec?.envVar ?? specName} is not set. Export it, mount a secret at ` +
           `${spec?.secretMountPath ?? '/run/secrets/<key>'}, or persist it via the TUI first.`,
       );
       return 1;
-    }
-    if (backend === 'azure') {
-      const endpointSpec = findSpec('azureEndpoint');
-      if (endpointSpec) endpoint = resolveApiKey(endpointSpec) || undefined;
-      if (!endpoint) {
-        err('huu dev: the Azure AI Foundry provider requires AZURE_OPENAI_BASE_URL. Export it or persist it via the TUI first.');
-        return 1;
-      }
     }
   }
 
@@ -684,7 +669,7 @@ export async function runDevCli(input: RunDevCliArgs): Promise<number> {
     apiKey: apiKey || 'stub',
     modelId: opts.modelId,
     backend,
-    provider: backend === 'azure' ? 'azure' : 'openrouter',
+    // provider removed from AppConfig
     endpoint,
   };
 
