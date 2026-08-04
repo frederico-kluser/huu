@@ -19,12 +19,15 @@ import { findSpec } from '../lib/api-key.js';
 import { createKeyPoolHandle, type KeyPoolHandle } from '../lib/api-key-pool.js';
 import { generateRunId } from '../lib/run-id.js';
 import {
+  resolveDevGraph,
   runDevMode,
   type DevEvent,
+  type DevGraphAnnouncement,
   type DevRunPhase,
   type DevStopReason,
   type OrphanAction,
 } from '../lib/dev-mode/dev-driver.js';
+import type { DevGraph } from '../lib/dev-graph/graph-types.js';
 import type { OrphanBranch } from '../lib/dev-mode/orphan-branches.js';
 import { activeMethodologies } from '../lib/dev-mode/methodology-registry.js';
 import {
@@ -88,6 +91,39 @@ export interface DevOrphanBranch {
   epoch?: number;
 }
 
+/**
+ * Why a DRAWN method was refused at the border — the three `DevStopReason`s
+ * {@link resolveDevGraph} can answer with, and no other.
+ */
+export type DevStartRefusalReason = Extract<
+  DevStopReason,
+  'graph-not-found' | 'graph-invalid' | 'graph-conflict'
+>;
+
+/**
+ * A start request the manager refuses BEFORE a session exists.
+ *
+ * WHY A TYPED ERROR AND NOT A BARE `Error`. `start()` already signals a bad
+ * request by throwing, and `server.ts` grades those by regex-ing the message
+ * (`/already running/` ⇒ 409). That is fine for one sentence and hopeless for a
+ * refusal the browser wants to ACT on: "the drawing you picked no longer
+ * exists" and "the drawing does not compile" are different repairs, and the
+ * only stable handle on the difference is the reason CODE. So the code travels
+ * as a field, the prose stays the message, and the HTTP layer maps neither by
+ * parsing English.
+ *
+ * A refusal costs nothing: it is thrown before `this.session` is assigned, so
+ * no worktree, no run id, no key resolution and no lock outlive it.
+ */
+export class DevStartRefusal extends Error {
+  readonly reason: DevStartRefusalReason;
+  constructor(reason: DevStartRefusalReason, detail: string) {
+    super(`${reason}: ${detail}`);
+    this.name = 'DevStartRefusal';
+    this.reason = reason;
+  }
+}
+
 export interface DevSessionSnapshot {
   active: boolean;
   /**
@@ -121,14 +157,46 @@ export interface DevSessionSnapshot {
    */
   methodologies: string[];
   backend: AgentBackendKind;
-  /** Epoch ceiling, or null when the session runs until the goal is done. */
+  /**
+   * Epoch ceiling, or null when the session runs until the goal is done.
+   *
+   * A DRAWN method reads back as `1`, whatever the browser posted (which is
+   * normally nothing). That is not a re-interpretation: the driver pins a graph
+   * session to one epoch — `resolveDevGraph` refuses an explicit ≥ 2 outright —
+   * so reporting `null` ("no ceiling") here would be the snapshot contradicting
+   * the session it describes.
+   */
   maxEpochs: number | null;
   maxFronts: number;
   currentEpoch: number;
   knowledge?: { present: boolean; reason: string; skillCount: number };
   knowledgeBootstrapped: boolean;
+  /**
+   * The DRAWING this session runs, when the human handed one over instead of
+   * letting the planner write the topology. Absent ⇒ an ordinary planner
+   * session, exactly as before.
+   *
+   * Set at `start()`, not at the `planned` event: the browser has to be able to
+   * say "this session is your method, not a model's" from the very first frame,
+   * including while the knowledge bootstrap is still running. The FULL
+   * compiled announcement arrives later, on {@link DevSessionSnapshot.graph}.
+   */
+  drawnMethod?: { id: string; name: string; description?: string };
+  /**
+   * What the drawing compiled to, as announced on the `planned` event: the
+   * emitted node order, the steps each node produced, and the blackboard root
+   * its artifacts land under. Absent on the planner path and until the drawing
+   * compiles.
+   */
+  graph?: DevGraphAnnouncement;
   /** The plan being approved or currently running. */
   plan?: DevPlan;
+  /**
+   * Everything the compiler and the SESSION want the human to know before the
+   * gate: on the graph path this is where `graphSessionWarnings` lands, which
+   * is how a user discovers that the methodology checkboxes and the per-role
+   * routing they left on were NOT compiled into their drawing.
+   */
   planWarnings: string[];
   /** True while `approve()` is the only thing the session is waiting on. */
   awaitingApproval: boolean;
@@ -197,6 +265,27 @@ export interface StartDevParams {
    * exactly the pipeline it compiles today.
    */
   methodology?: DevMethodology;
+  /**
+   * THE METHOD, DRAWN BY A HUMAN — by id. Names a graph saved under
+   * `.huu/dev/graphs/` INSIDE {@link StartDevParams.runDirectory} (the same
+   * directory `/api/graphs?dir=` writes to, deliberately: the editor and the
+   * runner must agree about where a method lives).
+   *
+   * Present ⇒ the LLM planner is never called, Phases A and B do not happen,
+   * and the session is exactly one epoch. Absent — together with
+   * {@link StartDevParams.graph} — leaves every byte of the request on the
+   * planner path it was on before this field existed.
+   */
+  graphId?: string;
+  /**
+   * The same thing by value, for a canvas that has not been saved (or a caller
+   * that already holds the object). Must be a graph the schema accepts — the
+   * server parses it with `parseDevGraph` before it gets here.
+   *
+   * Setting BOTH is fine while they name the same drawing; naming two different
+   * ones is refused ({@link DevStartRefusal}, `graph-conflict`).
+   */
+  graph?: DevGraph;
 }
 
 const MAX_LOG_LINES = 300;
@@ -259,8 +348,44 @@ export class WebDevManager {
   }
 
   /**
+   * The DRAWN METHOD a start request names, resolved at the BORDER.
+   *
+   * `resolveDevGraph` is exported by the driver for exactly this: it never
+   * throws, it answers with data, and it is the SAME function `runDevMode` will
+   * run a moment later — so a selection the driver would stop on becomes a 4xx
+   * here instead of a session that opens, costs a worktree and immediately dies
+   * with `graph-not-found`. Resolving twice is deliberate and free on this path:
+   * the resolved drawing is handed over INLINE, so the store is read once and a
+   * file edited between the two calls cannot swap the method mid-flight.
+   *
+   * `null` — and only `null` — means "no drawing was asked for", which is what
+   * keeps a request carrying neither field byte-identical to today's.
+   */
+  private resolveDrawing(
+    params: StartDevParams,
+    cwd: string,
+    goal: string,
+    approval: DevApprovalMode,
+    /** The EFFECTIVE ceiling, i.e. the number the driver is about to receive. */
+    maxEpochs: number | null,
+  ): DevGraph | null {
+    const resolution = resolveDevGraph(cwd, {
+      goal,
+      approval,
+      ...(maxEpochs === null ? {} : { maxEpochs }),
+      ...(params.graph !== undefined ? { graph: params.graph } : {}),
+      ...(params.graphId !== undefined ? { graphId: params.graphId } : {}),
+    });
+    if (resolution === null) return null;
+    if (!resolution.ok) throw new DevStartRefusal(resolution.reason, resolution.detail);
+    return resolution.graph;
+  }
+
+  /**
    * Start a session. Throws (mapped to 4xx by the server) on a bad request or
-   * when a session is already running.
+   * when a session is already running; a refused DRAWING throws the typed
+   * {@link DevStartRefusal} so the status and the reason code do not have to be
+   * recovered from the prose.
    */
   start(params: StartDevParams): { sessionId: string } {
     if (this.isActive()) {
@@ -272,6 +397,19 @@ export class WebDevManager {
 
     const bundle = selectBackend(params.backend);
     const runDirectory = params.runDirectory ? resolvePath(params.runDirectory) : this.cwd;
+
+    // The web surface offers NO epoch ceiling: a session runs until the planner
+    // reports the goal complete or the user aborts (only the driver's safety
+    // backstop bounds it). An explicit value is still honored if one is posted.
+    const maxEpochs = params.maxEpochs === undefined ? null : Math.max(1, params.maxEpochs);
+    const approval: DevApprovalMode = params.approval === 'each-epoch' ? 'each-epoch' : 'autonomous';
+
+    // Before the key, before the config, before anything that costs: a drawing
+    // the driver would refuse must not buy a session. `maxEpochs` is passed as
+    // the CLAMPED value, not the raw body one, so the border judges the exact
+    // number `runDevMode` is about to be handed — a `maxEpochs: 3` posted with a
+    // graph is `graph-conflict` HERE, not a session that opens and dies.
+    const drawnMethod = this.resolveDrawing(params, runDirectory, goal, approval, maxEpochs);
 
     let apiKey = '';
     let apiKeySource: AppConfig['apiKeySource'];
@@ -312,12 +450,7 @@ export class WebDevManager {
     };
 
     const sessionId = generateRunId();
-    // The web surface offers NO epoch ceiling: a session runs until the planner
-    // reports the goal complete or the user aborts (only the driver's safety
-    // backstop bounds it). An explicit value is still honored if one is posted.
-    const maxEpochs = params.maxEpochs === undefined ? null : Math.max(1, params.maxEpochs);
     const maxFronts = Math.min(Math.max(1, params.maxFronts ?? DEV_MAX_FRONTS), DEV_MAX_FRONTS);
-    const approval: DevApprovalMode = params.approval === 'each-epoch' ? 'each-epoch' : 'autonomous';
 
     // Preset FIRST, explicit roles OVER it — a user who picks `hetero` and then
     // pins one slot gets the preset everywhere else. A policy that ends up
@@ -346,7 +479,19 @@ export class WebDevManager {
       models,
       methodologies: activeMethodologies(params.methodology).map((d) => d.key),
       backend: params.backend,
-      maxEpochs,
+      // A drawing IS one epoch — see the field's own doc comment.
+      maxEpochs: drawnMethod ? 1 : maxEpochs,
+      ...(drawnMethod
+        ? {
+            drawnMethod: {
+              id: drawnMethod.id,
+              name: drawnMethod.name,
+              ...(drawnMethod.description !== undefined
+                ? { description: drawnMethod.description }
+                : {}),
+            },
+          }
+        : {}),
       maxFronts,
       currentEpoch: 0,
       knowledgeBootstrapped: false,
@@ -370,6 +515,15 @@ export class WebDevManager {
         maxEpochs: maxEpochs ?? undefined,
         maxFronts,
         skipKnowledgeBootstrap: params.skipKnowledgeBootstrap,
+        // THE DRAWING, handed over BY VALUE even when the request named it by
+        // id. The border already read and validated it (`resolveDrawing`), so
+        // passing the resolved object means the store is read exactly once and
+        // the driver runs the very graph the 200 was granted for — a file
+        // rewritten between the two calls cannot swap the method underneath the
+        // session. The id rides along when the caller supplied one, so the
+        // driver's log line and the resume gate name what the human picked.
+        ...(drawnMethod ? { graph: drawnMethod } : {}),
+        ...(params.graphId !== undefined ? { graphId: params.graphId } : {}),
         // Omitted entirely when nothing was routed — see `routed` above.
         ...(routed ? { models: policy } : {}),
         // Omitted entirely when no methodology checkbox came through — the
@@ -671,11 +825,26 @@ export class WebDevManager {
         s.currentEpoch = event.epoch;
         s.plan = undefined;
         s.planWarnings = [];
+        // The announcement belongs to the epoch that is about to be compiled,
+        // exactly like `plan`. On the graph path `planned` follows in the same
+        // tick, so this clears nothing a human ever sees; what it DOES buy is a
+        // compile that fails leaving no stale node map behind. `drawnMethod`
+        // survives — the session is still a drawing, compiled or not.
+        s.graph = undefined;
         break;
       case 'planned':
         s.plan = event.plan;
         s.planWarnings = event.warnings;
-        this.log('info', `época ${event.epoch}: ${event.plan.fronts.map((f) => f.id).join(', ')}`);
+        // Optional by construction: absent on the planner path, so this line is
+        // a no-op there. Present ⇒ the browser can render the boxes the human
+        // drew instead of the fronts a model invented.
+        if (event.graph) s.graph = event.graph;
+        this.log(
+          'info',
+          event.graph
+            ? `época ${event.epoch}: desenho "${event.graph.id}" — ${event.graph.nodeOrder.join(', ')}`
+            : `época ${event.epoch}: ${event.plan.fronts.map((f) => f.id).join(', ')}`,
+        );
         break;
       case 'epoch-start':
         s.phase = 'running';

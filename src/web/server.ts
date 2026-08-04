@@ -59,7 +59,9 @@ import {
 import { DEV_MODEL_ROLES, parseDevModelPolicy } from '../lib/dev-mode/dev-model-policy.js';
 import { DEV_METHODOLOGIES } from '../lib/dev-mode/methodology-registry.js';
 import { WebRunManager, pickRunKey, type RunSnapshot, type StartRunParams } from './run-manager.js';
-import { WebDevManager, type DevSessionSnapshot } from './dev-manager.js';
+import { DevStartRefusal, WebDevManager, type DevSessionSnapshot } from './dev-manager.js';
+import { parseDevGraph } from '../lib/dev-graph/graph-schema.js';
+import type { DevGraph } from '../lib/dev-graph/graph-types.js';
 import {
   graphBlockOptions,
   graphNodeKindOptions,
@@ -709,6 +711,43 @@ export function createWebServer(opts: WebServerOptions): {
       const methodology = parseDevMethodology(body.methodology);
       const resume =
         body.resume === 'auto' || body.resume === 'never' ? body.resume : undefined;
+      // THE DRAWN METHOD. Two ways in, and they are coerced with the OPPOSITE
+      // discipline to the fields above: routing, presets and methodology are
+      // dropped when malformed, because dropping them lands the caller on the
+      // default they would have got anyway. A drawing has no such default — the
+      // fallback for "your method could not be read" is the LLM PLANNER, i.e.
+      // silently swapping the human's topology for a model's, which is the one
+      // thing `dev-driver.ts` refuses to do at every other layer. So a `graph`
+      // or `graphId` that is present and unusable is a 400, never a shrug.
+      //
+      // `null` and a blank/whitespace `graphId` are the exception: they read as
+      // "no drawing", which is what a client clearing its picker sends.
+      let graph: DevGraph | undefined;
+      if (body.graph !== undefined && body.graph !== null) {
+        // The SAME parser `/api/graphs/compile` and the store use — the shape
+        // gate has one implementation, and it is not this file's.
+        const parsed =
+          typeof body.graph === 'object' && !Array.isArray(body.graph)
+            ? parseDevGraph(body.graph)
+            : ({ ok: false, errors: ['the "graph" field is not a devgraph object'] } as const);
+        if (!parsed.ok) {
+          return sendJson(res, 400, {
+            error: `invalid-schema: ${parsed.errors.join('; ')}`,
+            reason: 'invalid-schema',
+          });
+        }
+        graph = parsed.graph;
+      }
+      let graphId: string | undefined;
+      if (body.graphId !== undefined && body.graphId !== null) {
+        if (typeof body.graphId !== 'string') {
+          return sendJson(res, 400, {
+            error: `invalid-id: "graphId" must be the string id of a saved graph, got ${typeof body.graphId}`,
+            reason: 'invalid-id',
+          });
+        }
+        graphId = body.graphId.trim() || undefined;
+      }
       try {
         const started = devManager.start({
           goal: String(body.goal ?? ''),
@@ -729,10 +768,21 @@ export function createWebServer(opts: WebServerOptions): {
           ...(preset ? { modelsPreset: preset } : {}),
           ...(methodology ? { methodology } : {}),
           ...(resume ? { resume } : {}),
+          // Additive on BOTH halves: a body naming no drawing leaves these
+          // fields off the params object entirely, so the session it starts is
+          // the planner session it was before this feature existed.
+          ...(graph ? { graph } : {}),
+          ...(graphId ? { graphId } : {}),
         });
         return sendJson(res, 200, started);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        // A refused DRAWING carries its own reason code — the browser gets to
+        // branch on `graph-not-found` vs `graph-invalid` vs `graph-conflict`
+        // without parsing English. Everything else keeps the old grading.
+        if (err instanceof DevStartRefusal) {
+          return sendJson(res, 400, { error: msg, reason: err.reason });
+        }
         return sendJson(res, /already running/i.test(msg) ? 409 : 400, { error: msg });
       }
     }

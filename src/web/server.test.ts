@@ -1268,3 +1268,178 @@ describe('web server — folder-picker workspace (HUU_WORKSPACE)', () => {
     expect(d.path).toBe(repo);
   });
 });
+
+// ── /api/dev RUNS the methods /api/graphs saves ────────────────────────────
+//
+// The two namespaces are one feature seen from two ends: `/api/graphs` is where
+// a method is drawn and saved, `/api/dev` is where it is RUN. This block pins
+// the wiring between them at the ROUTE level — the coercion `POST /api/dev`
+// performs on `graph`/`graphId`, the status + reason code it answers with, and
+// the one property that makes the pair usable at all: both address the SAME
+// store for the same directory string. `dev-manager.test.ts` covers what the
+// session then becomes; neither file is a substitute for the other.
+
+describe('web server — /api/dev runs the methods /api/graphs saves', () => {
+  let repo: string;
+  let server: Server;
+  let base: string;
+
+  const NOW = '2026-08-03T12:00:00.000Z';
+
+  /** The smallest drawing that COMPILES: one objective, one box. */
+  const drawnGraph = (id: string): Record<string, unknown> => ({
+    _format: 'huu-devgraph-v1',
+    id,
+    name: `Método ${id}`,
+    createdAt: NOW,
+    updatedAt: NOW,
+    meta: {},
+    nodes: [
+      {
+        id: 'entrada',
+        kind: 'prompt',
+        label: 'Entrada do prompt',
+        position: { x: 0, y: 0 },
+        goal: 'audite o repositório',
+      },
+      {
+        id: 'auditar',
+        kind: 'action',
+        label: 'Auditar',
+        position: { x: 360, y: 0 },
+        block: 'security-review',
+        scope: 'project',
+        join: { mode: 'all' },
+      },
+    ],
+    edges: [{ id: 'e-1', source: 'entrada', target: 'auditar' }],
+  });
+
+  const postJson = async (
+    path: string,
+    body: unknown,
+  ): Promise<{ status: number; json: any }> => {
+    const res = await fetch(base + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, json: await res.json().catch(() => ({})) };
+  };
+
+  /** A dev session that parks at the approval gate — nothing runs until asked. */
+  const startDev = (extra: Record<string, unknown>): Promise<{ status: number; json: any }> =>
+    postJson('/api/dev', {
+      goal: 'rodar o método desenhado',
+      modelId: 'stub-model',
+      backend: 'stub',
+      approval: 'each-epoch',
+      skipKnowledgeBootstrap: true,
+      ...extra,
+    });
+
+  beforeEach(async () => {
+    repo = mkdtempSync(join(tmpdir(), 'huu-web-dev-graph-route-'));
+    setupRepo(repo);
+    ({ server } = createWebServer({ cwd: repo, defaultAutoScale: true }));
+    base = await listenEphemeral(server);
+  });
+
+  afterEach(async () => {
+    await postJson('/api/dev/abort', {});
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it('runs a method the editor saved one request earlier', async () => {
+    const put = await fetch(base + '/api/graphs/metodo-salvo', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ graph: drawnGraph('metodo-salvo') }),
+    });
+    expect(put.status).toBe(200);
+
+    const started = await startDev({ graphId: 'metodo-salvo' });
+    expect(started.status).toBe(200);
+    expect(started.json.sessionId).toBeTruthy();
+
+    const session = (await (await fetch(base + '/api/dev')).json()).session;
+    expect(session.drawnMethod).toMatchObject({ id: 'metodo-salvo' });
+  });
+
+  // The editor addresses a project with `?dir=`, the runner with
+  // `runDirectory`. They resolve through the SAME policy on purpose: a method
+  // saved through one and unreachable from the other is a feature with a hole
+  // in the middle.
+  it('addresses the same store from ?dir= and from runDirectory', async () => {
+    const other = mkdtempSync(join(tmpdir(), 'huu-web-dev-graph-other-'));
+    try {
+      setupRepo(other);
+      const put = await fetch(base + '/api/graphs/em-outro-projeto', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dir: other, graph: drawnGraph('em-outro-projeto') }),
+      });
+      expect(put.status).toBe(200);
+
+      // Not in THIS repository — and the runner says so instead of guessing.
+      const here = await startDev({ graphId: 'em-outro-projeto' });
+      expect(here.status).toBe(400);
+      expect(here.json.reason).toBe('graph-not-found');
+
+      // …and it IS reachable when the run addresses the same directory.
+      const there = await startDev({ graphId: 'em-outro-projeto', runDirectory: other });
+      expect(there.status).toBe(200);
+    } finally {
+      await postJson('/api/dev/abort', {});
+      rmSync(other, { recursive: true, force: true });
+    }
+  });
+
+  // Reason CODES, not prose: the browser has to tell "the drawing is gone" from
+  // "the drawing does not compile" from "you asked for something a graph cannot
+  // do", and English is not a stable handle on that.
+  it('answers every refusal with a machine-readable reason code', async () => {
+    const cases: [Record<string, unknown>, string][] = [
+      [{ graphId: 'nunca-salvo' }, 'graph-not-found'],
+      [{ graphId: 'metodo-x', maxEpochs: 4 }, 'graph-conflict'],
+      [{ graph: drawnGraph('a-graph'), graphId: 'outro' }, 'graph-conflict'],
+      [{ graph: { ...drawnGraph('sem-prompt'), nodes: [] } }, 'graph-invalid'],
+      [{ graph: 'não é um grafo' }, 'invalid-schema'],
+      [{ graphId: 42 }, 'invalid-id'],
+    ];
+    for (const [body, reason] of cases) {
+      const { status, json } = await startDev(body);
+      expect(status, JSON.stringify(body)).toBe(400);
+      expect(json.reason, JSON.stringify(body)).toBe(reason);
+      expect(typeof json.error, JSON.stringify(body)).toBe('string');
+    }
+    // Six refusals, and not one of them opened a session.
+    expect((await (await fetch(base + '/api/dev')).json()).session).toBeNull();
+  });
+
+  // The compile route and the run route must agree: a drawing `/api/graphs/
+  // compile` refuses is a drawing `/api/dev` refuses, and for the same reason.
+  it('refuses what /api/graphs/compile refuses, instead of running it', async () => {
+    const broken = { ...drawnGraph('quebrado'), nodes: [] };
+    const compiled = await postJson('/api/graphs/compile', { graph: broken });
+    expect(compiled.status).toBe(400);
+    expect(compiled.json.errors.map((e: { code: string }) => e.code)).toContain('no-prompt-node');
+
+    const started = await startDev({ graph: broken });
+    expect(started.status).toBe(400);
+    expect(started.json.reason).toBe('graph-invalid');
+    expect(started.json.error).toContain('no-prompt-node');
+  });
+
+  // The additive half: a /dev request that names no drawing is the request it
+  // was before this route learned the word "graph".
+  it('leaves a request that names no drawing on the planner path', async () => {
+    const started = await startDev({});
+    expect(started.status).toBe(200);
+    const session = (await (await fetch(base + '/api/dev')).json()).session;
+    expect(session.drawnMethod).toBeUndefined();
+    expect(session.graph).toBeUndefined();
+    expect(session.maxEpochs).toBeNull();
+  });
+});
