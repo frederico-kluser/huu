@@ -23,7 +23,7 @@
 //    call rather than the lazy one: the validator writes it with the SPECIFICS
 //    of the instance (which node, which limit, which count), so a static
 //    catalog sentence per code would be strictly less informative than what it
-//    replaced — and 49 hand-copied sentences would drift from
+//    replaced — and 50 hand-copied sentences would drift from
 //    `graph-validate.ts` the first time a message is reworded. Same rule as
 //    `tStatus()`: the classifier stays locale-blind, the frame around it does
 //    not.

@@ -513,8 +513,12 @@ huu dev "<o objetivo>" --graph=<id>              # um grafo salvo em .huu/dev/gr
 huu dev "<o objetivo>" --graph=./drafts/a.json   # um arquivo
 ```
 
-…pelo terminal, ou `R` na tela de grafos da TUI. **Pelo navegador ainda não dá
-para começar um** — veja [Limites conhecidos](#limites-conhecidos).
+…pelo terminal, ou `R` na tela de grafos da TUI. **Pelo navegador** é o painel
+*Método* do formulário `/dev` — `Planner LLM | Método que você desenhou`, mais um
+seletor dos métodos salvos — ou o **Rodar este método** do canvas, que entrega o
+id a esse mesmo formulário em vez de iniciar a sessão por conta própria. Os dois
+caminhos enviam `graphId`, então o desenho precisa estar **salvo** antes (veja
+[Limites conhecidos](#limites-conhecidos)).
 
 Um slug puro é um **id**; qualquer coisa com `/` ou `.` é um **caminho**, então os
 dois nunca podem ser confundidos. Com um grafo em mãos, **as Fases A e B da época
@@ -585,16 +589,34 @@ Lista honesta. Cada item foi verificado no código.
   (`--worker-model` e companhia) é ignorado pelo mesmo motivo — um desenho tem
   caixas, não papéis. Roteie pelo `meta.modelId` do grafo ou por um `modelId` de
   nó.
-- **O navegador não consegue lançar um desenho.** O `POST /api/dev` já aceita um
-  método desenhado — `graphId` (um id salvo) ou um `graph` inline — e recusa com
-  400 um que esteja presente mas inutilizável, em vez de cair no planner. Só que
-  **nenhum controle do cliente envia esses campos**: o formulário do `/dev` manda
-  objetivo, provedor, modelo, diretório, aprovação, frentes, roteamento de modelo
-  e metodologia, e mais nada. Então hoje o `/graph` deixa você desenhar, validar,
-  pré-compilar e salvar; rodar o resultado é `huu dev --graph=<id>` num terminal,
-  ou `R` na tela da TUI. O mais perto que o navegador chega é o botão de
-  **compilar**, que renderiza o pipeline resultante só para leitura — cada passo,
-  seu `dependsOn` e o `label → nextStepName` de cada saída, com o default marcado.
+- **O navegador lança um desenho só por *id*, e só um que já esteja salvo.** O
+  `POST /api/dev` aceita um método desenhado como `graphId` (um id salvo) ou como
+  um `graph` inline, e recusa com 400 (`graph-not-found`, `graph-invalid`,
+  `graph-conflict`) um que esteja presente mas inutilizável, em vez de cair no
+  planner. O cliente envia **`graphId` e nunca o `graph` inline**, então o canvas
+  *como está na tela* não é executável: o **Rodar este método** fica desabilitado,
+  com a razão escrita embaixo, até o validador ficar verde **e** o documento ainda
+  ser o que o servidor viu por último. ("Salvo" é igualdade por REFERÊNCIA contra
+  o último documento que veio do fio — toda mutação devolve objeto novo — então
+  erra para o lado de *não salvo*, o lado inofensivo: `huu dev --graph` lê o
+  ARQUIVO, e rodar um canvas editado-mas-não-salvo rodaria o método antigo com o
+  desenho novo na tela.) Dois controles chegam ao fio, e nenhum é um segundo
+  lançador: o painel **Método** do formulário `/dev` (`Planner LLM | Método que
+  você desenhou`, mais um seletor dos métodos salvos), e o botão do canvas — que
+  não faz POST nenhum. Ele só *nomeia* o método, disparando o evento de documento
+  `huu:run-graph` (um evento de DOM e não uma chamada: o `launch.js` já importa o
+  canvas, então importar o `dev.js` de volta fecharia um ciclo de ESM); o `/dev`
+  adota o id e o submit comum é que inicia a sessão, então existe exatamente um
+  caminho de submit e um corpo a testar. O `maxEpochs` nunca é enviado em nenhum
+  dos dois caminhos — uma sessão desenhada é exatamente uma época, e um
+  `maxEpochs >= 2` explícito é `graph-conflict` antes de a sessão existir. A
+  biblioteca também é **por projeto**: o `GET /api/graphs?dir=` lê a store dentro
+  do diretório escolhido, então trocar de projeto limpa a seleção e re-lista, e a
+  passagem vinda do canvas re-lista também — senão um id do projeto anterior, ou
+  um salvo segundos atrás, chega ao servidor como `graph-not-found`. O botão de
+  **compilar** continua o mesmo, e continua sendo uma prévia só de leitura: cada
+  passo, seu `dependsOn` e o `label → nextStepName` de cada saída, com o default
+  marcado.
 - **Não existe primitiva de rename.** A store indexa um grafo pelo id e deriva o
   nome do arquivo dele, e a superfície HTTP não tem rota de rename. O rename do
   navegador é portanto um **dois-passos destrutivo** — apaga o id antigo, salva

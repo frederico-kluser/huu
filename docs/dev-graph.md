@@ -505,8 +505,12 @@ huu dev "<the objective>" --graph=<id>              # a graph saved under .huu/d
 huu dev "<the objective>" --graph=./drafts/a.json   # a file
 ```
 
-…from the terminal, or `R` on the TUI's graph screen. **From the browser you
-cannot start one yet** — see [Known limits](#known-limits).
+…from the terminal, or `R` on the TUI's graph screen. **From the browser** it is
+the *Method* panel on the `/dev` form — `LLM planner | Method you drew`, plus a
+picker of the saved methods — or **Run this method** on the canvas, which hands
+the id to that same form rather than starting a session itself. Both routes post
+`graphId`, so the drawing has to be **saved** first (see
+[Known limits](#known-limits)).
 
 A bare slug is an **id**; anything containing `/` or `.` is a **path**, so the
 two can never be confused. With a graph in hand, **Phases A and B of the epoch do
@@ -574,17 +578,34 @@ Honest list. Each item was verified in the code.
   back from the machine. Per-role model routing (`--worker-model` and friends) is
   ignored for the same reason — a drawing has boxes, not roles. Route with the
   graph's `meta.modelId` or a per-node `modelId`.
-- **The browser cannot launch a drawing.** `POST /api/dev` already accepts a
-  drawn method — either `graphId` (a saved id) or an inline `graph` — and
-  refuses a present-but-unusable one with a 400 rather than falling back to the
-  planner. But **no control in the client posts either field**: the `/dev` form
-  submits goal, provider, model, directory, approval, fronts, model routing and
-  methodology, and nothing else. So today `/graph` lets you draw, validate,
-  compile-preview and save; running the result is `huu dev --graph=<id>` in a
-  terminal, or `R` on the TUI screen. The closest the browser gets is the
-  **compile** button, which renders the resulting pipeline read-only — every
-  step, its `dependsOn`, and each outcome's `label → nextStepName` with the
-  default marked.
+- **The browser launches a drawing only by *id*, and only one already saved.**
+  `POST /api/dev` takes a drawn method as either `graphId` (a saved id) or an
+  inline `graph`, and refuses a present-but-unusable one with a 400
+  (`graph-not-found`, `graph-invalid`, `graph-conflict`) rather than falling back
+  to the planner. The client posts **`graphId` and never the inline `graph`**, so
+  the canvas *as it stands on screen* is not runnable: **Run this method** is
+  disabled, with the reason spelled out beneath it, until the validator is green
+  **and** the document is still the one the server last saw. ("Saved" is
+  reference equality against the last document off the wire — every mutation
+  returns a new object — so it errs toward *unsaved*, the harmless direction:
+  `huu dev --graph` reads the FILE, and running an edited-but-unsaved canvas
+  would run the old method with the new drawing on screen.) Two controls reach
+  the wire, and neither is a second launcher: the **Method** panel on the `/dev`
+  form (`LLM planner | Method you drew`, plus a picker of the saved methods), and
+  the canvas button — which does not POST at all. It only *names* the method,
+  firing the `huu:run-graph` document event (a DOM event and not a call:
+  `launch.js` already imports the canvas, so importing `dev.js` back would close
+  an ESM cycle); `/dev` adopts the id and the ordinary submit starts the session,
+  so there is exactly one submit path and one body to test. `maxEpochs` is never
+  sent on either path — a drawn session is exactly one epoch, and an explicit
+  `maxEpochs >= 2` is `graph-conflict` before the session exists. The library is
+  also **per project**: `GET /api/graphs?dir=` reads the store inside the chosen
+  directory, so changing the project clears the selection and re-lists, and the
+  hand-off from the canvas re-lists too — otherwise an id from the previous
+  project, or one saved seconds ago, reaches the server as `graph-not-found`.
+  The **compile** button is unchanged and still a read-only preview: every step,
+  its `dependsOn`, and each outcome's `label → nextStepName` with the default
+  marked.
 - **There is no rename primitive.** The store keys a graph by its id and derives
   the filename from it, and the HTTP surface has no rename route. The browser's
   rename affordance is therefore a **destructive two-step** — delete the old id,
