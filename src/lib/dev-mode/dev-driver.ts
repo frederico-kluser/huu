@@ -27,6 +27,28 @@
 //             Zero gaps ⇒ Phase A is skipped and the epoch is one run, exactly
 //             as it has always been.
 //
+//   THE GRAPH PATH (`dev.graph` / `dev.graphId`)
+//             When the human hands over a DRAWN method, Phases A and B do not
+//             happen at all: there is no plan to write and nobody to brief,
+//             because the topology IS the drawing. `compileGraphPipeline` turns
+//             it into the same `huu-pipeline-v2` the planner path emits, and
+//             Phase C runs it — same landing merge, same evidence, same
+//             blackboard. The session is ONE epoch, always: replanning is what
+//             epochs exist for, and a graph has nothing to replan.
+//
+//             This is the branch that puts dev mode back inside MANIFESTO
+//             differential #2 ("nenhum planner LLM decide em runtime o que o
+//             passo 3 deve fazer"). `docs/dev-mode.md` opens by admitting the
+//             planner path contradicts it; the graph path does not — the human
+//             underwrites the method, the model supplies the intelligence
+//             inside each node, and nothing here can add a node nobody drew.
+//
+//             PHASE 0 STILL RUNS. Only A and B are gone. A graph session on a
+//             repo with no agent skills bootstraps them first, exactly like a
+//             planner session — one pi agent, real files, committed before the
+//             drawing compiles — because the node prompts only get the
+//             project-router prefix when the knowledge probe says it is there.
+//
 // Layering note: like `run-many.ts`, this module lives in `lib/` yet imports
 // `orchestrator/` — the established exception for run DRIVERS. Everything
 // below it (the planner, the compilers, the protocol blocks) stays pure.
@@ -49,6 +71,7 @@ import {
 import type {
   AppConfig,
   DevEpochRecord,
+  DevFront,
   DevModeConfig,
   DevPlan,
   DevState,
@@ -56,8 +79,25 @@ import type {
   OrchestratorState,
   Pipeline,
 } from '../types.js';
-import { DEV_MAX_FRONTS, DEV_MAX_GAPS, DEV_UNBOUNDED_EPOCH_BACKSTOP } from '../types.js';
+import {
+  DEFAULT_MEMORY_MAX_FILES,
+  DEV_MAX_FRONTS,
+  DEV_MAX_GAPS,
+  DEV_UNBOUNDED_EPOCH_BACKSTOP,
+} from '../types.js';
 import { compileEpochPipeline } from './plan-to-pipeline.js';
+import { compileGraphPipeline, type CompiledGraph } from '../dev-graph/graph-to-pipeline.js';
+import { readGraph } from '../dev-graph/graph-store.js';
+import { sanitizeNodeId } from '../dev-graph/research-contract.js';
+import { effectiveDependencies, validateGraph } from '../dev-graph/graph-validate.js';
+import {
+  isActionNode,
+  isGateNode,
+  isPromptNode,
+  isResearchNode,
+  type DevGraph,
+  type GraphNode,
+} from '../dev-graph/graph-types.js';
 import { detectChangelogPaths } from './changelog-surface.js';
 import { PipelineSchema } from '../pipeline-io.js';
 import { checkWritePartition, formatWritePartitionViolations, type TaskSpec } from './write-partition.js';
@@ -116,6 +156,35 @@ export type DevStopReason =
   | 'knowledge-failed'
   | 'model-preflight-failed'
   | 'dirty-tree'
+  /**
+   * `dev.graphId` names no readable graph under `.huu/dev/graphs/`. A session
+   * that cannot find the method it was told to run must not fall back to the
+   * PLANNER — that would silently swap the human's method for a model's.
+   */
+  | 'graph-not-found'
+  /**
+   * The drawn method does not compile: `validateGraph` reported blocking
+   * issues, the stored file is not a `huu-devgraph-v1`, or the compiler itself
+   * refused the output. Same rule as above — never a fallback, always a stop.
+   */
+  | 'graph-invalid'
+  /**
+   * The SESSION asked for something a graph cannot honor: `maxEpochs ≥ 2`
+   * (a graph is the complete method, so it is exactly one epoch), or a
+   * `graph`/`graphId` pair naming two different methods. Refused out loud
+   * instead of quietly picking one.
+   */
+  | 'graph-conflict'
+  /**
+   * The session being RESUMED was a drawn method (`DevState.drawnMethod`) and
+   * the caller did not re-supply the drawing. It is not a missing file — it is
+   * a missing ARGUMENT, and the only two things the driver could do without it
+   * are both wrong: run the LLM planner inside a session a human opened as a
+   * drawing (silently swapping their method for a model's), or start a fresh
+   * session under the same goal and orphan the epochs already recorded. So it
+   * refuses and names the graph the session needs back.
+   */
+  | 'graph-missing-on-resume'
   | 'aborted';
 
 /**
@@ -130,13 +199,53 @@ export type DevStopReason =
  */
 export const MAX_CONSECUTIVE_EPOCH_FAILURES = 3;
 
+/**
+ * How a DRAWN method announces itself on the `planned` event.
+ *
+ * WHY IT RIDES `planned` INSTEAD OF BEING ITS OWN EVENT. `DevEvent` is consumed
+ * by exhaustive `switch`es that return a value (`describeEvent` in
+ * `dev-cli.ts`), so a NEW variant is a compile error in every surface until it
+ * is taught the case — while an OPTIONAL FIELD on an existing variant is
+ * invisible to code that does not look for it. Every listener therefore keeps
+ * working unchanged and still sees a plan; the ones that want to render the
+ * drawing check for this field. `epoch-start` already carries the compiled
+ * `Pipeline`, so the graph costs the surfaces nothing extra to run.
+ */
+export interface DevGraphAnnouncement {
+  /** The graph's slug — its filename under `.huu/dev/graphs/`. */
+  id: string;
+  name: string;
+  description?: string;
+  /**
+   * Emission order of the nodes that produced steps — topological and
+   * deterministic. The `prompt` node emits nothing and is absent.
+   */
+  nodeOrder: string[];
+  /** node id → the pipeline step names it compiled to (1 or 2 per node). */
+  stepsByNode: Record<string, string[]>;
+  /** Repo-relative blackboard root this graph's artifacts land under. */
+  graphRoot: string;
+}
+
 export type DevEvent =
   | { type: 'knowledge'; status: KnowledgeStatus }
   | { type: 'bootstrap-start'; model: string }
   | { type: 'bootstrap-progress'; message: string }
   | { type: 'bootstrap-done'; ok: boolean }
   | { type: 'planning'; epoch: number }
-  | { type: 'planned'; epoch: number; plan: DevPlan; warnings: string[] }
+  /**
+   * `plan` is what the approval gate and every existing surface consume. On the
+   * GRAPH path it is SYNTHETIC — a view of the drawing in the shape the
+   * callback expects (see {@link graphDevPlan}) — and `graph` is set. On the
+   * planner path `graph` is absent and nothing changed.
+   */
+  | {
+      type: 'planned';
+      epoch: number;
+      plan: DevPlan;
+      warnings: string[];
+      graph?: DevGraphAnnouncement;
+    }
   | { type: 'epoch-start'; epoch: number; pipeline: Pipeline }
   | { type: 'epoch-done'; record: DevEpochRecord }
   | { type: 'stopped'; reason: DevStopReason; detail?: string }
@@ -367,6 +476,362 @@ function scanSpecs(root: string): TaskSpec[] {
   }
   return specs;
 }
+
+// ─────────────────────────── the drawn-method path ──────────────────────────
+
+/**
+ * The blackboard segment a graph session's artifacts live under —
+ * `.huu/dev/<sessionId>/graph/epoch-<N>/…`.
+ *
+ * UNDER THE SESSION, for exactly the reason `devSessionPaths` exists: a graph
+ * writes per-node research artifacts (`<graphRoot>/<nodeId>/research.json`) and
+ * critic shards, and node ids are semantic (`recon`, `consolidar`). Two SESSIONS
+ * of the same drawing sharing one directory is the collision the epoch
+ * blackboard already fixed, so the segment hangs off `paths.root`, never off
+ * `.huu/dev/` directly.
+ *
+ * AND UNDER THE EPOCH, which is the half that was missing. A graph session is
+ * one epoch PER RUN, not one epoch ever: a drawing always ends with
+ * `goalComplete: false`, so every re-run of the same objective is offered a
+ * resume, and an accepted resume continues the numbering (epoch 2, epoch 3…)
+ * inside the SAME `sessionId`. The session segment does nothing about that.
+ * Concretely, without the epoch segment: epoch 1's recon commits a list of 30
+ * targets; epoch 2's recon fails; the fan-out reads the committed file anyway
+ * (`resolveMemoryFiles` checks `existsSync` and nothing else) and dispatches 30
+ * agents onto yesterday's work. The segment turns that from likely into
+ * impossible — a run whose producer wrote nothing finds no list, resolves to
+ * ZERO tasks, and the stage completes empty, which is the honest outcome.
+ *
+ * (The FAN-OUT lists are a separate decision the compiler owns and documents:
+ * they live under `.huu/findings/`, outside `graphRoot`, because the producing
+ * blocks' gitignore remedy re-includes exactly that path — see
+ * {@link devGraphFanOutNamespace}, which carries the same epoch segment into
+ * the one path this function cannot reach.)
+ */
+export const DEV_GRAPH_ROOT_SEGMENT = 'graph';
+
+/** `.huu/dev/<sessionId>/graph/epoch-<N>` — see {@link DEV_GRAPH_ROOT_SEGMENT}. */
+export function devGraphRoot(sessionId: string, epoch: number): string {
+  const root = `${devSessionPaths(sessionId).root}/${DEV_GRAPH_ROOT_SEGMENT}`;
+  return `${root}/epoch-${Math.max(1, Math.trunc(epoch))}`;
+}
+
+/**
+ * Ceiling `sanitizeNodeId` enforces on the namespace segment (it is the id slug
+ * `RESEARCH_ID_PATTERN` accepts). Mirrored here because the truncation has to
+ * happen BEFORE the epoch suffix is appended: letting the compiler cut the
+ * string would drop the very segment this function exists to add, and silently
+ * restore the collision for any long session id.
+ */
+const FAN_OUT_NAMESPACE_MAX = 40;
+
+/**
+ * The namespace the fan-out lists live under —
+ * `.huu/findings/<session>-e<epoch>/<node>.json`.
+ *
+ * Same argument as {@link DEV_GRAPH_ROOT_SEGMENT}, applied to the ONE path that
+ * deliberately sits outside `graphRoot`: the producing blocks tell the agent it
+ * may un-ignore `.huu/findings/` and nothing else, so the list has to stay
+ * there and gets its execution segment folded into the namespace instead of
+ * added as a directory level.
+ *
+ * The session half is truncated first so the epoch half always survives — a
+ * namespace that lost its epoch is worse than a namespace that lost characters
+ * of its session id, because only one of the two is a correctness segment.
+ */
+export function devGraphFanOutNamespace(sessionId: string, epoch: number): string {
+  const suffix = `-e${Math.max(1, Math.trunc(epoch))}`;
+  const base = sanitizeNodeId(sessionId).slice(0, Math.max(1, FAN_OUT_NAMESPACE_MAX - suffix.length));
+  return `${base.replace(/-+$/, '')}${suffix}`;
+}
+
+/** A drawn method the session will run, or the refusal that stops it. */
+export type DevGraphResolution =
+  | { ok: true; graph: DevGraph }
+  | {
+      ok: false;
+      reason: Extract<DevStopReason, 'graph-not-found' | 'graph-invalid' | 'graph-conflict'>;
+      detail: string;
+    };
+
+/**
+ * Resolve the DRAWN METHOD a session was given, if any. Never throws.
+ *
+ * `null` — and ONLY `null` — means "no graph was asked for", which is what
+ * keeps every existing caller on the planner path byte for byte. Same
+ * discipline as `parseMethodologyFlags` returning `undefined` instead of `{}`.
+ *
+ * ORDER OF REFUSALS, and it is deliberate: the two pure-CONFIGURATION conflicts
+ * are checked BEFORE anything is read from disk. They cost nothing to detect
+ * and they are the ones the caller can fix without touching the repository, so
+ * a session with both a bad `--epochs` and a missing graph hears about the flag
+ * it typed rather than about a file it may not have written yet.
+ *
+ * Exported because a SURFACE should be able to refuse a bad selection before it
+ * starts a session at all (the picker saying "that drawing does not compile"
+ * beats a session that opens and immediately stops).
+ */
+export function resolveDevGraph(cwd: string, dev: DevModeConfig): DevGraphResolution | null {
+  const inline = dev.graph;
+  const id = dev.graphId?.trim();
+  if (inline === undefined && (id === undefined || id.length === 0)) return null;
+
+  // --- pure-configuration refusals -----------------------------------------
+  if (inline !== undefined && id !== undefined && id.length > 0 && inline.id !== id) {
+    return {
+      ok: false,
+      reason: 'graph-conflict',
+      detail: `the session was given two different methods — an inline graph "${inline.id}" and graphId "${id}". Pass one: there is no defensible way to guess which drawing the human meant.`,
+    };
+  }
+  // A drawn method IS the complete method, so the session that runs it is one
+  // epoch. Replanning is what the epoch chain exists for and there is nothing
+  // to replan here — running the SAME drawing N times over would repeat the
+  // work, not advance it. `undefined` (the web sends nothing; "no ceiling") is
+  // accepted and read as one epoch; only an explicit ≥ 2 is a contradiction of
+  // something the caller actually asked for.
+  if (dev.maxEpochs !== undefined && dev.maxEpochs > 1) {
+    return {
+      ok: false,
+      reason: 'graph-conflict',
+      detail: `maxEpochs=${dev.maxEpochs} cannot be combined with a drawn method: a devgraph is the COMPLETE method, so a graph session is exactly one epoch. Drop the epoch ceiling (or set it to 1) — re-running the same drawing is not a second epoch.`,
+    };
+  }
+
+  // --- load ----------------------------------------------------------------
+  let graph: DevGraph;
+  if (inline !== undefined) {
+    graph = inline;
+  } else {
+    const read = readGraph(cwd, id!);
+    if (!read.ok) {
+      // The store's `reason` opens with a stable prefix; only "there is no such
+      // graph" is a not-found. Everything else (bad JSON, foreign schema, a
+      // file that is not a regular file) is a graph that exists and is broken.
+      const absent = read.reason.startsWith('not-found') || read.reason.startsWith('invalid-id');
+      return {
+        ok: false,
+        reason: absent ? 'graph-not-found' : 'graph-invalid',
+        detail: `graphId "${id}": ${read.reason}`,
+      };
+    }
+    graph = read.graph;
+  }
+
+  // --- structural validation ------------------------------------------------
+  // `compileGraphPipeline` THROWS on an invalid graph, by contract. Running the
+  // non-throwing validator here is what turns that contract into a clean stop
+  // reason with the human's own node ids in it, before a session opens.
+  const validation = validateGraph(graph);
+  if (!validation.ok) {
+    const detail = validation.errors
+      .map((issue) => `${issue.code}${issue.nodeId ? ` (${issue.nodeId})` : ''}: ${issue.message}`)
+      .join('; ');
+    return {
+      ok: false,
+      reason: 'graph-invalid',
+      detail: `devgraph "${graph.id}" has ${validation.errors.length} blocking issue(s): ${detail}`,
+    };
+  }
+  return { ok: true, graph };
+}
+
+/** One line, collapsed and capped — falls back to the node id when blank. */
+function nodeLabel(node: GraphNode): string {
+  const raw = typeof node.label === 'string' ? node.label.replace(/\s+/g, ' ').trim() : '';
+  return raw.length > 0 ? raw : String(node.id ?? '');
+}
+
+/** Trim + collapse + cap, for text that goes into a `DevFront` field. */
+function oneLine(text: string | undefined, max: number): string {
+  const collapsed = (text ?? '').replace(/\s+/g, ' ').trim();
+  return collapsed.length <= max ? collapsed : `${collapsed.slice(0, max - 1)}…`;
+}
+
+/** What KIND of box this is, in one human line — the front's `rationale`. */
+function nodeRationale(node: GraphNode): string {
+  const notes = oneLine(node.notes, 160);
+  const kind = isActionNode(node)
+    ? `bloco "${node.block}"${node.scope ? ` · escopo ${node.scope}` : ''}${node.fanOutFrom ? ` · leque a partir de "${node.fanOutFrom}"` : ''}`
+    : isResearchNode(node)
+      ? `pesquisa (${node.outputKind})${node.useContext ? ' · lê o repositório' : ''}`
+      : isGateNode(node)
+        ? `portão · ${node.outcomes.length} saída(s), default "${node.defaultOutcome}"`
+        : 'nó';
+  return notes.length > 0 ? `${kind} — ${notes}` : kind;
+}
+
+/**
+ * A drawn node id, as a `DevFront.id`.
+ *
+ * `FRONT_ID_PATTERN` demands 3–40 chars; `graph-schema.ts` accepts a node id of
+ * ONE. So `a` is a legal box on a legal canvas and an illegal front, and the
+ * two shapes diverged in silence because nothing ever parsed the synthetic
+ * plan. Padding is the honest repair: the id is a DISPLAY key here (surfaces
+ * render it, `dependsOnFronts` cross-references it), while the authoritative
+ * node↔step mapping travels untouched on {@link DevGraphAnnouncement}.
+ */
+function padFrontId(nodeId: string): string {
+  const base = sanitizeNodeId(nodeId) || 'no';
+  return base.length >= 3 ? base : `${base}-no`;
+}
+
+/**
+ * node id → front id, for every emitted node at once.
+ *
+ * Done as a MAP rather than per node because padding is not injective: a canvas
+ * carrying both `a` and `a-no` would otherwise produce two fronts with one id,
+ * and `dependsOnFronts` would point at both. The numeric disambiguator is
+ * deterministic in emission order, which is itself deterministic.
+ */
+function frontIdsByNode(nodeIds: readonly string[]): Map<string, string> {
+  const taken = new Set<string>();
+  const byNode = new Map<string, string>();
+  for (const nodeId of nodeIds) {
+    const padded = padFrontId(nodeId);
+    let candidate = padded;
+    for (let n = 2; taken.has(candidate); n++) {
+      candidate = `${padded.slice(0, 35).replace(/-+$/, '')}-${n}`;
+    }
+    taken.add(candidate);
+    byNode.set(nodeId, candidate);
+  }
+  return byNode;
+}
+
+/**
+ * HOW MANY AGENTS THIS BOX MAY SPAWN — read off the COMPILED steps, never off
+ * the node.
+ *
+ * This number is what the approval gate prints ("até N agente(s)"), so it is
+ * the blast radius a human is signing for. Deriving it from the node was a
+ * consent bug in both directions at once: a node with no `maxFiles` showed 1
+ * while the compiled step carried {@link DEVGRAPH_DEFAULT_FAN_OUT} (40), and a
+ * node asking for 400 showed 400 while the compiled step was clamped to
+ * {@link DEVGRAPH_MAX_FAN_OUT} (100). Only the compiler knows the defaults and
+ * the clamps, and the compiled pipeline is already in hand when the plan is
+ * built — so the plan reads it instead of guessing.
+ *
+ * The rules mirror `Orchestrator.buildTasks` exactly:
+ *  - `memory` scope fans out over the producer's list, capped by `maxFiles`;
+ *  - any other step decomposes one task per file, and `decomposeTasks` gives a
+ *    step with no files ONE whole-project task (not zero);
+ *  - a `CheckStep` is one judge, always.
+ * A node emits at most two steps and they run in sequence, so the front's width
+ * is the WIDEST of them, not their sum.
+ */
+function compiledFrontWidth(compiled: CompiledGraph, nodeId: string): number {
+  const emitted = new Set(compiled.stepsByNode[nodeId] ?? []);
+  let width = 1;
+  for (const step of compiled.pipeline.steps) {
+    if (!emitted.has(step.name) || step.type === 'check') continue;
+    const stepWidth =
+      step.scope === 'memory' && typeof step.filesFrom === 'string'
+        ? (step.maxFiles ?? DEFAULT_MEMORY_MAX_FILES)
+        : Math.max(1, step.files.length);
+    if (stepWidth > width) width = stepWidth;
+  }
+  return width;
+}
+
+/**
+ * The drawing, in the shape {@link RunDevModeArgs.onApprove} expects.
+ *
+ * WHY A SYNTHETIC `DevPlan` AND NOT A NEW CALLBACK. The approval gate's whole
+ * job is "show the human what is about to run and let them refuse it", and its
+ * signature is already wired through the CLI (`formatPlan`) and the web
+ * (`session.plan` → the plan panel). A second callback would leave one of the
+ * two paths ungated until every surface grew it — and an ungated graph is the
+ * one thing this feature must not ship. So the graph is projected onto the
+ * shape that already gets shown, and the FULL drawing rides beside it on the
+ * event ({@link DevGraphAnnouncement}) for surfaces that want to render it
+ * properly.
+ *
+ * BE HONEST ABOUT THE PROJECTION: a `DevFront` is a parallel WORKSTREAM the
+ * planner invented; a graph node is a BOX A HUMAN DREW. One front per emitted
+ * node is the mapping that renders correctly in the panels that exist today
+ * (`title`, `id`, `rationale`, `dependsOnFronts`, `maxTasks` are the only
+ * fields any surface reads). The three prompt fields have no counterpart in a
+ * drawing, so they carry the node's own authored text — and, where the node
+ * authored none, one honest line saying where its prompt DOES come from,
+ * because `DevPlanSchema` reads an empty string as a missing field and every
+ * surface reads it as an empty box.
+ *
+ * IT IS A VALID `DevPlanSchema` VALUE, with three named exceptions. Nothing
+ * parses this object at run time, which is how the two shapes drifted apart
+ * unnoticed; `dev-driver.test.ts` now parses it, so they cannot drift again.
+ * The exceptions are all the same thing — cardinality ceilings that bound what
+ * a PLANNER MODEL may invent in one epoch, applied to a topology a human drew:
+ *   - `fronts` may exceed {@link DEV_MAX_FRONTS} (4). That cap exists to keep a
+ *     planner's epoch under the 20-step compile ceiling; a canvas is bounded by
+ *     `graph-schema.ts` and `validateGraph` instead, and truncating it would
+ *     hide boxes from the very gate that authorizes them.
+ *   - `dependsOnFronts` may exceed {@link DEV_MAX_FRONTS}, for the same reason:
+ *     a join is as wide as the arrows the human drew.
+ *   - `maxTasks` may exceed 40 (the planner's fan-out ceiling) up to
+ *     {@link DEVGRAPH_MAX_FAN_OUT}, or higher on a hand-picked file list. This
+ *     one is not negotiable in the other direction: see
+ *     {@link compiledFrontWidth} — under-reporting the blast radius at the
+ *     approval gate is a consent failure, and consent is what the gate is for.
+ *
+ * `goalComplete` is ALWAYS false: nothing in a drawing can claim the human's
+ * overall goal is met, and it is not a graph's business to say so.
+ */
+function graphDevPlan(graph: DevGraph, compiled: CompiledGraph): DevPlan {
+  const byId = new Map<string, GraphNode>();
+  for (const node of graph.nodes) if (!byId.has(node.id)) byId.set(node.id, node);
+  const promptId = graph.nodes.find(isPromptNode)?.id;
+  const frontIds = frontIdsByNode(compiled.nodeOrder);
+
+  const fronts: DevFront[] = [];
+  for (const nodeId of compiled.nodeOrder) {
+    const node = byId.get(nodeId);
+    if (!node) continue;
+    const steps = compiled.stepsByNode[nodeId] ?? [];
+    const authored = isResearchNode(node)
+      ? node.query
+      : isGateNode(node)
+        ? node.condition
+        : isActionNode(node)
+          ? (node.prompt ?? '')
+          : '';
+    const drawnOutcomes = isGateNode(node)
+      ? node.outcomes.map((outcome) => outcome.id).join(' | ')
+      : isResearchNode(node) && node.choices
+        ? node.choices.map((choice) => choice.id).join(' | ')
+        : '';
+    fronts.push({
+      id: frontIds.get(nodeId) ?? padFrontId(nodeId),
+      title: oneLine(nodeLabel(node), 60) || padFrontId(nodeId),
+      rationale: oneLine(nodeRationale(node), 400) || 'nó do desenho',
+      dependsOnFronts: effectiveDependencies(graph, node.id)
+        .filter((dep) => dep !== promptId)
+        .map((dep) => frontIds.get(dep) ?? padFrontId(dep)),
+      reconPrompt:
+        oneLine(authored, 400) ||
+        (isActionNode(node)
+          ? `sem texto próprio no nó — o prompt vem do bloco "${node.block}" do catálogo`
+          : 'sem texto próprio no nó'),
+      workPrompt: oneLine(steps.join(' · '), 6000) || 'nenhum step compilado para este nó',
+      verifyCondition:
+        oneLine(drawnOutcomes, 1200) || 'sem portão desenhado — nada julga este nó dentro do desenho',
+      // The width the COMPILED step actually has — see `compiledFrontWidth`.
+      maxTasks: compiledFrontWidth(compiled, nodeId),
+    });
+  }
+
+  const name = oneLine(graph.name, 120) || graph.id || 'método desenhado';
+  return {
+    epochGoal: name,
+    doneWhen: oneLine(
+      `o método desenhado "${oneLine(graph.name, 60) || graph.id}" rodou de ponta a ponta (${fronts.length} nó(s)) — um grafo não declara outro critério: quem desenhou é quem julga`,
+      600,
+    ),
+    goalComplete: false,
+    fronts,
+  };
+}
+
 /**
  * Run a full dev-mode session. Never throws for an expected failure — every
  * stop path comes back as a `DevModeResult` so the CLI and the web surface
@@ -385,15 +850,68 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
     emit({ type: 'log', level, message });
 
   const git = new GitClient(cwd);
+
+  // THE DRAWN METHOD, if the human handed one over. Resolved FIRST because the
+  // epoch ceiling below depends on it: a graph session is one epoch and nothing
+  // else. `null` is "no graph" and keeps every line after it exactly as it was;
+  // a refusal is reported the moment `finish()` has a knowledge status to
+  // report it with (just after the probe, below).
+  const graphResolution = resolveDevGraph(cwd, dev);
+  const drawnMethod: DevGraph | undefined =
+    graphResolution?.ok === true ? graphResolution.graph : undefined;
+
   // No ceiling configured ⇒ run until the goal is reported complete, the
   // consecutive-failure circuit breaker trips, or the caller aborts. The
   // backstop is not a product limit, it is the thing that keeps an unattended
   // session from looping forever on a planner that never says "done".
-  const unboundedEpochs = dev.maxEpochs === undefined;
-  const maxEpochs = unboundedEpochs
-    ? DEV_UNBOUNDED_EPOCH_BACKSTOP
-    : Math.max(1, dev.maxEpochs!);
+  //
+  // A GRAPH pins it to 1: the drawing is the complete method, so there is no
+  // second epoch to plan. `resolveDevGraph` already REFUSED an explicit
+  // `maxEpochs ≥ 2`, so this line only ever collapses `undefined` (the web's
+  // "no ceiling") and an explicit 1.
+  const unboundedEpochs = dev.maxEpochs === undefined && drawnMethod === undefined;
+  const maxEpochs = drawnMethod
+    ? 1
+    : unboundedEpochs
+      ? DEV_UNBOUNDED_EPOCH_BACKSTOP
+      : Math.max(1, dev.maxEpochs!);
   const maxFronts = Math.min(Math.max(1, dev.maxFronts ?? DEV_MAX_FRONTS), DEV_MAX_FRONTS);
+
+  /**
+   * Session options a DRAWING owns and a flag cannot override.
+   *
+   * Warned rather than refused, and the distinction matters: a caller may carry
+   * these from a preset or a default while the human's drawing already says
+   * `tdd` (they dropped the tdd block) or already says which model runs which
+   * node. Refusing would turn a harmless leftover into a dead session. What is
+   * NOT acceptable is silence — the flags read as promises, so they are logged
+   * AND carried into the approval gate's warnings, where a human signs.
+   *
+   * The 12 methodologies are the EPOCH compiler's surface: each one compiles a
+   * structure (an extra step, a merge gate, a critic rubric) into a graph the
+   * PLANNER wrote. `compileGraphPipeline` deliberately refuses to do that —
+   * adding steps nobody drew is the exact decision a devgraph takes back from
+   * the machine. Model routing is the same argument: `DevModelRole` names jobs
+   * inside the planner's fixed epoch template, and a drawing has boxes, not
+   * roles. Its routing surface is `meta.modelId` and each node's `modelId`.
+   */
+  const graphSessionWarnings: string[] = [];
+  if (drawnMethod) {
+    const flags = Object.entries(dev.methodology ?? {})
+      .filter(([, on]) => on === true)
+      .map(([key]) => key);
+    if (flags.length > 0) {
+      graphSessionWarnings.push(
+        `the session turned on ${flags.join(', ')}, and a drawn method does NOT compile the methodology flags — a devgraph expresses method by DRAWING it (drop the tdd block, draw a gate node). The flags are ignored here; the drawing decides.`,
+      );
+    }
+    const roles = Object.keys(dev.models ?? {});
+    if (roles.length > 0) {
+      graphSessionWarnings.push(
+        `per-role model routing (${roles.join(', ')}) is NOT applied to a drawn method — roles exist inside the planner's epoch template, a drawing has nodes. Route with the graph's meta.modelId or a per-node modelId.`,
+      );
+    }
+  }
   const aborted = (): boolean => args.signal?.aborted === true;
   const stopRequested = (): boolean => args.gracefulSignal?.aborted === true;
   const epochs: DevEpochRecord[] = [];
@@ -421,6 +939,15 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
     goalComplete: false,
     updatedAt: nowIso(),
     sessionId,
+    // WRITTEN SO A RESUME CAN REFUSE. `resolveDevGraph` reads only what the
+    // CALLER passed, so without this the drawing is forgotten the moment the
+    // process exits and a resume with no `--graph` degrades to the LLM planner
+    // — inside a session a human opened as a drawing. Spread, not assigned:
+    // a planner session must keep writing exactly the state.json it writes
+    // today, key for key.
+    ...(drawnMethod
+      ? { drawnMethod: { graphId: drawnMethod.id, graphName: drawnMethod.name } }
+      : {}),
   };
 
   const persist = async (message: string, extraPaths: readonly string[] = []): Promise<void> => {
@@ -582,6 +1109,23 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
   emit({ type: 'knowledge', status: knowledge });
   log('info', `knowledge probe: ${knowledge.present ? 'present' : 'absent'} — ${knowledge.reason}`);
 
+  // The drawn method was resolved at the top (the epoch ceiling depends on it);
+  // this is where a refusal becomes a stop. Reported BEFORE the model preflight
+  // and the dirty-tree probe on purpose: it is the cheapest gate and the one
+  // whose fix is entirely in the caller's hands. A session told to run a method
+  // it cannot load NEVER falls through to the planner — silently swapping the
+  // human's drawing for a model's plan is the one failure mode this whole
+  // feature exists to remove.
+  if (graphResolution && !graphResolution.ok) {
+    return finish(graphResolution.reason, knowledge, false, graphResolution.detail);
+  }
+  if (drawnMethod) {
+    log(
+      'info',
+      `drawn method "${drawnMethod.id}" (${drawnMethod.nodes.length} node(s), ${drawnMethod.edges.length} edge(s)) — the LLM planner will NOT be called; this session is one epoch`,
+    );
+  }
+
   // Model routing is checked BEFORE anything is created. Left to itself, an id
   // the pi registry has never heard of throws inside the first agent — after
   // its worktree and branch already exist. `planner` is deliberately exempt:
@@ -648,6 +1192,51 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
       }
     }
     if (accept) {
+      // ── THE DRAWING HAS TO COME BACK WITH THE SESSION ───────────────────
+      //
+      // A resume re-opens a session; it does not re-open the ARGUMENTS the
+      // session was started with. `resolveDevGraph` reads `dev.graph` /
+      // `dev.graphId`, which only the caller can supply, so a session whose
+      // epoch 1 was a drawn method comes back as an ordinary planner session
+      // the moment a surface forgets to re-send the selection — and epoch 2
+      // then runs a topology a MODEL invented inside a session a human opened
+      // as a drawing. That is the precise substitution this whole feature
+      // exists to delete, and it is the worst version of it, because nothing
+      // on screen says it happened.
+      //
+      // So: refuse. Not "start fresh" either — a fresh session under the same
+      // goal would orphan the epochs already recorded AND still run the
+      // planner. The two refusals below both precede every side effect (the
+      // orphan-branch scan, the first blackboard commit, the knowledge gate),
+      // exactly like the refusals in `resolveDevGraph`.
+      const previousDrawn = previous.drawnMethod;
+      if (previousDrawn) {
+        if (!drawnMethod) {
+          return finish(
+            'graph-missing-on-resume',
+            knowledge,
+            false,
+            `session ${previousSession} ran the drawn method "${previousDrawn.graphId}" (${previousDrawn.graphName}) and this resume carries no drawing — pass it again (graphId "${previousDrawn.graphId}"), or start a NEW session. huu will not hand a session a human opened as a drawing over to the LLM planner.`,
+          );
+        }
+        if (drawnMethod.id !== previousDrawn.graphId) {
+          return finish(
+            'graph-conflict',
+            knowledge,
+            false,
+            `session ${previousSession} ran the drawn method "${previousDrawn.graphId}" (${previousDrawn.graphName}) and this resume carries a DIFFERENT one, "${drawnMethod.id}" (${drawnMethod.name}) — resuming would continue one method's epoch numbering under another's topology. Pass "${previousDrawn.graphId}" to continue it, or start a new session for "${drawnMethod.id}".`,
+          );
+        }
+      } else if (drawnMethod) {
+        // The mirror case, and deliberately NOT a refusal: the human is here
+        // with a drawing in hand, which is them taking the topology BACK from
+        // the planner — the direction this feature wants. It still changes the
+        // method mid-session, so it is said out loud rather than assumed.
+        log(
+          'warn',
+          `session ${previousSession} was planned by the LLM planner and this resume carries the drawn method "${drawnMethod.id}" — epoch ${nextEpoch} onward runs the drawing, not a plan`,
+        );
+      }
       resumed = true;
       sessionId = previousSession;
       state.sessionId = sessionId;
@@ -759,6 +1348,32 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
       return extraction.commands;
     }
     return undefined;
+  };
+
+  /**
+   * Write the epoch's compiled graph to `paths.pipeline(epoch)` and COMMIT it.
+   *
+   * The compiled pipeline is the epoch's PORTABLE artefact — reusable, editable
+   * and auditable, which is what huu claims for every other pipeline. It is
+   * also huu-written, so huu commits it: an uncommitted file under `.huu/`
+   * leaves the tree dirty and the landing merge refuses. A write that fails is
+   * a warning, never a stop — losing the audit copy must not lose the epoch.
+   *
+   * Shared by BOTH compilers (the planner's `compileEpochPipeline` and the
+   * drawing's `compileGraphPipeline`) so the artefact, the commit and the
+   * `pendingEpoch` pointer that resumes it cannot drift between the two paths.
+   */
+  const persistPipeline = async (epoch: number, pipeline: Pipeline): Promise<string> => {
+    const pipelinePath = paths.pipeline(epoch);
+    let extras: string[] = [];
+    try {
+      writeFileEnsuringDir(join(cwd, pipelinePath), `${JSON.stringify(pipeline, null, 2)}\n`);
+      extras = [pipelinePath];
+    } catch (err) {
+      log('warn', `epoch ${epoch}: could not persist the compiled pipeline: ${message_(err)}`);
+    }
+    await persist(`chore(huu-dev): época ${epoch} — pipeline compilado`, extras);
+    return pipelinePath;
   };
 
   /**
@@ -1001,6 +1616,128 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
         'warn',
         `epoch ${epoch}: the persisted plan at ${resuming.pipelinePath} could not be read — planning it again`,
       );
+    }
+
+    // ═══ THE DRAWN METHOD ══════════════════════════════════════════════════
+    //
+    // Phases A and B do not run here. Not "are skipped to save money" — they
+    // have nothing to do. Phase B writes a plan, and the plan already exists:
+    // a human drew it. Phase A exists to brief the thing that writes the plan,
+    // and there is no such thing in this session. What survives untouched is
+    // everything AFTER the run: the landing merge, the epoch evidence, the
+    // blackboard commit. A graph changes who decides the topology, not what
+    // huu does with the result.
+    //
+    // PHASE 0 IS NOT ONE OF THEM, AND IT DOES RUN. The knowledge gate sits
+    // upstream of this whole loop: on a repo with no agent skills and no
+    // `skipKnowledgeBootstrap`, a graph session bootstraps the skill system
+    // FIRST — a real pi agent writing real files into the repo, committed
+    // before a single box of the drawing compiles, and a failure there stops
+    // the session with `bootstrap-failed` before the graph is ever touched.
+    // That is deliberate, not an oversight: `routerPrefix` below is only sent
+    // when `knowledge.present`, so every node's prompt loses its routing when
+    // Phase 0 is skipped. "Phases A and B do not happen" was always true and
+    // was always being read as "nothing runs before the drawing"; it is not.
+    // `dev-driver.test.ts` pins it.
+    if (drawnMethod) {
+      // Kept so the surfaces' state machine stays coherent — `dev-manager.ts`
+      // clears its plan panel on this event and sets the current epoch. On this
+      // path it means "compiling the drawing", not "asking a model", and the
+      // `planned` event that follows arrives in the same tick.
+      emit({ type: 'planning', epoch });
+
+      // BOTH namespaces carry the EPOCH, not just the session. A drawing always
+      // ends `goalComplete: false`, so re-running the same objective is offered
+      // a resume, and an accepted resume runs the same drawing again as epoch
+      // N+1 inside the SAME session id. Sharing one namespace across those runs
+      // means epoch 1's committed target list is exactly what epoch 2's fan-out
+      // reads when epoch 2's producer fails — a swarm dispatched over stale
+      // work, with real worktrees and real cost.
+      const graphRoot = devGraphRoot(sessionId, epoch);
+      const fanOutNamespace = devGraphFanOutNamespace(sessionId, epoch);
+      let compiled: CompiledGraph;
+      try {
+        compiled = compileGraphPipeline({
+          graph: drawnMethod,
+          goal: dev.goal,
+          graphRoot,
+          sessionId: fanOutNamespace,
+          // `modelId` is deliberately NOT forwarded. Passing `config.modelId`
+          // would stamp an explicit id on EVERY emitted step and end
+          // `AppConfig.modelId`'s job as the single authority — the same reason
+          // a role nobody routed omits the field on the planner path. Omitted,
+          // the graph's own `meta.modelId` and each node's `modelId` still win,
+          // which is where a DRAWING says routing.
+          cardTimeoutMs: args.cardTimeoutMs,
+          singleFileCardTimeoutMs: args.singleFileCardTimeoutMs,
+          routerPrefix: knowledge.present ? ROUTER_PREFIX : undefined,
+        });
+      } catch (err) {
+        // `resolveDevGraph` already ran the non-throwing validator before the
+        // session opened, so reaching this catch means the compiler refused its
+        // OWN output (its documented second gate) — a compiler bug, not a
+        // drawing the human can fix by moving a box. Either way there is
+        // nothing to route around: it is a stop, never a fallback to a planner.
+        return finish('graph-invalid', knowledge, bootstrapped, `epoch ${epoch}: ${message_(err)}`);
+      }
+
+      const graphWarnings = [...compiled.warnings, ...graphSessionWarnings];
+      for (const warning of graphWarnings) log('warn', `epoch ${epoch} graph: ${warning}`);
+
+      const graphPlan = graphDevPlan(drawnMethod, compiled);
+      state.doneWhen = graphPlan.doneWhen;
+      const announcement: DevGraphAnnouncement = {
+        id: drawnMethod.id,
+        name: drawnMethod.name,
+        ...(drawnMethod.description !== undefined ? { description: drawnMethod.description } : {}),
+        nodeOrder: compiled.nodeOrder,
+        stepsByNode: compiled.stepsByNode,
+        graphRoot,
+      };
+      emit({ type: 'planned', epoch, plan: graphPlan, warnings: graphWarnings, graph: announcement });
+
+      // The gate still gates, and it still fails CLOSED. A method the human
+      // drew last week is not automatically the method they want run right now
+      // against this goal — and `each-epoch` with nobody wired to answer must
+      // mean "no", exactly as it does on the planner path.
+      if (dev.approval === 'each-epoch') {
+        const approved = await Promise.resolve(args.onApprove?.(graphPlan, epoch, graphWarnings) ?? false);
+        if (!approved) {
+          return finish(
+            'plan-rejected',
+            knowledge,
+            bootstrapped,
+            `epoch ${epoch}: the drawn method "${drawnMethod.id}" was not approved`,
+          );
+        }
+      }
+      if (aborted()) {
+        return finish('aborted', knowledge, bootstrapped, `aborted before epoch ${epoch} started`);
+      }
+
+      const graphPipelinePath = await persistPipeline(epoch, compiled.pipeline);
+      // Same in-flight pointer the planner path sets: a crash from here on
+      // resumes the EXECUTION from the persisted graph instead of recompiling.
+      // It costs nothing to support and it is strictly the same artefact.
+      state.pendingEpoch = {
+        epoch,
+        pipelinePath: graphPipelinePath,
+        epochGoal: graphPlan.epochGoal,
+        frontIds: compiled.nodeOrder,
+      };
+      const graphOutcome = await runPlannedEpoch(compiled.pipeline, epoch, 0, {
+        epochGoal: graphPlan.epochGoal,
+        frontIds: compiled.nodeOrder,
+      });
+      if (graphOutcome.stop) return graphOutcome.stop;
+      if (graphOutcome.failure) {
+        consecutiveEpochFailures++;
+        lastEpochFailure = graphOutcome.failure;
+      } else {
+        consecutiveEpochFailures = 0;
+        lastEpochFailure = undefined;
+      }
+      continue;
     }
 
     emit({ type: 'planning', epoch });
@@ -1308,19 +2045,9 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
       return finish('aborted', knowledge, bootstrapped, `aborted before epoch ${epoch} started`);
     }
 
-    // The compiled graph is the epoch's PORTABLE artefact — reusable, editable
-    // and auditable, which is what huu claims for every other pipeline. It is
-    // also huu-written, so huu commits it: an uncommitted file under `.huu/`
-    // leaves the tree dirty and the landing merge refuses.
-    const pipelinePath = paths.pipeline(epoch);
-    let pipelineExtras: string[] = [];
-    try {
-      writeFileEnsuringDir(join(cwd, pipelinePath), `${JSON.stringify(compiled.pipeline, null, 2)}\n`);
-      pipelineExtras = [pipelinePath];
-    } catch (err) {
-      log('warn', `epoch ${epoch}: could not persist the compiled pipeline: ${message_(err)}`);
-    }
-    await persist(`chore(huu-dev): época ${epoch} — pipeline compilado`, pipelineExtras);
+    // The compiled graph is the epoch's PORTABLE artefact — see
+    // {@link persistPipeline}, shared with the drawn-method path.
+    const pipelinePath = await persistPipeline(epoch, compiled.pipeline);
 
     // --- Phase C: execution ---------------------------------------------
     //
@@ -1369,13 +2096,19 @@ export async function runDevMode(args: RunDevModeArgs): Promise<DevModeResult> {
     return finish(lastEpochFailure.reason, knowledge, bootstrapped, lastEpochFailure.detail);
   }
 
+  // `max-epochs` is the CLEAN end of a graph session, not a ceiling it bumped
+  // into: the drawing ran, so the method the human underwrote is finished. It
+  // is also already in the CLI's `CLEAN_STOPS`, which is what keeps a graph
+  // session exiting 0 without teaching every surface a new reason.
   return finish(
     'max-epochs',
     knowledge,
     bootstrapped,
-    unboundedEpochs
-      ? `stopped at the ${maxEpochs}-epoch safety backstop without the planner ever reporting the goal complete — inspect \`${devPaths.journal}\` before starting another session`
-      : `reached the ${maxEpochs}-epoch ceiling`,
+    drawnMethod
+      ? `the drawn method "${drawnMethod.id}" ran end to end — a devgraph is the COMPLETE method, so a graph session is exactly one epoch`
+      : unboundedEpochs
+        ? `stopped at the ${maxEpochs}-epoch safety backstop without the planner ever reporting the goal complete — inspect \`${devPaths.journal}\` before starting another session`
+        : `reached the ${maxEpochs}-epoch ceiling`,
   );
 }
 

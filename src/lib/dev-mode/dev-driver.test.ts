@@ -3,13 +3,41 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { runDevMode, MAX_CONSECUTIVE_EPOCH_FAILURES, type DevEvent, type DevRunHandle, type DevRunPhase } from './dev-driver.js';
-import { devPaths, devSessionPaths } from './dev-protocol.js';
+import {
+  runDevMode,
+  resolveDevGraph,
+  devGraphRoot,
+  devGraphFanOutNamespace,
+  DEV_GRAPH_ROOT_SEGMENT,
+  MAX_CONSECUTIVE_EPOCH_FAILURES,
+  type DevEvent,
+  type DevRunHandle,
+  type DevRunPhase,
+  type RunDevModeArgs,
+} from './dev-driver.js';
+import { ROUTER_PREFIX, devPaths, devSessionPaths } from './dev-protocol.js';
 import { writeDevState } from './dev-state.js';
+import { DevFrontSchema, DevPlanSchema, FRONT_ID_PATTERN } from './plan-schema.js';
 import { BASELINE_GAPS, DELIVERED_VS_PLANNED_GAP } from './knowledge-blackboard.js';
 import type { KnowledgeGap, KnowledgeRequest } from './knowledge-schema.js';
+import {
+  DEVGRAPH_DEFAULT_FAN_OUT,
+  DEVGRAPH_MAX_FAN_OUT,
+  compileGraphPipeline,
+} from '../dev-graph/graph-to-pipeline.js';
+import { findSample } from '../dev-graph/graph-samples.js';
+import { GRAPHS_DIR, writeGraph } from '../dev-graph/graph-store.js';
+import type { DevGraph, GraphNode } from '../dev-graph/graph-types.js';
 import type { AgentFactory } from '../../orchestrator/types.js';
-import type { AppConfig, DevFront, DevPlan, OrchestratorState } from '../types.js';
+import { DEV_MAX_FRONTS } from '../types.js';
+import type {
+  AppConfig,
+  DevFront,
+  DevModeConfig,
+  DevPlan,
+  OrchestratorState,
+  Pipeline,
+} from '../types.js';
 
 function git(args: string[], cwd: string): string {
   return execFileSync('git', args, {
@@ -2351,5 +2379,1336 @@ describe('runDevMode — resuming an epoch whose EXECUTION never finished', () =
     expect(plannerCalls).toBe(1);
     expect(result.epochs).toHaveLength(1);
     expect(result.epochs[0]!.landedCommit).toBeDefined();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// THE DRAWN METHOD — a `huu-devgraph-v1` replacing the LLM planner.
+//
+// These are SEAM tests: the orchestrator is faked, so what they prove is the
+// wiring inside the driver (which compiler runs, what is emitted, what is
+// refused, what is persisted). The end-to-end proof that a drawn method
+// actually runs through a real Orchestrator lives in
+// `src/lib/dev-graph/graph-e2e.test.ts`.
+// ────────────────────────────────────────────────────────────────────────────
+
+const GRAPH_STAMP = '2026-08-03T00:00:00.000Z';
+
+/** The sample the user asked for by name, built deterministically. */
+function sampleGraph(id = 'tdd-seguranca-performance'): DevGraph {
+  const sample = findSample(id);
+  if (!sample) throw new Error(`no such graph sample: ${id}`);
+  return sample.build(GRAPH_STAMP);
+}
+
+/** The smallest drawing that compiles: one objective, one box. */
+function tinyGraph(over: Partial<DevGraph> = {}): DevGraph {
+  return {
+    _format: 'huu-devgraph-v1',
+    id: 'metodo-minimo',
+    name: 'Método mínimo',
+    description: 'Um objetivo e uma auditoria.',
+    createdAt: GRAPH_STAMP,
+    updatedAt: GRAPH_STAMP,
+    meta: {},
+    nodes: [
+      {
+        id: 'entrada',
+        kind: 'prompt',
+        label: 'Entrada do prompt',
+        position: { x: 0, y: 0 },
+        goal: 'audite o repositório',
+      },
+      {
+        id: 'auditar',
+        kind: 'action',
+        label: 'Auditar',
+        position: { x: 360, y: 0 },
+        block: 'security-review',
+        scope: 'project',
+        join: { mode: 'all' },
+      },
+    ],
+    edges: [{ id: 'e-1', source: 'entrada', target: 'auditar' }],
+    ...over,
+  };
+}
+
+/**
+ * Planner seams that FAIL THE TEST if they are ever reached. A drawn method
+ * means the topology is the human's, so any planner call is the bug.
+ */
+function plannerSpies(): {
+  seams: Pick<RunDevModeArgs, 'planner' | 'knowledgePlanner'>;
+  calls: { plan: number; knowledge: number };
+} {
+  const calls = { plan: 0, knowledge: 0 };
+  return {
+    calls,
+    seams: {
+      planner: async () => {
+        calls.plan++;
+        throw new Error('the LLM planner must never run when a method was drawn');
+      },
+      knowledgePlanner: async () => {
+        calls.knowledge++;
+        throw new Error('the knowledge planner must never run when a method was drawn');
+      },
+    },
+  };
+}
+
+describe('runDevMode — a drawn method replaces the planner', () => {
+  const SESSION_G = 'sessao-grafo';
+  const gpaths = devSessionPaths(SESSION_G);
+
+  it('never calls the planner or the knowledge planner', async () => {
+    const spy = plannerSpies();
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graph: sampleGraph() },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_G,
+      agentFactory: NOOP_FACTORY,
+      ...spy.seams,
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `graph-${epoch}` }),
+    });
+
+    expect(spy.calls).toEqual({ plan: 0, knowledge: 0 });
+    expect(result.stoppedBecause).toBe('max-epochs');
+  });
+
+  it('runs exactly ONE run, in the work phase — there is no knowledge run', async () => {
+    const phases: DevRunPhase[] = [];
+    await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graph: sampleGraph() },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_G,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      orchestratorFactory: (_p, epoch, phase) => {
+        phases.push(phase);
+        return fakeRun({ runId: `graph-${epoch}` });
+      },
+    });
+
+    expect(phases).toEqual(['work']);
+    expect(existsSync(join(repo, gpaths.knowledgeIndex(1)))).toBe(false);
+    expect(existsSync(join(repo, gpaths.gapsDir(1)))).toBe(false);
+  });
+
+  it('runs the pipeline compileGraphPipeline emits for the same drawing', async () => {
+    const graph = sampleGraph();
+    let ran: Pipeline | undefined;
+
+    await runDevMode({
+      dev: { goal: 'migrar o parser', approval: 'autonomous', skipKnowledgeBootstrap: true, graph },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_G,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      onEvent: (e) => {
+        if (e.type === 'epoch-start') ran = e.pipeline;
+      },
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `graph-${epoch}` }),
+    });
+
+    const expected = compileGraphPipeline({
+      graph,
+      goal: 'migrar o parser',
+      graphRoot: devGraphRoot(SESSION_G, 1),
+      sessionId: devGraphFanOutNamespace(SESSION_G, 1),
+    }).pipeline;
+    expect(ran).toEqual(expected);
+  });
+
+  it('derives the graph blackboard from the SESSION *and* the epoch', () => {
+    expect(devGraphRoot(SESSION_G, 1)).toBe(`${gpaths.root}/${DEV_GRAPH_ROOT_SEGMENT}/epoch-1`);
+    expect(devGraphRoot('outra', 1)).not.toBe(devGraphRoot(SESSION_G, 1));
+    // …and the epoch is a real segment, not decoration: two epochs of ONE
+    // session address two different blackboards.
+    expect(devGraphRoot(SESSION_G, 2)).not.toBe(devGraphRoot(SESSION_G, 1));
+  });
+
+  // The fan-out list cannot live under `graphRoot` (the producing blocks'
+  // gitignore remedy only re-includes `.huu/findings/`), so the execution
+  // segment is folded into the namespace instead.
+  it('namespaces the fan-out lists by session AND epoch, keeping the epoch when the id is long', () => {
+    expect(devGraphFanOutNamespace(SESSION_G, 1)).toBe(`${SESSION_G}-e1`);
+    expect(devGraphFanOutNamespace(SESSION_G, 2)).toBe(`${SESSION_G}-e2`);
+    expect(devGraphFanOutNamespace('outra', 1)).not.toBe(devGraphFanOutNamespace(SESSION_G, 1));
+
+    // `sanitizeNodeId` cuts at 40 chars. The SESSION half is truncated first so
+    // the epoch half always survives — losing it would silently restore the
+    // collision the segment exists to remove.
+    const long = 'a'.repeat(80);
+    const ns = devGraphFanOutNamespace(long, 7);
+    expect(ns.endsWith('-e7')).toBe(true);
+    expect(ns.length).toBeLessThanOrEqual(40);
+    expect(devGraphFanOutNamespace(long, 8)).not.toBe(ns);
+  });
+
+  it('lands the epoch and leaves the working tree clean', async () => {
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graph: sampleGraph() },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_G,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      orchestratorFactory: (_p, epoch) =>
+        fakeRun({ runId: `graph-${epoch}`, files: { 'drawn.ts': 'export const drawn = 1;\n' } }),
+    });
+
+    expect(result.epochs).toHaveLength(1);
+    expect(result.epochs[0]!.landedCommit).toMatch(/^[0-9a-f]{40}$/);
+    expect(git(['status', '--porcelain'], repo).trim()).toBe('');
+    expect(git(['ls-files'], repo)).toContain('drawn.ts');
+  });
+
+  it('persists the compiled drawing as a committed, portable artefact', async () => {
+    await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graph: sampleGraph() },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_G,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `graph-${epoch}` }),
+    });
+
+    expect(git(['ls-files'], repo)).toContain(gpaths.pipeline(1));
+    const pipeline = JSON.parse(readFileSync(join(repo, gpaths.pipeline(1)), 'utf8')) as Pipeline;
+    expect(pipeline.steps.map((s) => s.name).join('\n')).toContain('[seguranca]');
+  });
+
+  it('records the epoch under the drawing name, with the node ids as frontIds', async () => {
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graph: sampleGraph() },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_G,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `graph-${epoch}` }),
+    });
+
+    expect(result.epochs[0]!.epochGoal).toBe('TDD, segurança e performance em paralelo');
+    // Topological order, prompt node excluded.
+    expect(result.epochs[0]!.frontIds).toEqual(['tdd', 'seguranca', 'performance', 'consolidar']);
+  });
+
+  it('resolves a graphId out of .huu/dev/graphs/', async () => {
+    const written = writeGraph(repo, sampleGraph(), GRAPH_STAMP);
+    expect(written.ok).toBe(true);
+
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graphId: 'tdd-seguranca-performance' },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_G,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `graph-${epoch}` }),
+    });
+
+    expect(result.stoppedBecause).toBe('max-epochs');
+    expect(result.epochs[0]!.frontIds).toContain('seguranca');
+  });
+
+  it('accepts an inline graph and a graphId that name the SAME drawing', async () => {
+    // No file on disk: the inline object wins and the store is never read.
+    const result = await runDevMode({
+      dev: {
+        goal: 'g',
+        approval: 'autonomous',
+        skipKnowledgeBootstrap: true,
+        graph: tinyGraph(),
+        graphId: 'metodo-minimo',
+      },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_G,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `graph-${epoch}` }),
+    });
+
+    expect(result.stoppedBecause).toBe('max-epochs');
+    expect(existsSync(join(repo, GRAPHS_DIR, 'metodo-minimo.json'))).toBe(false);
+  });
+
+  it('says out loud that the planner will not be called', async () => {
+    const messages: string[] = [];
+    await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graph: tinyGraph() },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_G,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      onEvent: (e) => {
+        if (e.type === 'log') messages.push(e.message);
+      },
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `graph-${epoch}` }),
+    });
+
+    expect(messages.join('\n')).toContain('the LLM planner will NOT be called');
+  });
+});
+
+describe('runDevMode — a session with NO graph is byte-identical', () => {
+  // The additive contract, stated as a test: the same discipline that makes
+  // `parseMethodologyFlags` return undefined instead of {}.
+  it('still runs the planner when neither graph nor graphId is set', async () => {
+    let plannerCalls = 0;
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', maxEpochs: 2, skipKnowledgeBootstrap: true },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      planner: async () => {
+        plannerCalls++;
+        return planFixture();
+      },
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `run-${epoch}` }),
+    });
+
+    expect(plannerCalls).toBe(2);
+    expect(result.stoppedBecause).toBe('max-epochs');
+    expect(result.epochs).toHaveLength(2);
+  });
+
+  it('treats explicit undefined and a blank graphId as no graph at all', async () => {
+    let plannerCalls = 0;
+    const result = await runDevMode({
+      dev: {
+        goal: 'g',
+        approval: 'autonomous',
+        maxEpochs: 2,
+        skipKnowledgeBootstrap: true,
+        graph: undefined,
+        graphId: '   ',
+      },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      planner: async () => {
+        plannerCalls++;
+        return planFixture();
+      },
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `run-${epoch}` }),
+    });
+
+    // maxEpochs 2 is honored, which is the tell: no graph pinned it to 1.
+    expect(plannerCalls).toBe(2);
+    expect(result.stoppedBecause).toBe('max-epochs');
+  });
+
+  it('emits a planned event with NO graph announcement on the planner path', async () => {
+    const planned: DevEvent[] = [];
+    await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', maxEpochs: 1, skipKnowledgeBootstrap: true },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      planner: async () => planFixture(),
+      onEvent: (e) => {
+        if (e.type === 'planned') planned.push(e);
+      },
+      orchestratorFactory: () => fakeRun({ runId: 'run-1' }),
+    });
+
+    expect(planned).toHaveLength(1);
+    expect(planned[0]!.type === 'planned' && planned[0]!.graph).toBeUndefined();
+  });
+});
+
+describe('runDevMode — refusing a drawing it cannot honor', () => {
+  /** Every refusal must stop BEFORE anything runs and before any planner call. */
+  async function refuse(dev: Partial<DevModeConfig>): Promise<{
+    result: Awaited<ReturnType<typeof runDevMode>>;
+    runs: number;
+    planners: { plan: number; knowledge: number };
+  }> {
+    let runs = 0;
+    const spy = plannerSpies();
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, ...dev },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      ...spy.seams,
+      orchestratorFactory: () => {
+        runs++;
+        return fakeRun({ runId: 'never' });
+      },
+    });
+    return { result, runs, planners: spy.calls };
+  }
+
+  it('graph-not-found when the id names nothing under .huu/dev/graphs/', async () => {
+    const { result, runs, planners } = await refuse({ graphId: 'nao-existe' });
+    expect(result.stoppedBecause).toBe('graph-not-found');
+    expect(result.detail).toContain('nao-existe');
+    expect(runs).toBe(0);
+    expect(planners).toEqual({ plan: 0, knowledge: 0 });
+  });
+
+  it('graph-not-found when the id is not even a slug (refused before any path is built)', async () => {
+    const { result } = await refuse({ graphId: '../../etc/passwd' });
+    expect(result.stoppedBecause).toBe('graph-not-found');
+    expect(result.detail).toContain('invalid-id');
+  });
+
+  it('graph-invalid when the stored file is not a huu-devgraph-v1', async () => {
+    mkdirSync(join(repo, GRAPHS_DIR), { recursive: true });
+    writeFileSync(join(repo, GRAPHS_DIR, 'quebrado.json'), '{"_format":"outra-coisa"}');
+
+    const { result, runs } = await refuse({ graphId: 'quebrado' });
+    expect(result.stoppedBecause).toBe('graph-invalid');
+    expect(runs).toBe(0);
+  });
+
+  it('graph-invalid when the stored file is not JSON at all', async () => {
+    mkdirSync(join(repo, GRAPHS_DIR), { recursive: true });
+    writeFileSync(join(repo, GRAPHS_DIR, 'quebrado.json'), '{ not json');
+
+    const { result } = await refuse({ graphId: 'quebrado' });
+    expect(result.stoppedBecause).toBe('graph-invalid');
+  });
+
+  // The compiler THROWS on an invalid graph, by contract. The driver runs the
+  // non-throwing validator first so the human gets their own node ids back.
+  it('graph-invalid, with the node id, when the drawing is structurally broken', async () => {
+    const broken = tinyGraph({
+      nodes: [
+        {
+          id: 'auditar',
+          kind: 'action',
+          label: 'Auditar',
+          position: { x: 0, y: 0 },
+          block: 'security-review',
+          scope: 'project',
+          join: { mode: 'all' },
+        },
+      ],
+      edges: [],
+    });
+
+    const { result, runs } = await refuse({ graph: broken });
+    expect(result.stoppedBecause).toBe('graph-invalid');
+    expect(result.detail).toContain('no-prompt-node');
+    expect(runs).toBe(0);
+  });
+
+  it('graph-conflict when maxEpochs asks for more than the one epoch a drawing is', async () => {
+    const { result, runs } = await refuse({ graph: tinyGraph(), maxEpochs: 3 });
+    expect(result.stoppedBecause).toBe('graph-conflict');
+    expect(result.detail).toContain('maxEpochs=3');
+    expect(result.detail).toContain('exactly one epoch');
+    expect(runs).toBe(0);
+  });
+
+  it('graph-conflict when the inline graph and the graphId name different drawings', async () => {
+    const { result } = await refuse({ graph: tinyGraph(), graphId: 'outro-metodo' });
+    expect(result.stoppedBecause).toBe('graph-conflict');
+    expect(result.detail).toContain('metodo-minimo');
+    expect(result.detail).toContain('outro-metodo');
+  });
+
+  it('refuses the epoch ceiling BEFORE reading the repository (pure config first)', async () => {
+    // Both wrong: the config refusal wins, because it is the one the caller can
+    // fix without touching the repo.
+    const { result } = await refuse({ graphId: 'nao-existe', maxEpochs: 2 });
+    expect(result.stoppedBecause).toBe('graph-conflict');
+  });
+
+  it('accepts maxEpochs: 1 — the ceiling the drawing already is', async () => {
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', maxEpochs: 1, skipKnowledgeBootstrap: true, graph: tinyGraph() },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `graph-${epoch}` }),
+    });
+    expect(result.stoppedBecause).toBe('max-epochs');
+    expect(result.epochs).toHaveLength(1);
+  });
+
+  // The web deliberately sends no ceiling ("unbounded"). With a drawing that
+  // must read as ONE epoch, never as the 50-epoch backstop.
+  it('collapses an absent ceiling to one epoch instead of the unbounded backstop', async () => {
+    let runs = 0;
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graph: tinyGraph() },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      orchestratorFactory: (_p, epoch) => {
+        runs++;
+        return fakeRun({ runId: `graph-${epoch}` });
+      },
+    });
+
+    expect(runs).toBe(1);
+    expect(result.epochs).toHaveLength(1);
+    expect(result.stoppedBecause).toBe('max-epochs');
+    expect(result.detail).toContain('COMPLETE method');
+  });
+});
+
+describe('runDevMode — how a drawing announces itself', () => {
+  const SESSION_A = 'sessao-anuncio';
+
+  async function announce(graph: DevGraph): Promise<{
+    plan: DevPlan;
+    announcement: NonNullable<Extract<DevEvent, { type: 'planned' }>['graph']>;
+    warnings: string[];
+  }> {
+    let captured: Extract<DevEvent, { type: 'planned' }> | undefined;
+    await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graph },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_A,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      onEvent: (e) => {
+        if (e.type === 'planned') captured = e;
+      },
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `graph-${epoch}` }),
+    });
+    if (!captured?.graph) throw new Error('no graph announcement was emitted');
+    return { plan: captured.plan, announcement: captured.graph, warnings: captured.warnings };
+  }
+
+  it('carries the drawing identity, its emission order and its step map', async () => {
+    const { announcement } = await announce(sampleGraph());
+    expect(announcement.id).toBe('tdd-seguranca-performance');
+    expect(announcement.name).toBe('TDD, segurança e performance em paralelo');
+    expect(announcement.nodeOrder).toEqual(['tdd', 'seguranca', 'performance', 'consolidar']);
+    expect(announcement.stepsByNode['seguranca']).toEqual(['2. Revisão de segurança [seguranca]']);
+    expect(announcement.graphRoot).toBe(devGraphRoot(SESSION_A, 1));
+  });
+
+  it('projects one synthetic front per DRAWN node, in emission order', async () => {
+    const { plan } = await announce(sampleGraph());
+    expect(plan.fronts.map((f) => f.id)).toEqual(['tdd', 'seguranca', 'performance', 'consolidar']);
+    expect(plan.fronts[1]!.title).toBe('Revisão de segurança');
+    expect(plan.fronts[1]!.rationale).toContain('security-review');
+  });
+
+  it('never turns the prompt node into a front — it is the objective, not work', async () => {
+    const { plan } = await announce(sampleGraph());
+    expect(plan.fronts.some((f) => f.id === 'entrada')).toBe(false);
+    // …and it is not a dependency either: a node hanging off the objective is a
+    // pipeline ROOT.
+    expect(plan.fronts[0]!.dependsOnFronts).toEqual([]);
+  });
+
+  it('carries the drawn dependencies, honoring a subset join', async () => {
+    const { plan } = await announce(sampleGraph());
+    const consolidate = plan.fronts.find((f) => f.id === 'consolidar');
+    // The sample relaxes the join to `subset: [performance]` — three arrows are
+    // drawn, one is a dependency.
+    expect(consolidate!.dependsOnFronts).toEqual(['performance']);
+  });
+
+  it('never claims the human goal is complete, and says who judges that', async () => {
+    const { plan } = await announce(sampleGraph());
+    expect(plan.goalComplete).toBe(false);
+    expect(plan.epochGoal).toBe('TDD, segurança e performance em paralelo');
+    expect(plan.doneWhen).toContain('quem desenhou é quem julga');
+  });
+});
+
+describe('runDevMode — approval on the drawn-method path', () => {
+  it('runs the drawing when the human approves it', async () => {
+    const seen: { epoch: number; fronts: string[] }[] = [];
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'each-epoch', skipKnowledgeBootstrap: true, graph: sampleGraph() },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      onApprove: (plan, epoch) => {
+        seen.push({ epoch, fronts: plan.fronts.map((f) => f.id) });
+        return true;
+      },
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `graph-${epoch}` }),
+    });
+
+    expect(seen).toEqual([{ epoch: 1, fronts: ['tdd', 'seguranca', 'performance', 'consolidar'] }]);
+    expect(result.epochs).toHaveLength(1);
+  });
+
+  it('stops the session when the human refuses the drawing', async () => {
+    let runs = 0;
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'each-epoch', skipKnowledgeBootstrap: true, graph: sampleGraph() },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      onApprove: () => false,
+      orchestratorFactory: () => {
+        runs++;
+        return fakeRun({ runId: 'never' });
+      },
+    });
+
+    expect(result.stoppedBecause).toBe('plan-rejected');
+    expect(result.detail).toContain('tdd-seguranca-performance');
+    expect(runs).toBe(0);
+  });
+
+  // A drawing the human made is still not a drawing they signed FOR THIS RUN.
+  it('fails closed when each-epoch is set with no approver wired', async () => {
+    let runs = 0;
+    const result = await runDevMode({
+      dev: { goal: 'g', approval: 'each-epoch', skipKnowledgeBootstrap: true, graph: tinyGraph() },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      orchestratorFactory: () => {
+        runs++;
+        return fakeRun({ runId: 'never' });
+      },
+    });
+
+    expect(result.stoppedBecause).toBe('plan-rejected');
+    expect(runs).toBe(0);
+  });
+
+  it('never asks in autonomous mode', async () => {
+    let asked = 0;
+    await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graph: tinyGraph() },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      onApprove: () => {
+        asked++;
+        return true;
+      },
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `graph-${epoch}` }),
+    });
+
+    expect(asked).toBe(0);
+  });
+});
+
+describe('runDevMode — what a drawing does NOT inherit from the session', () => {
+  async function warningsFor(dev: Partial<DevModeConfig>): Promise<string[]> {
+    let warnings: string[] = [];
+    await runDevMode({
+      dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graph: tinyGraph(), ...dev },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      onEvent: (e) => {
+        if (e.type === 'planned') warnings = e.warnings;
+      },
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `graph-${epoch}` }),
+    });
+    return warnings;
+  }
+
+  // The 12 flags are the EPOCH compiler's surface: each compiles a STRUCTURE
+  // into a graph the planner wrote. A drawing expresses method by being drawn.
+  it('warns that the methodology flags are not compiled, and still runs', async () => {
+    const warnings = await warningsFor({ methodology: { tdd: true, lintGate: true } });
+    const line = warnings.find((w) => w.includes('methodology flags'));
+    expect(line).toBeDefined();
+    expect(line).toContain('tdd');
+    expect(line).toContain('lintGate');
+  });
+
+  it('warns that per-role model routing is not applied to a drawing', async () => {
+    const warnings = await warningsFor({ models: { worker: 'deepseek/deepseek-v4-pro' } });
+    expect(warnings.some((w) => w.includes('per-role model routing') && w.includes('worker'))).toBe(true);
+  });
+
+  it('emits no such warning when the session sets neither', async () => {
+    const warnings = await warningsFor({});
+    expect(warnings.some((w) => w.includes('methodology flags'))).toBe(false);
+    expect(warnings.some((w) => w.includes('per-role model routing'))).toBe(false);
+  });
+
+  it('carries the compiler warnings the drawing itself produced', async () => {
+    // The sample declares `meta.methodology.tdd`, which the compiler reports as
+    // carried-not-compiled. That warning is the human's to see.
+    const warnings = await warningsFor({ graph: sampleGraph() });
+    expect(warnings.some((w) => w.includes('meta.methodology'))).toBe(true);
+  });
+});
+
+describe('resolveDevGraph — the refusals, as data', () => {
+  it('returns null when no method was drawn (the additive contract)', () => {
+    expect(resolveDevGraph(repo, { goal: 'g', approval: 'autonomous' })).toBeNull();
+    expect(resolveDevGraph(repo, { goal: 'g', approval: 'autonomous', graphId: '' })).toBeNull();
+  });
+
+  it('resolves a valid inline drawing', () => {
+    const resolution = resolveDevGraph(repo, { goal: 'g', approval: 'autonomous', graph: tinyGraph() });
+    expect(resolution?.ok).toBe(true);
+    expect(resolution?.ok === true && resolution.graph.id).toBe('metodo-minimo');
+  });
+
+  it('never throws — every refusal comes back as data', () => {
+    for (const dev of [
+      { goal: 'g', approval: 'autonomous' as const, graphId: 'nada' },
+      { goal: 'g', approval: 'autonomous' as const, graphId: '///' },
+      { goal: 'g', approval: 'autonomous' as const, graph: tinyGraph(), maxEpochs: 9 },
+      { goal: 'g', approval: 'autonomous' as const, graph: tinyGraph({ nodes: [], edges: [] }) },
+    ]) {
+      const resolution = resolveDevGraph(repo, dev);
+      expect(resolution).not.toBeNull();
+      expect(resolution!.ok).toBe(false);
+    }
+  });
+
+  it('accepts a ceiling of exactly one, and an absent ceiling', () => {
+    expect(resolveDevGraph(repo, { goal: 'g', approval: 'autonomous', graph: tinyGraph(), maxEpochs: 1 })?.ok).toBe(true);
+    expect(resolveDevGraph(repo, { goal: 'g', approval: 'autonomous', graph: tinyGraph() })?.ok).toBe(true);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// WHAT THE HUMAN IS ACTUALLY SIGNING FOR, AND WHAT SURVIVES A RESUME.
+//
+// The four suites below all defend the same property from different sides: a
+// session that started as a DRAWING must never turn into something else without
+// saying so — not into a wider fan-out than the gate printed, not into an
+// invalid plan value nobody parses, not into an LLM plan on the next resume, and
+// not into a second epoch reading the first epoch's committed target list.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** A pipeline step, in the shape these assertions need to read it. */
+type StepShape = {
+  name: string;
+  type: string;
+  scope?: string;
+  files?: string[];
+  maxFiles?: number;
+  filesFrom?: string;
+  produces?: string;
+  prompt?: string;
+};
+
+function stepFor(pipeline: Pipeline, nodeId: string): StepShape {
+  const step = pipeline.steps.find((s) => s.name.includes(`[${nodeId}]`));
+  if (!step) throw new Error(`no compiled step for node "${nodeId}"`);
+  return step as unknown as StepShape;
+}
+
+/** One graph session, with the plan and the pipeline it produced. */
+async function captureDrawnSession(
+  graph: DevGraph,
+  sessionId: string,
+  over: Partial<DevModeConfig> = {},
+): Promise<{ plan: DevPlan; pipeline: Pipeline; nodeOrder: string[] }> {
+  let plan: DevPlan | undefined;
+  let pipeline: Pipeline | undefined;
+  let nodeOrder: string[] = [];
+  await runDevMode({
+    dev: { goal: 'g', approval: 'autonomous', skipKnowledgeBootstrap: true, graph, ...over },
+    config: CONFIG,
+    cwd: repo,
+    sessionId,
+    agentFactory: NOOP_FACTORY,
+    ...plannerSpies().seams,
+    onEvent: (e) => {
+      if (e.type === 'planned') {
+        plan = e.plan;
+        nodeOrder = e.graph?.nodeOrder ?? [];
+      }
+      if (e.type === 'epoch-start') pipeline = e.pipeline;
+    },
+    orchestratorFactory: (_p, epoch) => fakeRun({ runId: `${sessionId}-${epoch}` }),
+  });
+  if (!plan || !pipeline) throw new Error('the session emitted no plan or no pipeline');
+  return { plan, pipeline, nodeOrder };
+}
+
+/** `recon-fanout`, with its fan-out node rewritten. */
+function fanOutGraph(mutate: (node: Record<string, unknown>) => void): DevGraph {
+  const graph = sampleGraph('recon-fanout');
+  const node = graph.nodes.find((n) => n.id === 'gerar-testes');
+  if (!node) throw new Error('the recon-fanout sample lost its fan-out node');
+  mutate(node as unknown as Record<string, unknown>);
+  return graph;
+}
+
+/** `width` action boxes hanging off one objective, optionally all joining a tail. */
+function wideGraph(width: number, opts: { join?: boolean } = {}): DevGraph {
+  const boxes: GraphNode[] = [];
+  const edges: DevGraph['edges'] = [];
+  const ids: string[] = [];
+  for (let i = 1; i <= width; i++) {
+    const id = `frente-${i}`;
+    ids.push(id);
+    boxes.push({
+      id,
+      kind: 'action',
+      label: `Frente ${i}`,
+      position: { x: 360, y: i * 120 },
+      block: 'security-review',
+      scope: 'project',
+      join: { mode: 'all' },
+    } as GraphNode);
+    edges.push({ id: `e-${i}`, source: 'entrada', target: id });
+  }
+  if (opts.join) {
+    boxes.push({
+      id: 'juntar',
+      kind: 'action',
+      label: 'Juntar tudo',
+      position: { x: 760, y: 0 },
+      block: 'consolidate',
+      join: { mode: 'all' },
+    } as GraphNode);
+    for (const [i, id] of ids.entries()) {
+      edges.push({ id: `j-${i}`, source: id, target: 'juntar' });
+    }
+  }
+  return tinyGraph({
+    id: 'metodo-largo',
+    name: 'Método largo',
+    nodes: [
+      {
+        id: 'entrada',
+        kind: 'prompt',
+        label: 'Entrada do prompt',
+        position: { x: 0, y: 0 },
+        goal: 'audite o repositório',
+      } as GraphNode,
+      ...boxes,
+    ],
+    edges,
+  });
+}
+
+describe('runDevMode — the approval gate prints the REAL blast radius', () => {
+  // THE BUG THIS PINS: `maxTasks` used to be read off the NODE
+  // (`node.maxFiles ?? node.files?.length ?? 1`), while the compiler filled the
+  // step in from its own default and its own clamp. A node with no `maxFiles`
+  // therefore told the human "até 1 agente(s)" and compiled a step 40 wide.
+  // Approving 1 and getting 40 is a consent failure, and consent is the only
+  // thing the gate is for.
+  it('reports the compiler DEFAULT, not 1, when the drawing names no fan-out width', async () => {
+    const { plan, pipeline } = await captureDrawnSession(
+      fanOutGraph((node) => {
+        delete node.maxFiles;
+      }),
+      'sessao-sem-maxfiles',
+    );
+
+    const front = plan.fronts.find((f) => f.id === 'gerar-testes')!;
+    const step = stepFor(pipeline, 'gerar-testes');
+    expect(step.maxFiles).toBe(DEVGRAPH_DEFAULT_FAN_OUT);
+    expect(front.maxTasks).toBe(step.maxFiles);
+    expect(front.maxTasks).toBe(DEVGRAPH_DEFAULT_FAN_OUT);
+  });
+
+  it('reports the compiler CLAMP, not the drawing’s number, when the drawing asks for too much', async () => {
+    const { plan, pipeline } = await captureDrawnSession(
+      fanOutGraph((node) => {
+        node.maxFiles = 400;
+      }),
+      'sessao-maxfiles-400',
+    );
+
+    const front = plan.fronts.find((f) => f.id === 'gerar-testes')!;
+    const step = stepFor(pipeline, 'gerar-testes');
+    expect(step.maxFiles).toBe(DEVGRAPH_MAX_FAN_OUT);
+    expect(front.maxTasks).toBe(step.maxFiles);
+    // Never the drawn 400: the human cannot authorize a width the step is
+    // incapable of having.
+    expect(front.maxTasks).not.toBe(400);
+  });
+
+  it('reports the drawn width verbatim when the drawing names one the compiler keeps', async () => {
+    // The sample draws `maxFiles: 8` — inside the clamp, so it survives.
+    const { plan, pipeline } = await captureDrawnSession(sampleGraph('recon-fanout'), 'sessao-fanout-real');
+    const front = plan.fronts.find((f) => f.id === 'gerar-testes')!;
+    expect(stepFor(pipeline, 'gerar-testes').maxFiles).toBe(8);
+    expect(front.maxTasks).toBe(8);
+  });
+
+  it('matches the compiled step for EVERY node of a drawing, fan-out or not', async () => {
+    const { plan, pipeline } = await captureDrawnSession(sampleGraph('recon-fanout'), 'sessao-todos');
+    for (const front of plan.fronts) {
+      const step = stepFor(pipeline, front.id);
+      const compiled =
+        step.scope === 'memory' && step.filesFrom
+          ? step.maxFiles!
+          : Math.max(1, step.files?.length ?? 0);
+      expect({ id: front.id, width: front.maxTasks }).toEqual({ id: front.id, width: compiled });
+    }
+    // …and the non-fan-out boxes really are one agent each, so the assertion
+    // above is not vacuously comparing 1 to 1 everywhere.
+    expect(plan.fronts.map((f) => f.maxTasks)).toEqual([1, 8, 1]);
+  });
+});
+
+describe('runDevMode — the synthetic plan is a real DevPlan value', () => {
+  // Nothing parses this object at run time, which is exactly how it drifted
+  // away from `DevPlanSchema` unnoticed: empty prompt fields (`.min(1)`), an
+  // 80-char title (`.max(60)`), a node id too short for `FRONT_ID_PATTERN`.
+  // Parsing it here is what stops the two shapes drifting again.
+  it('parses under DevPlanSchema for an ordinary drawing', async () => {
+    const { plan } = await captureDrawnSession(sampleGraph(), 'sessao-schema-1');
+    const parsed = DevPlanSchema.safeParse(plan);
+    expect(parsed.success ? [] : parsed.error.issues.map((i) => i.path.join('.'))).toEqual([]);
+    expect(parsed.success).toBe(true);
+  });
+
+  it('parses for the smallest drawing, and for one with a fan-out', async () => {
+    for (const [i, graph] of [tinyGraph(), sampleGraph('recon-fanout')].entries()) {
+      const { plan } = await captureDrawnSession(graph, `sessao-schema-${i + 2}`);
+      expect(DevPlanSchema.safeParse(plan).success).toBe(true);
+    }
+  });
+
+  it('never emits an empty prompt field — the schema reads "" as missing, a surface as an empty box', async () => {
+    // `tinyGraph`'s single box authors no prompt, draws no gate and lists no
+    // choices: all three `.min(1)` fields used to come out as ''.
+    const { plan } = await captureDrawnSession(tinyGraph(), 'sessao-vazios');
+    const front = plan.fronts[0]!;
+    expect(front.reconPrompt).toContain('security-review');
+    expect(front.workPrompt.length).toBeGreaterThan(0);
+    expect(front.verifyCondition).toContain('sem portão desenhado');
+    expect(DevFrontSchema.safeParse(front).success).toBe(true);
+  });
+
+  it('pads a node id too short to be a front id, and keeps it unique', async () => {
+    // `graph-schema.ts` accepts a ONE-character node id; FRONT_ID_PATTERN
+    // demands three. Both ids below are legal boxes, and they must not collapse
+    // onto one front.
+    const graph = tinyGraph({
+      nodes: [
+        {
+          id: 'entrada',
+          kind: 'prompt',
+          label: 'Entrada do prompt',
+          position: { x: 0, y: 0 },
+          goal: 'audite o repositório',
+        } as GraphNode,
+        {
+          id: 'a',
+          kind: 'action',
+          label: 'A',
+          position: { x: 360, y: 0 },
+          block: 'security-review',
+          scope: 'project',
+          join: { mode: 'all' },
+        } as GraphNode,
+        {
+          id: 'a-no',
+          kind: 'action',
+          label: 'A também',
+          position: { x: 360, y: 200 },
+          block: 'security-review',
+          scope: 'project',
+          join: { mode: 'all' },
+        } as GraphNode,
+      ],
+      edges: [
+        { id: 'e-1', source: 'entrada', target: 'a' },
+        { id: 'e-2', source: 'entrada', target: 'a-no' },
+      ],
+    });
+
+    const { plan } = await captureDrawnSession(graph, 'sessao-id-curto');
+    expect(plan.fronts.map((f) => f.id)).toEqual(['a-no', 'a-no-2']);
+    for (const front of plan.fronts) expect(FRONT_ID_PATTERN.test(front.id)).toBe(true);
+    expect(DevPlanSchema.safeParse(plan).success).toBe(true);
+  });
+
+  it('carries the padding into dependsOnFronts, so the projection stays coherent', async () => {
+    const graph = tinyGraph({
+      nodes: [
+        {
+          id: 'entrada',
+          kind: 'prompt',
+          label: 'Entrada do prompt',
+          position: { x: 0, y: 0 },
+          goal: 'audite o repositório',
+        } as GraphNode,
+        {
+          id: 'a',
+          kind: 'action',
+          label: 'A',
+          position: { x: 360, y: 0 },
+          block: 'security-review',
+          scope: 'project',
+          join: { mode: 'all' },
+        } as GraphNode,
+        {
+          id: 'depois',
+          kind: 'action',
+          label: 'Depois',
+          position: { x: 760, y: 0 },
+          block: 'consolidate',
+          join: { mode: 'all' },
+        } as GraphNode,
+      ],
+      edges: [
+        { id: 'e-1', source: 'entrada', target: 'a' },
+        { id: 'e-2', source: 'a', target: 'depois' },
+      ],
+    });
+
+    const { plan } = await captureDrawnSession(graph, 'sessao-id-curto-dep');
+    expect(plan.fronts.map((f) => f.id)).toEqual(['a-no', 'depois']);
+    expect(plan.fronts[1]!.dependsOnFronts).toEqual(['a-no']);
+    expect(DevPlanSchema.safeParse(plan).success).toBe(true);
+  });
+
+  // THE THREE DELIBERATE DIVERGENCES, enumerated so a FOURTH one cannot appear
+  // in silence. All three are the same thing: a cardinality ceiling that bounds
+  // what a PLANNER MODEL may invent in one epoch, applied to a topology a human
+  // drew. A canvas is bounded by `graph-schema.ts` and `validateGraph` instead.
+  it('may draw more boxes than DEV_MAX_FRONTS — and every front is still schema-legal', async () => {
+    const { plan } = await captureDrawnSession(wideGraph(6), 'sessao-larga');
+    expect(plan.fronts).toHaveLength(6);
+    expect(plan.fronts.length).toBeGreaterThan(DEV_MAX_FRONTS);
+    for (const front of plan.fronts) {
+      expect(DevFrontSchema.safeParse(front).success).toBe(true);
+    }
+    const parsed = DevPlanSchema.safeParse(plan);
+    expect(parsed.success).toBe(false);
+    expect(parsed.success === false && parsed.error.issues.map((i) => i.path.join('.'))).toEqual([
+      'fronts',
+    ]);
+  });
+
+  it('may join more arrows than DEV_MAX_FRONTS, because the human drew them', async () => {
+    const { plan } = await captureDrawnSession(wideGraph(5, { join: true }), 'sessao-junta-larga');
+    const tail = plan.fronts.find((f) => f.id === 'juntar')!;
+    expect(tail.dependsOnFronts).toHaveLength(5);
+    expect(DevFrontSchema.safeParse(tail).success).toBe(false);
+    expect(
+      DevFrontSchema.safeParse(tail).success === false &&
+        DevFrontSchema.safeParse(tail).error!.issues.map((i) => i.path.join('.')),
+    ).toEqual(['dependsOnFronts']);
+  });
+
+  it('may exceed the planner’s 40-agent ceiling — under-reporting it would be the bug', async () => {
+    const { plan } = await captureDrawnSession(
+      fanOutGraph((node) => {
+        node.maxFiles = 400;
+      }),
+      'sessao-teto-40',
+    );
+    const front = plan.fronts.find((f) => f.id === 'gerar-testes')!;
+    expect(front.maxTasks).toBe(DEVGRAPH_MAX_FAN_OUT);
+    const parsed = DevFrontSchema.safeParse(front);
+    expect(parsed.success).toBe(false);
+    expect(parsed.success === false && parsed.error.issues.map((i) => i.path.join('.'))).toEqual([
+      'maxTasks',
+    ]);
+  });
+});
+
+describe('runDevMode — a resumed session must bring the drawing back', () => {
+  const SESSION_D = 'sessao-desenhada';
+
+  /** Epoch 1 of a drawn session, left resumable (`goalComplete` is never true). */
+  async function firstEpoch(graph: DevGraph = tinyGraph()): Promise<void> {
+    const result = await runDevMode({
+      dev: { goal: 'o objetivo', approval: 'autonomous', skipKnowledgeBootstrap: true, graph },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_D,
+      resume: 'never',
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `um-${epoch}` }),
+    });
+    expect(result.stoppedBecause).toBe('max-epochs');
+    expect(result.epochs).toHaveLength(1);
+  }
+
+  /** A second invocation against the same repo and goal, resuming by default. */
+  async function resumeWith(dev: Partial<DevModeConfig>): Promise<{
+    result: Awaited<ReturnType<typeof runDevMode>>;
+    runs: number;
+    planners: { plan: number; knowledge: number };
+  }> {
+    let runs = 0;
+    const spy = plannerSpies();
+    const result = await runDevMode({
+      dev: { goal: 'o objetivo', approval: 'autonomous', skipKnowledgeBootstrap: true, ...dev },
+      config: CONFIG,
+      cwd: repo,
+      resume: 'auto',
+      agentFactory: NOOP_FACTORY,
+      ...spy.seams,
+      orchestratorFactory: (_p, epoch) => {
+        runs++;
+        return fakeRun({ runId: `dois-${epoch}` });
+      },
+    });
+    return { result, runs, planners: spy.calls };
+  }
+
+  it('records the drawn method in state.json, so a resume has something to check', async () => {
+    await firstEpoch();
+    const state = JSON.parse(readFileSync(join(repo, devPaths.state), 'utf8'));
+    expect(state.drawnMethod).toEqual({ graphId: 'metodo-minimo', graphName: 'Método mínimo' });
+  });
+
+  it('writes NO drawnMethod on the planner path — the field is additive', async () => {
+    await runDevMode({
+      dev: { goal: 'o objetivo', approval: 'autonomous', maxEpochs: 1, skipKnowledgeBootstrap: true },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      planner: async () => planFixture(),
+      orchestratorFactory: () => fakeRun({ runId: 'planejada-1' }),
+    });
+    const state = JSON.parse(readFileSync(join(repo, devPaths.state), 'utf8'));
+    expect('drawnMethod' in state).toBe(false);
+  });
+
+  it('continues the session when the SAME drawing comes back', async () => {
+    await firstEpoch();
+    const { result, runs, planners } = await resumeWith({ graph: tinyGraph() });
+
+    expect(result.resumed).toBe(true);
+    expect(result.sessionId).toBe(SESSION_D);
+    expect(result.epochs).toHaveLength(2);
+    expect(result.stoppedBecause).toBe('max-epochs');
+    expect(runs).toBe(1);
+    expect(planners).toEqual({ plan: 0, knowledge: 0 });
+  });
+
+  // THE MAJOR BUG THIS PINS: without the recorded drawing, epoch 1 replayed the
+  // persisted pipeline, then `maxEpochs` fell back to the UNBOUNDED backstop and
+  // epoch 2 called the LLM planner — a model's topology running inside a session
+  // a human opened as a drawing, with nothing on screen saying so.
+  it('REFUSES a resume that lost the drawing, instead of degrading to the planner', async () => {
+    await firstEpoch();
+    const { result, runs, planners } = await resumeWith({});
+
+    expect(result.stoppedBecause).toBe('graph-missing-on-resume');
+    expect(result.detail).toContain('metodo-minimo');
+    expect(result.detail).toContain(SESSION_D);
+    // Nothing ran, and the planner was never asked — the refusal precedes every
+    // side effect.
+    expect(runs).toBe(0);
+    expect(planners).toEqual({ plan: 0, knowledge: 0 });
+    expect(result.epochs).toHaveLength(0);
+    expect(result.resumed).toBe(false);
+  });
+
+  it('REFUSES a resume that brings a DIFFERENT drawing, naming both', async () => {
+    await firstEpoch();
+    const { result, runs } = await resumeWith({ graph: sampleGraph() });
+
+    expect(result.stoppedBecause).toBe('graph-conflict');
+    expect(result.detail).toContain('metodo-minimo');
+    expect(result.detail).toContain('tdd-seguranca-performance');
+    expect(runs).toBe(0);
+  });
+
+  it('leaves the recorded session untouched when it refuses', async () => {
+    await firstEpoch();
+    const before = readFileSync(join(repo, devPaths.state), 'utf8');
+    await resumeWith({});
+    expect(readFileSync(join(repo, devPaths.state), 'utf8')).toBe(before);
+    expect(git(['status', '--porcelain'], repo).trim()).toBe('');
+  });
+
+  // Declining the resume is NOT the refused path: the human is deliberately
+  // starting over, and a new session under the same goal is exactly what they
+  // asked for.
+  it('starts a fresh planner session when the human declines the resume', async () => {
+    await firstEpoch();
+    let plannerCalls = 0;
+    const result = await runDevMode({
+      dev: { goal: 'o objetivo', approval: 'autonomous', maxEpochs: 1, skipKnowledgeBootstrap: true },
+      config: CONFIG,
+      cwd: repo,
+      agentFactory: NOOP_FACTORY,
+      onResumeOffer: () => false,
+      planner: async () => {
+        plannerCalls++;
+        return planFixture();
+      },
+      orchestratorFactory: () => fakeRun({ runId: 'nova-1' }),
+    });
+
+    expect(result.resumed).toBe(false);
+    expect(result.sessionId).not.toBe(SESSION_D);
+    expect(plannerCalls).toBe(1);
+  });
+
+  // The mirror case: a planner session that a human comes back to WITH a
+  // drawing. That is the topology moving back to the human, so it runs — loudly.
+  it('lets a drawing take over a planner session, and says so', async () => {
+    await runDevMode({
+      dev: { goal: 'o objetivo', approval: 'autonomous', maxEpochs: 1, skipKnowledgeBootstrap: true },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: 'sessao-planejada',
+      resume: 'never',
+      agentFactory: NOOP_FACTORY,
+      planner: async () => planFixture(),
+      orchestratorFactory: () => fakeRun({ runId: 'planejada-1' }),
+    });
+
+    const messages: string[] = [];
+    const result = await runDevMode({
+      dev: { goal: 'o objetivo', approval: 'autonomous', skipKnowledgeBootstrap: true, graph: tinyGraph() },
+      config: CONFIG,
+      cwd: repo,
+      resume: 'auto',
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      onEvent: (e) => {
+        if (e.type === 'log') messages.push(e.message);
+      },
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `retomada-${epoch}` }),
+    });
+
+    expect(result.resumed).toBe(true);
+    expect(result.epochs).toHaveLength(2);
+    expect(messages.join('\n')).toContain('epoch 2 onward runs the drawing');
+  });
+});
+
+describe('runDevMode — two epochs of ONE session never share a fan-out list', () => {
+  const SESSION_N = 'sessao-repetida';
+
+  // THE COLLISION: a drawing always ends `goalComplete: false`, so re-running
+  // the same objective is offered a resume, and an accepted resume runs the SAME
+  // drawing again inside the SAME session id. With only a session segment in the
+  // path, epoch 1's target list — committed, because the fan-out needs it in the
+  // integration worktree — is exactly what epoch 2's fan-out reads when epoch
+  // 2's producer fails. Real worktrees, real cost, over yesterday's work.
+  it('gives every epoch its own namespace, producer and consumer alike', async () => {
+    const graph = sampleGraph('recon-fanout');
+    const pipelines: Pipeline[] = [];
+    const capture = (e: DevEvent): void => {
+      if (e.type === 'epoch-start') pipelines.push(e.pipeline);
+    };
+
+    await runDevMode({
+      dev: { goal: 'mapear e testar', approval: 'autonomous', skipKnowledgeBootstrap: true, graph },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: SESSION_N,
+      resume: 'never',
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      onEvent: capture,
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `n1-${epoch}` }),
+    });
+
+    const second = await runDevMode({
+      dev: { goal: 'mapear e testar', approval: 'autonomous', skipKnowledgeBootstrap: true, graph },
+      config: CONFIG,
+      cwd: repo,
+      resume: 'auto',
+      agentFactory: NOOP_FACTORY,
+      ...plannerSpies().seams,
+      onEvent: capture,
+      orchestratorFactory: (_p, epoch) => fakeRun({ runId: `n2-${epoch}` }),
+    });
+
+    // ONE session, TWO epochs — the exact shape the old namespace ignored.
+    expect(second.resumed).toBe(true);
+    expect(second.sessionId).toBe(SESSION_N);
+    expect(second.epochs).toHaveLength(2);
+    expect(pipelines).toHaveLength(2);
+
+    const [first, later] = pipelines as [Pipeline, Pipeline];
+    expect(stepFor(first, 'mapear-alvos').produces).toBe(
+      `.huu/findings/${SESSION_N}-e1/mapear-alvos.json`,
+    );
+    expect(stepFor(later, 'mapear-alvos').produces).toBe(
+      `.huu/findings/${SESSION_N}-e2/mapear-alvos.json`,
+    );
+    expect(stepFor(later, 'mapear-alvos').produces).not.toBe(
+      stepFor(first, 'mapear-alvos').produces,
+    );
+
+    // The consumer follows its own producer, never the previous epoch's.
+    expect(stepFor(first, 'gerar-testes').filesFrom).toBe(stepFor(first, 'mapear-alvos').produces);
+    expect(stepFor(later, 'gerar-testes').filesFrom).toBe(stepFor(later, 'mapear-alvos').produces);
+
+    // …and the same for the graph blackboard, where the research artifacts and
+    // the critic shards live.
+    expect(devGraphRoot(SESSION_N, 1)).not.toBe(devGraphRoot(SESSION_N, 2));
+  });
+});
+
+describe('runDevMode — a graph session still pays Phase 0', () => {
+  // "Phases A and B do not happen" was true and was being read as "nothing runs
+  // before the drawing". Phase 0 — the knowledge bootstrap — sits UPSTREAM of
+  // the epoch loop and runs for a drawn session exactly as for a planned one:
+  // a real pi agent writing real files into the repo, committed, before a single
+  // box compiles. Every other graph test sets `skipKnowledgeBootstrap: true`,
+  // which is why nothing said so.
+  it('bootstraps BEFORE the drawing compiles, and a failure there stops the session', async () => {
+    const events: DevEvent[] = [];
+    let runs = 0;
+    const spy = plannerSpies();
+
+    const result = await runDevMode({
+      // No `skipKnowledgeBootstrap` — the defaults a real user gets.
+      dev: { goal: 'g', approval: 'autonomous', graph: tinyGraph() },
+      config: CONFIG,
+      cwd: repo,
+      sessionId: 'sessao-bootstrap',
+      agentFactory: NOOP_FACTORY,
+      ...spy.seams,
+      onEvent: (e) => events.push(e),
+      orchestratorFactory: () => {
+        runs++;
+        return fakeRun({ runId: 'nunca' });
+      },
+    });
+
+    // The probe, then the bootstrap, then the stop — the drawing is never
+    // reached, so there is no `planning` and no `planned`.
+    expect(events.filter((e) => e.type !== 'log').map((e) => e.type)).toEqual([
+      'knowledge',
+      'bootstrap-start',
+      'stopped',
+    ]);
+    expect(result.stoppedBecause).toBe('bootstrap-failed');
+    expect(runs).toBe(0);
+    expect(spy.calls).toEqual({ plan: 0, knowledge: 0 });
+  });
+
+  // …and WHY it is upstream: the node prompts only get the project-router
+  // prefix when the knowledge probe found a knowledge system. Skipping Phase 0
+  // is therefore not free — it silently un-routes every box in the drawing.
+  it('routes every compiled node through the project-router when the knowledge is there', async () => {
+    mkdirSync(join(repo, '.agents/skills/project-router'), { recursive: true });
+    writeFileSync(join(repo, '.agents/skills/project-router/SKILL.md'), '# router\n');
+    writeFileSync(join(repo, '.agents/skills/catalog.md'), '# catalog\n');
+    git(['add', '-A'], repo);
+    git(['commit', '-q', '-m', 'skills'], repo);
+
+    const { pipeline } = await captureDrawnSession(tinyGraph(), 'sessao-router');
+    expect(stepFor(pipeline, 'auditar').prompt).toContain(ROUTER_PREFIX.trim().slice(0, 40));
+  });
+
+  it('does NOT route them when the bootstrap was skipped on a bare repo', async () => {
+    const { pipeline } = await captureDrawnSession(tinyGraph(), 'sessao-sem-router');
+    expect(stepFor(pipeline, 'auditar').prompt).not.toContain(ROUTER_PREFIX.trim().slice(0, 40));
   });
 });

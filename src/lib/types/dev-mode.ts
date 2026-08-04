@@ -6,6 +6,7 @@
  * `../lib/types/dev-mode.js`.
  */
 
+import type { DevGraph } from '../dev-graph/graph-types.js';
 import type { ReviewFinding } from './pipeline.js';
 
 // --- Development mode ---
@@ -338,6 +339,28 @@ export interface DevState {
    */
   sessionId?: string;
   /**
+   * THE SESSION RAN A METHOD A HUMAN DREW — recorded so a RESUME cannot
+   * silently hand the same session back to the LLM planner.
+   *
+   * Without it, `resolveDevGraph` reads only `dev.graph` / `dev.graphId`, which
+   * the CALLER must re-supply. A caller that resumes without them gets a
+   * session whose epoch 1 was a drawing and whose epoch 2 is a model's plan —
+   * the exact substitution {@link DevModeConfig.graph} exists to remove, and
+   * the worst possible outcome, because it is invisible. With this field the
+   * driver can refuse instead: see the `graph-missing-on-resume` and
+   * `graph-conflict` stops in `dev-driver.ts`.
+   *
+   * Additive and optional: a state file written by a planner session has none,
+   * which is exactly what "this session was never a drawing" means, and every
+   * state file written before this field existed is still a valid v2 record.
+   */
+  drawnMethod?: {
+    /** The graph's slug — the identity a resume must match. */
+    graphId: string;
+    /** Its name when it ran, so a refusal can be read by a human. */
+    graphName: string;
+  };
+  /**
    * Verification commands extracted from the `build-test-commands` brief,
    * persisted on first successful extraction. The baseline gap that produces
    * them is only asked in epoch 1 — without this field every epoch ≥ 2 lost
@@ -472,6 +495,43 @@ export interface DevModeConfig {
   maxFronts?: number;
   /** Skip the knowledge bootstrap even when the probe says it is missing. */
   skipKnowledgeBootstrap?: boolean;
+  /**
+   * THE METHOD, DRAWN BY A HUMAN. Present ⇒ the LLM planner is never called.
+   *
+   * This is the field that closes the MANIFESTO gap `docs/dev-mode.md` opens
+   * in its own first section: dev mode normally hands the TOPOLOGY to a model
+   * (how many fronts, what each does, where they join), which is precisely the
+   * decision differential #2 says must not be delegated. A `huu-devgraph-v1` is
+   * the human's answer — the topology IS the drawing, and the model only
+   * supplies intelligence INSIDE each node.
+   *
+   * Consequences, all of them deliberate (see `runDevMode`):
+   *  - Phase A (knowledge) and Phase B (plan) are SKIPPED. There is nothing to
+   *    plan and nobody to brief: the drawing already says what runs.
+   *  - The session is EXACTLY ONE EPOCH. Replanning is what epochs are for, and
+   *    a graph has nothing to replan — so {@link DevModeConfig.maxEpochs} ≥ 2
+   *    is REFUSED (`graph-conflict`) rather than silently ignored.
+   *  - {@link DevModeConfig.methodology} and {@link DevModeConfig.models} are
+   *    NOT compiled into it. A devgraph expresses method by DRAWING it and
+   *    routing by the node's own `modelId`; applying the flags here would mean
+   *    adding steps the human never drew.
+   *
+   * ADDITIVE, and that is a contract with a test behind it: a session that
+   * sets NEITHER this nor {@link DevModeConfig.graphId} compiles and runs
+   * byte-identically to today's planner session.
+   */
+  graph?: DevGraph;
+  /**
+   * The same thing by reference: the id of a graph saved under
+   * `.huu/dev/graphs/`, resolved by the driver through `readGraph`.
+   *
+   * Exists so a surface can hand over a picker selection without loading and
+   * re-serializing the drawing. Setting BOTH is fine while they name the same
+   * graph (the inline object wins, no read happens); naming two DIFFERENT
+   * graphs is refused (`graph-conflict`) — there is no defensible way to pick
+   * which method the human meant.
+   */
+  graphId?: string;
   /**
    * Per-role model routing. Undefined — or any role left unset inside it —
    * means the emitted step omits `modelId` entirely and falls back to
