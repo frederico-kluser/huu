@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolvePiRuntimeReport, renderPiRuntimeText } from './pi-doctor.js';
+import { resolvePiRuntimeReport, renderPiRuntimeText } from './jcode-doctor.js';
 
 const BASE = {
   piVersion: '0.73.1',
@@ -19,10 +19,10 @@ describe('resolvePiRuntimeReport', () => {
     expect(r.piVersion).toBe('0.73.1');
   });
 
-  it('HUU_PI_HERMETIC=0 → host ~/.pi/agent', () => {
+  it('HUU_PI_HERMETIC=0 → host ~/.jcode', () => {
     const r = resolvePiRuntimeReport({ ...BASE, env: { HUU_PI_HERMETIC: '0' } });
     expect(r.hermetic).toBe(false);
-    expect(r.agentDir).toBe('/home/u/.pi/agent');
+    expect(r.agentDir).toBe('/home/u/.jcode');
     expect(r.agentDirSource).toBe('host');
   });
 

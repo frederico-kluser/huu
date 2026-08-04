@@ -1,7 +1,7 @@
 /**
  * Shared config for huu's hermetic pi runtime — the tiny pure bits both the
  * session composer (orchestrator/backends/pi/hermetic.ts) and the `huu status`
- * doctor (lib/pi-doctor.ts) need. Lives in lib/ so imports only flow downward.
+ * doctor (lib/jcode-doctor.ts) need. Lives in lib/ so imports only flow downward.
  */
 import { join } from 'node:path';
 import { getHuuHome } from './huu-home.js';

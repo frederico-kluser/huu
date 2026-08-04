@@ -9,7 +9,7 @@ import {
   gatherPiRuntimeInputs,
   renderPiRuntimeText,
   resolvePiRuntimeReport,
-} from './pi-doctor.js';
+} from './jcode-doctor.js';
 
 /**
  * Headless status reporter for huu runs. Parses the NDJSON debug log

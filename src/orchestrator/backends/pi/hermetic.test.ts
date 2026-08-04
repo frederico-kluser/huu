@@ -33,7 +33,7 @@ function snapshotTree(root: string): string[] {
  */
 function seedFakeHome(): string {
   const home = mkdtempSync(join(tmpdir(), 'huu-hermetic-home-'));
-  const agent = join(home, '.pi', 'agent');
+  const agent = join(home, '.jcode');
   mkdirSync(join(agent, 'skills', 'canary'), { recursive: true });
   writeFileSync(
     join(agent, 'auth.json'),
@@ -101,13 +101,13 @@ describe('loadRepoContextFiles', () => {
 });
 
 describe('buildPiSessionEnvironment — hermetic (default)', () => {
-  it('CANARY: never reads host ~/.pi (auth invisible, discovery empty, tree untouched)', async () => {
+  it('CANARY: never reads host ~/.jcode (auth invisible, discovery empty, tree untouched)', async () => {
     const home = seedFakeHome();
     process.env.HOME = home;
     process.env.HUU_HOST_HOME = home;
     delete process.env.PI_CODING_AGENT_DIR;
     const cwd = mkdtempSync(join(tmpdir(), 'huu-wt-'));
-    const before = snapshotTree(join(home, '.pi'));
+    const before = snapshotTree(join(home, '.jcode'));
 
     const fakeEnv: NodeJS.ProcessEnv = {};
     const piEnv = await buildPiSessionEnvironment({
@@ -132,8 +132,8 @@ describe('buildPiSessionEnvironment — hermetic (default)', () => {
     expect(loader.getThemes().themes).toEqual([]);
     expect(loader.getSystemPrompt()).toBeUndefined();
     expect(loader.getAppendSystemPrompt()).toEqual([]);
-    // And the host ~/.pi tree is byte-structure identical (nothing created).
-    expect(snapshotTree(join(home, '.pi'))).toEqual(before);
+    // And the host ~/.jcode tree is byte-structure identical (nothing created).
+    expect(snapshotTree(join(home, '.jcode'))).toEqual(before);
   });
 
   it('creates the huu-owned agent dir and exports PI_CODING_AGENT_DIR only when unset', async () => {
@@ -235,7 +235,7 @@ describe('resolveWorktreeSkillPaths', () => {
 
   it('never walks above the worktree', () => {
     // The whole point of the hermetic loader: an ancestor `.agents/skills`
-    // (or ~/.pi) must stay invisible.
+    // (or ~/.jcode) must stay invisible.
     const parent = mkdtempSync(join(tmpdir(), 'huu-ancestor-'));
     mkdirSync(join(parent, '.agents', 'skills'), { recursive: true });
     const child = join(parent, 'worktree');

@@ -199,7 +199,7 @@ export const piAgentFactory: AgentFactory = async (
 
   // Hermetic composition: in-memory auth/registry/settings + a discovery-off
   // resource loader (scoped repo context only). See hermetic.ts for why —
-  // the SDK defaults would load host-global ~/.pi config and npm pi-* extensions.
+  // the SDK defaults would load host-global ~/.jcode config and npm pi-* extensions.
   const piEnv = await buildPiSessionEnvironment({
     provider: 'openrouter',
     apiKey,

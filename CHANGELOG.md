@@ -626,7 +626,7 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 - **Hermetic pi runtime (default ON).** Every pi session huu composes —
   openrouter AND azure backends, task agents and conflict resolvers alike — is
   now hermetic: in-memory auth/settings/model-registry fed by the run's key,
-  ZERO reads of the host's `~/.pi`, ZERO global npm `pi-*` extension discovery
+  ZERO reads of the host's `~/.jcode`, ZERO global npm `pi-*` extension discovery
   (`npm root -g` is never consulted), no skill/prompt/theme auto-discovery, and
   a huu-owned agent dir (`~/.huu/pi-agent`, with `PI_CODING_AGENT_DIR` exported
   only-when-unset as defense in depth). This closes the door a host-global
@@ -687,7 +687,7 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
   (the hermetic canary tests fail loudly on a regressing bump).
 - **Agent context files are now SCOPED.** pi sessions no longer auto-inject
   AGENTS.md/CLAUDE.md from every ancestor directory (which reached `$HOME` and
-  `~/.pi/agent`); huu injects only the target repo root's AGENTS.md/CLAUDE.md
+  `~/.jcode`); huu injects only the target repo root's AGENTS.md/CLAUDE.md
   (deduped by realpath). Pipelines that relied on `$HOME`-level context files
   must move that guidance into the repo or the pipeline prompt.
 - **`huu Test Suite` fan-out widened (12 → 24 files).** The per-file test-writing

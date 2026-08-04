@@ -6,7 +6,7 @@
  * 33-run incident, where the user had NO way to tell whether the 50% dial had
  * taken effect at all.
  *
- * Shape follows pi-doctor: a PURE core (`resolveRamDoctorReport`) with every
+ * Shape follows jcode-doctor: a PURE core (`resolveRamDoctorReport`) with every
  * fs/env input injected — unit-testable — plus one impure gatherer and a text
  * renderer. Everything degrades to nulls instead of throwing.
  */

@@ -371,7 +371,7 @@ huu --cli                 # TUI no terminal
 | `HUU_RAM_PERCENT` / `--ram-percent=<n>` | Orçamento de RAM como % do total da máquina (default `70`, faixa 10–95). Também na Web em Settings → RAM budget % — **aplicado ao vivo pela web** (vale na hora pra execuções atuais + fila, persistido no servidor). |
 | `HUU_NO_HOST_CLAMP=1` | Desliga o clamp por **disponibilidade do host** (o huu volta a planejar só pelo dial/cgroup do container). Use em hosts dedicados ao huu. |
 | `HUU_OOM_SCORE_ADJ` | Ajuste do `oom_score_adj` do processo huu (default conservador; best-effort — valor negativo só "pega" com `CAP_SYS_RESOURCE`, que nem o container tem; a alavanca real é `HUU_CHILD_OOM_SCORE_ADJ`, que sobe os subprocessos dos agentes pra +500). |
-| `HUU_PI_HERMETIC=0` | Escape de debug: desliga o **runtime pi hermético** (por padrão as sessões pi do huu NUNCA leem `~/.pi` nem carregam extensões `pi-*` globais do npm — só os prompts do huu + AGENTS.md/CLAUDE.md da raiz do repo-alvo). `huu status` mostra o estado. |
+| `HUU_PI_HERMETIC=0` | Escape de debug: desliga o **runtime pi hermético** (por padrão as sessões pi do huu NUNCA leem `~/.jcode` nem carregam extensões `pi-*` globais do npm — só os prompts do huu + AGENTS.md/CLAUDE.md da raiz do repo-alvo). `huu status` mostra o estado. |
 | `HUU_AGENT_MEM_SEED_MB` | Seed do footprint por-agente do AutoScaler (MiB, clamp 128–4096; default pessimista `1536`). Baixe SÓ com medição — veja `scaler`/`ema_move` no debug log. |
 | `HUU_AGENT_MEM_EMA_ALPHA` | Fator da EMA do footprint observado (0.01–1; default `0.2`). Maior = converge mais rápido do seed pro valor real. |
 

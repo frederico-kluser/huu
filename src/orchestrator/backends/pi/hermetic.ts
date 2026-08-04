@@ -2,10 +2,10 @@
  * Hermetic pi-session composition — huu's OWN clean pi runtime.
  *
  * Why this exists: `createAgentSession` fills every option huu omits with
- * HOST-GLOBAL defaults — it reads `~/.pi/agent/settings.json` (whose `packages`
+ * HOST-GLOBAL defaults — it reads `~/.jcode/settings.json` (whose `packages`
  * list resolves through `npm root -g` and loads GLOBAL npm `pi-*` extensions
- * into every huu agent), reads/writes `~/.pi/agent/auth.json` and
- * `models.json`, auto-discovers skills/prompts/themes under `~/.pi` and every
+ * into every huu agent), reads/writes `~/.jcode/auth.json` and
+ * `models.json`, auto-discovers skills/prompts/themes under `~/.jcode` and every
  * ancestor `.agents/skills`, and injects AGENTS.md/CLAUDE.md from every
  * directory up to `/`. One such global extension (`pi-animations`) crashed a
  * whole multi-run fleet via a detached timer huu never asked for.
@@ -16,7 +16,7 @@
  * in-memory settings (no `packages` ⇒ the loader never shells `npm root -g`),
  * and a resource loader with every discovery surface disabled. The single
  * deliberate re-addition is SCOPED repo context: AGENTS.md/CLAUDE.md from the
- * agent worktree ROOT only (never `$HOME`, never `~/.pi`, never ancestors).
+ * agent worktree ROOT only (never `$HOME`, never `~/.jcode`, never ancestors).
  *
  * Default ON for every pi-backed session (openrouter AND azure — both
  * factories compose sessions here). Escape hatch for debugging:
@@ -84,7 +84,7 @@ const SKILL_ROOTS = ['.agents/skills', '.claude/skills', '.opencode/skills'];
  * SCOPED replacement for pi's skill auto-discovery.
  *
  * `noSkills: true` stays on — that is what stops the ancestor walk and the
- * `~/.pi` scan. But it does NOT suppress `additionalSkillPaths`
+ * `~/.jcode` scan. But it does NOT suppress `additionalSkillPaths`
  * (`resource-loader.js`: `noSkills ? mergePaths(cliEnabledSkills,
  * additionalSkillPaths) : …`), so an EXPLICIT worktree-local root is loadable
  * without reopening any of the surfaces this module exists to close.
@@ -163,7 +163,7 @@ export interface BuildPiSessionEnvironmentOptions {
  * Defense in depth: `PI_CODING_AGENT_DIR` is exported (only when unset) so any
  * SDK-internal `getAgentDir()` caller not covered by explicit options — and
  * any `pi` a tool subprocess might invoke inside the worktree — still lands in
- * huu-owned space instead of `~/.pi/agent`.
+ * huu-owned space instead of `~/.jcode`.
  */
 export async function buildPiSessionEnvironment(
   opts: BuildPiSessionEnvironmentOptions,
@@ -172,7 +172,7 @@ export async function buildPiSessionEnvironment(
 
   if (!resolveHermeticEnabled(env)) {
     // Legacy escape hatch: exactly the pre-hermetic composition (host-global
-    // ~/.pi/agent auth + models.json, SDK-default settings/loader discovery).
+    // ~/.jcode auth + models.json, SDK-default settings/loader discovery).
     const authStorage = AuthStorage.create();
     authStorage.setRuntimeApiKey(opts.provider, opts.apiKey);
     const modelRegistry = ModelRegistry.create(authStorage);
@@ -204,7 +204,7 @@ export async function buildPiSessionEnvironment(
     agentDir,
     settingsManager,
     noExtensions: true,
-    // Discovery stays OFF (no ancestor walk, no ~/.pi). The explicit
+    // Discovery stays OFF (no ancestor walk, no ~/.jcode). The explicit
     // worktree-local roots below are the ONE re-addition, same rule as the
     // scoped repo context above.
     noSkills: true,

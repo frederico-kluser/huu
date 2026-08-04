@@ -75,7 +75,7 @@ Pontos-chave:
 O huu compõe TODA sessão pi (openrouter E azure — os dois factories passam por
 `src/orchestrator/backends/pi/hermetic.ts`) de forma **hermética**: a sessão
 carrega SÓ o que o huu injeta, nunca o estado do SO. Sem isso, os defaults de
-`createAgentSession` leem `~/.pi/agent/settings.json` do host, resolvem a lista
+`createAgentSession` leem `~/.jcode/settings.json` do host, resolvem a lista
 `packages` via `npm root -g` e carregam **extensões `pi-*` globais** dentro dos
 agentes headless do huu (foi exatamente assim que um timer solto da extensão
 global `pi-animations` derrubou um fleet multi-run inteiro), além de ler
@@ -86,12 +86,12 @@ Composição hermética (`buildPiSessionEnvironment`):
 
 | Superfície | Hermético (default) | Legacy (`HUU_PI_HERMETIC=0`) |
 | --- | --- | --- |
-| Auth | `AuthStorage.inMemory()` + key da run | `~/.pi/agent/auth.json` |
-| Modelos | `ModelRegistry.inMemory()` | `~/.pi/agent/models.json` |
+| Auth | `AuthStorage.inMemory()` + key da run | `~/.jcode/auth.json` |
+| Modelos | `ModelRegistry.inMemory()` | `~/.jcode/models.json` |
 | Settings | `SettingsManager.inMemory({})` (packages=[]) | settings.json global + do projeto |
-| Extensões/skills/prompts/temas | desligados (`no*` flags) | auto-descoberta (`npm root -g`, `~/.pi`, ancestrais) |
-| Contexto (AGENTS.md/CLAUDE.md) | SÓ a raiz do repo-alvo (escopado, dedupe por realpath) | todos os ancestrais até `/` + `~/.pi/agent` |
-| Agent dir | `~/.huu/pi-agent` (+ `PI_CODING_AGENT_DIR` exportada só-se-unset) | `~/.pi/agent` |
+| Extensões/skills/prompts/temas | desligados (`no*` flags) | auto-descoberta (`npm root -g`, `~/.jcode`, ancestrais) |
+| Contexto (AGENTS.md/CLAUDE.md) | SÓ a raiz do repo-alvo (escopado, dedupe por realpath) | todos os ancestrais até `/` + `~/.jcode` |
+| Agent dir | `~/.huu/pi-agent` (+ `PI_CODING_AGENT_DIR` exportada só-se-unset) | `~/.jcode` |
 
 O flip do contexto escopado é o default `includeRepoContext: true` no seam.
 Diagnóstico: `huu status` imprime `pi runtime: <versão> · hermetic=on ·

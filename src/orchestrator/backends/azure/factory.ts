@@ -111,7 +111,7 @@ export const azureAgentFactory: AgentFactory = async (
 
   // Azure sessions are pi sessions too — same hermetic composition as the pi
   // backend (in-memory auth/registry/settings, discovery-off loader), so the
-  // host's ~/.pi config and global npm pi-* extensions never leak in here either.
+  // host's ~/.jcode config and global npm pi-* extensions never leak in here either.
   const piEnv = await buildPiSessionEnvironment({
     provider: AZURE_PROVIDER,
     apiKey,

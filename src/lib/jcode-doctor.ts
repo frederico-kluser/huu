@@ -24,7 +24,7 @@ export interface PiRuntimeReport {
   hermetic: boolean;
   /** The agent dir pi sessions will effectively use. */
   agentDir: string;
-  /** Where that dir came from: user env override, huu-owned, or host ~/.pi. */
+  /** Where that dir came from: user env override, huu-owned, or host ~/.jcode. */
   agentDirSource: 'env' | 'huu' | 'host';
   globalNpmRoot: string | null;
   /** Host-global pi-* packages found under the npm root (hermetic ignores them). */
@@ -59,7 +59,7 @@ export function resolvePiRuntimeReport(inputs: PiRuntimeInputs): PiRuntimeReport
     agentDir = join(huuHome, '.huu', 'pi-agent');
     agentDirSource = 'huu';
   } else {
-    agentDir = join(osHome, '.pi', 'agent');
+    agentDir = join(osHome, '.jcode');
     agentDirSource = 'host';
   }
 

@@ -497,7 +497,7 @@ export function buildDockerArgv(opts: DockerCommandOptions): string[] {
     'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL',
     // Hermetic-pi escape hatch + RAM-tuning knobs must reach the in-container
     // orchestrator. Deliberately NOT forwarding PI_CODING_AGENT_DIR: the
-    // container has no host ~/.pi to leak from, and the hermetic composition
+    // container has no host ~/.jcode to leak from, and the hermetic composition
     // sets its own huu-owned dir.
     'HUU_PI_HERMETIC', 'HUU_AGENT_MEM_SEED_MB', 'HUU_AGENT_MEM_EMA_ALPHA',
     // RAM-safety knobs (dial, guard ladder, admission, OS reserve, pause) —
