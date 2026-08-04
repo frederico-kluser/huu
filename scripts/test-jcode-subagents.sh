@@ -148,30 +148,26 @@ AGENT3_MARKER="[agent-listing] DONE"
 # ---- spawn agents in parallel ----
 step "spawning agents in parallel"
 
-declare -A AGENT_PIDS
-declare -A AGENT_LOGS
-declare -A AGENT_START_TS
+# bash 3.2 compat: use simple variables instead of associative arrays
+AGENT1_PID="" AGENT2_PID="" AGENT3_PID=""
 
 run_agent() {
   local name="$1"
   local prompt="$2"
   local log="$SCRATCH/${name}.log"
 
-  AGENT_LOGS["$name"]="$log"
-  AGENT_START_TS["$name"]="$(date +%s)"
+  printf "[test-jcode] spawning %s ...\n" "$name"
 
-  printf '[test-jcode] spawning %s ...\n' "$name"
-
-  # Run jcode in background.
-  # The prompt is passed as the MESSAGE positional arg (last arg after --).
-  # We use --quiet to suppress non-error output to stderr; stdout goes to the log.
   JCODE_MEMORY_ENABLED="${JCODE_MEMORY_ENABLED:-false}" \
   JCODE_NO_TELEMETRY="${JCODE_NO_TELEMETRY:-1}" \
     "$JCODE_BIN" "${JCODE_ARGS[@]}" "$prompt" >"$log" 2>&1 &
 
-  AGENT_PIDS["$name"]=$!
+  case "$name" in
+    agent-readme)  AGENT1_PID=$! ;;
+    agent-counter) AGENT2_PID=$! ;;
+    agent-listing) AGENT3_PID=$! ;;
+  esac
 }
-
 run_agent "$AGENT1_NAME" "$(printf '%b' "$AGENT1_PROMPT")"
 
 if [ "$QUICK" != "--quick" ]; then
@@ -189,7 +185,7 @@ if [ "$QUICK" != "--quick" ]; then
 fi
 
 for name in "${AGENT_NAMES[@]}"; do
-  pid="${AGENT_PIDS[$name]}"
+  case "$name" in agent-readme) pid="$AGENT1_PID" ;; agent-counter) pid="$AGENT2_PID" ;; agent-listing) pid="$AGENT3_PID" ;; esac
   log="${AGENT_LOGS[$name]}"
   start_ts="${AGENT_START_TS[$name]}"
 
