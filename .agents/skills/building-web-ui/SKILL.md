@@ -2,7 +2,7 @@
 name: building-web-ui
 description: Procedure and conventions for huu's BROWSER UI (src/web) — the vanilla-ESM no-build client (index.html/app.js/styles.css), the multi-run server over node:http + SSE with its TWO frame types (throttled run snapshot vs the un-throttled agent-stream output firehose mirrored to the browser console), the browser-owns-state rule (keys in sessionStorage, run history in IndexedDB), the provider→backend dispatch gotcha, and how to verify client logic with no browser. Use for any change under src/web/ — client screens, the SSE/run-manager server, api-data, or web run/queue/history behavior.
 metadata:
-  version: 0.8.0
+  version: 0.8.1
   type: task
 ---
 
@@ -17,7 +17,7 @@ Anything under `src/web/`: browser client (`client/index.html`, `client/app.js`,
 ### Layering & build
 
 - `src/web/` is a presentation layer, sibling to `src/ui/` — imports from `orchestrator`/`lib`, never the reverse (`following-architecture-conventions`).
-- Client is **vanilla ES modules — no framework, no bundler, no CDN**. `build` does `tsc && cp -R src/web/client/. dist/web/client/`. `tsconfig` has **no `allowJs`**, so client `.js` is NOT type-checked. Server `.ts` files ARE type-checked and have colocated `.test.ts`.
+- Client is **vanilla ES modules — no framework, no bundler, no CDN**. `build` does `tsc && cp -R src/web/client/. dist/web/client/`. Client `.js` **IS type-checked**: `tsconfig.client.json` (`allowJs` + `checkJs`, `strict: false`, `lib: ES2022+DOM`, `include: src/web/client/**/*.js`) and `npm run typecheck` runs BOTH compilers — `tsc --noEmit && tsc -p tsconfig.client.json --noEmit`. Consequence: `el.querySelector(...)` is an `Element`, so `.value`/`.hidden`/`.disabled` need the house JSDoc cast `/** @type {HTMLInputElement | null} */ (…)`, and `ev.target` needs `instanceof Node`/`Element` before `contains`/`closest`. `strict: false` also means JSDoc discriminated unions do NOT narrow reliably — use one loose shape + prose. Per-module gate: `node --check <file>` + `npx tsc -p tsconfig.client.json --noEmit`. Server `.ts` files are type-checked by the root tsconfig and have colocated `.test.ts`.
 - `clientDir()` resolves `./client/` from `import.meta.url`, works in dev (tsx) and prod (dist). Static GETs confined to that dir; content-type by extension.
 
 ### Client conventions (`client/app.js`)
@@ -25,7 +25,7 @@ Anything under `src/web/`: browser client (`client/index.html`, `client/app.js`,
 - Helpers: `$(id)` = getElementById; mutable `S` state; `api(path, opts)` = fetch+JSON (throws on `!res.ok`); `esc()` for HTML. Match these.
 - **One SSE stream, two frame types.** `{type:'run', run}` is the THROTTLED snapshot — ≤1 frame/120ms, last replayed on connect, agent logs capped at 200 (`trimState`). `{type:'agent-stream', agentId, channel, text}` is the RAW firehose — NOT throttled, NOT replayed, mirrored to `console.log` (silence with `HUU_LOG_STREAM=false`). Fed by `Orchestrator.subscribeAgentOutput` (second channel beside snapshot `subscribe`). RULE: high-frequency data gets its OWN un-throttled frame type. **SSE liveness watchdog:** server sends real `event: ping` every 25s; client (`sse-liveness.js`, pure + Node-tested) detects 60s silence/CLOSED → force reopens EventSource with backoff + `/api/bootstrap` resync; `visibilitychange`/`online` check immediately. `renderLog` coalesced to one trailing render/100ms (timer, NOT rAF).
 - **The browser owns state.** Launch-form API keys in `sessionStorage` (validated via `POST /api/keys/validate`), sent as `apiKey` per `/api/run`. Run **history** in **IndexedDB** (`client/db.js`). Queue perists to `localStorage` WITHOUT keys — versioned `{schema:'huu-queue-v2'}` envelope with per-item `status`+`runId`; `relinkQueue` re-links on boot. **⚙ Settings → OpenRouter key** persists server-side — `POST /api/keys` validates + writes config store + arms `WebRunManager.setWebKey`; rejected keys never saved; `maskKey` removes raw value from payloads/logs.
-- Keep non-DOM logic in **separate modules with NO top-level DOM/IndexedDB access** (e.g. `db.js`) so they import cleanly in Node. Colocated `.test.js` runs under vitest (esbuild transforms; `tsconfig`'s missing `allowJs` only gates `tsc`). The "no client test harness" caveat applies ONLY to code touching DOM at import/call time.
+- Keep non-DOM logic in **separate modules with NO top-level DOM/IndexedDB access** (e.g. `db.js`) so they import cleanly in Node. Colocated `.test.js` runs under vitest (default `include` matches `[jt]s`). `vitest.config.ts` sets NO `environment`, so tests run under `node` with no `document` — a DOM-touching client test opts in per file with a first-line `// @vitest-environment jsdom` (jsdom is a devDependency; keep it per-file, never global — the rest of the suite boots real servers and real git repos).
 
 ### Guided launch (cart) flow — the DEFAULT launch view
 

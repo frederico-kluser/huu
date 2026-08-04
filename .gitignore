@@ -1,4 +1,9 @@
-node_modules/
+# NO trailing slash: a trailing slash matches a DIRECTORY only, and every
+# agent worktree in this repo's parallel-agent flow gets `node_modules` as a
+# SYMLINK to the main checkout's. With `node_modules/` the symlink stayed
+# untracked-and-unignored, so one `git add -A` would commit the author's
+# absolute machine path into the branch. Bare `node_modules` matches both.
+node_modules
 dist/
 *.log
 .DS_Store
