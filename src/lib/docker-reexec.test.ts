@@ -17,6 +17,7 @@ import {
   buildMemoryLimitArgs,
   dockerMemoryLimitBytes,
 } from './docker-reexec.js';
+import { JCODE_CONTAINER_DIR } from './jcode-bundle.js';
 
 describe('decideReexec', () => {
   function env(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
@@ -888,5 +889,60 @@ describe('web-research (surf) plumbing', () => {
         else process.env[k] = saved[k];
       }
     }
+  });
+});
+
+// The jcode binary is NOT in the image (no public distribution URL exists), so
+// the wrapper lends the HOST's bundle as a read-only bind at /opt/jcode. These
+// pin the final argument SHAPE — `--mount ...,readonly`, never `-v`, and
+// nothing at all when the host has no usable bundle.
+describe('buildDockerArgv jcode bundle mount (readonlyMounts)', () => {
+  const baseOpts = {
+    cwd: '/w',
+    image: 'huu:test',
+    cidfile: '/tmp/cid',
+    args: [] as string[],
+    hasTTY: false,
+    uid: 1000,
+    gid: 1000,
+  };
+  const hostDir = '/home/u/.jcode/builds/versions/0.67.1';
+
+  it('emits a read-only bind of the bundle DIRECTORY at the container path', () => {
+    const argv = buildDockerArgv({
+      ...baseOpts,
+      readonlyMounts: [{ hostPath: hostDir, containerPath: JCODE_CONTAINER_DIR }],
+    });
+    const i = argv.indexOf('--mount');
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(argv[i + 1]).toBe(`type=bind,src=${hostDir},dst=/opt/jcode,readonly`);
+  });
+
+  it('never exposes the bundle as a writable -v mount', () => {
+    const argv = buildDockerArgv({
+      ...baseOpts,
+      readonlyMounts: [{ hostPath: hostDir, containerPath: JCODE_CONTAINER_DIR }],
+    });
+    expect(argv.some((a) => a.startsWith(`${hostDir}:`))).toBe(false);
+    const mounts = argv.filter((a) => a.startsWith('type=bind,'));
+    for (const m of mounts) expect(m).toMatch(/,readonly$/);
+  });
+
+  it('adds no mount flag at all when the host has no usable bundle', () => {
+    const argv = buildDockerArgv({ ...baseOpts, readonlyMounts: [] });
+    expect(argv.join(' ')).not.toContain('/opt/jcode');
+    expect(buildDockerArgv(baseOpts).join(' ')).not.toContain('/opt/jcode');
+  });
+
+  it('coexists with secret mounts without clobbering them', () => {
+    const argv = buildDockerArgv({
+      ...baseOpts,
+      readonlyMounts: [{ hostPath: hostDir, containerPath: JCODE_CONTAINER_DIR }],
+      secretMounts: [{ hostPath: '/dev/shm/huu-openrouter-1-a', containerPath: '/run/secrets/k' }],
+    });
+    const mounts = argv.filter((a) => a.startsWith('type=bind,'));
+    expect(mounts).toHaveLength(2);
+    expect(mounts[0]).toContain('dst=/opt/jcode');
+    expect(mounts[1]).toContain('dst=/run/secrets/k');
   });
 });

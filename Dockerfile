@@ -213,7 +213,22 @@ COPY --from=builder /build/native/port-shim/huu-port-shim.so /opt/huu/native/huu
 ENV HUU_NATIVE_SHIM_PATH=/opt/huu/native/huu-port-shim.so
 
 # Symlink so `huu ...` resolves anywhere on PATH inside the container.
-RUN ln -s /opt/huu/dist/cli.js /usr/local/bin/huu
+#
+# Same trick for `jcode`, with one difference: jcode is NOT baked into this
+# image. No public distribution URL for it exists, so the image cannot fetch
+# it; instead the HOST wrapper bind-mounts a usable host install read-only at
+# /opt/jcode (src/lib/jcode-bundle.ts → buildDockerArgv `readonlyMounts`). The
+# mounted directory carries BOTH the /bin/sh launcher and its sidecar ELF
+# payload, which is why the mount unit is a directory and why this link points
+# at the launcher inside it.
+#
+# A symlink is deliberately preferred over `ENV PATH=/opt/jcode:$PATH`: it
+# exposes exactly one name, so an arbitrary host directory can never shadow the
+# container's own git/node/sh. When no bundle was mounted the link simply
+# dangles and `spawn('jcode')` fails with ENOENT — which the jcode backend
+# turns into an actionable message (jcodeMissingExecutableMessage).
+RUN ln -s /opt/huu/dist/cli.js /usr/local/bin/huu \
+    && ln -s /opt/jcode/jcode /usr/local/bin/jcode
 
 # Entrypoint script applies last-mile fixups (HOME synthesis when the
 # user passes --user with a UID not in /etc/passwd, fallback safe.directory

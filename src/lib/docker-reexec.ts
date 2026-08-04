@@ -13,6 +13,7 @@ import { homedir, tmpdir, totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
 import { API_KEY_REGISTRY, resolveApiKeyWithSource } from './api-key.js';
 import { osReserveBytes } from './budget.js';
+import { detectHostJcodeBundle } from './jcode-bundle.js';
 
 /**
  * Transparent re-exec from the host into the official Docker image.
@@ -344,12 +345,19 @@ export function stripRemovedNativeFlags(args: string[]): string[] {
   return [...args];
 }
 
-export interface SecretMount {
-  /** Absolute path on the host. The wrapper writes + unlinks this. */
+/** A host path exposed inside the container as a read-only bind mount. */
+export interface ReadonlyMount {
+  /** Absolute path on the host. */
   hostPath: string;
   /** Path to expose inside the container. */
   containerPath: string;
 }
+
+/**
+ * A {@link ReadonlyMount} whose content is a secret VALUE the wrapper writes
+ * before `docker run` and unlinks after it exits.
+ */
+export type SecretMount = ReadonlyMount;
 
 export interface DockerCommandOptions {
   cwd: string;
@@ -380,6 +388,15 @@ export interface DockerCommandOptions {
    * mount is rw, not ro.
    */
   extraMounts?: string[];
+  /**
+   * Host paths bind-mounted READ-ONLY at a DIFFERENT path inside the container
+   * (unlike `extraMounts`, which are rw and same-path). Today's only user is
+   * the host jcode bundle → `/opt/jcode`: the image cannot ship jcode (no
+   * public distribution URL exists), so the wrapper lends the host's copy.
+   * Read-only because the container has no business writing into a host
+   * toolchain.
+   */
+  readonlyMounts?: ReadonlyMount[];
   /**
    * `docker run --network=<value>`. Opt-in via `HUU_DOCKER_NETWORK`.
    * Use case: VPN users (WireGuard/OpenVPN) whose tunnel MTU is below
@@ -450,6 +467,16 @@ export function buildDockerArgv(opts: DockerCommandOptions): string[] {
   // points at resolve identically inside.
   for (const path of opts.extraMounts ?? []) {
     argv.push('-v', `${path}:${path}`);
+  }
+
+  // Read-only tool mounts (today: the host jcode bundle → /opt/jcode). Same
+  // `--mount ...,readonly` form as the secrets below — the container gets the
+  // directory, never write access to it.
+  for (const m of opts.readonlyMounts ?? []) {
+    argv.push(
+      '--mount',
+      `type=bind,src=${m.hostPath},dst=${m.containerPath},readonly`,
+    );
   }
 
   // Secret-file mounts (e.g. OPENROUTER_API_KEY → /run/secrets/...).
@@ -845,6 +872,22 @@ export async function reexecInDocker(
     excludeFromEnv.add(spec.envVar);
   }
 
+  // jcode is NOT in the image (there is no public distribution URL for it), so
+  // the wrapper lends the host's install: a read-only bind of the bundle dir at
+  // /opt/jcode, which the Dockerfile symlinks onto PATH as `jcode`.
+  //
+  // OPPORTUNISTIC by necessity: this code runs BEFORE any UI, and the backend
+  // is picked later (web UI, TUI, or per pipeline step) — "will this run use
+  // jcode?" is unknowable here. So we mount whenever the host has a usable
+  // bundle (free: read-only, zero image bytes) and mount nothing when it
+  // doesn't. A host without jcode NEVER fails to start; the jcode backend is
+  // the one that fails, loudly and actionably, if a run actually reaches for it
+  // (see jcodeMissingExecutableMessage).
+  const jcodeBundle = detectHostJcodeBundle();
+  const readonlyMounts = jcodeBundle
+    ? [{ hostPath: jcodeBundle.hostDir, containerPath: jcodeBundle.containerDir }]
+    : [];
+
   const argv = buildDockerArgv({
     cwd: process.cwd(),
     image,
@@ -856,6 +899,7 @@ export async function reexecInDocker(
     secretMounts,
     excludeFromEnv,
     extraMounts: [...(opts.extraMounts ?? []), ...workspaceMounts],
+    readonlyMounts,
     network: pickDockerNetwork(),
     publishPorts: opts.publishPorts,
     memoryLimitSupported: probeDockerMemoryLimitSupport(),
