@@ -947,6 +947,279 @@ describe('web server — translation catalog (/api/i18n)', () => {
   });
 });
 
+describe('web server — hand-drawn methods (/api/graphs + /graph)', () => {
+  let repo: string;
+  let server: Server;
+  let base: string;
+
+  /** The smallest graph the schema accepts — the root prompt node, nothing else. */
+  const NOW = '2026-08-03T12:00:00.000Z';
+  const emptyGraph = (id: string, name = `Graph ${id}`): Record<string, unknown> => ({
+    _format: 'huu-devgraph-v1',
+    id,
+    name,
+    createdAt: NOW,
+    updatedAt: NOW,
+    meta: {},
+    nodes: [
+      {
+        id: 'prompt-1',
+        kind: 'prompt',
+        label: 'Entrada do prompt',
+        position: { x: 0, y: 0 },
+        goal: 'Objetivo de teste.',
+      },
+    ],
+    edges: [],
+  });
+
+  const postJson = (path: string, body: unknown): Promise<Response> =>
+    fetch(base + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  beforeEach(async () => {
+    repo = mkdtempSync(join(tmpdir(), 'huu-web-graph-'));
+    setupRepo(repo);
+    ({ server } = createWebServer({ cwd: repo, defaultAutoScale: true }));
+    base = await listenEphemeral(server);
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it('serves the SPA shell at /graph and /graph/ — a deep link is not a missing asset', async () => {
+    for (const path of ['/graph', '/graph/']) {
+      const res = await fetch(base + path);
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get('content-type'), path).toContain('text/html');
+      expect(await res.text(), path).toContain('app.js');
+    }
+  });
+
+  it('serves the whole editor catalog in one call', async () => {
+    const res = await fetch(base + '/api/graphs/catalog');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      blocks: { id: string; promptTemplate: string }[];
+      kinds: { kind: string }[];
+      methodologies: { key: string }[];
+      samples: { id: string; name: string; description: string }[];
+    };
+    expect(body.blocks.length).toBeGreaterThan(0);
+    expect(body.kinds.map((k) => k.kind).sort()).toEqual(['action', 'gate', 'prompt', 'research']);
+    expect(body.methodologies.length).toBeGreaterThan(0);
+    expect(body.samples.length).toBeGreaterThan(0);
+    // The catalog is the FULL block — the node editor shows the template.
+    expect(body.blocks.find((b) => b.id === 'recon')?.promptTemplate).toContain('$goal');
+    // Samples cross the wire without their builders.
+    expect(Object.keys(body.samples[0]!).sort()).toEqual(['description', 'id', 'name']);
+  });
+
+  it('PUT → GET → list → DELETE round-trips a graph through the real server', async () => {
+    const put = await fetch(base + '/api/graphs/alpha', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ graph: emptyGraph('alpha', 'Alpha') }),
+    });
+    expect(put.status).toBe(200);
+    expect(((await put.json()) as { ok: boolean }).ok).toBe(true);
+
+    const got = await fetch(base + '/api/graphs/alpha');
+    expect(got.status).toBe(200);
+    expect(((await got.json()) as { graph: { name: string } }).graph.name).toBe('Alpha');
+
+    const listed = (await (await fetch(base + '/api/graphs')).json()) as {
+      graphs: { id: string; valid: boolean }[];
+    };
+    expect(listed.graphs.map((g) => g.id)).toEqual(['alpha']);
+    expect(listed.graphs[0]!.valid).toBe(true);
+
+    const del = await fetch(base + '/api/graphs/alpha', { method: 'DELETE' });
+    expect(del.status).toBe(200);
+    expect((await fetch(base + '/api/graphs/alpha')).status).toBe(404);
+    expect(
+      ((await (await fetch(base + '/api/graphs')).json()) as { graphs: unknown[] }).graphs,
+    ).toEqual([]);
+  });
+
+  it('404s a graph nobody saved and 400s a hostile id', async () => {
+    const missing = await fetch(base + '/api/graphs/never-saved');
+    expect(missing.status).toBe(404);
+    expect(String(((await missing.json()) as { error: string }).error)).toMatch(/^not-found:/);
+
+    const hostile = await fetch(base + '/api/graphs/..%2F..%2Fetc%2Fpasswd');
+    expect(hostile.status).toBe(400);
+    expect(String(((await hostile.json()) as { error: string }).error)).toMatch(/^invalid-id:/);
+  });
+
+  it('honors ?dir= so the editor can address another project', async () => {
+    const other = mkdtempSync(join(tmpdir(), 'huu-web-graph-other-'));
+    try {
+      const put = await fetch(base + '/api/graphs/beta', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dir: other, graph: emptyGraph('beta') }),
+      });
+      expect(put.status).toBe(200);
+      const here = (await (await fetch(base + '/api/graphs')).json()) as { graphs: unknown[] };
+      expect(here.graphs).toEqual([]);
+      const there = (await (
+        await fetch(base + '/api/graphs?dir=' + encodeURIComponent(other))
+      ).json()) as { graphs: { id: string }[] };
+      expect(there.graphs.map((g) => g.id)).toEqual(['beta']);
+    } finally {
+      rmSync(other, { recursive: true, force: true });
+    }
+  });
+
+  it('validate answers 200 for a BAD graph — a half-drawn method is not a transport error', async () => {
+    const res = await postJson('/api/graphs/validate', {
+      graph: { ...emptyGraph('alpha'), nodes: [] },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; errors: { code: string }[] };
+    expect(body.ok).toBe(false);
+    expect(body.errors.map((e) => e.code)).toContain('no-prompt-node');
+  });
+
+  it('validate reports a payload that is not a graph as invalid-schema, still 200', async () => {
+    const res = await postJson('/api/graphs/validate', { graph: 'not a graph' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; errors: { code: string }[] };
+    expect(body.ok).toBe(false);
+    expect(body.errors[0]!.code).toBe('invalid-schema');
+  });
+
+  it('compiles a sample the server itself created, end to end', async () => {
+    const created = await postJson('/api/graphs/from-sample', { sampleId: 'recon-fanout' });
+    expect(created.status).toBe(200);
+    const { graph } = (await created.json()) as { graph: Record<string, unknown> };
+    expect(graph.id).toBe('recon-fanout');
+
+    const compiled = await postJson('/api/graphs/compile', { graph });
+    expect(compiled.status).toBe(200);
+    const body = (await compiled.json()) as {
+      ok: boolean;
+      pipeline: { steps: unknown[] };
+      nodeOrder: string[];
+      stepsByNode: Record<string, string[]>;
+      warnings: string[];
+    };
+    expect(body.ok).toBe(true);
+    expect(body.pipeline.steps.length).toBeGreaterThan(0);
+    expect(body.nodeOrder.length).toBeGreaterThan(0);
+    expect(Object.keys(body.stepsByNode).length).toBeGreaterThan(0);
+    expect(Array.isArray(body.warnings)).toBe(true);
+
+    // …and the sample really landed on disk under the server's cwd.
+    const listed = (await (await fetch(base + '/api/graphs')).json()) as { graphs: { id: string }[] };
+    expect(listed.graphs.map((g) => g.id)).toContain('recon-fanout');
+  });
+
+  it('compile answers 400 — never a bare 500 — for a graph that cannot compile', async () => {
+    const res = await postJson('/api/graphs/compile', {
+      graph: { ...emptyGraph('alpha'), nodes: [] },
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { ok: boolean; error: string; errors: { code: string }[] };
+    expect(body.ok).toBe(false);
+    expect(body.error).toBeTruthy();
+    expect(body.errors.map((e) => e.code)).toContain('no-prompt-node');
+  });
+
+  it('405s a verb the route does not implement and 404s a nested path', async () => {
+    expect((await fetch(base + '/api/graphs/catalog', { method: 'DELETE' })).status).toBe(405);
+    expect((await fetch(base + '/api/graphs', { method: 'DELETE' })).status).toBe(405);
+    expect((await fetch(base + '/api/graphs/a/b')).status).toBe(404);
+  });
+
+  it('400s a malformed JSON body instead of the catch-all 500', async () => {
+    const res = await fetch(base + '/api/graphs/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{ not json',
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/invalid JSON/);
+  });
+
+  it('serves the palette on /api/bootstrap, projected from the single sources', async () => {
+    const boot = (await (await fetch(base + '/api/bootstrap')).json()) as {
+      graphBlocks: Record<string, unknown>[];
+      graphNodeKinds: { kind: string }[];
+      graphSamples: Record<string, unknown>[];
+    };
+    expect(boot.graphBlocks.length).toBeGreaterThan(0);
+    expect(boot.graphNodeKinds.map((k) => k.kind).sort()).toEqual([
+      'action',
+      'gate',
+      'prompt',
+      'research',
+    ]);
+    expect(boot.graphSamples.length).toBeGreaterThan(0);
+    // The palette projection carries the browser-facing columns only…
+    expect(Object.keys(boot.graphBlocks[0]!).sort()).toEqual([
+      'defaultScope',
+      'description',
+      'id',
+      'label',
+      'produces',
+      'readOnly',
+      'review',
+    ]);
+    expect(Object.keys(boot.graphSamples[0]!).sort()).toEqual(['description', 'id', 'name']);
+    // …and no agent prompt rides on a payload fetched at every page load.
+    expect(JSON.stringify(boot.graphBlocks)).not.toContain('$goal');
+
+    // The catalog is the same set, so the two can never disagree about ids.
+    const catalog = (await (await fetch(base + '/api/graphs/catalog')).json()) as {
+      blocks: { id: string }[];
+      samples: { id: string }[];
+    };
+    expect(catalog.blocks.map((b) => b.id)).toEqual(
+      boot.graphBlocks.map((b) => b.id as string),
+    );
+    expect(catalog.samples.map((s) => s.id)).toEqual(boot.graphSamples.map((s) => s.id as string));
+  });
+});
+
+describe('web server — /api/graphs behind the token gate', () => {
+  let repo: string;
+  let server: Server;
+  let base: string;
+
+  beforeEach(async () => {
+    repo = mkdtempSync(join(tmpdir(), 'huu-web-graph-tok-'));
+    setupRepo(repo);
+    ({ server } = createWebServer({ cwd: repo, defaultAutoScale: true, token: 'sekret' }));
+    base = await listenEphemeral(server);
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it('gates every graph route but still serves the /graph shell', async () => {
+    expect((await fetch(base + '/graph')).status).toBe(200);
+    expect((await fetch(base + '/api/graphs')).status).toBe(401);
+    expect((await fetch(base + '/api/graphs/catalog')).status).toBe(401);
+    expect((await fetch(base + '/api/graphs/alpha')).status).toBe(401);
+    expect(
+      (await fetch(base + '/api/graphs/validate', { method: 'POST', body: '{}' })).status,
+    ).toBe(401);
+    expect((await fetch(base + '/api/graphs?token=sekret')).status).toBe(200);
+    expect(
+      (await fetch(base + '/api/graphs/catalog', { headers: { 'x-huu-token': 'sekret' } })).status,
+    ).toBe(200);
+  });
+});
+
 describe('web server — folder-picker workspace (HUU_WORKSPACE)', () => {
   let repo: string;
   let workspace: string;

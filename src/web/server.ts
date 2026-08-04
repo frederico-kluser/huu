@@ -60,6 +60,13 @@ import { DEV_MODEL_ROLES, parseDevModelPolicy } from '../lib/dev-mode/dev-model-
 import { DEV_METHODOLOGIES } from '../lib/dev-mode/methodology-registry.js';
 import { WebRunManager, pickRunKey, type RunSnapshot, type StartRunParams } from './run-manager.js';
 import { WebDevManager, type DevSessionSnapshot } from './dev-manager.js';
+import {
+  graphBlockOptions,
+  graphNodeKindOptions,
+  graphSampleOptions,
+  handleGraphRequest,
+  isGraphApiPath,
+} from './graph-api.js';
 import { TranscribeError, isTranscribeFormat, transcribeAudio } from '../lib/transcribe.js';
 import { termLog } from './terminal-log.js';
 import {
@@ -285,6 +292,12 @@ export function createWebServer(opts: WebServerOptions): {
     if (method === 'GET' && (path === '/dev' || path === '/dev/')) {
       // Same SPA shell for development mode — the client routes on
       // location.pathname, exactly like /simulation.
+      return serveStatic(res, root, 'index.html');
+    }
+    if (method === 'GET' && (path === '/graph' || path === '/graph/')) {
+      // Same SPA shell for the method editor (`huu-devgraph-v1`). Without this
+      // route a deep link to /graph would fall through to the static handler
+      // below and 404 as a missing asset.
       return serveStatic(res, root, 'index.html');
     }
     if (method === 'GET' && path === '/api/health') {
@@ -785,6 +798,31 @@ export function createWebServer(opts: WebServerOptions): {
       }
     }
 
+    // --- Hand-drawn methods (`huu-devgraph-v1`) ---------------------------
+    // ONE branch for the whole `/api/graphs` namespace: the grammar and every
+    // status live in `graph-api.ts` as pure functions, so this layer only
+    // recognizes the prefix and parses the body. See that module's header.
+    if (isGraphApiPath(path)) {
+      let body: Record<string, unknown> = {};
+      if (method === 'POST' || method === 'PUT') {
+        try {
+          body = await readJsonBody(req);
+        } catch (err) {
+          // A malformed body is the caller's mistake — a 400 with the reason,
+          // never the catch-all 500 an uncaught throw would produce here.
+          return sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+      const result = handleGraphRequest({
+        cwd: opts.cwd,
+        method,
+        path,
+        query: url.searchParams,
+        body,
+      });
+      return sendJson(res, result.status, result.body);
+    }
+
     if (method === 'GET' && path === '/events') {
       return openSse(req, res);
     }
@@ -956,6 +994,18 @@ export function createWebServer(opts: WebServerOptions): {
       // The methodology checkboxes, from the SAME table the POST parser reads
       // — the /dev form renders the toggles from data, never a hardcoded copy.
       devMethodologyOptions: DEV_METHODOLOGY_OPTIONS,
+      // The /graph palette, PROJECTED from the single declaration surfaces
+      // (`ACTION_BLOCKS`, `NODE_KINDS`, `GRAPH_SAMPLES`) exactly the way
+      // `DEV_METHODOLOGY_OPTIONS` is projected from `DEV_METHODOLOGIES`, and
+      // for the same reason: a client that kept its own copy would drift the
+      // day a block ships. Only the browser-facing columns cross the wire —
+      // the agent-facing `promptTemplate`/`judgeClause` and each sample's
+      // `build()` stay server-side, one call away at GET /api/graphs/catalog,
+      // so this payload (fetched on every page load AND every SSE resync)
+      // does not carry kilobytes of prompt nobody has opened yet.
+      graphBlocks: graphBlockOptions(),
+      graphNodeKinds: graphNodeKindOptions(),
+      graphSamples: graphSampleOptions(),
       // Server-persisted machine-global settings (source of truth for the ⚙
       // modal — localStorage is only a cache) + the budget the scheduler is
       // actually enforcing right now.
