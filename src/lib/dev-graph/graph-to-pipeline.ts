@@ -27,10 +27,50 @@
 //  - `dependsOn` may only name EARLIER steps. Steps are emitted in the graph's
 //    topological order, so a dependency is always already in the array — but
 //    the tests pin it, because a future emission reorder would break it
-//    silently.
+//    silently. The tests also pin that the array is NOT VACUOUSLY backwards: a
+//    compiler that emitted `dependsOn: []` everywhere would satisfy "all
+//    dependencies point backwards" and lose every join the human drew.
 //  - a `memory`-scope step may not be at index 0. The graph validator already
 //    requires a fan-out's producer to be an ANCESTOR, and an ancestor is
-//    emitted first, so index 0 is structurally impossible here — pinned too.
+//    emitted first, so index 0 is structurally impossible here — pinned too,
+//    together with the fact that the memory step DOES depend on its producer.
+//
+// THE ARM THAT GOES BACK. A rework edge (`GraphEdge.rework`) compiles to an
+// `outcomes[].nextStepName` pointing at the FIRST step of a node that already
+// ran — and to NOTHING in `dependsOn`. That asymmetry is the entire mechanism:
+// `validateTopology` requires dependencies to point backwards in the array and
+// says so in its own words ("loops belong to next/outcomes (activation edges)"),
+// so a route back is legal exactly where a dependency back would not be. What
+// bounds the loop is the gate's `maxRuns` (defaulted here to
+// `DEVGRAPH_REWORK_CHECK_MAX_RUNS` when a gate actually has a rework arm), with
+// `Pipeline.maxNodeExecutions` as the run-wide backstop — `resolveMaxNodeExecutions`
+// budgets for the repeats instead of letting the backstop cut a legitimate loop.
+//
+// AUTHOR TEXT: WHAT IS NEUTRALIZED, AND WHY IT IS NOT EVERYTHING.
+//
+// One posture, stated once, so this file stops contradicting itself (it used to
+// argue at length that the goal was too dangerous to hand a research prompt and
+// then hand the same goal, raw, to every action prompt and every judge):
+//
+//   TEXT THAT TRAVELS IS NEUTRALIZED. The `goal` reaches nodes its author was
+//   not writing (every block template, every critic brief) and the gate
+//   `condition` is pasted into a JUDGE prompt whose closed enum and JSON
+//   verdict contract are huu's MACHINERY. In both places the delimiters belong
+//   to huu, and a forged `=== … ===` section or a stray ``` fence would rewrite
+//   a mechanism rather than an instruction. Both go through
+//   `neutralizePromptText` (`research-contract.ts`), the same function the
+//   research prompt already used.
+//
+//   TEXT THAT STAYS IS NOT. A node's own `prompt` override IS the instruction
+//   for that node — its fences and its headers are the author writing a prompt,
+//   which is the feature. Neutralizing it would mangle legitimate code fences
+//   to no purpose: there is no boundary to cross, because the author is
+//   addressing their own agent. `notes` never reach an agent at all.
+//
+// This is a coherence rule, not a security boundary: the author of a devgraph
+// underwrites the run. What it buys is that a human who pastes a spec
+// containing `=== HARD RULES ===` into the objective gets a prompt that still
+// means what it says.
 //
 // HONEST NOTE ON `subset` JOINS (repeated from `graph-types.ts` because this is
 // where the temptation lives): relaxing a join removes the DEPENDENCY — of data
@@ -65,6 +105,7 @@ import {
   isGateNode,
   isPromptNode,
   isResearchNode,
+  isReworkEdge,
   type ActionNode,
   type DevGraph,
   type GateNode,
@@ -72,7 +113,9 @@ import {
   type ResearchNode,
 } from './graph-types.js';
 import {
+  ancestorsOf,
   branchOutcomesOf,
+  descendantsOf,
   effectiveDependencies,
   outboundEdges,
   topoOrder,
@@ -86,6 +129,7 @@ import {
   buildResearchJudgeCondition,
   buildResearchPrompt,
   defaultLabel,
+  neutralizePromptText,
   sanitizeGraphRoot,
   sanitizeNodeId,
   type ResearchRoutingKind,
@@ -115,7 +159,24 @@ export const DEVGRAPH_MAX_FAN_OUT = 100;
 export const DEVGRAPH_CHECK_MAX_RUNS = 2;
 
 /**
- * Where a producing block leaves the `huu-memory-v1` list a later fan-out reads.
+ * Visit cap for a gate that actually HAS a rework arm and named no `maxRuns`.
+ *
+ * Three visits = the first verdict plus two chances to fix, which is the
+ * smallest number that makes a loop worth drawing (at 2 the human gets one
+ * retry, and a gate that can retry once is barely a gate). It applies ONLY to
+ * gates with a rework arm, so every graph drawn before loops existed keeps
+ * {@link DEVGRAPH_CHECK_MAX_RUNS} and compiles byte-identically.
+ *
+ * This number is the REAL loop bound. `Pipeline.maxNodeExecutions` is the
+ * run-wide backstop underneath it — see {@link resolveMaxNodeExecutions}, which
+ * budgets for the repeats so the backstop never cuts a loop the human
+ * legitimately drew.
+ */
+export const DEVGRAPH_REWORK_CHECK_MAX_RUNS = 3;
+
+/**
+ * Root of the `huu-memory-v1` lists producing blocks write — see
+ * {@link fanOutPath} for the per-session, per-node path itself.
  *
  * NOT under `graphRoot`, and that is the one path decision in this file worth
  * arguing about. The producing blocks' own `promptTemplate`s instruct the agent
@@ -130,6 +191,15 @@ export const DEVGRAPH_CHECK_MAX_RUNS = 2;
  * covers `node_modules/`, `dist/`, `.git/` and friends — not `.huu/`.
  */
 export const DEVGRAPH_FINDINGS_DIR = '.huu/findings';
+
+/**
+ * The namespace used when the caller names no session and `graphRoot`
+ * sanitizes to nothing. Deliberately a WORD, not an empty segment: two
+ * unrelated runs sharing `shared/` is a bug the human can see in a path,
+ * whereas collapsing back onto `.huu/findings/<nodeId>.json` would silently
+ * restore the collision this namespace exists to remove.
+ */
+const DEVGRAPH_SHARED_NAMESPACE = 'shared';
 
 /** Step names are kanban cards; keep the human-readable half scannable. */
 const MAX_STEP_LABEL = 40;
@@ -148,6 +218,14 @@ export interface CompileGraphOptions {
   goal?: string;
   /** Raiz do blackboard deste grafo, repo-relativa. Ex.: `.huu/dev/<sessionId>/graph` */
   graphRoot: string;
+  /**
+   * A sessão que este grafo está rodando — o namespace das listas de fan-out.
+   *
+   * Omitido, é DERIVADO de `graphRoot` (que o chamador já namespaceia por
+   * sessão), nunca ausente: uma lista sem namespace é a colisão que
+   * {@link fanOutPath} existe para eliminar.
+   */
+  sessionId?: string;
   /** Default de modelo do run; `node.modelId` e `graph.meta.modelId` vencem. */
   modelId?: string;
   cardTimeoutMs?: number;
@@ -193,16 +271,61 @@ function nodeDir(graphRoot: string, nodeId: string): string {
 }
 
 /**
- * The `huu-memory-v1` list one producing node writes — see
- * {@link DEVGRAPH_FINDINGS_DIR}.
+ * The session namespace of the fan-out lists: an explicit `sessionId`, else one
+ * derived from `graphRoot`, else {@link DEVGRAPH_SHARED_NAMESPACE}.
  *
- * Namespaced by NODE, never by block: `validateTopology` rejects two steps
+ * Derivation exists so a caller CANNOT accidentally opt out. `graphRoot` is
+ * already per-session by construction (`.huu/dev/<sessionId>/graph`), so
+ * folding it into one path segment yields a namespace that is unique whenever
+ * the blackboard is — without adding a required option that an existing caller
+ * would have to be taught.
+ */
+function fanOutNamespace(sessionId: string | undefined, graphRoot: string): string {
+  const explicit = sanitizeNodeId(sessionId);
+  if (explicit.length > 0) return explicit;
+  const derived = sanitizeNodeId(sanitizeGraphRoot(graphRoot).replaceAll('/', '-'));
+  return derived.length > 0 ? derived : DEVGRAPH_SHARED_NAMESPACE;
+}
+
+/**
+ * The `huu-memory-v1` list one producing node writes:
+ * `.huu/findings/<session>/<node>.json`.
+ *
+ * NAMESPACED BY NODE, never by block: `validateTopology` rejects two steps
  * declaring the same `produces`, and `memoryCapForPath` matches producer to
  * consumer by string equality. A per-node path is what lets the same block be
  * dropped twice on one canvas.
+ *
+ * NAMESPACED BY SESSION, and this half is a CORRECTNESS FIX, not tidiness —
+ * the same one `devSessionPaths` (`dev-mode/dev-protocol.ts`) made for the
+ * epoch blackboard, for exactly the same reason. `resolveMemoryFiles` reads
+ * `filesFrom` out of the INTEGRATION worktree, which branches from the user's
+ * checkout, and it performs NO validity check on what it finds — just
+ * `existsSync`. Node ids are semantic (`recon`, `achados`), so the old
+ * `.huu/findings/<node>.json` was a path two different runs of the same drawing
+ * would share. Concretely: yesterday a recon found 30 targets and COMMITTED the
+ * list; today the same graph runs for a different objective and its recon fails
+ * (or finds 3) — and the fan-out dispatches 27 agents onto yesterday's targets
+ * with yesterday's hints. Real worktrees, real cost, work nobody asked for. One
+ * path segment turns that from likely into impossible: a session whose producer
+ * wrote nothing finds no list, resolves to ZERO tasks, and the stage completes
+ * empty, which is the honest outcome.
+ *
+ * WHY THE SEGMENT GOES *UNDER* `.huu/findings/` AND NOT UNDER `graphRoot`.
+ * Putting the list at `<graphRoot>/findings/<node>.json` would have been tidier
+ * — everything else this module writes lives there — and it would have been
+ * WRONG, because it breaks a coupling that is invisible from here: the
+ * producing blocks' `promptTemplate`s (`node-catalog.ts`) tell the agent that,
+ * in a repository whose `.gitignore` has `.huu/`, it may rewrite that line to
+ * `.huu/*` and add `!.huu/findings/` — "the one edit permitted". That remedy
+ * re-includes `.huu/findings/**`, so a session sub-directory under it is
+ * committed; `.huu/dev/<sessionId>/graph/findings/` is NOT re-included by it
+ * and would stay ignored, uncommitted, and invisible to `resolveMemoryFiles` —
+ * a fan-out over zero tasks, silently, in exactly the repositories that need
+ * the remedy. The tidy path would have traded one silent-zero bug for another.
  */
-function fanOutPath(producerNodeId: string): string {
-  return `${DEVGRAPH_FINDINGS_DIR}/${sanitizeNodeId(producerNodeId)}.json`;
+function fanOutPath(namespace: string, producerNodeId: string): string {
+  return `${DEVGRAPH_FINDINGS_DIR}/${namespace}/${sanitizeNodeId(producerNodeId)}.json`;
 }
 
 /** Where a node's per-task critic writes its finding shards. */
@@ -425,8 +548,15 @@ export function narrowGraphMethodology(graph: DevGraph): {
 /** Everything the per-node builders need, resolved once per compilation. */
 interface Ctx {
   graph: DevGraph;
+  /**
+   * The objective as it enters a PROMPT — neutralized (see the file header's
+   * "author text" section). The raw objective survives only in the pipeline
+   * description, which is a label a human reads, not a prompt an agent obeys.
+   */
   goal: string;
   graphRoot: string;
+  /** Session segment of every fan-out list — see {@link fanOutPath}. */
+  fanOutNamespace: string;
   /** node id → the step names it emitted, in emission order. */
   namesByNode: Map<string, string[]>;
   promptNodeId: string | undefined;
@@ -482,7 +612,14 @@ function researchContextFor(ctx: Ctx, nodeId: string): string {
   return buildResearchContextBlock(upstreamInfoSpecs(ctx.graph, nodeId, ctx.graphRoot));
 }
 
-/** arm id → the node that arm routes to. */
+/**
+ * arm id → the node that arm routes to.
+ *
+ * Reads the ACTIVATION layer (`outboundEdges`, rework arms included): a route
+ * back is still a route, and the arm that carries it needs its `nextStepName`
+ * exactly like every other. What a rework arm never becomes is a dependency —
+ * that separation lives in `effectiveDependencies`, not here.
+ */
 function armTargets(graph: DevGraph, nodeId: string): Map<string, string> {
   const targets = new Map<string, string>();
   for (const edge of outboundEdges(graph, nodeId)) {
@@ -490,6 +627,17 @@ function armTargets(graph: DevGraph, nodeId: string): Map<string, string> {
     if (!targets.has(edge.sourceOutcome)) targets.set(edge.sourceOutcome, edge.target);
   }
   return targets;
+}
+
+/** The arm ids of `nodeId` that go BACK, as the sanitized labels a judge emits. */
+function reworkLabels(graph: DevGraph, nodeId: string): Set<string> {
+  const out = new Set<string>();
+  for (const edge of outboundEdges(graph, nodeId)) {
+    if (!isReworkEdge(edge) || typeof edge.sourceOutcome !== 'string') continue;
+    const label = sanitizeNodeId(edge.sourceOutcome);
+    if (label.length > 0) out.add(label);
+  }
+  return out;
 }
 
 /**
@@ -536,22 +684,38 @@ function rawArmsByLabel(node: GraphNode, ctx: Ctx): Map<string, string> {
  * Force exactly one `default: true`, which `validateTopology` requires and the
  * forward-default rule depends on.
  *
- * On a valid graph the default is already there (`default-outcome-missing` and
- * `default-outcome-unknown` are blocking errors, and `defaultLabel()` always
- * returns a member of the enum). This is the net for the degraded case, and it
- * picks the LAST outcome for the same reason `defaultLabel` does: it is
- * deterministic, in-enum, and honest about not being a claim of safety.
+ * On a valid graph the default is already there (`default-outcome-missing`,
+ * `default-outcome-unknown` and `default-outcome-is-rework` are blocking
+ * errors, and `defaultLabel()` always returns a member of the enum). This is
+ * the net for the degraded case, and it picks the LAST outcome for the same
+ * reason `defaultLabel` does: it is deterministic, in-enum, and honest about
+ * not being a claim of safety.
+ *
+ * The one preference it does express is the forward-default rule: among the
+ * candidates it prefers the last NON-REWORK arm, because the default fires when
+ * the judge FAILS and a default that loops turns a broken judge into a run that
+ * spins backwards until `maxNodeExecutions` kills it. Only if every arm goes
+ * back does it take one anyway — and says so, loudly.
  */
-function ensureSingleDefault(outcomes: CheckOutcome[], stepName: string, ctx: Ctx): CheckOutcome[] {
+function ensureSingleDefault(
+  outcomes: CheckOutcome[],
+  stepName: string,
+  ctx: Ctx,
+  reworkArms: ReadonlySet<string> = new Set(),
+): CheckOutcome[] {
   const defaults = outcomes.filter((outcome) => outcome.default === true);
-  if (defaults.length === 1) return outcomes;
+  if (defaults.length === 1 && !reworkArms.has(defaults[0]!.label)) return outcomes;
+
+  const forward = outcomes.filter((outcome) => !reworkArms.has(outcome.label));
+  const chosen = (forward.length > 0 ? forward : outcomes)[
+    (forward.length > 0 ? forward : outcomes).length - 1
+  ]!;
   ctx.warn(
-    `check "${stepName}" resolved ${defaults.length} default outcomes — forcing the last one, which is the only in-enum choice a compiler may make`,
+    forward.length > 0
+      ? `check "${stepName}" resolved ${defaults.length} usable default outcome(s) — forcing "${chosen.label}", the last arm that goes FORWARD`
+      : `check "${stepName}" has NO forward arm — forcing the rework arm "${chosen.label}" as the default, which means a judge that fails will loop until the run's execution budget stops it`,
   );
-  return outcomes.map((outcome, index) => ({
-    ...outcome,
-    default: index === outcomes.length - 1,
-  }));
+  return outcomes.map((outcome) => ({ ...outcome, default: outcome === chosen }));
 }
 
 // --- action ------------------------------------------------------------------
@@ -650,12 +814,12 @@ function buildActionStep(
   // agent is told to follow a contract it was never given. No format
   // boilerplate is written here, by design.
   if (block.produces === true) {
-    step.produces = fanOutPath(node.id);
+    step.produces = fanOutPath(ctx.fanOutNamespace, node.id);
   }
   if (readOnly) step.readOnly = true;
 
   if (fanOutFrom !== undefined) {
-    step.filesFrom = fanOutPath(fanOutFrom);
+    step.filesFrom = fanOutPath(ctx.fanOutNamespace, fanOutFrom);
     const requested = typeof node.maxFiles === 'number' ? node.maxFiles : DEVGRAPH_DEFAULT_FAN_OUT;
     const capped = clamp(Math.trunc(requested), 1, DEVGRAPH_MAX_FAN_OUT);
     if (capped !== requested) {
@@ -686,13 +850,14 @@ function buildResearchSteps(node: ResearchNode, ctx: Ctx): PipelineStep[] {
   const names = ctx.namesByNode.get(node.id)!;
   const spec: ResearchSpec = researchSpecOf(ctx.graph, node, ctx.graphRoot);
 
-  // The research prompt is NOT given the graph objective. `buildResearchPrompt`
-  // builds a delimited, section-tagged prompt and neutralizes every piece of
-  // author text that enters it; the goal is author text this compiler would be
-  // injecting RAW, so a goal containing `=== HARD RULES ===` would forge a
-  // section in the one prompt written to resist exactly that. A research node's
-  // assignment is its query — if the objective matters to the question, the
-  // human writes it into the query.
+  // The research prompt is NOT given the graph objective, and the reason is
+  // ASSIGNMENT, not safety — the file header's posture already neutralizes the
+  // objective everywhere it enters a prompt, here as much as anywhere else. A
+  // research node's assignment is its QUERY: the prompt is built around one
+  // question, with a closed label enum and an artifact contract, and widening
+  // it with a project-wide objective is how a question becomes "tell me about
+  // the project". If the objective matters to the question, the human writes it
+  // into the query — which is the same rule the canvas states everywhere else.
   const work: WorkStep = {
     type: 'work',
     name: names[0]!,
@@ -709,6 +874,7 @@ function buildResearchSteps(node: ResearchNode, ctx: Ctx): PipelineStep[] {
   const rawByLabel = rawArmsByLabel(node, ctx);
   const fallback = defaultLabel(spec);
   const checkName = names[1]!;
+  const rework = reworkLabels(ctx.graph, node.id);
 
   const outcomes: CheckOutcome[] = [];
   for (const label of allowedLabels(spec)) {
@@ -726,13 +892,14 @@ function buildResearchSteps(node: ResearchNode, ctx: Ctx): PipelineStep[] {
     type: 'check',
     name: checkName,
     dependsOn: [work.name],
-    maxRuns: DEVGRAPH_CHECK_MAX_RUNS,
+    // A research node that sends work back gets the loop budget, like a gate.
+    maxRuns: rework.size > 0 ? DEVGRAPH_REWORK_CHECK_MAX_RUNS : DEVGRAPH_CHECK_MAX_RUNS,
     ...modelStamp(ctx, node),
     // The judge TRANSCRIBES the artifact the work step committed; it does not
     // re-research and does not weigh the research's merit. The compile-time
     // barrier on `kind` is why the cast below is safe: `info` returned above.
     condition: buildResearchJudgeCondition(spec as ResearchSpec & { kind: ResearchRoutingKind }),
-    outcomes: ensureSingleDefault(outcomes, checkName, ctx),
+    outcomes: ensureSingleDefault(outcomes, checkName, ctx, rework),
   };
 
   return [work, check];
@@ -745,6 +912,7 @@ function buildGateStep(node: GateNode, ctx: Ctx): CheckStep {
   const targets = armTargets(ctx.graph, node.id);
   const arms = branchOutcomesOf(node) ?? [];
   const rawByLabel = rawArmsByLabel(node, ctx);
+  const rework = reworkLabels(ctx.graph, node.id);
 
   // The judge answers with the arm's ID, never its pt-BR chip label: the id is a
   // slug, it is what the edges route on, and it is what `defaultOutcome` names.
@@ -768,7 +936,12 @@ function buildGateStep(node: GateNode, ctx: Ctx): CheckStep {
   }
 
   const human = new Map(arms.map((arm) => [sanitizeNodeId(arm.id), arm.label]));
-  const condition = typeof node.condition === 'string' ? node.condition.trim() : '';
+  // AUTHOR TEXT THAT TRAVELS (see the file header): the condition is pasted
+  // into a judge prompt whose closed enum and JSON verdict block are huu's
+  // machinery, so it is neutralized exactly like a research query — a condition
+  // containing `=== RÓTULOS PERMITIDOS ===` must not be able to forge the enum
+  // the route is read from.
+  const condition = neutralizePromptText(node.condition);
   if (condition.length === 0) {
     ctx.warn(
       `gate "${node.id}": no condition was drawn — the judge is told to take the default route "${fallback}" instead of inventing a criterion`,
@@ -791,8 +964,18 @@ Esta é a visita nº $runs a este portão.`
     type: 'check',
     name,
     dependsOn: dependsOnOf(ctx, node.id),
+    // THE LOOP BOUND. A gate with a rework arm is the only thing that can make
+    // work repeat, so its visit cap IS the retry budget the human gets. Gates
+    // without one keep the historical default, which is what makes every graph
+    // drawn before loops existed compile byte-identically.
     maxRuns: clamp(
-      Math.trunc(typeof node.maxRuns === 'number' ? node.maxRuns : DEVGRAPH_CHECK_MAX_RUNS),
+      Math.trunc(
+        typeof node.maxRuns === 'number'
+          ? node.maxRuns
+          : rework.size > 0
+            ? DEVGRAPH_REWORK_CHECK_MAX_RUNS
+            : DEVGRAPH_CHECK_MAX_RUNS,
+      ),
       1,
       50,
     ),
@@ -805,7 +988,7 @@ Esta é a visita nº $runs a este portão.`
         fallback,
       ),
     ].join('\n\n'),
-    outcomes: ensureSingleDefault(outcomes, name, ctx),
+    outcomes: ensureSingleDefault(outcomes, name, ctx, rework),
   };
 }
 
@@ -844,7 +1027,14 @@ export function compileGraphPipeline(opts: CompileGraphOptions): CompiledGraph {
   // --- resolved inputs -------------------------------------------------------
   const nodes = nodesOf(graph);
   const promptNode = nodes.find(isPromptNode);
-  const goal = (opts.goal ?? promptNode?.goal ?? '').trim();
+  const rawGoal = (opts.goal ?? promptNode?.goal ?? '').trim();
+  // AUTHOR TEXT THAT TRAVELS (see the file header): the objective is injected
+  // into templates this compiler wrote, into every `$goal` token and into the
+  // critic's brief — prompts whose `=== … ===` sections are huu's machinery and
+  // whose author is not the one who wrote the objective. The RAW text survives
+  // only in `pipeline.description`, which is a label for a human, not an
+  // instruction for an agent.
+  const goal = neutralizePromptText(rawGoal);
   if (goal.length === 0) {
     warn('the graph carries no objective — every prompt that injects $goal will inject nothing');
   }
@@ -894,6 +1084,7 @@ export function compileGraphPipeline(opts: CompileGraphOptions): CompiledGraph {
     graph,
     goal,
     graphRoot,
+    fanOutNamespace: fanOutNamespace(opts.sessionId, graphRoot),
     namesByNode,
     promptNodeId: promptNode?.id,
     modelId:
@@ -941,13 +1132,13 @@ export function compileGraphPipeline(opts: CompileGraphOptions): CompiledGraph {
     (typeof graph.name === 'string' ? graph.name.trim() : '') || `huu Devgraph — ${graph.id}`;
   const rawDescription =
     (typeof graph.description === 'string' ? graph.description.replace(/\s+/g, ' ').trim() : '') ||
-    goal.replace(/\s+/g, ' ').trim();
+    rawGoal.replace(/\s+/g, ' ').trim();
 
   const pipeline: Pipeline = {
     name,
     ...(rawDescription ? { description: rawDescription.slice(0, MAX_DESCRIPTION) } : {}),
     steps,
-    maxNodeExecutions: resolveMaxNodeExecutions(graph, steps, warn),
+    maxNodeExecutions: resolveMaxNodeExecutions(graph, steps, stepsByNode, warn),
     ...(isPositiveInt(opts.cardTimeoutMs) ? { cardTimeoutMs: opts.cardTimeoutMs } : {}),
     ...(isPositiveInt(opts.singleFileCardTimeoutMs)
       ? { singleFileCardTimeoutMs: opts.singleFileCardTimeoutMs }
@@ -988,17 +1179,58 @@ function isPositiveInt(value: unknown): value is number {
 }
 
 /**
+ * How many times each node may run because a rework loop encloses it.
+ *
+ * The body of one loop is `descendants(target) ∩ (ancestors(gate) ∪ {target})`
+ * in the DEPENDENCY layer — everything the gate's arm sends back through. Each
+ * node in it may run once per gate VISIT, so it carries the gate's `maxRuns` as
+ * a multiplier; nested loops multiply, which is an upper bound and is meant to
+ * be (the result is clamped, and a budget that is too tight cuts a legitimate
+ * loop mid-run while a budget that is too loose costs nothing until something
+ * actually spins).
+ *
+ * The gate itself is excluded: its own `maxRuns` already counts its visits, and
+ * multiplying that by itself would square a number nobody meant.
+ */
+function reworkLoopFactors(
+  graph: DevGraph,
+  visitsOfNode: (nodeId: string) => number,
+): Map<string, number> {
+  const factors = new Map<string, number>();
+  for (const node of nodesOf(graph)) {
+    const arms = outboundEdges(graph, node.id).filter(isReworkEdge);
+    if (arms.length === 0) continue;
+    const visits = visitsOfNode(node.id);
+    if (visits <= 1) continue;
+    const upstream = ancestorsOf(graph, node.id);
+    for (const arm of arms) {
+      const body = new Set<string>([arm.target, ...descendantsOf(graph, arm.target)]);
+      for (const id of body) {
+        if (id === node.id) continue;
+        if (!upstream.has(id)) continue;
+        factors.set(id, (factors.get(id) ?? 1) * visits);
+      }
+    }
+  }
+  return factors;
+}
+
+/**
  * The run's last-resort loop cap.
  *
- * A devgraph is acyclic, so the EXACT ceiling is computable: every work step
- * runs once and every check may be visited up to its own `maxRuns`. The default
- * is that number or {@link DEFAULT_MAX_NODE_EXECUTIONS}, whichever is larger —
- * a 40-node graph would otherwise be cut off mid-run by a constant that was
- * sized for a 4-front epoch.
+ * The DEPENDENCY layer of a devgraph is acyclic, so the ceiling is computable:
+ * every work step runs once, every check may be visited up to its own
+ * `maxRuns`, and every step inside a rework loop may repeat once per visit of
+ * the gate that sends it back ({@link reworkLoopFactors}). The default is that
+ * number or {@link DEFAULT_MAX_NODE_EXECUTIONS}, whichever is larger — a
+ * 40-node graph would otherwise be cut off mid-run by a constant that was sized
+ * for a 4-front epoch, and a drawn loop would be cut off by the very backstop
+ * that exists for loops nobody drew.
  */
 function resolveMaxNodeExecutions(
   graph: DevGraph,
   steps: readonly PipelineStep[],
+  stepsByNode: Record<string, string[]>,
   warn: (message: string) => void,
 ): number {
   const declared = graph.meta?.maxNodeExecutions;
@@ -1009,9 +1241,26 @@ function resolveMaxNodeExecutions(
     }
     return capped;
   }
+
+  const stepByName = new Map(steps.map((step) => [step.name, step]));
+  const nodeByStep = new Map<string, string>();
+  for (const [nodeId, names] of Object.entries(stepsByNode)) {
+    for (const name of names) nodeByStep.set(name, nodeId);
+  }
+  const visitsOf = (nodeId: string): number => {
+    for (const name of stepsByNode[nodeId] ?? []) {
+      const step = stepByName.get(name);
+      if (step?.type === 'check') return step.maxRuns ?? DEVGRAPH_CHECK_MAX_RUNS;
+    }
+    return 1;
+  };
+  const factors = reworkLoopFactors(graph, visitsOf);
+
   let budget = 0;
   for (const step of steps) {
-    budget += step.type === 'check' ? (step.maxRuns ?? DEVGRAPH_CHECK_MAX_RUNS) : 1;
+    const runs = step.type === 'check' ? (step.maxRuns ?? DEVGRAPH_CHECK_MAX_RUNS) : 1;
+    const nodeId = nodeByStep.get(step.name);
+    budget += runs * (nodeId === undefined ? 1 : (factors.get(nodeId) ?? 1));
   }
   return clamp(Math.max(DEFAULT_MAX_NODE_EXECUTIONS, budget), 1, MAX_NODE_EXECUTIONS_CAP);
 }

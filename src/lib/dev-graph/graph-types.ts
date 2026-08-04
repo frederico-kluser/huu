@@ -230,12 +230,61 @@ export type JoiningNode = ActionNode | ResearchNode | GateNode;
  * or any `gate`) and FORBIDDEN otherwise — a `prompt`, an `action` and an
  * `info` research node each have exactly one way out, so naming an arm there
  * would be a route that does not exist.
+ *
+ * `rework` marks THE ARM THAT GOES BACK — see {@link isReworkEdge} for the full
+ * argument. Absent means an ordinary edge, so every graph drawn before this
+ * field existed keeps its exact meaning and compiles to the exact same
+ * pipeline.
  */
 export interface GraphEdge {
   id: string;
   source: string;
   target: string;
   sourceOutcome?: string;
+  /**
+   * `true` — and ONLY `true` — turns this arm into a rework route. The OFF
+   * state is the field's ABSENCE, never `false`: a boolean with two meanings
+   * invites `rework: false` to be read as "a rework edge that is disabled",
+   * and there is no such thing here.
+   */
+  rework?: true;
+}
+
+/**
+ * THE ARM THAT GOES BACK — a `gate` (or branching `research`) arm routed at a
+ * node that already ran.
+ *
+ * WHY IT HAS TO BE EXPLICIT, AND WHY IT IS NOT A CYCLE:
+ *
+ * "quality gate: if it failed, go back and fix it" is the single most common
+ * reason a gate exists, and until this field it was not drawable — a backwards
+ * arm was rejected as `cycle`, so the human's only option was a SECOND node
+ * that redid the work, duplicating the block on the canvas and still unable to
+ * repeat. The limitation was in this FORMAT, never in the runtime:
+ * `validateTopology` (`src/lib/pipeline-io.ts`) says it outright — dependency
+ * cycles are structurally impossible because "loops belong to next/outcomes
+ * (activation edges)". Dev mode's own front judge has always compiled exactly
+ * this shape (`plan-to-pipeline.ts`: `{approved, default:true}` forward,
+ * `{rework, nextStepName: <the work step>}` backwards).
+ *
+ * So a devgraph has TWO layers over the same drawing:
+ *
+ *   DEPENDENCY layer — every edge WITHOUT `rework`. This is what becomes
+ *                      `dependsOn`, what `topoOrder` sorts, what "ancestor"
+ *                      means, and the ONLY layer a `cycle` is looked for in.
+ *   ACTIVATION layer — every edge, rework included. This is what routes
+ *                      (`outcomes[].nextStepName`) and what reachability
+ *                      follows, so a rework arm still reaches its target.
+ *
+ * A rework edge NEVER becomes a dependency: if it did, the target would start
+ * waiting for the gate that comes after it and the drawing would be a genuine
+ * dependency cycle. It is inferred from NOTHING — a backwards arm without this
+ * field stays an error — because a loop the human did not underwrite is a loop
+ * nobody signed. What bounds it is the gate's own `maxRuns`, with
+ * `Pipeline.maxNodeExecutions` as the run-wide backstop.
+ */
+export function isReworkEdge(edge: GraphEdge | undefined | null): boolean {
+  return edge?.rework === true;
 }
 
 // --- Envelope ---------------------------------------------------------------
@@ -313,6 +362,10 @@ export function hasJoin(node: GraphNode): node is JoiningNode {
  *    CAUSE and the unreachability is its consequence; naming the cause is what
  *    the human can act on, and naming both would double-count one drawing
  *    mistake exactly the way `orphan-node` would have.
+ *  - the same rule governs the four `rework-*` codes: an edge that fails one of
+ *    them is NOT also reported under the generic `edge-outcome-*` family. A
+ *    rework arm leaving an action node is one mistake, and
+ *    `rework-edge-not-from-branch` is the sentence that explains it.
  */
 export type GraphErrorCode =
   | 'no-prompt-node'
@@ -329,7 +382,30 @@ export type GraphErrorCode =
   | 'duplicate-edge-id'
   | 'self-edge'
   | 'duplicate-edge'
+  /**
+   * A cycle in the DEPENDENCY layer — edges without `rework`. A rework arm may
+   * point backwards as far as it likes; that is the whole point of
+   * {@link isReworkEdge}, and it is why this code is no longer what a
+   * loop-back gate gets.
+   */
   | 'cycle'
+  /** `rework: true` on an edge leaving a node that has only one way out. */
+  | 'rework-edge-not-from-branch'
+  /** `rework: true` without a `sourceOutcome` — a rework route is still an ARM. */
+  | 'rework-edge-needs-outcome'
+  /**
+   * `rework: true` whose target is NOT an ancestor in the dependency layer —
+   * an ordinary forward edge wearing the loop's clothes. Refused so the drawing
+   * cannot say "this goes back" about something that goes forward.
+   */
+  | 'rework-edge-not-backward'
+  /**
+   * The node's `defaultOutcome` is a rework arm. huu's forward-default rule:
+   * the default fires when the judge FAILS, so it has to be the safe route
+   * forward — a default that loops turns a broken judge into a run that spins
+   * until `maxNodeExecutions` kills it.
+   */
+  | 'default-outcome-is-rework'
   | 'unreachable-node'
   | 'branch-outcome-missing-edge'
   | 'branch-outcome-multiple-edges'
@@ -342,6 +418,22 @@ export type GraphErrorCode =
   | 'duplicate-choice-id'
   | 'gate-needs-two'
   | 'duplicate-outcome-id'
+  /**
+   * A branch arm id (a research `choice.id`, a gate `outcome.id`) that is not a
+   * slug. The zod schema declares these strict, but a graph reaches the
+   * compiler without ever passing `parseDevGraph`, and the compiler routes on
+   * the SANITIZED id — so an unslugged arm silently becomes a different label
+   * (or collapses onto a sibling) instead of failing where a human can see it.
+   */
+  | 'invalid-outcome-id'
+  /**
+   * A numeric field that is `NaN` or `Infinity` (`maxRuns`, `maxFiles`,
+   * `position.x/y`). Not merely untidy: a non-finite number survives every
+   * `clamp`/`Math.trunc` this stack applies and only dies at `PipelineSchema`,
+   * where the compiler reports it as "this is a huu bug" — a message that
+   * blames huu for a value the drawing carried.
+   */
+  | 'invalid-number'
   | 'join-subset-empty'
   | 'join-subset-not-inbound'
   | 'join-subset-unknown-node'

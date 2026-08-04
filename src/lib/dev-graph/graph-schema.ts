@@ -161,6 +161,14 @@ export const GraphEdgeSchema = z.object({
   source: RefSchema,
   target: RefSchema,
   sourceOutcome: RefSchema.optional(),
+  /**
+   * `z.literal(true)`, not `z.boolean()`, and that follows the id rule at the
+   * top of this file: `rework` is a DECLARATION, not a reference. A `false`
+   * here is not a graph with a disabled loop — it is a writer who thinks the
+   * field has two states. Failing the parse says so once; accepting it would
+   * leave every reader downstream deciding what `false` meant.
+   */
+  rework: z.literal(true).optional(),
 });
 
 const DevGraphMetaSchema = z.object({
@@ -323,6 +331,10 @@ export function serializeDevGraph(graph: DevGraph): string {
         source: edge.source,
         target: edge.target,
         sourceOutcome: edge.sourceOutcome,
+        // `compact` drops it when absent, so an ordinary edge serializes to
+        // exactly the same three keys it always did — a graph drawn before
+        // this field existed still round-trips byte-identically.
+        rework: edge.rework,
       }),
     ),
   });

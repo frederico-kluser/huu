@@ -4,8 +4,10 @@ import type {
   DevGraph,
   GateNode,
   GraphEdge,
+  GraphErrorCode,
   GraphIssue,
   GraphNode,
+  GraphWarningCode,
   PromptNode,
   ResearchNode,
 } from './graph-types.js';
@@ -13,6 +15,7 @@ import {
   RESEARCH_BOOLEAN_OUTCOMES,
   ancestorsOf,
   branchOutcomesOf,
+  descendantsOf,
   directPredecessors,
   effectiveDependencies,
   inboundEdges,
@@ -1209,5 +1212,616 @@ describe('graph-validate / validateGraph never throws', () => {
         true,
       );
     }
+  });
+});
+
+// --- THE ARM THAT GOES BACK -------------------------------------------------
+//
+// The rule this suite pins is the one the format existed WITHOUT until now:
+// "quality gate: if it failed, go back and fix it". Every assertion here is
+// about the two layers — a rework arm ROUTES (activation) and never ORDERS
+// (dependency) — because that separation is the whole reason the loop is
+// expressible without a cycle.
+
+describe('graph-validate / the arm that goes back (rework)', () => {
+  /** portão → aprovado ↦ selar · reprovado ↦ back to the work it came from. */
+  function reworkGraph(over: Partial<GraphEdge> = {}): DevGraph {
+    return graph(
+      [
+        prompt(),
+        action('implementar'),
+        gate('portao', {
+          outcomes: [
+            { id: 'aprovado', label: 'Aprovado' },
+            { id: 'reprovado', label: 'Reprovado' },
+          ],
+          defaultOutcome: 'aprovado',
+        }),
+        action('selar', { block: 'docs' }),
+      ],
+      [
+        edge('e-1', 'p', 'implementar'),
+        edge('e-2', 'implementar', 'portao'),
+        edge('e-3', 'portao', 'selar', 'aprovado'),
+        { id: 'e-4', source: 'portao', target: 'implementar', sourceOutcome: 'reprovado', rework: true, ...over },
+      ],
+    );
+  }
+
+  it('ACCEPTS a gate arm routed back at an ancestor', () => {
+    const result = validateGraph(reworkGraph());
+    expect(result.errors).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('still calls the SAME arm a cycle when it is not declared as rework', () => {
+    // The proof that nothing is inferred: one field is the whole difference
+    // between a loop the human underwrote and a drawing mistake.
+    const g = reworkGraph();
+    delete (g.edges[3] as { rework?: true }).rework;
+    expect(codes(validateGraph(g).errors)).toContain('cycle');
+  });
+
+  it('does NOT make the target wait for the gate', () => {
+    const g = reworkGraph();
+    expect(effectiveDependencies(g, 'implementar')).toEqual(['p']);
+    expect(directPredecessors(g, 'implementar')).toEqual(['p']);
+  });
+
+  it('keeps the gate out of the target ancestors, so the ORDER is unchanged', () => {
+    const g = reworkGraph();
+    expect([...ancestorsOf(g, 'implementar')]).toEqual(['p']);
+    expect(ancestorsOf(g, 'portao').has('implementar')).toBe(true);
+  });
+
+  it('leaves the topological order acyclic and in work order', () => {
+    const { order, cycle } = topoOrder(reworkGraph());
+    expect(cycle).toBe(false);
+    expect(order).toEqual(['p', 'implementar', 'portao', 'selar']);
+  });
+
+  it('is a real ROUTE: reachability counts it, and the loop ends somewhere', () => {
+    // Reachability reads the ACTIVATION layer (all edges) while the ORDER reads
+    // the dependency layer. In a valid graph a rework arm can never be a
+    // target's only way in — its target is an ancestor of the gate, so it was
+    // already reachable — which is exactly why the loop adds a route without
+    // adding an entry point, and why nothing here is reported twice.
+    const result = validateGraph(reworkGraph());
+    expect(codes(result.errors)).not.toContain('unreachable-node');
+    expect(codes(result.warnings)).not.toContain('no-terminal-node');
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('leaves an ordinary graph byte-identical in every derived helper', () => {
+    const g = referenceGraph();
+    expect(topoOrder(g).order).toEqual(['p', 'recon-1', 'tdd-1', 'sec-1', 'perf-1', 'join-1']);
+    expect(effectiveDependencies(g, 'join-1')).toEqual(['tdd-1', 'sec-1', 'perf-1']);
+    expect(validateGraph(g).ok).toBe(true);
+  });
+
+  it('rework-edge-not-from-branch when the source has one way out', () => {
+    const g = graph(
+      [prompt(), action('a1'), action('b1')],
+      [
+        edge('e-1', 'p', 'a1'),
+        edge('e-2', 'a1', 'b1'),
+        { id: 'e-3', source: 'b1', target: 'a1', rework: true },
+      ],
+    );
+    const all = codes(validateGraph(g).errors);
+    expect(all).toContain('rework-edge-not-from-branch');
+    // ONE DEFECT, ONE CODE: the generic outcome family stays silent.
+    expect(all).not.toContain('edge-outcome-forbidden');
+    expect(all).not.toContain('cycle');
+  });
+
+  it('rework-edge-needs-outcome when the arm names no verdict', () => {
+    const g = reworkGraph();
+    delete (g.edges[3] as { sourceOutcome?: string }).sourceOutcome;
+    const all = codes(validateGraph(g).errors);
+    expect(all).toContain('rework-edge-needs-outcome');
+    expect(all).not.toContain('edge-outcome-required');
+  });
+
+  it('rework-edge-not-backward when the target does not run before the source', () => {
+    const g = reworkGraph();
+    // `selar` runs AFTER the gate: routing "reprovado" there is an ordinary
+    // forward edge wearing the loop's clothes.
+    g.edges[3] = {
+      id: 'e-4',
+      source: 'portao',
+      target: 'selar',
+      sourceOutcome: 'reprovado',
+      rework: true,
+    };
+    expect(codes(validateGraph(g).errors)).toContain('rework-edge-not-backward');
+  });
+
+  it('rework-edge-not-backward for a sibling branch that never feeds the gate', () => {
+    const g = graph(
+      [
+        prompt(),
+        action('a1'),
+        action('paralelo'),
+        gate('portao', {
+          outcomes: [
+            { id: 'ok', label: 'OK' },
+            { id: 'volta', label: 'Volta' },
+          ],
+          defaultOutcome: 'ok',
+        }),
+        action('fim', { block: 'docs' }),
+      ],
+      [
+        edge('e-1', 'p', 'a1'),
+        edge('e-2', 'p', 'paralelo'),
+        edge('e-3', 'a1', 'portao'),
+        edge('e-4', 'portao', 'fim', 'ok'),
+        { id: 'e-5', source: 'portao', target: 'paralelo', sourceOutcome: 'volta', rework: true },
+      ],
+    );
+    expect(codes(validateGraph(g).errors)).toContain('rework-edge-not-backward');
+  });
+
+  it('default-outcome-is-rework — the default must be the safe route FORWARD', () => {
+    const g = reworkGraph();
+    (g.nodes[2] as GateNode).defaultOutcome = 'reprovado';
+    const all = codes(validateGraph(g).errors);
+    expect(all).toContain('default-outcome-is-rework');
+    expect(all).not.toContain('default-outcome-unknown');
+  });
+
+  it('says WHY in the message, so the human can act on it', () => {
+    const g = reworkGraph();
+    (g.nodes[2] as GateNode).defaultOutcome = 'reprovado';
+    const issue = validateGraph(g).errors.find((e) => e.code === 'default-outcome-is-rework');
+    expect(issue?.message).toContain('judge FAILS');
+    expect(issue?.nodeId).toBe('portao');
+  });
+
+  it('lets a branching RESEARCH node send work back too', () => {
+    const g = graph(
+      [
+        prompt(),
+        action('a1'),
+        research('r1', { outputKind: 'boolean', defaultOutcome: 'yes' }),
+        action('fim', { block: 'docs' }),
+      ],
+      [
+        edge('e-1', 'p', 'a1'),
+        edge('e-2', 'a1', 'r1'),
+        edge('e-3', 'r1', 'fim', 'yes'),
+        { id: 'e-4', source: 'r1', target: 'a1', sourceOutcome: 'no', rework: true },
+      ],
+    );
+    expect(validateGraph(g).errors).toEqual([]);
+  });
+
+  it('a DEPENDENCY cycle is still a cycle, rework arms or not', () => {
+    const g = reworkGraph();
+    g.edges.push(edge('e-5', 'selar', 'implementar'));
+    expect(codes(validateGraph(g).errors)).toContain('cycle');
+  });
+});
+
+// --- The entry gate must cover what the OUTPUT gate assumes ------------------
+//
+// The compiler's exit gate says a failure there is "a COMPILER BUG, not a bad
+// drawing — the drawing was already accepted by the entry gate". These are the
+// four drawings that used to make that sentence false: validateGraph said ok,
+// and the compiler threw "this is a huu bug" over a value the DRAWING carried.
+
+describe('graph-validate / the entry gate covers what the compiler assumes', () => {
+  it('invalid-outcome-id for a research choice that is not a slug', () => {
+    const g = graph(
+      [
+        prompt(),
+        research('r1', {
+          outputKind: 'choice',
+          choices: [
+            { id: '!!!', label: 'A' },
+            { id: '???', label: 'B' },
+          ],
+          defaultOutcome: '!!!',
+        }),
+        action('a1'),
+        action('b1'),
+      ],
+      [
+        edge('e-1', 'p', 'r1'),
+        edge('e-2', 'r1', 'a1', '!!!'),
+        edge('e-3', 'r1', 'b1', '???'),
+      ],
+    );
+    const result = validateGraph(g);
+    expect(codes(result.errors).filter((c) => c === 'invalid-outcome-id')).toHaveLength(2);
+    expect(result.ok).toBe(false);
+  });
+
+  it('invalid-outcome-id for a gate outcome that is not a slug', () => {
+    const g = graph(
+      [
+        prompt(),
+        gate('g1', {
+          outcomes: [
+            { id: '@@@', label: 'A' },
+            { id: '###', label: 'B' },
+          ],
+          defaultOutcome: '@@@',
+        }),
+        action('a1'),
+        action('b1'),
+      ],
+      [edge('e-1', 'p', 'g1'), edge('e-2', 'g1', 'a1', '@@@'), edge('e-3', 'g1', 'b1', '###')],
+    );
+    expect(codes(validateGraph(g).errors).filter((c) => c === 'invalid-outcome-id')).toHaveLength(2);
+  });
+
+  it('accepts the slugs a real graph uses', () => {
+    expect(codes(validateGraph(referenceGraph()).errors)).not.toContain('invalid-outcome-id');
+  });
+
+  it('does not mistake a MISSING id for the string "undefined"', () => {
+    // `PATTERN.test(undefined)` coerces to "undefined", which matches — the
+    // check has to look at the type first.
+    const g = graph([
+      prompt(),
+      { ...gate('g1'), outcomes: [{ label: 'A' }, { label: 'B' }] } as unknown as GateNode,
+    ]);
+    expect(codes(validateGraph(g).errors).filter((c) => c === 'invalid-outcome-id')).toHaveLength(2);
+  });
+
+  it('invalid-number for a gate maxRuns of NaN', () => {
+    const g = graph(
+      [prompt(), gate('g1', { maxRuns: Number.NaN }), action('a1'), action('b1')],
+      [edge('e-1', 'p', 'g1'), edge('e-2', 'g1', 'a1', 'green'), edge('e-3', 'g1', 'b1', 'red')],
+    );
+    expect(codes(validateGraph(g).errors)).toContain('invalid-number');
+  });
+
+  it('invalid-number for a fan-out maxFiles of NaN', () => {
+    const g = graph(
+      [
+        prompt(),
+        action('recon-1', { block: 'recon' }),
+        action('a1', { fanOutFrom: 'recon-1', scope: 'memory', maxFiles: Number.NaN }),
+      ],
+      [edge('e-1', 'p', 'recon-1'), edge('e-2', 'recon-1', 'a1')],
+    );
+    expect(codes(validateGraph(g).errors)).toContain('invalid-number');
+  });
+
+  it('invalid-number for an Infinity position', () => {
+    const g = graph(
+      [prompt(), action('a1', { position: { x: Number.POSITIVE_INFINITY, y: 0 } })],
+      [edge('e-1', 'p', 'a1')],
+    );
+    expect(codes(validateGraph(g).errors)).toContain('invalid-number');
+  });
+
+  it('leaves ordinary finite numbers alone', () => {
+    const g = graph(
+      [prompt(), gate('g1', { maxRuns: 5 }), action('a1'), action('b1')],
+      [edge('e-1', 'p', 'g1'), edge('e-2', 'g1', 'a1', 'green'), edge('e-3', 'g1', 'b1', 'red')],
+    );
+    expect(codes(validateGraph(g).errors)).not.toContain('invalid-number');
+  });
+});
+
+// --- descendantsOf ----------------------------------------------------------
+
+describe('graph-validate / descendantsOf', () => {
+  it('walks the dependency layer forwards', () => {
+    expect([...descendantsOf(referenceGraph(), 'recon-1')].sort()).toEqual([
+      'join-1',
+      'perf-1',
+      'sec-1',
+      'tdd-1',
+    ]);
+  });
+
+  it('excludes the node itself', () => {
+    expect(descendantsOf(referenceGraph(), 'recon-1').has('recon-1')).toBe(false);
+  });
+
+  it('does NOT follow a rework arm — it is a route, not an order', () => {
+    const g = graph(
+      [
+        prompt(),
+        action('a1'),
+        gate('g1', {
+          outcomes: [
+            { id: 'ok', label: 'OK' },
+            { id: 'volta', label: 'Volta' },
+          ],
+          defaultOutcome: 'ok',
+        }),
+        action('fim', { block: 'docs' }),
+      ],
+      [
+        edge('e-1', 'p', 'a1'),
+        edge('e-2', 'a1', 'g1'),
+        edge('e-3', 'g1', 'fim', 'ok'),
+        { id: 'e-4', source: 'g1', target: 'a1', sourceOutcome: 'volta', rework: true },
+      ],
+    );
+    expect([...descendantsOf(g, 'g1')]).toEqual(['fim']);
+  });
+
+  it('is empty for a leaf', () => {
+    expect([...descendantsOf(referenceGraph(), 'join-1')]).toEqual([]);
+  });
+});
+
+// --- EVERY CODE OF THE UNION IS EMITTED BY A DRAWING -------------------------
+//
+// The tables below are typed `Record<GraphErrorCode, …>` / `Record<
+// GraphWarningCode, …>`, so ADDING a code to the union without adding a
+// reproduction here is a COMPILE error, not a coverage report nobody runs. A
+// code the UI must translate and a human must act on has to be demonstrably
+// reachable from a drawing; one that is not is either dead or a rule that never
+// fires, and both are worse than a missing feature.
+
+describe('graph-validate / every issue code is reachable from a drawing', () => {
+  const ERROR_REPROS: Record<GraphErrorCode, () => DevGraph> = {
+    'no-prompt-node': () => graph([action('a1')]),
+    'multiple-prompt-nodes': () => graph([prompt(), prompt({ id: 'p2' })]),
+    'prompt-has-inbound': () => graph([prompt(), action('a1')], [edge('e-1', 'a1', 'p')]),
+    'duplicate-node-id': () => graph([prompt(), action('a1'), action('a1')], [edge('e-1', 'p', 'a1')]),
+    'invalid-node-id': () => graph([prompt(), action('A 1')], [edge('e-1', 'p', 'A 1')]),
+    'malformed-node-entry': () =>
+      ({ ...graph([prompt()]), nodes: [prompt(), null] }) as unknown as DevGraph,
+    'malformed-edge-entry': () => ({ ...graph([prompt()]), edges: [null] }) as unknown as DevGraph,
+    'edge-unknown-node': () => graph([prompt()], [edge('e-1', 'p', 'ghost')]),
+    'invalid-edge-id': () => graph([prompt(), action('a1')], [edge('E 1', 'p', 'a1')]),
+    'duplicate-edge-id': () =>
+      graph([prompt(), action('a1'), action('b1')], [edge('e-1', 'p', 'a1'), edge('e-1', 'p', 'b1')]),
+    'self-edge': () => graph([prompt(), action('a1')], [edge('e-1', 'p', 'a1'), edge('e-2', 'a1', 'a1')]),
+    'duplicate-edge': () =>
+      graph([prompt(), action('a1')], [edge('e-1', 'p', 'a1'), edge('e-2', 'p', 'a1')]),
+    cycle: () =>
+      graph(
+        [prompt(), action('a1'), action('b1')],
+        [edge('e-1', 'p', 'a1'), edge('e-2', 'a1', 'b1'), edge('e-3', 'b1', 'a1')],
+      ),
+    'rework-edge-not-from-branch': () =>
+      graph(
+        [prompt(), action('a1'), action('b1')],
+        [
+          edge('e-1', 'p', 'a1'),
+          edge('e-2', 'a1', 'b1'),
+          { id: 'e-3', source: 'b1', target: 'a1', rework: true },
+        ],
+      ),
+    'rework-edge-needs-outcome': () =>
+      graph(
+        [prompt(), action('a1'), gate('g1'), action('fim', { block: 'docs' })],
+        [
+          edge('e-1', 'p', 'a1'),
+          edge('e-2', 'a1', 'g1'),
+          edge('e-3', 'g1', 'fim', 'green'),
+          { id: 'e-4', source: 'g1', target: 'a1', rework: true },
+        ],
+      ),
+    'rework-edge-not-backward': () =>
+      graph(
+        [prompt(), action('a1'), gate('g1'), action('fim', { block: 'docs' })],
+        [
+          edge('e-1', 'p', 'a1'),
+          edge('e-2', 'a1', 'g1'),
+          edge('e-3', 'g1', 'fim', 'green'),
+          { id: 'e-4', source: 'g1', target: 'fim', sourceOutcome: 'red', rework: true },
+        ],
+      ),
+    'default-outcome-is-rework': () =>
+      graph(
+        [
+          prompt(),
+          action('a1'),
+          gate('g1', { defaultOutcome: 'red' }),
+          action('fim', { block: 'docs' }),
+        ],
+        [
+          edge('e-1', 'p', 'a1'),
+          edge('e-2', 'a1', 'g1'),
+          edge('e-3', 'g1', 'fim', 'green'),
+          { id: 'e-4', source: 'g1', target: 'a1', sourceOutcome: 'red', rework: true },
+        ],
+      ),
+    'unreachable-node': () => graph([prompt(), action('a1')]),
+    'branch-outcome-missing-edge': () => graph([prompt(), gate('g1')], [edge('e-1', 'p', 'g1')]),
+    'branch-outcome-multiple-edges': () =>
+      graph(
+        [prompt(), gate('g1'), action('a1'), action('b1')],
+        [
+          edge('e-1', 'p', 'g1'),
+          edge('e-2', 'g1', 'a1', 'green'),
+          edge('e-3', 'g1', 'b1', 'green'),
+          edge('e-4', 'g1', 'b1', 'red'),
+        ],
+      ),
+    'edge-outcome-required': () =>
+      graph([prompt(), gate('g1'), action('a1')], [edge('e-1', 'p', 'g1'), edge('e-2', 'g1', 'a1')]),
+    'edge-outcome-forbidden': () =>
+      graph([prompt(), action('a1'), action('b1')], [edge('e-1', 'p', 'a1'), edge('e-2', 'a1', 'b1', 'green')]),
+    'edge-outcome-unknown': () =>
+      graph([prompt(), gate('g1'), action('a1')], [edge('e-1', 'p', 'g1'), edge('e-2', 'g1', 'a1', 'roxo')]),
+    'default-outcome-missing': () =>
+      graph([prompt(), gate('g1', { defaultOutcome: '' })], [edge('e-1', 'p', 'g1')]),
+    'default-outcome-unknown': () =>
+      graph([prompt(), gate('g1', { defaultOutcome: 'ghost' })], [edge('e-1', 'p', 'g1')]),
+    'choice-needs-two': () =>
+      graph(
+        [prompt(), research('r1', { outputKind: 'choice', choices: [{ id: 'a', label: 'A' }], defaultOutcome: 'a' })],
+        [edge('e-1', 'p', 'r1')],
+      ),
+    'duplicate-choice-id': () =>
+      graph(
+        [
+          prompt(),
+          research('r1', {
+            outputKind: 'choice',
+            choices: [
+              { id: 'a', label: 'A' },
+              { id: 'a', label: 'A again' },
+            ],
+            defaultOutcome: 'a',
+          }),
+        ],
+        [edge('e-1', 'p', 'r1')],
+      ),
+    'gate-needs-two': () =>
+      graph(
+        [prompt(), gate('g1', { outcomes: [{ id: 'green', label: 'Verde' }] })],
+        [edge('e-1', 'p', 'g1')],
+      ),
+    'duplicate-outcome-id': () =>
+      graph(
+        [
+          prompt(),
+          gate('g1', {
+            outcomes: [
+              { id: 'green', label: 'Verde' },
+              { id: 'green', label: 'Verde de novo' },
+            ],
+          }),
+        ],
+        [edge('e-1', 'p', 'g1')],
+      ),
+    'invalid-outcome-id': () =>
+      graph(
+        [
+          prompt(),
+          gate('g1', {
+            outcomes: [
+              { id: '@@@', label: 'A' },
+              { id: 'red', label: 'B' },
+            ],
+            defaultOutcome: 'red',
+          }),
+        ],
+        [edge('e-1', 'p', 'g1')],
+      ),
+    'invalid-number': () =>
+      graph([prompt(), gate('g1', { maxRuns: Number.NaN })], [edge('e-1', 'p', 'g1')]),
+    'join-subset-empty': () =>
+      graph([prompt(), action('a1', { join: { mode: 'subset', of: [] } })], [edge('e-1', 'p', 'a1')]),
+    'join-subset-not-inbound': () =>
+      graph(
+        [prompt(), action('a1'), action('b1', { join: { mode: 'subset', of: ['a1'] } })],
+        [edge('e-1', 'p', 'a1'), edge('e-2', 'p', 'b1')],
+      ),
+    'join-subset-unknown-node': () =>
+      graph(
+        [prompt(), action('a1', { join: { mode: 'subset', of: ['ghost'] } })],
+        [edge('e-1', 'p', 'a1')],
+      ),
+    'unknown-block': () =>
+      graph([prompt(), action('a1', { block: 'not-a-block' })], [edge('e-1', 'p', 'a1')]),
+    'fanout-source-unknown': () =>
+      graph([prompt(), action('a1', { fanOutFrom: 'ghost' })], [edge('e-1', 'p', 'a1')]),
+    'fanout-source-not-ancestor': () =>
+      graph(
+        [prompt(), action('recon-1', { block: 'recon' }), action('a1', { fanOutFrom: 'recon-1' })],
+        [edge('e-1', 'p', 'recon-1'), edge('e-2', 'p', 'a1')],
+      ),
+    'fanout-source-not-producer': () =>
+      graph(
+        [prompt(), action('impl-1'), action('a1', { fanOutFrom: 'impl-1' })],
+        [edge('e-1', 'p', 'impl-1'), edge('e-2', 'impl-1', 'a1')],
+      ),
+    'scope-memory-needs-fanout': () =>
+      graph([prompt(), action('a1', { scope: 'memory' })], [edge('e-1', 'p', 'a1')]),
+    'fanout-needs-memory-scope': () =>
+      graph(
+        [
+          prompt(),
+          action('recon-1', { block: 'recon' }),
+          action('a1', { fanOutFrom: 'recon-1', scope: 'per-file' }),
+        ],
+        [edge('e-1', 'p', 'recon-1'), edge('e-2', 'recon-1', 'a1')],
+      ),
+    'too-many-nodes': () => {
+      const nodes: GraphNode[] = [prompt()];
+      const edges: GraphEdge[] = [];
+      for (let index = 0; index < 41; index += 1) {
+        nodes.push(action(`a-${index}`));
+        edges.push(edge(`e-${index}`, 'p', `a-${index}`));
+      }
+      return graph(nodes, edges);
+    },
+    'too-many-edges': () => {
+      const edges: GraphEdge[] = [];
+      for (let index = 0; index < 81; index += 1) edges.push(edge(`e-${index}`, 'p', 'a1'));
+      return graph([prompt(), action('a1')], edges);
+    },
+    'too-many-files': () =>
+      graph(
+        [
+          prompt(),
+          action('a1', {
+            scope: 'per-file',
+            files: Array.from({ length: 401 }, (_u, i) => `src/f-${i}.ts`),
+          }),
+        ],
+        [edge('e-1', 'p', 'a1')],
+      ),
+    'too-many-branches': () =>
+      graph(
+        [
+          prompt(),
+          gate('g1', {
+            outcomes: Array.from({ length: 13 }, (_u, i) => ({ id: `o-${i}`, label: `O${i}` })),
+            defaultOutcome: 'o-0',
+          }),
+        ],
+        [edge('e-1', 'p', 'g1')],
+      ),
+    'label-too-long': () =>
+      graph([prompt(), action('a1', { label: 'x'.repeat(81) })], [edge('e-1', 'p', 'a1')]),
+    'text-too-long': () => graph([prompt({ goal: 'x'.repeat(4001) })]),
+  };
+
+  const WARNING_REPROS: Record<GraphWarningCode, () => DevGraph> = {
+    'join-subset-single-inbound': () =>
+      graph([prompt(), action('a1', { join: { mode: 'subset', of: ['p'] } })], [edge('e-1', 'p', 'a1')]),
+    'join-subset-drops-barrier': () => referenceGraph('subset'),
+    'no-terminal-node': () =>
+      graph(
+        [prompt(), action('a1'), action('b1')],
+        [edge('e-1', 'p', 'a1'), edge('e-2', 'a1', 'b1'), edge('e-3', 'b1', 'a1')],
+      ),
+    'deep-graph': () => {
+      const nodes: GraphNode[] = [prompt()];
+      const edges: GraphEdge[] = [];
+      let previous = 'p';
+      for (let index = 0; index < 13; index += 1) {
+        const id = `a-${index}`;
+        nodes.push(action(id));
+        edges.push(edge(`e-${index}`, previous, id));
+        previous = id;
+      }
+      return graph(nodes, edges);
+    },
+  };
+
+  for (const [code, build] of Object.entries(ERROR_REPROS)) {
+    it(`emits ${code}`, () => {
+      expect(codes(validateGraph(build()).errors)).toContain(code);
+    });
+  }
+
+  for (const [code, build] of Object.entries(WARNING_REPROS)) {
+    it(`warns ${code}`, () => {
+      expect(codes(validateGraph(build()).warnings)).toContain(code);
+    });
+  }
+
+  it('covers the whole union — no code left without a drawing', () => {
+    // Belt and braces for the type-level exhaustiveness above: it also proves
+    // the tables were not padded with a key the union does not declare.
+    const covered = [...Object.keys(ERROR_REPROS), ...Object.keys(WARNING_REPROS)];
+    expect(new Set(covered).size).toBe(covered.length);
+    expect(covered.length).toBeGreaterThan(40);
   });
 });

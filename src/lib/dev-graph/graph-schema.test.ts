@@ -309,6 +309,26 @@ describe('graph-schema / GraphEdgeSchema', () => {
   it('rejects an edge without a target', () => {
     expect(() => GraphEdgeSchema.parse({ id: 'e-1', source: 'a' })).toThrow();
   });
+
+  it('keeps rework:true — the arm that goes back', () => {
+    expect(
+      GraphEdgeSchema.parse({ id: 'e-1', source: 'a', target: 'b', sourceOutcome: 'red', rework: true }),
+    ).toEqual({ id: 'e-1', source: 'a', target: 'b', sourceOutcome: 'red', rework: true });
+  });
+
+  it('leaves an ordinary edge with exactly the three keys it always had', () => {
+    // The additive contract: a graph drawn before rework existed parses into
+    // the same object, with no `rework: false` invented for it.
+    const parsed = GraphEdgeSchema.parse({ id: 'e-1', source: 'a', target: 'b' });
+    expect(Object.keys(parsed)).toEqual(['id', 'source', 'target']);
+    expect('rework' in parsed).toBe(false);
+  });
+
+  it('REFUSES rework:false — the off state is the absence of the field', () => {
+    expect(() =>
+      GraphEdgeSchema.parse({ id: 'e-1', source: 'a', target: 'b', rework: false }),
+    ).toThrow();
+  });
 });
 
 describe('graph-schema / serializeDevGraph', () => {
@@ -423,6 +443,30 @@ describe('graph-schema / serializeDevGraph', () => {
     const json = serializeDevGraph(graph);
     (graph.nodes[1] as ActionNode).join = { mode: 'all' };
     expect(json).toContain('"subset"');
+  });
+
+  it('writes rework AFTER sourceOutcome, and only on the arm that carries it', () => {
+    const graph = richGraph();
+    graph.edges = [
+      { id: 'e-1', source: 'prompt-1', target: 'action-1' },
+      { id: 'e-2', source: 'gate-1', target: 'action-1', sourceOutcome: 'red', rework: true },
+    ];
+    const parsed = JSON.parse(serializeDevGraph(graph)) as {
+      edges: Record<string, unknown>[];
+    };
+    expect(Object.keys(parsed.edges[0]!)).toEqual(['id', 'source', 'target']);
+    expect(Object.keys(parsed.edges[1]!)).toEqual(['id', 'source', 'target', 'sourceOutcome', 'rework']);
+  });
+
+  it('round-trips a rework arm unchanged', () => {
+    const graph = richGraph();
+    graph.edges = [
+      ...graph.edges,
+      { id: 'e-5', source: 'gate-1', target: 'action-1', sourceOutcome: 'red', rework: true },
+    ];
+    const result = parseDevGraph(JSON.parse(serializeDevGraph(graph)));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(serializeDevGraph(result.graph)).toBe(serializeDevGraph(graph));
   });
 });
 
