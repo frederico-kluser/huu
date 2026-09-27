@@ -1,5 +1,11 @@
 # Proposta (opcional): hook Stop para tornar o passo de evolução determinístico
 
+> **SUPERADA (2026-09-27).** O passo `<evolution>` e o `check-pending-evolution.sh`
+> foram apagados na centralização da memória no CoALA: o aprendizado durável agora é
+> um `coala.py add` no fim de cada tarefa (`<aprender>`). Mantida só como histórico —
+> a sentinela consumível em si continua sendo um padrão válido se um dia voltar a ser
+> preciso (agora apontando a passos `<aprender>` pendentes).
+
 > Fase 4 do sistema de skills · 2026-06-12 · NÃO habilitado por padrão — decisão do humano.
 
 ## Problema

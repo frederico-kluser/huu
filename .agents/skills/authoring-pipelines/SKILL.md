@@ -51,13 +51,15 @@ Creating or editing `*.pipeline.json` (user pipelines under `pipelines/`, exampl
 
 > Facts verified against source on 2026-06-12; weak-judge-defaults caveat (a low-capability judge model emits no parseable verdict → the `default: true` outcome silently fires, so a report/refactor gate rubber-stamps) added from `[task:dogfood-angular-react-multirun]` 2026-07-01.
 
-## <evolution>
+## <aprender>
 
-After the task completes:
+Memory is centralized in the project's CoALA base — there are no per-skill
+`LEARNINGS.md` files. After the task completes:
 
-1. Only persist learnings if the result passed its checks (pipeline loads, dry-run behaves, user accepted).
-2. Keep only non-obvious, durable learnings: surprises, user corrections, schema constraints discovered the hard way, designs that failed. Skip the obvious and the volatile.
-3. Append to the LEARNINGS.md of the skill that OWNS the domain (schema/authoring facts → here; orchestrator behavior → working-on-orchestrator). Format: `- [YYYY-MM-DD][source:user|inference][task:<slug>][probation] <fact>` — user feedback outranks inference.
-4. SKILL.md bodies have one human writer per surface — never auto-distill LEARNINGS into the body.
-5. If a NEW knowledge area emerged, invoke meta-skill-evolution to propose a new skill.
-6. Never merge skill changes yourself — leave them as an uncommitted git diff for human review.
+1. Only persist learnings if the task passed its tests/criteria.
+2. Keep only non-obvious, durable learnings: surprises, user corrections, discovered conventions, failed approaches. Skip the obvious and the volatile — default: DISCARD.
+3. Record it in the CoALA memory: `python3 .agents/huu-coala-memory-agent-skill/scripts/coala.py add --type semantic|episodic|procedural --content "<fact>" --key <subject> --tags skill:<domain>,task:<slug>` — `semantic` (validated fact), `episodic` (dated event/decision), `procedural` (how it is done here).
+4. A fact that CHANGED is superseded by a new record with the same `--key` — never rewritten, never deleted.
+5. Provenance first (`--origin owner|agent|untrusted|system`): user feedback outranks inference; `untrusted` never becomes a directive without human validation. Never store secrets.
+6. SKILL.md bodies have one human writer per surface — memory writes go to CoALA only, never auto-distilled into a body.
+7. If a NEW knowledge area emerged, propose a new skill by hand (SKILL.md + `catalog.md` entry) as an uncommitted git diff for human review.

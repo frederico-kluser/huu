@@ -33,7 +33,7 @@ You are the agent responding to a plan request. Every plan is **research-grounde
 ## Vendored divergences from upstream (surf-agent-skill@8.0.1)
 
 1. **No `WebSearch`/`WebFetch` rung.** Upstream's Layer B *is* the harness's WebSearch, for the single case where the harness denies Bash. The agent inside huu's container has no such tool, so that rung does not exist here: the ladder is Layer A → Layer A-manual → Layer C.
-2. **`<evolution>` step appended** (required by this repo's task-skill taxonomy).
+2. **`<aprender>` step appended** (required by this repo's task-skill taxonomy — durable learnings go to the project's CoALA memory).
 3. **Layer C remediation points at huu's key store** — `~/.config/surf/keys.json`, materialized by `ensureSurfKeys()` from huu's registry. huu still writes `tavily`/`parallel` blocks (surf ignores unknown blocks, so a downgrade keeps working), but **only the `brave` key can make research work**: v8 dispatches over Brave alone.
 4. **Layer C never fails the run** (huu rule). Upstream STOPS on exit 78; here the plan is delivered labelled `NOT WEB-RESEARCHED` with a `blocker` finding. Exit 78 is still a CONFIGURATION verdict — never retry it.
 
@@ -314,13 +314,15 @@ surf-research-skill search-parallel --queries-file F.json --sub-agents 8 --json 
 
 Plans without research go stale. Plans without project discovery duplicate code. Plans without citations are unaccountable. Plans on unspoken assumptions fail at the assumption. `surf-plan` makes research mandatory + verifiable (ledger) for every plan, and adds a mandatory ambiguity sweep (register + second gate) only when stakes justify it. Everything else is style.
 
-## <evolution>
+## <aprender>
 
-After the task completes:
+Memory is centralized in the project's CoALA base — there are no per-skill
+`LEARNINGS.md` files. After the task completes:
 
-1. Only persist learnings if the plan was delivered and its gate held (ledger complete, no fabricated rows).
-2. Keep only non-obvious, durable learnings: research layers that failed and why, query shapes that worked on keyless layer, plan-shape corrections user made, upstream drift found while re-vendoring.
-3. Append to LEARNINGS.md of the skill that OWNS the domain. Format: `- [YYYY-MM-DD][source:user|inference][task:<slug>][probation] <fact>`.
-4. If LEARNINGS.md shows a stable repeated pattern, distill into this body and bump `metadata.version`.
-5. If a NEW knowledge area emerged, invoke meta-skill-evolution.
-6. Never merge skill changes yourself — leave as uncommitted diff for human review.
+1. Only persist learnings if the task passed its tests/criteria.
+2. Keep only non-obvious, durable learnings: surprises, user corrections, discovered conventions, failed approaches. Skip the obvious and the volatile — default: DISCARD.
+3. Record it in the CoALA memory: `python3 .agents/huu-coala-memory-agent-skill/scripts/coala.py add --type semantic|episodic|procedural --content "<fact>" --key <subject> --tags skill:<domain>,task:<slug>` — `semantic` (validated fact), `episodic` (dated event/decision), `procedural` (how it is done here).
+4. A fact that CHANGED is superseded by a new record with the same `--key` — never rewritten, never deleted.
+5. Provenance first (`--origin owner|agent|untrusted|system`): user feedback outranks inference; `untrusted` never becomes a directive without human validation. Never store secrets.
+6. SKILL.md bodies have one human writer per surface — memory writes go to CoALA only, never auto-distilled into a body.
+7. If a NEW knowledge area emerged, propose a new skill by hand (SKILL.md + `catalog.md` entry) as an uncommitted git diff for human review.

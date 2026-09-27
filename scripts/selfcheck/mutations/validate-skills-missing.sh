@@ -9,19 +9,18 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 # Setup dirs matching the expected layout: root/.agents/skills, root/.claude/skills
 mkdir -p "$TMP/.agents/skills" "$TMP/.claude/skills"
-cp -r "$ROOT/.agents/skills/"* "$TMP/.agents/skills/"
+cp -rL "$ROOT/.agents/skills/"* "$TMP/.agents/skills/"
 # Create symlinks so the symlink check passes for non-mutated skills
 for d in "$TMP/.agents/skills"/*/; do
   name=$(basename "$d")
-  [ "$name" = "meta-skill-consolidate" ] && continue
   ln -s "../.agents/skills/$name" "$TMP/.claude/skills/$name"
 done
 
-cp "$ROOT/.agents/skills/meta-skill-consolidate/scripts/validate-skills.sh" "$TMP/validate-skills.sh"
+cp "$ROOT/scripts/validate-skills.sh" "$TMP/validate-skills.sh"
 chmod +x "$TMP/validate-skills.sh"
 
-# Find one skill dir (not catalog.md, not the meta-skill itself) and remove its SKILL.md
-SKILL_DIR=$(ls "$TMP/.agents/skills" | grep -v '^catalog\.md$' | grep -v '^meta-skill-consolidate$' | head -1)
+# Find one skill dir (not catalog.md, not the project memory skill) and remove its SKILL.md
+SKILL_DIR=$(ls "$TMP/.agents/skills" | grep -v '^catalog\.md$' | grep -v '^huu-coala-memory-agent-skill$' | head -1)
 rm "$TMP/.agents/skills/$SKILL_DIR/SKILL.md"
 
 # Patch root path

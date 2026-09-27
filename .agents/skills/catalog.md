@@ -1,13 +1,19 @@
 # huu skill catalog
 
 > llms.txt-style index. The project-router consults this file to assemble skill chains.
-> Source of truth: `.agents/skills/` (each skill: `SKILL.md` + `LEARNINGS.md`). Portable via per-skill
-> symlinks in `.claude/skills/`. Task skills end with an `<evolution>` step; knowledge skills receive
-> learnings routed by domain ownership.
+> Source of truth: `.agents/skills/` (each skill: `SKILL.md`). Portable via per-skill
+> symlinks in `.claude/skills/`. Task skills end with an `<aprender>` step; durable learnings
+> are centralized in the project's CoALA memory (`huu-coala-memory-agent-skill`) — there are
+> NO per-skill `LEARNINGS.md` files (centralized 2026-09-27).
 
 ## Router
 
-- [project-router](project-router/SKILL.md) `router` — entry point for EVERY task; classifies, assembles the chain, enforces evolution.
+- [project-router](project-router/SKILL.md) `router` — entry point for EVERY task; classifies, assembles the chain, enforces the `<aprender>` memory step.
+
+## Memory
+
+- [huu-coala-memory-agent-skill](huu-coala-memory-agent-skill/SKILL.md) `memory` — the project's CoALA/SQLite memory (episodic/semantic/procedural + budgeted working memory, hybrid FTS5+vector search, provenance, supersession). Orient (`recall`) at task start, learn (`add`) at task end; `ingest` when project material changes. NEVER edit `memory/coala.sqlite` directly and never store secrets there.
+
 ## Knowledge skills
 
 - [following-architecture-conventions](following-architecture-conventions/SKILL.md) `knowledge` — layers, downward-only imports, ESM `.js`, named exports, style; load before writing any TS in src/.
@@ -19,7 +25,7 @@
 - [writing-tests](writing-tests/SKILL.md) `knowledge` — vitest colocated, real git in temp dirs, stub factories, regression-tests-as-spec; load before touching any test, and include in any chain that changes runtime code.
 - [writing-project-docs](writing-project-docs/SKILL.md) `knowledge` — pt-BR/EN twin files, docs/ layout, Keep-a-Changelog, identity framing; for any markdown work.
 - [authoring-agent-prompts](authoring-agent-prompts/SKILL.md) `knowledge` — cross-LLM step-prompt techniques (atomic ops, output contract, $file/$hint injection, mechanical forward-default judges, lean system prompts); for writing/sharpening any step prompt, judge condition or memory recon prompt.
-## Task skills (end with `<evolution>`)
+## Task skills (end with `<aprender>`)
 
 - [surf-plan-skill](surf-plan-skill/SKILL.md) `task` — research-grounded execution plans: project read → MANDATORY web research → interview with researched options → plan with cited sources + a research ledger. Research is surf v8 (`surf-agent-skill`, what the Dockerfile installs): Layer A is the `surf-search-normal` autonomous wave, Layer A-manual is `surf-research-skill search` for raw links, and `surf-research-skill gate` is the free Phase-0 probe (exit 0 = usable Brave key · exit 78 = none). Brave is the ONLY backend: there is NO keyless rung (`surf-free-skill` was deleted in v8) and no harness WebSearch in the container, so no key ⇒ a `blocker` finding + a `NOT WEB-RESEARCHED` plan, never a failed run. Keys at `~/.config/surf/keys.json`, materialized by huu — `tavily`/`parallel` blocks are still written but are legacy; only `brave` can make research work. VENDORED from surf-skill@5.2.0, facts realigned to surf-agent-skill@8.0.1 (not re-vendored); for any design/plan/spec/architecture request.
 - [authoring-pipelines](authoring-pipelines/SKILL.md) `task` — pipeline JSON v2 schema + design + stub dry-run; for any *.pipeline.json.
@@ -32,10 +38,9 @@
 - [committing-and-validating](committing-and-validating/SKILL.md) `task` — typecheck+test gate locally, the same 10-step `scripts/gate.sh` CI runs on push/PR, Conventional Commits, smoke triggers; for every commit/push.
 - [releasing-versions](releasing-versions/SKILL.md) `task` — manual release steps, GHCR multi-arch publish, published-image smoke.
 
-## Meta skills
-
-- [meta-skill-evolution](meta-skill-evolution/SKILL.md) `meta` — update/create/discard decision for new learnings; anti-injection; always a reviewable diff.- [meta-skill-consolidate](meta-skill-consolidate/SKILL.md) `meta` — periodic GC: dedupe, temporal versioning, probation→promotion, token budgets.
 ## Chain hints
+
+- EVERY chain starts by orienting in memory (`coala.py recall "<objective>" --budget 1500`) and ends by recording durable learnings (`coala.py add` — the `<aprender>` step of the task skill).
 
 - Design / architecture / spec / "make a plan" request → the chain STARTS with surf-plan-skill (its gate must open before any plan is presented), then the domain skills for whatever it plans to touch.
 - Any code change → following-architecture-conventions + the domain skill → writing-tests → committing-and-validating.

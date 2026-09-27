@@ -1,0 +1,72 @@
+{
+  "_doc": "Fontes do material do projeto para `coala.py ingest`. mode: markdown|text|whole|pdf · type: episodic|semantic|procedural · origin: owner|agent|untrusted|system · tags aceitam {stem} {name} {dir} {rule}. Primeira regra que apanha um ficheiro ganha. Ver references/instalar.md da coala-agent-skill.",
+  "version": 1,
+  "key_prefix": "proj",
+  "path_prefix": "",
+  "exclude": [],
+  "rules": [
+    {
+      "name": "identidade",
+      "include": [
+        "MANIFESTO.md"
+      ],
+      "mode": "markdown",
+      "type": "semantic",
+      "origin": "owner",
+      "tags": "projeto,identidade,{stem}"
+    },
+    {
+      "name": "metodo",
+      "include": [
+        "METODO.md"
+      ],
+      "mode": "markdown",
+      "type": "semantic",
+      "origin": "agent",
+      "tags": "projeto,metodo,{stem}"
+    },
+    {
+      "name": "arquitetura",
+      "include": [
+        "AGENTS.md"
+      ],
+      "mode": "markdown",
+      "type": "semantic",
+      "origin": "agent",
+      "tags": "projeto,arquitetura,{stem}"
+    },
+    {
+      "name": "readme",
+      "include": [
+        "README.md"
+      ],
+      "mode": "markdown",
+      "type": "semantic",
+      "origin": "agent",
+      "tags": "docs,readme"
+    },
+    {
+      "name": "docs",
+      "include": [
+        "docs/**/*.md"
+      ],
+      "mode": "markdown",
+      "type": "semantic",
+      "origin": "agent",
+      "tags": "docs,{dir}"
+    }
+  ],
+  "graph": {
+    "entities": [
+      { "name": "huu", "kind": "sistema" },
+      { "name": "orchestrator", "kind": "modulo" },
+      { "name": "worktree", "kind": "mecanismo" },
+      { "name": "CoALA", "kind": "memoria" }
+    ],
+    "edges": [
+      ["huu", "usa", "CoALA"],
+      ["huu", "tem", "orchestrator"],
+      ["orchestrator", "usa", "worktree"]
+    ]
+  }
+}

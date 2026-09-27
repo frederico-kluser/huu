@@ -5,14 +5,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(fileURLToPath(import.meta.url), '..', '..', '..');
-const script = join(
-  root,
-  '.agents',
-  'skills',
-  'meta-skill-consolidate',
-  'scripts',
-  'validate-skills.sh',
-);
+// The library gate lives in scripts/ since the memory centralization
+// (2026-09-27): the meta-skill-consolidate skill that used to host it was deleted.
+const script = join(root, 'scripts', 'validate-skills.sh');
 const skillsDir = join(root, '.agents', 'skills');
 const claudeSkillsDir = join(root, '.claude', 'skills');
 
@@ -31,7 +26,7 @@ function runValidatorExpectFail(): string {
 }
 
 /** Set up a temp skill dir + catalog entry + symlink. Returns cleanup fn. */
-function setupTempSkill(name: string, skillBody: string, learningsBody: string): () => void {
+function setupTempSkill(name: string, skillBody: string): () => void {
   const testDir = join(skillsDir, name);
   const catalogPath = join(skillsDir, 'catalog.md');
   const catalogOrig = readFileSync(catalogPath, 'utf-8');
@@ -46,7 +41,6 @@ function setupTempSkill(name: string, skillBody: string, learningsBody: string):
   if (!existsSync(claudeSkillsDir)) mkdirSync(claudeSkillsDir, { recursive: true });
 
   writeFileSync(join(testDir, 'SKILL.md'), skillBody);
-  writeFileSync(join(testDir, 'LEARNINGS.md'), learningsBody);
 
   symlinkSync(testDir, linkPath);
   linkCreated = true;
@@ -86,14 +80,8 @@ metadata:
 
 ${body}
 `;
-    const learningsMd = `# Learnings — ${name}
-Append-only log.
 
-<!-- entries below this line -->
-- [2026-07-01][source:inference][task:test][probation] Test entry.
-`;
-
-    const cleanup = setupTempSkill(name, skillMd, learningsMd);
+    const cleanup = setupTempSkill(name, skillMd);
     let out = '';
     try {
       out = runValidatorExpectFail();
@@ -115,22 +103,14 @@ metadata:
 
 # TTL Test
 `;
-    const learningsMd = `# Learnings — ${name}
-Append-only log.
 
-<!-- entries below this line -->
-- [2025-01-01][source:inference][task:test][probation] Test entry.
-`;
-
-    const cleanup = setupTempSkill(name, skillMd, learningsMd);
+    const cleanup = setupTempSkill(name, skillMd);
     let out = '';
 
-    // Backdate files to >300 days ago
+    // Backdate the skill to >300 days ago
     const skillPath = join(skillsDir, name, 'SKILL.md');
-    const learningsPath = join(skillsDir, name, 'LEARNINGS.md');
     const oldTime = new Date('2025-03-01T00:00:00Z');
     utimesSync(skillPath, oldTime, oldTime);
-    utimesSync(learningsPath, oldTime, oldTime);
 
     try {
       out = runValidatorExpectFail();
@@ -141,34 +121,35 @@ Append-only log.
     expect(out).toContain(name);
   });
 
-  it('validate-skills.sh catches closed-vocabulary violations in LEARNINGS', () => {
-    const name = 'vocab-test';
+  // Memory centralization (2026-09-27): the distributed memory (per-skill
+  // LEARNINGS.md) was migrated to the CoALA base and deleted. The gate must
+  // fail when the retired shape reappears — otherwise the memory silently
+  // forks back into N files.
+  it('validate-skills.sh rejects a stray LEARNINGS.md (memory centralized in CoALA)', () => {
+    const name = 'stray-learnings-test';
 
     const skillMd = `---
 name: ${name}
-description: Temporary skill for vocabulary validation testing.
+description: Temporary skill for stray-LEARNINGS validation testing.
 metadata:
   type: knowledge
 ---
 
-# Vocab Test
-`;
-    const learningsMd = `# Learnings — ${name}
-Append-only log.
-
-<!-- entries below this line -->
-- [2026-07-01][source:inference][task:good][probation] Valid entry.
-- [2026-07-01][source:chatgpt][task:bad-source][probation] This entry uses an invalid source tag.
+# Stray Learnings Test
 `;
 
-    const cleanup = setupTempSkill(name, skillMd, learningsMd);
+    const cleanup = setupTempSkill(name, skillMd);
     let out = '';
     try {
+      writeFileSync(
+        join(skillsDir, name, 'LEARNINGS.md'),
+        '# Learnings\n\n<!-- entries below this line -->\n- [2026-09-27][source:agent][task:test][probation] Should not live here.\n',
+      );
       out = runValidatorExpectFail();
     } finally {
       cleanup();
     }
-    expect(out).toMatch(/FAIL\[vocab-test\].*vocabulary/);
+    expect(out).toMatch(/FAIL\[stray-learnings-test\].*stray LEARNINGS\.md/);
   });
 
   // Regression: the old "backend name consistency check" derived its grep
@@ -193,14 +174,8 @@ metadata:
 Note: azure IS a real backend, and \`backends/pi/\` holds the factory.
 Run it with \`--backend=pi\`; the pi agent reads your AGENTS.md.
 `;
-    const learningsMd = `# Learnings — ${name}
-Append-only log.
 
-<!-- entries below this line -->
-- [2026-09-05][source:inference][task:test][probation] Test entry.
-`;
-
-    const cleanup = setupTempSkill(name, skillMd, learningsMd);
+    const cleanup = setupTempSkill(name, skillMd);
     let out = '';
     try {
       out = runValidatorExpectFail();
@@ -230,16 +205,8 @@ metadata:
 The pi backend was the default until v3.0; the azure backend is gone.
 \`docs/pi-coding-agent.md\` survives only as a REMOVED-backend marker.
 `;
-    // A LEARNINGS journal is dated by construction — a 2026-06 entry about the
-    // pi backend records what was true then and must never fail the gate.
-    const learningsMd = `# Learnings — ${name}
-Append-only log.
 
-<!-- entries below this line -->
-- [2026-06-25][source:inference][task:test][probation] The pi backend used \`AgentBackendKind = 'pi' | 'azure' | 'stub'\` back then.
-`;
-
-    const cleanup = setupTempSkill(name, skillMd, learningsMd);
+    const cleanup = setupTempSkill(name, skillMd);
     let out = '';
     try {
       out = runValidator();

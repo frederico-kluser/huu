@@ -8,14 +8,13 @@ trap 'rm -rf "$TMP"' EXIT
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 mkdir -p "$TMP/.agents/skills" "$TMP/.claude/skills"
-cp -r "$ROOT/.agents/skills/"* "$TMP/.agents/skills/"
+cp -rL "$ROOT/.agents/skills/"* "$TMP/.agents/skills/"
 for d in "$TMP/.agents/skills"/*/; do
   name=$(basename "$d")
-  [ "$name" = "meta-skill-consolidate" ] && continue
   ln -s "../.agents/skills/$name" "$TMP/.claude/skills/$name"
 done
 
-cp "$ROOT/.agents/skills/meta-skill-consolidate/scripts/validate-skills.sh" "$TMP/validate-skills.sh"
+cp "$ROOT/scripts/validate-skills.sh" "$TMP/validate-skills.sh"
 chmod +x "$TMP/validate-skills.sh"
 
 # Add a fake skill entry to catalog.md — calculated name (not hardcoded)

@@ -73,7 +73,7 @@ is_ci() {
 STEPS=(
   "typecheck|npm run typecheck|"
   "test|npm test|"
-  "validate-skills|.agents/skills/meta-skill-consolidate/scripts/validate-skills.sh|"
+  "validate-skills|scripts/validate-skills.sh|"
   "check-acceptance|npx tsx scripts/check-acceptance.ts --selector requeue|"
   "smoke-defaults|scripts/smoke-defaults.sh|"
   "validate-graph|scripts/validate-graph.sh pipelines/*.pipeline.json|"

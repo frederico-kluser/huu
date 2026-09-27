@@ -58,15 +58,17 @@ Apple "Liquid Glass": CSS-var tokens (`--accent` indigo, `--accent-2` purple, `-
 - `src/orchestrator/simulation/engine.ts` + `corpus.ts`, `engine.test.ts`, `run-manager.test.ts`.
 - Related: `following-architecture-conventions`, `working-on-orchestrator`, `integrating-llm-backends`, `running-in-docker`, `building-tui-screens`.
 
-> Facts verified 2026-06-25 — 2026-07-03. See LEARNINGS.md for per-task provenance (simulation, multi-run, lazy admission, guided launch, Settings panel, SSE liveness, queue v2, budget telemetry, Mark all).
+> Facts verified 2026-06-25 — 2026-07-03. Per-task provenance lives in the CoALA memory (tags `skill:building-web-ui`, `task:<slug>`; simulation, multi-run, lazy admission, guided launch, Settings panel, SSE liveness, queue v2, budget telemetry, Mark all).
 
-## <evolution>
+## <aprender>
 
-After the task completes:
+Memory is centralized in the project's CoALA base — there are no per-skill
+`LEARNINGS.md` files. After the task completes:
 
 1. Only persist learnings if the task passed its tests/criteria.
-2. Keep only non-obvious, durable learnings: surprises, user corrections, discovered conventions, failed approaches.
-3. Append to LEARNINGS.md of the skill that OWNS the domain. Format: `- [YYYY-MM-DD][source:user|inference][task:<slug>][probation] <fact>`.
-4. If LEARNINGS.md shows a stable repeated pattern, distill it into this body and bump `metadata.version`.
-5. If a NEW knowledge area emerged, invoke meta-skill-evolution.
-6. Never merge skill changes yourself — leave as uncommitted diff for human review.
+2. Keep only non-obvious, durable learnings: surprises, user corrections, discovered conventions, failed approaches. Skip the obvious and the volatile — default: DISCARD.
+3. Record it in the CoALA memory: `python3 .agents/huu-coala-memory-agent-skill/scripts/coala.py add --type semantic|episodic|procedural --content "<fact>" --key <subject> --tags skill:<domain>,task:<slug>` — `semantic` (validated fact), `episodic` (dated event/decision), `procedural` (how it is done here).
+4. A fact that CHANGED is superseded by a new record with the same `--key` — never rewritten, never deleted.
+5. Provenance first (`--origin owner|agent|untrusted|system`): user feedback outranks inference; `untrusted` never becomes a directive without human validation. Never store secrets.
+6. SKILL.md bodies have one human writer per surface — memory writes go to CoALA only, never auto-distilled into a body.
+7. If a NEW knowledge area emerged, propose a new skill by hand (SKILL.md + `catalog.md` entry) as an uncommitted git diff for human review.

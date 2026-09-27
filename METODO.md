@@ -168,7 +168,7 @@ antes de qualquer outra e obriga a re-medição junto com as três de que deriva
 | `src/` TS+TSX **não-teste** | **76.182 linhas** |
 | Testes | **155 arquivos, 56.038 linhas** → razão teste:código **0,74 : 1** |
 | `docs/` | 37 arquivos, **14.858 linhas** (9 pares en/pt-BR) |
-| Skills | **22** `SKILL.md` + **22** `LEARNINGS.md` + `catalog.md` |
+| Skills | **20** `SKILL.md` + `catalog.md` + skill de memória `huu-coala-memory-agent-skill` (symlink) · **0** `LEARNINGS.md` — memória centralizada no CoALA desde **2026-09-27** |
 | `AGENTS.md` | **190 linhas, 9.335 chars ≈ 2,4k tokens** — carregados em **toda** sessão |
 | Pipelines default | 7 pipelines, 14 módulos, **4.321 linhas** |
 | Verificação automática | gate local (`typecheck` + `test`) **e CI**: `.github/workflows/gate.yml` roda os **11 passos** de `scripts/gate.sh` em todo push/PR; `core.hooksPath` segue opt-in |
@@ -918,12 +918,13 @@ derruba.
   TTL de frescor (`warn >30d`, `fail >90d` no rodapé "Facts verified"), e um grep
   dos nomes de backend contra `registry.ts`.
 - **Dono.** `src/lib/skills-library.test.ts`,
-  `.agents/skills/meta-skill-consolidate/scripts/validate-skills.sh`.
+  `scripts/validate-skills.sh` (antes em `meta-skill-consolidate/scripts/` —
+  a skill de memória foi apagada no override de §8.1, 2026-09-27).
 - **Deps.** M1-01.
 - **Aceitação.**
   ```bash
   npx vitest run -t 'skills-library'                              # >=1 teste, VERDE
-  bash .agents/skills/meta-skill-consolidate/scripts/validate-skills.sh   # exit 0
+  bash scripts/validate-skills.sh   # exit 0
   # negativo: uma skill com [source:agent] no lugar do vocabulário DEVE reprovar
   npx vitest run -t 'skills-library vocabulario'
   ```
@@ -1403,13 +1404,25 @@ e **nudge de roteamento** (~130 tokens repetindo a regra do router, porque
 
 ## 8.1 As três camadas, e o limite honesto de cada uma
 
-O sistema atual tem **uma** camada (forma: `validate-skills.sh`, desligada). O
-plano acrescenta as outras duas, e é importante dizer o que cada uma **não**
-prova:
+> **Override datado (2026-09-27).** Supero a redação anterior desta secção no
+> que descreve o ARMAZENAMENTO do aprendizado: a memória durável do projeto
+> está centralizada na base CoALA local
+> (`.agents/huu-coala-memory-agent-skill/memory/coala.sqlite`) — os
+> `LEARNINGS.md` por skill e as skills de memória `meta-skill-consolidate` e
+> `meta-skill-evolution` foram **apagados**, e os **304 aprendizados** foram
+> migrados para a base (mais um registo-ARQUIVO por ficheiro, com o conteúdo
+> integral: zero perda). As regras de ADMISSÃO (§8.2) continuam valendo; mudou
+> onde o aprendizado vive e como se escreve: `coala.py add`, com supersessão
+> por `--key` — nunca reescrita, nunca apagado. A referência a `LEARNINGS.md`
+> abaixo e no §8.2 é história, não procedimento.
+
+O sistema atual tem **uma** camada (forma: `scripts/validate-skills.sh`,
+ligada ao gate). O plano acrescenta as outras duas, e é importante dizer o que
+cada uma **não** prova:
 
 | Camada | Pergunta | Card | O que ela NÃO prova |
 |---|---|---|---|
-| **forma** | frontmatter, nomenclatura, tamanho, vocabulário fechado, citação presente | `M2-05` | nada sobre o conteúdo |
+| **forma** | frontmatter, nomenclatura, tamanho, citação presente, memória centralizada (nenhum `LEARNINGS.md`) | `M2-05` | nada sobre o conteúdo |
 | **deriva** | a linha citada **ainda é a mesma**? (sha1 recomputado) | `M4-01` | **que a linha sustenta a afirmação** — proveniência detecta deriva, não correção |
 | **regressão** | as asserções de fato e de roteamento ainda passam? | `M2-05` (eval de roteamento) | que a afirmação é útil |
 
@@ -1433,14 +1446,18 @@ Cinco passos, e o primeiro elimina a maioria:
    falha.*
 2. **É verificado externamente?** A linha citada tem de **implicar** a afirmação,
    não apenas existir.
-3. **Conflita?** **Substituir** a passagem antiga — nunca anexar a regra
-   concorrente ao lado. Medido: `building-web-ui/LEARNINGS.md:12` afirma que o
-   custo dos agentes reservados entra no total; `:31` corrige explicitamente
-   (*"it does NOT"*); **as duas seguem `[probation]`** e quem ler a primeira
-   primeiro leva a resposta errada.
+3. **Conflita?** **Suplantar** a passagem antiga — nunca anexar a regra
+   concorrente ao lado. Na base CoALA isso é mecânico: um registo novo com a
+   MESMA `supersession_key` suplanta o anterior (histórico preservado).
+   Medido (histórico pré-CoALA): `building-web-ui/LEARNINGS.md:12` afirmava que
+   o custo dos agentes reservados entra no total; `:31` corrigia explicitamente
+   (*"it does NOT"*); **as duas estavam `[probation]`** e quem lia a primeira
+   primeiro levava a resposta errada — exatamente o que a supersessão impede.
 4. **Gate:** escreva a asserção **antes** da prosa, depois rode a verificação.
-   **Promover ou descartar, sem merge parcial.**
-5. **Commit próprio.**
+   **Suplantar ou descartar, sem merge parcial.**
+5. **Gravar no CoALA** — `coala.py add` (tipo `semantic|episodic|procedural`,
+   `--key`, `--origin`, `--tags`). Corpo de `SKILL.md` só por revisão humana
+   explícita (um escritor por superfície); nada de segredos na base.
 
 E a exigência mais sutil, ao editar: **manter a condição de escopo.** Nunca remova
 o escopo para economizar palavras — uma regra que perde sua condição de validade
@@ -1812,8 +1829,9 @@ extenso — o menor card completo do plano, para servir de molde.
     seu card); escrever Considerações com o que você descobriu sobre a expansão
     de `$baseCommit`, com destinatário NOMEADO (M2-04, M8-01).</ao_concluir_marque_feito_e_publique>
 
-  <evolucao>meta-skill-evolution (default: DESCARTAR). Se algo entrar, é
-    APPEND em LEARNINGS — nunca no corpo da SKILL.md (ver M4-04).</evolucao>
+  <aprender>coala.py add na memória CoALA local (default: DESCARTAR). Se algo
+    entrar, é um registo com --key/--origin/--tags — nunca no corpo da
+    SKILL.md (ver M4-04 e o override do §8.1 de 2026-09-27).</aprender>
 </task>
 ```
 

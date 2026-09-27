@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
-# Mechanical validation of the skill library (step 1 of meta-skill-consolidate).
+# Mechanical validation of the skill library (wired into scripts/gate.sh).
+# Was step 1 of meta-skill-consolidate; that memory skill was deleted when the
+# project's memory was centralized in the CoALA base (2026-09-27).
 # Checks, per skill dir: SKILL.md present; frontmatter name == directory;
 # description 1..1024 chars (single-line descriptions assumed); body < 500
-# lines and ~< 5000 tokens (bytes/4); LEARNINGS.md present; listed in
-# catalog.md; .claude/skills symlink resolves. Also: every catalog entry must
-# resolve to a real skill.
+# lines and ~< 5000 tokens (bytes/4); listed in catalog.md; .claude/skills
+# symlink resolves. Also: every catalog entry must resolve to a real skill.
+#
+# Memory centralization (2026-09-27): a stray LEARNINGS.md under
+# .agents/skills/ FAILS (memory lives in .agents/<p>-coala-memory-agent-skill/,
+# and a project with no such memory skill FAILS too).
 #
 # Added checks (M2-05):
-# - Closed vocabulary: LEARNINGS.md entries must match the canonical format.
-# - TTL freshness: warn if skill files are >30d stale, fail if >90d.
+# - TTL freshness: warn if SKILL.md is >30d stale, fail if >90d.
 # - Removed-backend liveness: grep SKILL.md bodies + catalog.md for a FIXED
 #   historical vocabulary (pi, azure, ...) asserted as a LIVE backend.
 # Exits non-zero on any violation.
 set -uo pipefail
 
-root="$(cd "$(dirname "$0")/../../../.." && pwd)"
+root="$(cd "$(dirname "$0")/.." && pwd)"
 skills="$root/.agents/skills"
 fail=0
 warns=0
@@ -49,8 +53,6 @@ for dir in "$skills"/*/; do
   toks=$(( $(wc -c < "$f") / 4 ))
   [ "$toks" -lt 5000 ] || err "$name" "~$toks tokens (cap 5000)"
 
-  [ -f "$dir/LEARNINGS.md" ] || err "$name" "missing LEARNINGS.md"
-
   grep -q "($name/SKILL.md)" "$skills/catalog.md" || err "$name" "not listed in catalog.md"
 
   link="$root/.claude/skills/$name"
@@ -62,43 +64,27 @@ while IFS= read -r n; do
   [ -f "$skills/$n/SKILL.md" ] || err "catalog" "lists '$n' but no such skill exists"
 done < <(grep -o '([a-z0-9-]*/SKILL.md)' "$skills/catalog.md" | sed 's|^(\(.*\)/SKILL.md)$|\1|')
 
-# ---- M2-05: Closed vocabulary for LEARNINGS.md entries ----
-# Canonical format: "- [YYYY-MM-DD][source:user|inference|agent][task:<slug>][probation|promoted|superseded] <fact>"
-# Only validates lines that start with "- [20" (actual entry lines), skipping
-# headers, comments, and boilerplate.
-LEARNINGS_ENTRY_RE='^- \[20[0-9][0-9]-[0-1][0-9]-[0-3][0-9]\]\[source:(user|inference|agent)\]\[task:[a-z0-9._-]+\]\[(probation|promoted|superseded)\] .+'
-
-for dir in "$skills"/*/; do
-  name="$(basename "$dir")"
-  lf="$dir/LEARNINGS.md"
-  [ -f "$lf" ] || continue
-  # Only check lines after the entries marker
-  past_marker=false
-  while IFS= read -r line; do
-    # Detect the entries-start marker
-    [[ "$line" =~ ^\<\!--\ entries\ below ]] && past_marker=true && continue
-    $past_marker || continue
-    # Skip empty lines and HTML comments
-    [[ -z "$line" ]] && continue
-    [[ "$line" =~ ^\<\!\-\- ]] && continue
-    # Skip non-entry lines (headings in entries section, etc.)
-    [[ "$line" =~ ^# ]] && continue
-    # Only check lines that start with "- [20" (actual entries)
-    if [[ "$line" =~ ^-\ \[20 ]]; then
-      if ! [[ "$line" =~ $LEARNINGS_ENTRY_RE ]]; then
-        err "$name" "LEARNINGS entry violates closed vocabulary: '${line:0:120}...'"
-      fi
-    fi
-  done < "$lf"
+# ---- Memory centralized in the CoALA base (2026-09-27) ----
+# The distributed memory (per-skill LEARNINGS.md) was migrated to
+# .agents/<p>-coala-memory-agent-skill/memory/coala.sqlite and deleted.
+# A stray LEARNINGS.md is the FAIL here; so is a project without its memory skill.
+for f in "$skills"/*/LEARNINGS.md; do
+  [ -e "$f" ] || continue
+  err "$(basename "$(dirname "$f")")" "stray LEARNINGS.md — memory is centralized in the CoALA base (2026-09-27)"
 done
+mem_skill=""
+for d in "$root"/.agents/*-coala-memory-agent-skill/ "$root"/.agents/skills/*-coala-memory-agent-skill/; do
+  [ -f "$d/SKILL.md" ] && mem_skill="$d" && break
+done
+[ -n "$mem_skill" ] || err "memory" "no .agents/<p>-coala-memory-agent-skill/ — install it with the coala-agent-skill installer"
 
 # ---- M2-05: TTL freshness check ----
-# Warn if SKILL.md or LEARNINGS.md is >30d since last modification.
+# Warn if SKILL.md is >30d since last modification.
 # Fail if >90d since last modification.
 for dir in "$skills"/*/; do
   name="$(basename "$dir")"
   max_age=0
-  for f in "$dir/SKILL.md" "$dir/LEARNINGS.md"; do
+  for f in "$dir/SKILL.md"; do
     [ -f "$f" ] || continue
     age=$(days_since "$f")
     [ "$age" -gt "$max_age" ] && max_age="$age"
