@@ -2,7 +2,7 @@
 //
 // The `huu Knowledge System` pipeline answers this question INSIDE a prompt
 // (its step 1 tells the agent to shell out and look for
-// `.agents/skills/catalog.md` / a router SKILL.md). Dev mode needs the same
+// `.agents/skills/catalog.md` / a router SKILL.md). Some flows need the same
 // answer BEFORE any agent runs, so it can decide whether to spend a whole
 // bootstrap run on it. This module is that probe, kept deliberately in the
 // same spirit as `project-digest.ts`: synchronous, bounded, best-effort, and
@@ -15,7 +15,7 @@
 //      `type: router`, or the conventional names)
 //   3. any `.agents/skills/*/SKILL.md`  → skills exist but no routing surface
 //   4. the same three probes under `.claude/skills/`
-// Nothing found ⇒ absent, and dev mode bootstraps.
+// Nothing found ⇒ absent, and the caller may bootstrap one.
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -36,10 +36,10 @@ export type KnowledgeSurface = 'agents' | 'claude';
 
 export interface KnowledgeStatus {
   /**
-   * True when the repo has a knowledge system dev mode can route through.
+   * True when the repo has a knowledge system the tooling can route through.
    * Requires BOTH at least one skill and a routing surface (catalog or
    * router skill) — loose skills with nothing to route them are treated as
-   * absent, because the dev planner has no entry point into them.
+   * absent, because a planner has no entry point into them.
    */
   present: boolean;
   /** Which tree the skills live in; undefined when none was found. */
@@ -159,7 +159,7 @@ function probeRoot(repoRoot: string, root: string): Omit<KnowledgeStatus, 'reaso
 /**
  * Probes `repoRoot` for an agent-skills knowledge system. Never throws.
  *
- * Dev mode calls this before its first epoch: `present: false` means the
+ * Callers use this before starting work: `present: false` means the
  * bootstrap run (`huu Knowledge System`) is worth its cost, and
  * `bootstrapMode` tells that run whether it is creating a surface or
  * extending one that already exists.

@@ -37,7 +37,7 @@ const _PROVIDER_UNIONS_MATCH: SameProviders = true;
  *
  * `xiaomi/mimo-v2.6-pro` since 2026-10-03: every mode SUGGESTS it, and it is
  * omni-modal (input text+image+video+audio — OpenRouter `input_modalities`,
- * verified live), so the dev mode's vision requirement and the default
+ * verified live), so any vision requirement and the default
  * suggestion never collide. The whole MiMo family is NOT uniformly visual
  * (mimo-v2.5-pro is text-only): capability rides on `inputModalities`, never
  * on the name.
@@ -51,7 +51,7 @@ const DEFAULT_RECOMMENDED_MODELS: readonly ModelEntry[] = [
     inputPrice: 0.435,
     outputPrice: 0.87,
     description:
-      '★ default — omni-modal (texto+imagem+vídeo+áudio), reasoning forte, long-context. O sugerido em todos os modos; o modo DEV exige visão e este modelo tem.',
+      '★ default — omni-modal (texto+imagem+vídeo+áudio), reasoning forte, long-context. O sugerido em todos os modos.',
     bestFor: ['general', 'coding', 'reasoning'],
     tier: 'flagship',
     // OpenRouter-namespaced (`xiaomi/…`): api.deepseek.com serves only its own
@@ -166,7 +166,7 @@ function providerFor(m: ModelEntry): LlmProvider {
 }
 
 /**
- * Whether an entry ACCEPTS IMAGE input — the one question the dev mode's
+ * Whether an entry ACCEPTS IMAGE input — the one question a
  * vision gate asks. Deliberately strict: absent `inputModalities` is UNKNOWN
  * and answers `false` (fail-safe text-only). Gating a capable model out is a
  * visible, fixable complaint; sending an image that dies mid-run — or gets

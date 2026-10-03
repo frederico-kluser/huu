@@ -508,7 +508,7 @@ function warnConfigWasCorrupt(path: string, backup: string | undefined): void {
  * silent: `readConfigStore()` answers `{}` for anything it cannot parse, so the
  * next write would serialize that emptiness over what remained. `rename(2)` is
  * atomic within a filesystem: a reader sees either the whole old file or the
- * whole new one. Same staging shape as `dev-mode/dev-state.ts`,
+ * whole new one. Same staging shape as every other staged write here,
  * `dev-graph/graph-store.ts`, `jcode/hermetic.ts` and `run-logger.ts`: the tmp
  * is a SIBLING (a rename across filesystems is EXDEV), its name carries
  * pid+random so concurrent writers cannot share it, and it is swept on failure

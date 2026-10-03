@@ -148,7 +148,7 @@ describe('loadRecommendedModels (provider filter)', () => {
 });
 
 describe('modelAcceptsImage — the vision gate predicate', () => {
-  // The dev mode REQUIRES vision; this predicate is the whole gate. Its
+  // Some surfaces REQUIRE vision; this predicate is the whole gate. Its
   // contract is fail-safe: an entry without `inputModalities` is UNKNOWN and
   // answers false — gating a capable model out is a visible complaint, an
   // image that dies (or is silently dropped) mid-run is neither. Never from

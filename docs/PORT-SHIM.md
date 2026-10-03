@@ -445,7 +445,7 @@ Na primeira execução em um repo:
 
 1. Detecta SO (`linux` / `darwin`) e `arch` (`x64` / `arm64`).
 2. Localiza a fonte C (`native/port-shim/port-shim.c`) — funciona
-   tanto em modo dev (`tsx`) quanto em modo build (`dist/`).
+   tanto em execução via `tsx` (fonte) quanto via `dist/` (build).
 3. Verifica se `<repoRoot>/.huu-cache/native-shim/<os>-<arch>/huu-port-shim.{so,dylib}`
    existe e é mais recente que a fonte. Se sim, reusa.
 4. Caso contrário, chama `cc` com flags apropriadas. Em ~50ms produz

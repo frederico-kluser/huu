@@ -142,13 +142,6 @@ The synthesis — and one refusal:
    verdict — and even that has enumerated routes, an iteration cap,
    and a `default` outcome for when the judge fails.
 
-   \> **Exception:** the development mode (`huu dev`,
-   \> `src/lib/dev-mode/`) uses an LLM planner to decompose a human
-   \> goal into parallel fronts. This is a legitimate and deliberate
-   \> exception: the human underwrites the GOAL (`goal.md`) and the
-   \> METHOD (epoch format); the planner only DECOMPOSES, never invents
-   \> scope. See `AGENTS.md` (Development mode section) and
-   \> `METODO.md §0.4`.
 3. **The pipeline is a portable artifact.** Not code against an SDK;
    plain JSON, versionable, shareable as a gist. The know-how of *how
    to decompose a class of task* becomes a file that outlives any

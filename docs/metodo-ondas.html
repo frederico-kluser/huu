@@ -195,7 +195,7 @@
           </h4>
           <div id="fam-b" class="accordion-collapse collapse" data-bs-parent="#acc-familias">
             <div class="accordion-body">
-              <p><code>docs/dev-mode.md:250-253</code> traz um cabeçalho literal:
+              <p>A documentação já trazia um cabeçalho literal:
                 <strong>“Rules huu enforces (that the planner cannot break)” — Partition by
                 file ownership</strong>.</p>
               <p><strong>Nada enforça isso.</strong> A busca foi exaustiva e negativa:
@@ -492,7 +492,6 @@ state=error phase=paused:
             <tr><td><strong>W3</strong></td><td class="text-end">4</td><td class="text-end">2–3</td><td class="text-end">0–1</td><td>grafo + propriedade de arquivo — <strong>o coração do plano</strong></td></tr>
             <tr><td><strong>W4</strong></td><td class="text-end">4</td><td class="text-end">2–3</td><td class="text-end">1</td><td>memória, incerteza e ADR</td></tr>
             <tr><td><strong>W5</strong></td><td class="text-end">1</td><td class="text-end">5</td><td class="text-end">0</td><td><strong>neck</strong>: <code>AGENTS.md</code> — sozinha de propósito</td></tr>
-            <tr><td><strong>W6</strong></td><td class="text-end">4</td><td class="text-end">4</td><td class="text-end">2</td><td>dev mode — herda write-set, <code>accept</code> e ledger</td></tr>
             <tr><td><strong>W7</strong></td><td class="text-end">4</td><td class="text-end">6</td><td class="text-end">0–1</td><td>quebrar os singletons medidos</td></tr>
             <tr><td><strong>W8</strong></td><td class="text-end">2</td><td class="text-end">3</td><td class="text-end">5</td><td><strong>dogfooding</strong> — preenchedor de paralelismo, folga grande</td></tr>
             <tr><td><strong>W9</strong></td><td class="text-end">1</td><td class="text-end">7</td><td class="text-end">0</td><td><strong>join</strong> — estado derivado + catálogo vivo</td></tr>
@@ -600,12 +599,8 @@ W7:  M7-03 (types) → M7-04 (gêmeos) → M7-01 (app.js) → M7-02 (index.ts)</
             <tr><td><code>M4-03</code></td><td>ADRs com <strong>guarda executável</strong> + os 3 primeiros</td><td><code>rg -L 'Guarda executável' docs/adr/*</code> → vazio</td></tr>
             <tr><td><code>M4-04</code></td><td>Governança: revogar a auto-promoção, purgar <code>copilot</code>, consolidar de verdade</td><td><code>rg -c copilot .agents/skills</code> → 0</td></tr>
 
-            <tr class="table-secondary"><td colspan="3"><strong>W5 · W6 · W7 · W8 · W9</strong></td></tr>
+            <tr class="table-secondary"><td colspan="3"><strong>W5 · W7 · W8 · W9</strong></td></tr>
             <tr><td><code>M5-01</code></td><td><code>AGENTS.md</code> 520 → ~120 linhas; ~7k tokens por sessão de volta</td><td><code>rg -c MAX_CONCURRENT_RUNS AGENTS.md</code> → 0</td></tr>
-            <tr><td><code>M6-01</code> 🔴</td><td>Partição de write-set no dev mode (o parser já existe)</td><td>“dois specs mesmo arquivo <strong>recusa</strong>”</td></tr>
-            <tr><td><code>M6-02</code></td><td><code>verifyCommands</code> deixa de ser código morto</td><td><code>rg -c verifyCommands dev-driver.ts</code> &gt; 0</td></tr>
-            <tr><td><code>M6-03</code></td><td>Honestidade do fim de época: <code>alreadyUpToDate</code>, <code>goalComplete</code>, <code>doneWhen</code></td><td>“época no-op não conta como landed”</td></tr>
-            <tr><td><code>M6-04</code></td><td>Flush periódico do manifesto; <code>journal.md</code> commitado</td><td>“manifest flush incremental” — existe em disco <em>meio</em> run</td></tr>
             <tr><td><code>M7-01..04</code></td><td>Quebrar <code>app.js</code>, <code>index.ts</code>, <code>types.ts</code>; paridade dos gêmeos por script</td><td>tetos de linha + as 414 asserções do orquestrador verdes</td></tr>
             <tr><td><code>M8-01..02</code></td><td>O huu roda o huu no CI do huu; <code>huu Test Suite</code> nos maiores sem teste</td><td>o relatório aparece em <code>.huu/audits/</code></td></tr>
             <tr><td><code>M9-01</code></td><td>Estado <strong>derivado</strong> + catálogo de falso-verde vivo</td><td>mude um número à mão → exit ≠ 0</td></tr>
@@ -662,8 +657,7 @@ W7:  M7-03 (types) → M7-04 (gêmeos) → M7-01 (app.js) → M7-02 (index.ts)</
             FALHA</strong>. Não é instrução no prompt — é a ferramenta recusando.</p>
           <p class="small mb-0"><strong>É a corroboração mais direta do diagnóstico.</strong> O
             <code>huu</code> hoje faz o oposto: a partição é prosa repetida em cinco lugares, e a
-            doc a anuncia como “Rules huu enforces”. Sobe a prioridade de <code>M3-02</code> e
-            <code>M6-01</code> — e sugere levá-los à camada de ferramenta do backend.</p>
+            doc a anuncia como “Rules huu enforces”. Sobe a prioridade de <code>M3-02</code> — e sugere levá-lo à camada de ferramenta do backend.</p>
         </div>
         <div class="list-group-item border-danger">
           <div class="d-flex justify-content-between"><strong>O fan-in é onde os fornecedores param</strong><span class="badge text-bg-success">3-0</span></div>

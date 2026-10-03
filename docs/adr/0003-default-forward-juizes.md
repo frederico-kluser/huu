@@ -9,7 +9,7 @@ Todo `CheckStep` de pipeline no `huu` declara outcomes com rotas enumeradas
 (`approved` → próximo passo, `rework` → reexecuta), e **exatamente um**
 outcome com `default: true`. Quando o juiz falha (modelo inalcançável,
 veredito fora do enum, timeout), o outcome `default` dispara — e em todos
-os pipelines atuais (7 auditorias, 1 test suite, dev mode) o default aponta
+os pipelines atuais (7 auditorias, 1 test suite) o default aponta
 para **forward** (prossegue, não bloqueia).
 
 O diagnóstico `METODO.md` §4.1 (item A2) registrou: **"nenhum teste no
@@ -98,9 +98,6 @@ necessários para a mitigação.
 - Não proíbe um `CheckStep` com `default: true` apontando para `rework` —
   apenas estabelece que forward é o padrão e que a mitigação `M2-04` é o
   que o torna seguro.
-- Não cobre juízes do dev mode (`review` loop por card) — o dev mode tem
-  sua própria política de convergência com forward-default em toda falha
-  (`running-dev-mode` skill).
 
 ## Limites do que é verificável aqui
 

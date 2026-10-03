@@ -514,7 +514,7 @@ export class Orchestrator {
   private reportedCollisions: Set<string> = new Set();
   /**
    * The current declared-ownership collision set, surfaced on
-   * {@link OrchestratorState} so a driver (dev mode) can fold it into the
+   * {@link OrchestratorState} so a driver can fold it into the
    * epoch's evidence and hand it to the next planner. Instrumentation with a
    * consumer — never a gate.
    */
@@ -1606,7 +1606,7 @@ export class Orchestrator {
 
   /**
    * Write the task's finding shard (one file per task — never a shared file,
-   * the same anti-conflict sharding the dev-mode findings protocol uses).
+   * the same anti-conflict sharding the findings protocol uses).
    * Best-effort: a failure here must never affect the run.
    */
   private persistReviewFindings(

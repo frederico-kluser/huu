@@ -509,7 +509,7 @@ The forward-default table above is deliberate: a broken or unconverged critic mu
 Two caveats before reaching for `'hold'`:
 
 - **It parks the stage.** The run waits for a human decision at that point — that is the feature, but design for it: attended runs only.
-- **Headless always degrades to `'waive'`.** Runs without an interactive channel wired (`run-many`, smoke tests, any orchestrator started without `interactiveRetry`) fall back to the waive path automatically, so `'hold'` can never deadlock an unattended run. Development mode relies on exactly this: its [methodology options](dev-mode.md#methodology-options) stamp `'hold'`, and a headless `huu dev` session still terminates.
+- **Headless always degrades to `'waive'`.** Runs without an interactive channel wired (`run-many`, smoke tests, any orchestrator started without `interactiveRetry`) fall back to the waive path automatically, so `'hold'` can never deadlock an unattended run.
 
 ### Cost, and two rules of thumb
 

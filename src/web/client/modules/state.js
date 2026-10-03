@@ -20,12 +20,9 @@ export async function api(path, opts = {}) {
     ...rest,
   });
   const data = await res.json().catch(() => ({}));
-  // The BODY travels with the failure. `POST /api/graphs/compile` answers 400
-  // with `{ok:false, error, errors[], warnings[]}` — the array being
-  // deliberately additive so the canvas can highlight the offending nodes with
-  // no second round-trip. Keeping only `data.error` threw that array away and
-  // left every caller with a sentence (see the CAVEAT in graph-api-client.js,
-  // which reads `err.body`). The cast is because `Error` has no `body`.
+  // The BODY travels with the failure: an error response may carry structured
+  // detail beyond `error`, and keeping only the sentence threw that away and
+  // left every caller blind to it. The cast is because `Error` has no `body`.
   if (!res.ok) {
     const err = /** @type {any} */ (new Error(data.error || `HTTP ${res.status}`));
     err.body = data;
@@ -176,27 +173,5 @@ export const S = {
     stopping: false,
     id: '',
   },
-  // Dev surface
-  devBooted: false,
-  devDir: '',
-  devSession: null,
   lastBudget: null,
-  // Method canvas (/graph). Same shape as the dev surface above: one boolean
-  // that makes the lazy init idempotent, plus what has to SURVIVE a view swap.
-  // `graphDoc` is the devgraph currently on the canvas — kept here so switching
-  // to Pipelines and back does not hand the human an empty drawing; the React
-  // root itself is torn down and rebuilt from it.
-  graphBooted: false,
-  graphDir: '',
-  graphDoc: null,
-  graphCatalog: null,
-  graphMount: null,
-  // THE HAND-OFF between the canvas and development mode. `/graph` never starts
-  // a session itself — it names the method here and dispatches `huu:run-graph`,
-  // and the /dev form (which owns the goal, the project and the model routing)
-  // pre-selects it. Kept on S rather than passed as an argument because the two
-  // surfaces must not import each other: `launch.js` already imports
-  // `graph/canvas.js`, so a canvas → dev import would close an ESM cycle.
-  devGraphId: '',
-  devGraphName: '',
 };

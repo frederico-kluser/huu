@@ -142,13 +142,6 @@ A síntese — e uma recusa:
    veredito de um `check` — e mesmo ele tem rotas enumeradas, cap de
    iterações e um outcome `default` para quando o juiz falha.
 
-   \> **Exceção:** o modo de desenvolvimento (`huu dev`,
-   \> `src/lib/dev-mode/`) usa um planner LLM para decompor uma meta
-   \> humana em fronts paralelos. Esta é uma exceção legítima e
-   \> deliberada: o humano subscreve a META (`goal.md`) e o MÉTODO
-   \> (formato de épocas); o planner apenas DECOMPÕE, nunca inventa
-   \> escopo. Ver `AGENTS.md` (seção Development mode) e
-   \> `METODO.md §0.4`.
 3. **O pipeline é um artefato portátil.** Não é código contra um SDK;
    é JSON puro, versionável, compartilhável como gist. O know-how de
    *como decompor uma classe de tarefa* vira um arquivo que sobrevive

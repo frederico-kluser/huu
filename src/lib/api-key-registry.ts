@@ -134,8 +134,8 @@ export const API_KEY_REGISTRY: readonly ApiKeySpec[] = [
   // All three are `required: false` AND deliberately carry NO
   // `providerBound`: the run gate only enforces an unbound spec when
   // `required: true`, so these stay invisible to it. Web research is an
-  // OPTIONAL capability — a missing key degrades the research step (see
-  // docs/dev-mode.md), it must never block a run.
+  // OPTIONAL capability — a missing key degrades the research step, it
+  // must never block a run.
   //
   // WHICH OF THEM STILL SEARCHES: only `brave`. The installed surf is v8 and
   // it dispatches over Brave alone — no Tavily, no Parallel, no keyless tier,

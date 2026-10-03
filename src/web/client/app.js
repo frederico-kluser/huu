@@ -2,12 +2,12 @@
    Real-time over one SSE stream, actions over fetch POSTs.
    App state and infrastructure → modules/state.js
    Utilities → modules/utils.js
-   Screens → modules/launch.js, queue.js, settings.js, board.js, dev.js */
+   Screens → modules/launch.js, queue.js, settings.js, board.js */
 
 import { esc, toast } from './modules/utils.js';
 import { $, S, api, applyTheme, withTok, TOKEN, pipeIcon, sessionKey, setSessionKey, backendSpecName, providerInfoById, providerReady, providerBackend, parseRamPercent, syncTimeoutField, DEFAULT_MODEL_ID } from './modules/state.js';
 
-import { goStep, renderGallery, selectPipelineByName, showView, switchMode } from './modules/launch.js';
+import { goStep, renderGallery, selectPipelineByName } from './modules/launch.js';
 
 import { renderQueue, restoreQueue, refreshHistoryBadge } from './modules/queue.js';
 
@@ -15,7 +15,6 @@ import { loadSettings, saveSettings } from './modules/settings.js';
 
 import { bootSimulation, connectSse, ingestRun, renderActiveRun, renderBudget } from './modules/board.js';
 
-import { initDevSurface } from './modules/dev.js';
 import { applyI18n, initI18n, t } from './i18n.js';
 
 /* ── Cross-surface links ── */
@@ -61,9 +60,6 @@ export async function boot() {
   // /simulation is a self-contained demo surface — short-circuit the launch flow.
   if (location.pathname.replace(/\/+$/, '') === '/simulation') { bootSimulation(b); return; }
 
-  // /dev does NOT short-circuit: development mode is one half of the mode
-  // SWITCH, so both surfaces boot together and switching between them is a
-  // view swap, not a page load (which would drop the SSE stream and the board).
   if (b.defaults && typeof b.defaults.concurrency === 'number') { S.manualN = b.defaults.concurrency; }
   if (b.defaults && b.defaults.autoScale === false) { S.mode = 'manual'; }
   S.provider = b.lockedProvider || pickDefaultProvider(b.providers);
@@ -88,23 +84,7 @@ export async function boot() {
   renderQueue();
   syncTimeoutField();
   refreshHistoryBadge();
-  // Now that providers/models are loaded, finish wiring the dev surface. The
-  // VIEW was already chosen synchronously at parse time (see below) so there
-  // is no flash; this only fills it in.
-  if (location.pathname.replace(/\/+$/, '') === '/dev') switchMode('dev', { push: false });
-  // Same deal for the method canvas: the VIEW was already picked synchronously
-  // below, and this is what actually mounts it — the palette needs the sample
-  // list `/api/bootstrap` carries, so the mount waits for boot to have it.
-  if (location.pathname.replace(/\/+$/, '') === '/graph') switchMode('graph', { push: false });
 }
-
-/* Pick the surface SYNCHRONOUSLY, before /api/bootstrap is even requested.
-   Deciding it after the fetch resolved made a direct /dev load paint the
-   pipeline picker first and swap a beat later — a visible flash. This is a
-   pure DOM toggle; `initDevSurface()` still runs later, once boot() has the
-   providers and models it needs. */
-if (location.pathname.replace(/\/+$/, '') === '/dev') showView('dev');
-if (location.pathname.replace(/\/+$/, '') === '/graph') showView('graph');
 
 boot().catch((e) => {
   // The catalog may not have loaded — fall back to the English literal so the

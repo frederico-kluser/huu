@@ -129,7 +129,7 @@ export interface AcceptSpec {
 export interface ReviewSpec {
   /**
    * The critic's briefing. Authored by the PIPELINE, never by a planner — the
-   * same boundary that keeps dev mode's planner from emitting step graphs.
+   * same boundary that keeps a planner from emitting step graphs.
    */
   prompt: string;
   /**
@@ -149,7 +149,7 @@ export interface ReviewSpec {
   /**
    * Critic model. Cross-family from the worker on purpose — a model reviewing
    * its own family's output is the design's most fragile assumption, so the
-   * dev-mode preset points this at a different vendor than the worker.
+   * a preset points this at a different vendor than the worker.
    * Falls back to `AppConfig.modelId` when undefined, like every other
    * `modelId` in this file.
    */
@@ -172,7 +172,7 @@ export interface ReviewSpec {
   verifyCommands?: string[];
   /**
    * Where per-task finding shards are written (one file per task, never a
-   * shared file) — the same anti-conflict sharding the dev-mode findings
+   * shared file) — the same anti-conflict sharding the findings
    * protocol already uses.
    */
   findingsDir?: string;

@@ -4,7 +4,7 @@ import { generateAgentSystemPrompt } from './agents-md-generator.js';
 /**
  * The header is the HIGHEST-PRIORITY text an agent reads — it precedes the step
  * prompt in the same message. These tests exist because it silently
- * contradicted every dev-mode prompt for a long time and nothing caught it:
+ * contradicted every agent prompt for a long time and nothing caught it:
  * there was no test on this file at all. Each case below pins one contradiction
  * that was actually shipped.
  */
@@ -29,7 +29,7 @@ describe('generateAgentSystemPrompt', () => {
     }
   });
 
-  it('drops the rules that fought the dev-mode prompts', () => {
+  it('drops the rules that fought the agent prompts', () => {
     const text = generateAgentSystemPrompt({ ...base, files: ['src/a.ts'] });
     // "Do NOT create new files unless absolutely necessary" fought every front
     // whose job is to create files.
@@ -48,11 +48,11 @@ describe('generateAgentSystemPrompt', () => {
       const text = generateAgentSystemPrompt({
         ...base,
         // A memory-scope task: `files` is the BRIEFING, not the target.
-        files: ['.huu/dev/s1/epoch-1/api/T-001.md'],
+        files: ['.huu/runs/s1/epoch-1/api/T-001.md'],
         ownedPaths: ['src/api/routes.ts', 'src/api/schema.ts'],
       });
       expect(text).toContain('Your assignment is briefed in:');
-      expect(text).toContain('.huu/dev/s1/epoch-1/api/T-001.md');
+      expect(text).toContain('.huu/runs/s1/epoch-1/api/T-001.md');
       expect(text).toContain('The files you may WRITE are exactly these');
       expect(text).toContain('src/api/routes.ts');
       expect(text).toContain('src/api/schema.ts');

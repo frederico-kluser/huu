@@ -2,7 +2,7 @@
  * Provider-aware LangChain client factory.
  *
  * Centralizes client construction so every helper (Pipeline Assistant, Smart
- * File Select, Project Recon, the dev-mode planner, check-feasibility,
+ * File Select, Project Recon, check-feasibility,
  * recon-selector, assistant-architect) builds its `ChatOpenAI` against the
  * right host with the right credential.
  *

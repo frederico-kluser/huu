@@ -21,13 +21,10 @@ import type { AgentBackendKind } from '../orchestrator/backends/registry.js';
 import { parseBackendKind } from '../orchestrator/backends/registry.js';
 import type { AgentOutputChunk } from '../orchestrator/types.js';
 import type {
-  DevMethodology,
-  DevModelPreset,
   LlmProvider,
   OrchestratorState,
   Pipeline,
 } from '../lib/types.js';
-import { DEV_MODEL_PRESETS } from '../lib/types.js';
 import { backendToProvider, parseProvider, providerToBackend } from '../lib/providers.js';
 import {
   listBackendsInfo,
@@ -57,25 +54,7 @@ import {
   removePoolKey,
   saveKeyPool,
 } from '../lib/api-key-pool.js';
-import {
-  DEV_MODEL_ROLES,
-  devModelPresetProviders,
-  parseDevModelPolicy,
-} from '../lib/dev-mode/dev-model-policy.js';
-import { devModelProviderIndex } from '../lib/dev-mode/model-catalog-index.js';
-import { DEV_METHODOLOGIES } from '../lib/dev-mode/methodology-registry.js';
 import { WebRunManager, pickRunKey, type RunSnapshot, type StartRunParams } from './run-manager.js';
-import { DevStartRefusal, WebDevManager, type DevSessionSnapshot } from './dev-manager.js';
-import { parseDevGraph } from '../lib/dev-graph/graph-schema.js';
-import type { DevGraph } from '../lib/dev-graph/graph-types.js';
-import {
-  graphBlockOptions,
-  graphNodeKindOptions,
-  graphSampleOptions,
-  handleGraphRequest,
-  isGraphApiPath,
-} from './graph-api.js';
-import { TranscribeError, isTranscribeFormat, transcribeAudio } from '../lib/transcribe.js';
 import { termLog } from './terminal-log.js';
 import {
   DEFAULT_LOCALE,
@@ -117,25 +96,6 @@ const MAX_AGENT_LOG_LINES = 200;
 /** Coalesce orchestrator emits to at most one SSE frame per this interval. */
 const BROADCAST_INTERVAL_MS = 120;
 
-/**
- * The selectable dev-mode methodologies, served on `/api/bootstrap` so the
- * /dev form renders its toggles FROM this table — the same pattern as
- * `devModelPresets`/`devModelRoles`, and for the same reason: a client that
- * hardcoded the list would drift the day an option is added.
- *
- * Projected from {@link DEV_METHODOLOGIES}, the single declaration surface, so
- * the web catalog cannot drift from the CLI flags or the planner's bullets
- * either. Only the browser-facing columns cross the wire — the flag and the
- * planner bullet are nobody's business here. The keys stay compile-checked
- * against {@link DevMethodology}, so an option the type does not declare fails
- * the build instead of silently doing nothing. All OFF by default — a session
- * that checks none compiles the pipeline it compiles today, byte for byte.
- */
-const DEV_METHODOLOGY_OPTIONS: readonly {
-  key: keyof DevMethodology;
-  label: string;
-  description: string;
-}[] = DEV_METHODOLOGIES.map(({ key, label, description }) => ({ key, label, description }));
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -226,25 +186,6 @@ export function createWebServer(opts: WebServerOptions): {
 
   const manager = new WebRunManager(opts.cwd, scheduleBroadcast, broadcastAgentStream);
 
-  // Development-mode sessions ride TWO channels: each epoch is an ordinary run
-  // and goes through `scheduleBroadcast` so the existing kanban renders it
-  // unchanged; only the session layer (goal, knowledge probe, epoch chain,
-  // approval gate) needs its own frame type. Session frames are NOT throttled —
-  // they fire on lifecycle transitions, not on agent activity.
-  let lastDevSnapshot: DevSessionSnapshot | null = null;
-  const broadcastDev = (session: DevSessionSnapshot): void => {
-    lastDevSnapshot = session;
-    if (sseClients.size === 0) return;
-    const frame = JSON.stringify({ type: 'dev', session });
-    for (const client of sseClients) writeSse(client.res, 'message', frame);
-  };
-  const devManager = new WebDevManager(
-    opts.cwd,
-    manager,
-    broadcastDev,
-    scheduleBroadcast,
-    broadcastAgentStream,
-  );
 
   // Machine-global budget telemetry: one `{type:'budget'}` frame per second to
   // every client while runs are tracked. Low-frequency by design — it rides its
@@ -302,17 +243,6 @@ export function createWebServer(opts: WebServerOptions): {
     if (method === 'GET' && (path === '/simulation' || path === '/simulation/')) {
       // SPA shell for the synthetic /simulation demo. The client routes on
       // location.pathname and shows the simulation setup instead of launch.
-      return serveStatic(res, root, 'index.html');
-    }
-    if (method === 'GET' && (path === '/dev' || path === '/dev/')) {
-      // Same SPA shell for development mode — the client routes on
-      // location.pathname, exactly like /simulation.
-      return serveStatic(res, root, 'index.html');
-    }
-    if (method === 'GET' && (path === '/graph' || path === '/graph/')) {
-      // Same SPA shell for the method editor (`huu-devgraph-v1`). Without this
-      // route a deep link to /graph would fall through to the static handler
-      // below and 404 as a missing asset.
       return serveStatic(res, root, 'index.html');
     }
     if (method === 'GET' && path === '/api/health') {
@@ -729,268 +659,8 @@ export function createWebServer(opts: WebServerOptions): {
       manager.finish(String(body.runId ?? ''));
       return sendJson(res, 200, { ok: true });
     }
-    // --- Development mode -------------------------------------------------
     // One session at a time: every epoch ends in a merge into the user's
     // working branch, so two concurrent sessions would race that merge.
-    if (method === 'GET' && path === '/api/dev') {
-      return sendJson(res, 200, { session: devManager.snapshot() });
-    }
-    if (method === 'POST' && path === '/api/dev') {
-      // A body huu cannot even parse is a 400, exactly like `/api/graphs` —
-      // starting a session is the most expensive thing this server does, and
-      // "your JSON is broken" must never read as "huu failed" (see
-      // `readJsonBodyOr400`).
-      const body = await readJsonBodyOr400(req, res);
-      if (!body) return;
-      const provider = typeof body.provider === 'string' ? (body.provider as LlmProvider) : undefined;
-      const backend: AgentBackendKind = provider
-        ? providerToBackend(provider)
-        : ((body.backend as AgentBackendKind) ?? 'jcode');
-      // Per-role routing is ADDITIVE and defensively parsed: an unknown role,
-      // a non-string value or an unknown preset name is dropped rather than
-      // refused, and a body carrying NEITHER field leaves `models`/
-      // `modelsPreset` undefined — which is what makes such a request compile
-      // the exact pipeline it compiles today. `modelId` stays required and
-      // stays the fallback for every role nothing named.
-      const models = parseDevModelPolicy(body.models);
-      const preset = parseModelsPreset(body.modelsPreset);
-      // Methodology checkboxes follow the SAME additive contract as the
-      // routing fields above: only `true` under a KNOWN key survives, and a
-      // body that enables nothing carries no `methodology` at all — so it
-      // compiles exactly the pipeline it compiles today.
-      const methodology = parseDevMethodology(body.methodology);
-      const resume =
-        body.resume === 'auto' || body.resume === 'never' ? body.resume : undefined;
-      // THE DRAWN METHOD. Two ways in, and they are coerced with the OPPOSITE
-      // discipline to the fields above: routing, presets and methodology are
-      // dropped when malformed, because dropping them lands the caller on the
-      // default they would have got anyway. A drawing has no such default — the
-      // fallback for "your method could not be read" is the LLM PLANNER, i.e.
-      // silently swapping the human's topology for a model's, which is the one
-      // thing `dev-driver.ts` refuses to do at every other layer. So a `graph`
-      // or `graphId` that is present and unusable is a 400, never a shrug.
-      //
-      // `null` and a blank/whitespace `graphId` are the exception: they read as
-      // "no drawing", which is what a client clearing its picker sends.
-      let graph: DevGraph | undefined;
-      if (body.graph !== undefined && body.graph !== null) {
-        // The SAME parser `/api/graphs/compile` and the store use — the shape
-        // gate has one implementation, and it is not this file's.
-        const parsed =
-          typeof body.graph === 'object' && !Array.isArray(body.graph)
-            ? parseDevGraph(body.graph)
-            : ({ ok: false, errors: ['the "graph" field is not a devgraph object'] } as const);
-        if (!parsed.ok) {
-          return sendJson(res, 400, {
-            error: `invalid-schema: ${parsed.errors.join('; ')}`,
-            reason: 'invalid-schema',
-          });
-        }
-        graph = parsed.graph;
-      }
-      let graphId: string | undefined;
-      if (body.graphId !== undefined && body.graphId !== null) {
-        if (typeof body.graphId !== 'string') {
-          return sendJson(res, 400, {
-            error: `invalid-id: "graphId" must be the string id of a saved graph, got ${typeof body.graphId}`,
-            reason: 'invalid-id',
-          });
-        }
-        graphId = body.graphId.trim() || undefined;
-      }
-      // --- PRINTS (uploads) ------------------------------------------------
-      //
-      // The browser sends screenshots as data URLs; the server is the one that
-      // STOPS nonsense before it costs a session: shape, type, count and size
-      // are all checked here with actionable messages, the files are saved
-      // under `.huu/prints/`, and only their paths travel onward. Analysis
-      // (a vision side-call) happens inside `devManager.start`, with the same
-      // credential precedence the run itself will use.
-      const printPaths: string[] = [];
-      if (body.prints !== undefined && body.prints !== null) {
-        if (!Array.isArray(body.prints) || body.prints.length > 8) {
-          return sendJson(res, 400, {
-            error: 'prints: esperado um array com no máximo 8 screenshots.',
-          });
-        }
-        const printsDir = join(opts.cwd, '.huu', 'prints');
-        mkdirSync(printsDir, { recursive: true });
-        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-        for (const [i, entry] of body.prints.entries()) {
-          const dataUrl = typeof entry === 'object' && entry ? String((entry as { dataUrl?: unknown }).dataUrl ?? '') : '';
-          const m = dataUrl.match(/^data:image\/(png|jpe?g|webp|gif);base64,([A-Za-z0-9+/=]+)$/);
-          if (!m) {
-            return sendJson(res, 400, {
-              error: `prints[${i}]: esperado data URL base64 de PNG/JPEG/WebP/GIF (ex.: data:image/png;base64,…).`,
-            });
-          }
-          const bytes = Buffer.from(m[2], 'base64');
-          if (bytes.length > 5 * 1024 * 1024) {
-            return sendJson(res, 400, {
-              error: `prints[${i}]: imagem com ${(bytes.length / 1024 / 1024).toFixed(1)}MB — o limite é 5MB por print.`,
-            });
-          }
-          const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
-          // The ORIGINAL name survives into the saved one: the briefing that
-          // references this print must say something the user recognizes.
-          const rawName = typeof entry === 'object' && entry ? String((entry as { name?: unknown }).name ?? '') : '';
-          const safeName = (rawName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60) || `print-${i}.${ext}`).replace(/\.+$/, '');
-          const outPath = join(printsDir, `upload-${stamp}-${safeName}`);
-          writeFileSync(outPath, bytes);
-          printPaths.push(outPath);
-        }
-      }
-
-      try {
-        const started = await devManager.start({
-          ...(printPaths.length > 0 ? { printPaths } : {}),
-          goal: String(body.goal ?? ''),
-          backend,
-          provider,
-          modelId: String(body.modelId ?? ''),
-          apiKey: typeof body.apiKey === 'string' ? body.apiKey : undefined,
-          endpoint: typeof body.endpoint === 'string' ? body.endpoint : undefined,
-          runDirectory: typeof body.runDirectory === 'string' ? body.runDirectory : undefined,
-          approval: body.approval === 'each-epoch' ? 'each-epoch' : 'autonomous',
-          maxEpochs: typeof body.maxEpochs === 'number' ? body.maxEpochs : undefined,
-          maxFronts: typeof body.maxFronts === 'number' ? body.maxFronts : undefined,
-          skipKnowledgeBootstrap: body.skipKnowledgeBootstrap === true,
-          concurrency: typeof body.concurrency === 'number' ? body.concurrency : undefined,
-          mode: typeof body.mode === 'string' ? (body.mode as 'auto' | 'manual' | 'greedy') : undefined,
-          timeoutMinutes: typeof body.timeoutMinutes === 'number' ? body.timeoutMinutes : undefined,
-          ...(Object.keys(models).length > 0 ? { models } : {}),
-          ...(preset ? { modelsPreset: preset } : {}),
-          ...(methodology ? { methodology } : {}),
-          ...(resume ? { resume } : {}),
-          // Additive on BOTH halves: a body naming no drawing leaves these
-          // fields off the params object entirely, so the session it starts is
-          // the planner session it was before this feature existed.
-          ...(graph ? { graph } : {}),
-          ...(graphId ? { graphId } : {}),
-        });
-        return sendJson(res, 200, started);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        // A refused DRAWING carries its own reason code — the browser gets to
-        // branch on `graph-not-found` vs `graph-invalid` vs `graph-conflict`
-        // without parsing English. Everything else keeps the old grading.
-        if (err instanceof DevStartRefusal) {
-          return sendJson(res, 400, { error: msg, reason: err.reason });
-        }
-        return sendJson(res, /already running/i.test(msg) ? 409 : 400, { error: msg });
-      }
-    }
-    if (method === 'GET' && path === '/api/dev/debate') {
-      // THE SETTLED HALF of the debate chat. Both briefs are written inside the
-      // debater's own worktree, so a UI watching the canonical path would see
-      // each file appear ALREADY FINISHED — the live half therefore rides the
-      // un-throttled `agent-stream` firehose the browser already receives, and
-      // this route answers only what a merge has landed. Parsing happens here
-      // because the client is bundler-free vanilla ESM and cannot import the
-      // TypeScript parser; a hand-written JS twin would be a second set of
-      // prose rules to keep in sync.
-      // No path ever crosses the wire: `epoch` indexes a map huu itself filled
-      // from the compiled pipeline.
-      const raw = url.searchParams.get('epoch');
-      const epoch = raw === null || raw.trim() === '' ? undefined : Number(raw);
-      if (epoch !== undefined && !Number.isFinite(epoch)) {
-        return sendJson(res, 400, { error: 'epoch must be a number' });
-      }
-      const read = devManager.debateTranscript(epoch);
-      // `present: false` is the DEFAULT answer — `--debate` is off unless the
-      // human turned it on — and it is a 200, not a 404: "this session has no
-      // debate" is an answer, not a missing resource.
-      return sendJson(res, 200, read ? { present: true, ...read } : { present: false });
-    }
-    if (method === 'POST' && path === '/api/dev/approve') {
-      const body = await readJsonBodyOr400(req, res);
-      if (!body) return;
-      const approved = body.approved !== false;
-      if (!devManager.approve(approved)) {
-        return sendJson(res, 409, { error: 'no plan is awaiting approval' });
-      }
-      return sendJson(res, 200, { ok: true, approved });
-    }
-    if (method === 'POST' && path === '/api/dev/resume') {
-      // Answer the resume gate: continue the previous session (same blackboard
-      // namespace, epoch numbering continued) or start fresh. 409 when nothing
-      // is waiting, so a stale click can never be mistaken for an answer.
-      const body = await readJsonBodyOr400(req, res);
-      if (!body) return;
-      const accept = body.accept === true;
-      if (!devManager.resumeSession(accept)) {
-        return sendJson(res, 409, { error: 'no previous session is awaiting a resume decision' });
-      }
-      return sendJson(res, 200, { ok: true, accept });
-    }
-    if (method === 'POST' && path === '/api/dev/orphans') {
-      // Answer the orphan-branch gate. `land` merges them oldest epoch first;
-      // `ignore` just names them. Anything else is `ignore` — the safe side.
-      const body = await readJsonBodyOr400(req, res);
-      if (!body) return;
-      const action = body.action === 'land' ? 'land' : 'ignore';
-      if (!devManager.resolveOrphans(action)) {
-        return sendJson(res, 409, { error: 'no orphan branches are awaiting a decision' });
-      }
-      return sendJson(res, 200, { ok: true, action });
-    }
-    if (method === 'POST' && path === '/api/dev/abort') {
-      return sendJson(res, 200, { ok: devManager.abort() });
-    }
-
-    if (method === 'POST' && path === '/api/dev/transcribe') {
-      // Dictation for the goal field. The browser captures audio, re-encodes it
-      // as 16 kHz mono WAV (the transcriber requires this format)
-      // and posts the base64 here; the key follows the same precedence a run's
-      // does, so a browser-session key works without ever touching disk.
-      const body = await readJsonBodyOr400(req, res);
-      if (!body) return;
-      const format = body.format ?? 'wav';
-      if (!isTranscribeFormat(format)) {
-        return sendJson(res, 400, { error: `unsupported audio format "${String(format)}"` });
-      }
-      const picked = pickRunKey(
-        typeof body.apiKey === 'string' ? body.apiKey : undefined,
-        manager.getWebKey('deepseek'),
-        findSpec('deepseek'),
-      );
-      try {
-        const result = await transcribeAudio({
-          audioBase64: String(body.audio ?? ''),
-          format,
-          apiKey: picked.value,
-          modelId: typeof body.modelId === 'string' ? body.modelId : process.env.HUU_TRANSCRIBE_MODEL,
-        });
-        return sendJson(res, 200, result);
-      } catch (err) {
-        const status = err instanceof TranscribeError ? (err.status ?? 502) : 500;
-        return sendJson(res, status, { error: err instanceof Error ? err.message : String(err) });
-      }
-    }
-
-    // --- Hand-drawn methods (`huu-devgraph-v1`) ---------------------------
-    // ONE branch for the whole `/api/graphs` namespace: the grammar and every
-    // status live in `graph-api.ts` as pure functions, so this layer only
-    // recognizes the prefix and parses the body. See that module's header.
-    if (isGraphApiPath(path)) {
-      let body: Record<string, unknown> = {};
-      if (method === 'POST' || method === 'PUT') {
-        // A malformed body is the caller's mistake — a 400 with the reason,
-        // never the catch-all 500 an uncaught throw would produce here.
-        const parsed = await readJsonBodyOr400(req, res);
-        if (!parsed) return;
-        body = parsed;
-      }
-      const result = handleGraphRequest({
-        cwd: opts.cwd,
-        method,
-        path,
-        query: url.searchParams,
-        body,
-      });
-      return sendJson(res, result.status, result.body);
-    }
-
     if (method === 'GET' && path === '/events') {
       return openSse(req, res);
     }
@@ -1098,11 +768,6 @@ export function createWebServer(opts: WebServerOptions): {
     if (snaps.length === 0) writeSse(res, 'message', buildFrame(manager.getSnapshot()));
     else for (const snap of snaps) writeSse(res, 'message', buildFrame(snap));
 
-    // Same replay contract for a live dev session, so a refresh mid-session
-    // (including one parked at the approval gate) re-links instead of resetting.
-    if (lastDevSnapshot) {
-      writeSse(res, 'message', JSON.stringify({ type: 'dev', session: lastDevSnapshot }));
-    }
 
     // Keep-alive ping as a REAL named event, not an SSE comment: comments are
     // invisible to the browser's EventSource API, so a comment-only heartbeat
@@ -1129,17 +794,6 @@ export function createWebServer(opts: WebServerOptions): {
     return w && existsSync(w) ? w : opts.cwd;
   }
 
-  /**
-   * `preset → providers that can run it`, computed ONCE (the catalogs are files
-   * on disk and `/api/bootstrap` is hit on every page load and every SSE
-   * resync). Lazy rather than eager so constructing a server still touches no
-   * filesystem.
-   */
-  let presetProviders: Record<string, string[]> | undefined;
-  function devPresetProviders(): Record<string, string[]> {
-    if (!presetProviders) presetProviders = devModelPresetProviders(devModelProviderIndex(opts.cwd));
-    return presetProviders;
-  }
 
   function bootstrapPayload(): Record<string, unknown> {
     return {
@@ -1167,34 +821,6 @@ export function createWebServer(opts: WebServerOptions): {
       // and offers a "Home" shortcut back to it.
       workspace: workspaceRoot(),
       runs: manager.getSnapshots().map(serializeSnapshot),
-      // Dev-mode per-role routing, served from the SAME constants the driver
-      // and the compilers read, so the browser can render the presets and the
-      // role slots without hardcoding a list that would drift the day a role
-      // is added.
-      devModelPresets: DEV_MODEL_PRESETS,
-      devModelRoles: DEV_MODEL_ROLES,
-      // …and WHICH PROVIDER can actually run each preset, from the very
-      // `checkDevModelPolicy` that refuses the POST. /dev makes routing a
-      // required decision — the form opens with a preset already selected — so
-      // without this the client cheerfully assembles a body the border then
-      // rejects with a 400 nobody could have seen coming. Served rather than
-      // reimplemented in the browser: two copies of the rule is two answers.
-      devModelPresetProviders: devPresetProviders(),
-      // The methodology checkboxes, from the SAME table the POST parser reads
-      // — the /dev form renders the toggles from data, never a hardcoded copy.
-      devMethodologyOptions: DEV_METHODOLOGY_OPTIONS,
-      // The /graph palette, PROJECTED from the single declaration surfaces
-      // (`ACTION_BLOCKS`, `NODE_KINDS`, `GRAPH_SAMPLES`) exactly the way
-      // `DEV_METHODOLOGY_OPTIONS` is projected from `DEV_METHODOLOGIES`, and
-      // for the same reason: a client that kept its own copy would drift the
-      // day a block ships. Only the browser-facing columns cross the wire —
-      // the agent-facing `promptTemplate`/`judgeClause` and each sample's
-      // `build()` stay server-side, one call away at GET /api/graphs/catalog,
-      // so this payload (fetched on every page load AND every SSE resync)
-      // does not carry kilobytes of prompt nobody has opened yet.
-      graphBlocks: graphBlockOptions(),
-      graphNodeKinds: graphNodeKindOptions(),
-      graphSamples: graphSampleOptions(),
       // Server-persisted machine-global settings (source of truth for the ⚙
       // modal — localStorage is only a cache) + the budget the scheduler is
       // actually enforcing right now.
@@ -1244,40 +870,6 @@ function trimState(state: OrchestratorState): OrchestratorState {
   };
 }
 
-/**
- * Coerce an untrusted `modelsPreset` field to a known preset name.
- *
- * Reads the key set off {@link DEV_MODEL_PRESETS} rather than repeating the
- * literals, so adding a preset never leaves this parser behind. An unknown
- * name yields undefined — the request keeps working, it just routes nothing.
- */
-function parseModelsPreset(raw: unknown): DevModelPreset | undefined {
-  if (typeof raw !== 'string') return undefined;
-  const name = raw.trim();
-  return Object.prototype.hasOwnProperty.call(DEV_MODEL_PRESETS, name)
-    ? (name as DevModelPreset)
-    : undefined;
-}
-
-/**
- * Coerce an untrusted `methodology` field to a clean {@link DevMethodology}.
- *
- * Reads the key set off {@link DEV_METHODOLOGY_OPTIONS} rather than repeating
- * the literals — the same single-source trick as `parseModelsPreset`. A key
- * survives only when its value is literally `true`; anything else (truthy
- * strings, unknown keys, non-objects) is dropped rather than refused, and a
- * body that enables nothing yields UNDEFINED, never `{}` — that is what keeps
- * such a request compiling the exact pipeline it compiles today.
- */
-function parseDevMethodology(raw: unknown): DevMethodology | undefined {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
-  const record = raw as Record<string, unknown>;
-  const out: DevMethodology = {};
-  for (const { key } of DEV_METHODOLOGY_OPTIONS) {
-    if (record[key] === true) out[key] = true;
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
-}
 
 /** Coerce an unknown body field to an integer within [lo, hi], else `dflt`. */
 function clampInt(v: unknown, dflt: number, lo: number, hi: number): number {

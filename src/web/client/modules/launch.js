@@ -8,8 +8,6 @@ import { esc, toast, shortDir, projectName } from './utils.js';
 import { $, S, api, pipeIcon, sessionKey, setSessionKey, activeKeySpecName, providerInfoById, providerReady, providerBackend, syncTimeoutField, DEFAULT_MODEL_ID, withTok } from './state.js';
 import { renderQueue, commitBatch, setAddBtnLabel, addLabel, renderLaunchRunning } from './queue.js';
 import { renderActiveRun } from './board.js';
-import { initDevSurface } from './dev.js';
-import { initGraphSurface } from './graph/canvas.js';
 import { t } from '../i18n.js';
 
 /* ---------------- Guided-launch wizard (steps) ----------------
@@ -163,8 +161,6 @@ export async function refreshModelsAndKeys() {
   }
   mainCombo.refresh();
   resolverCombo.refresh();
-  // The /dev per-role fields share ONE <datalist> fed from the same catalog.
-  renderDevModelOptions();
   // Keys (by provider). A spec we already hold a validated key for in THIS
   // browser session is satisfied even though the server — which never saw it —
   // still reports it missing.
@@ -178,14 +174,6 @@ export async function refreshModelsAndKeys() {
   updateRunBtn();
 }
 
-/** Fill the ONE shared <datalist> the dev role inputs point at. */
-export function renderDevModelOptions() {
-  const list = document.getElementById('devModelOptions');
-  if (!list) return;
-  list.innerHTML = (S.models || [])
-    .map((m) => `<option value="${esc(m.id)}">${esc(m.label && m.label !== m.id ? m.label : '')}</option>`)
-    .join('');
-}
 
 /* Render one row per credential the selected provider needs. Each value can be
    set when missing AND changed when already present. Pasted values are
@@ -545,7 +533,7 @@ const resolverCombo = makeModelCombo({
   // on first load, with nothing but a console error. Nothing caught it because
   // no test imported this module. Keep every `t()` in this file inside a
   // function; `editorNavHints()` in PipelineEditor.tsx is the same fix on the
-  // Ink side, and `dev.test.js` now imports the real entry so a relapse fails
+  // Ink side, and a client test now imports the real entry so a relapse fails
   // the suite.
   placeholder: () => t('web.config.resolver_placeholder_value'),
   emptyHint: () => t('web.config.resolver_hint'),
@@ -759,14 +747,12 @@ export function showView(which) {
   $('viewLaunch').hidden = which !== 'launch';
   $('viewRun').hidden = which !== 'run';
   $('viewSim').hidden = which !== 'sim';
-  $('viewDev').hidden = which !== 'dev';
-  $('viewGraph').hidden = which !== 'graph';
   // The mode switch only makes sense while CHOOSING work. On the board (or the
   // synthetic /simulation surface) it would be a way to silently navigate away
   // from a live run, so it hides.
   const sw = $('modeSwitch');
   if (sw) {
-    sw.hidden = !(which === 'launch' || which === 'dev' || which === 'graph');
+    sw.hidden = which !== 'launch';
     // The mode-switch options are elements carrying data-mode.
     for (const opt of /** @type {HTMLElement[]} */ (Array.from(sw.querySelectorAll('[data-mode]')))) {
       const on = opt.dataset.mode === which;
@@ -777,61 +763,8 @@ export function showView(which) {
   }
 }
 
-/* ---------------- Mode switch (Pipelines ⇄ Development) ----------------
-   The two surfaces are separate ROUTES (/ and /dev) so they stay bookmarkable
-   and the server can serve either shell — but switching between them must not
-   reload the page and drop the SSE stream, the run board or a half-built
-   queue. So the anchors are intercepted: swap the view in place, pushState the
-   URL, and let popstate handle Back. A modified click (ctrl/cmd/middle) falls
-   through to the browser so "open in new tab" still works. */
-/* Every choosing-surface mode ⇄ its route. The single table both switchMode()
-   and popstate read, so adding a surface is one row here. */
-export const MODE_PATHS = { launch: '/', dev: '/dev', graph: '/graph' };
-export function pathToMode(p) {
-  const norm = (p || '').replace(/\/+$/, '') || '/';
-  return Object.keys(MODE_PATHS).find((m) => MODE_PATHS[m] === norm) || 'launch';
-}
-
-export function switchMode(mode, { push = true } = {}) {
-  if (mode === 'dev' && !S.devBooted) initDevSurface();
-  // Same lazy contract as the dev surface: the React root (and the vendored
-  // React Flow bundle it drives) is only built the first time the human opens
-  // the canvas, and `initGraphSurface` is a no-op on every later switch.
-  if (mode === 'graph' && !S.graphBooted) initGraphSurface();
-  showView(mode);
-  if (!push) return;
-  const path = MODE_PATHS[mode] || '/';
-  if (location.pathname.replace(/\/+$/, '') !== path.replace(/\/+$/, '')) {
-    history.pushState({ mode }, '', withTok(path));
-  }
-}
-
-export function wireModeSwitch() {
-  const sw = $('modeSwitch');
-  if (!sw) return;
-  sw.addEventListener('click', (ev) => {
-    if (!(ev.target instanceof Element)) return;
-    // Mode-switch options are elements carrying data-mode.
-    const opt = /** @type {HTMLElement | null} */ (ev.target.closest('[data-mode]'));
-    if (!opt) return;
-    // Let the browser own modified clicks — new tab / new window must work.
-    if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey || ev.button !== 0) return;
-    ev.preventDefault();
-    switchMode(opt.dataset.mode);
-  });
-  window.addEventListener('popstate', () => {
-    // Never yank the user off a live board via Back — only the choosing
-    // surfaces participate in this history.
-    if ($('viewRun').hidden === false || $('viewSim').hidden === false) return;
-    switchMode(pathToMode(location.pathname), { push: false });
-  });
-}
 $('backToLaunch').addEventListener('click', () => {
   if (S.sim) { showView('sim'); return; }
-  // Came from development mode → go BACK to it, not to the pipeline picker.
-  // The board is shared by both surfaces, so "back" has to mean the one the
-  // user actually came from.
-  if (S.devSession?.active) { switchMode('dev'); return; }
   // Leaving the board while the queue is live → pin home so the per-frame
   // auto-switch doesn't drag us back; the runs keep streaming in the background.
   if (S.queue.running) S.homePinned = true;

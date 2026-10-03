@@ -102,8 +102,6 @@ export const cliPtBR = {
   'cli.banner_in_container': 'escutando dentro do container na :{port} (publicada para o host)',
   'cli.banner_local': 'Local',
   'cli.banner_network': 'Rede',
-  'cli.banner_dev_mode': 'Modo dev',
-  'cli.banner_dev_hint': 'acrescente /dev à URL acima',
   'cli.banner_token_required': '(token obrigatório — a URL com ?token= acima já o carrega)',
   'cli.banner_lan_warning':
     '(acessível na sua rede local — defina HUU_WEB_TOKEN para exigir um segredo, ou HUU_WEB_HOST=127.0.0.1 para só localhost)',
@@ -121,13 +119,7 @@ Uso:
   huu auto <p.json> --config <c.json>
                             Execução headless — sem TUI. O JSON de config informa
                             modelo, backend e a seleção de arquivos por passo.
-  huu dev "<objetivo>"      Modo desenvolvimento — cria as skills de agente do
-                            projeto quando faltam, depois planeja e roda épocas de
-                            FRENTES paralelas como um enxame de worktrees. Ver flags dev.
-  huu graph <sub> [...]     O método DESENHADO, pelo terminal: lista, desenha, valida,
-                            compila, cria e apaga os devgraphs salvos em
-                            .huu/dev/graphs/. Ver subcomandos do graph.
-  huu init-docker [...]     Gera o compose.huu.yaml no repositório atual
+Gera o compose.huu.yaml no repositório atual
   huu status [...]          Inspeciona a última execução via .huu/debug-*.log
   huu prune [...]           Lista/mata containers huu órfãos + cidfiles obsoletos
   huu setup                 Reabre a configuração inicial: interface, runtime e
@@ -150,47 +142,6 @@ Uso:
   huu --no-auto-scale       Desliga a auto-escala por memória (ligada por padrão; a guarda continua)
   huu --auto-scale          Obsoleto: a auto-escala já é o padrão
   huu --help                Mostra esta ajuda
-
-flags do dev:
-  --model <id>              Modelo do planejador e do enxame (obrigatório, exceto com --stub)
-  --graph <id|arquivo.json> Roda um MÉTODO QUE VOCÊ DESENHOU em vez do planner LLM. Um slug
-                            puro (a-z, 0-9, hífens) é um grafo salvo em .huu/dev/graphs/;
-                            qualquer outra coisa é um caminho para um .json. Um desenho é o
-                            método COMPLETO, então a sessão é exatamente UMA época e
-                            --epochs > 1 é recusado. As 13 flags de metodologia e as flags
-                            de modelo por papel NÃO são compiladas num desenho (aviso).
-  --epochs <n>              Teto de épocas (padrão 3). Cada época planeja, roda e aterrissa.
-  --fronts <n>              Teto de frentes paralelas por época (padrão 4, máx 4)
-  --max-cost <usd>          Para antes da época que passaria deste gasto (as duas runs contam)
-  --approve-each            Mostra o plano de cada época e espera confirmação antes de rodar
-  --autonomous              Planeja e roda todas as épocas sem perguntar (o padrão)
-  --skip-knowledge          Não cria as skills de agente mesmo quando o projeto não tem nenhuma
-  --run-dir <caminho>       Repositório onde desenvolver (padrão: o diretório atual)
-  metodologias (todas desligadas por padrão; rode 'huu dev' sem objetivo para a lista completa):
-  --tdd --characterize --lint-gate --fitness --diff-budget --changelog
-  --standards --checklist --write-set --plan-review --traceability --verify-claims
-  --debate                  dois agentes de FAMÍLIAS diferentes discutem o design da
-                            época antes das frentes; um juiz anonimizado decide, no
-                            máximo 2 rodadas. Como toda opção daqui, também faz a tarefa
-                            bloqueada ESPERAR por um humano em vez de waive no teto de
-                            rodadas do crítico. Roteie o par com --advocate-model /
-                            --prosecutor-model
-
-subcomandos do graph (o método desenhado — sem navegador):
-  list                      Lista os desenhos salvos (id, nós/arestas, válido?)
-  show <id>                 Desenha a topologia em TEXTO: por nó o tipo, o bloco, o join
-                            (todos vs apenas X), os braços com o destino de cada um e as
-                            arestas de retrabalho que voltam
-  validate <id>             Reporta cada erro e aviso com seu código estável e sua âncora;
-                            sai com código != 0 quando houver qualquer erro
-  compile <id> [--out <a>]  Compila o desenho num huu-pipeline-v2. Sai no stdout, ou vai
-                            para --out. UM PIPELINE GRAVADO É UM ARTEFATO PORTÁTIL: rode-o
-                            com 'huu auto <a> --config <c.json>', em qualquer repositório,
-                            sem modo dev nenhum.
-  new <id> [--from <amostra>] [--name <n>] [--force]
-                            Cria um desenho vazio, ou a partir de uma amostra que vem junto
-  rm <id>                   Apaga o desenho salvo
-  (todo subcomando respeita o --dir=<repo> global)
 
 flags do init-docker:
   --force                   Sobrescreve arquivos que já existem

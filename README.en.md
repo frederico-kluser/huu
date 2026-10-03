@@ -79,9 +79,7 @@ That sentence has a few claims worth unpacking:
 - **The human underwrites the scope.** No LLM planner decides what
   step 3 should do or which files it should touch. If a step is
   misdesigned, the result is predictably and auditably wrong — not
-  surprisingly wrong. (The exception is **development mode**, in beta:
-  there the graph is written at run time, and its section owns the
-  contradiction instead of hiding it.)
+  surprisingly wrong.
 - **Deterministic in method and merge order, not in result.** The
   pipeline topology, the scopes, the merge points and the order
   (`git merge --no-ff`, branches ascending by agentId) are identical on
@@ -857,164 +855,6 @@ Controls:
 
 ---
 
-## Development mode (`huu dev`) — beta
-
-> 🚧 **Beta, and the manifesto is the reason.** This is the **only** huu flow
-> in which an LLM writes the step graph **at run time** — against differential
-> #2 of the [MANIFESTO](MANIFESTO.en.md) ("zero LLM planner at run time") and
-> against "huu is not a tool for building new features". The contradiction is
-> owned, not hidden: the callout at the end of this section says where it hurts
-> and what survives it. With the gate off — the default — **nobody signs the
-> plan**; `--approve-each` hands that signature back, and **the drawn method**
-> (`huu-devgraph-v1`, right below) is the same idea with no LLM planner at all.
-
-The only huu flow whose **step graph is written at run time**. You write the
-goal; a planner decomposes it into parallel **fronts**; each front becomes
-`recon → a swarm of worktree agents (every task reviewed by a critic before it
-merges) → judge`.
-
-```bash
-# Autonomous — THE DEFAULT: plans and runs every epoch without asking anything
-huu dev "migrate the parser to streaming without breaking the public API" \
-    --model=anthropic/claude-sonnet-4
-
-# Opting IN to a human gate on every epoch
-huu dev "extract the HTTP client into its own package" \
-    --model=anthropic/claude-sonnet-4 --approve-each --epochs=2
-```
-
-On the web, a **switch** at the top puts the two ways to start work side by
-side — `Pipelines` (you already have the method) and `Development` (you have a
-goal). Each half is a real route (`/` and `/dev`, bookmarkable), but clicking
-swaps the view without a reload, so the SSE stream and the run board survive.
-
-**Two surfaces to watch it on — one in the terminal, one on the web.** In the
-terminal, `huu dev "<goal>" --cli` renders a **live kanban** (the pipeline
-dashboard's own `RunKanban`) instead of a scrolling log — and it paints on
-**stderr**, so the JSON object `huu dev` writes to **stdout stays byte-identical**
-and no script that consumes it breaks. It is an explicit opt-in (`--cli`,
-`--tui` or `HUU_CLI=1`); a plain `huu dev` keeps the headless log, and with no
-TTY on stderr (a pipe, a log file, CI) huu says so once and keeps the plain log
-rather than drawing a board nobody can read. The three `y/N` gates —
-`--approve-each`, resuming an earlier session, and landing orphan branches —
-are answered **inside the frame**, because Ink holds stdin in raw mode, with
-the semantics they always had: `y`/`s` is yes, **any other key, ENTER
-included, is no**. `Ctrl+C` unmounts and exits `130`.
-
-On the web, with `--debate` on, `/dev` grows a **Debate** button that opens the
-two sides as a conversation: **live** off the agent-output firehose (the SSE
-`agent-stream` frame, which is **not throttled** — it is literally the advocate
-and the prosecutor as they write) and **settled** afterwards, when
-`GET /api/dev/debate` reads the merged `A.md`/`B.md` and parses them **on the
-server**. The live half cannot come from a file, and that is counterintuitive
-enough to say out loud: each brief is written **inside its own agent's
-worktree** and only reaches the canonical path once the wave merges, so a UI
-watching the file would see it appear **finished**, never filling — there is no
-debate JSON to poll. Without `--debate` (which ships **off**) the button never
-appears, and **the terminal has no debate panel at all**: the kanban is the
-terminal's, the chat is the web's.
-
-**Phase 0 — the knowledge gate.** Before any development, huu checks whether
-the project has agent skills (`.agents/skills/catalog.md`, a router skill, or
-`.claude/skills/`). If it doesn't, it runs the `huu Knowledge System` pipeline
-in **MAX** mode — the largest swarm the machine admits — and lands the result
-before the first epoch.
-
-**Phase 1..N — epochs.** Each epoch is `plan → (approve) → run → land →
-replan`. The plan compiles into an ordinary `huu-pipeline-v2` with `dependsOn`
-edges, so the wave scheduler, the `scope: memory` fan-out, the judges and the
-deterministic merge run **unchanged**. Independent fronts become ready in the
-same wave and share one worker pool.
-
-**Methodologies — 13 checkboxes, all off by default.** `--tdd`,
-`--plan-review`, `--write-set`, `--verify-claims`, `--debate` and eight more
-change what an epoch **enforces**; with none of them on, the compiled pipeline
-is the one it always was, byte for byte. The 13th is `--debate`: before any
-front starts, two agents argue the plan's decisions — one defends them
-(`A.md`), the other attacks them (`B.md`), one `SUSTENTADA`/`CONTESTADA`
-verdict per decision — and a judge whose rubric is **anonymized by model**
-closes the record. There is no "the advocate won" outcome: a sustained decision
-gets implemented, a contested one becomes a named risk in the affected front's
-spec. Turning on *any* methodology also switches every task's critic to HOLD
-(park the card for a human) instead of a silent waive at the round cap.
-
-**Per-role routing — `--models=<preset>`.** The nine roles (`planner`, `recon`,
-`worker`, `critic`, `reporter`, `judge`, `integration`, `advocate`,
-`prosecutor`) can each land on a different model, and every route carries the
-**provider** alongside the id — `openrouter:anthropic/claude-opus-5`. Presets:
-`uniform` (everything on the run's model, today's behavior), `hetero`,
-`thrifty`, `monoculture` and `roster` — the last one five vendors over a single
-endpoint, one per role. Per-role flags (`--critic-model=`, `--judge-model=`,
-`--advocate-model=`, …) override the preset, and a value may be a
-comma-separated **fallback chain**.
-
-**The model preflight — refusal happens at the border.** A role routed to an id
-the catalog places on ANOTHER endpoint is a **refusal, exit 1**, before any
-worktree or branch exists: `hetero`, `thrifty`, `monoculture` and `roster` pin
-ids only OpenRouter serves, so under `--provider=deepseek` they stop at the
-command line instead of dying inside the first agent. Absence of evidence is a
-**warning**, never a refusal — an id no catalog entry mentions runs anyway,
-because the catalog is a recommendation list, not a registry. On `/dev`, the
-presets the active provider cannot run come back **disabled** with a tooltip
-naming the provider that serves them, decided by the SAME function that refuses
-the POST.
-
-> **Does this contradict the manifesto?** It does, in two places, and the doc
-> says so plainly: differential #2 is "zero LLM planner at run time", and the
-> manifesto states that huu "is not a tool for building new features". What
-> holds is the boundary: the human underwrites the **goal** (verbatim in
-> `.huu/dev/goal.md`, never rewritten by an agent) and the **method** (the
-> epoch shape is huu's, fixed and re-validated by `PipelineSchema` — neither
-> the plan nor the knowledge request carries `steps`, `dependsOn` or paths),
-> and every path ends at a judge. **Autonomy is the default**:
-> `--approve-each` is the opt-in gate, `--autonomous` only states the default
-> out loud. And what gets worse: the merge is now gated by a *per-task* critic
-> whose criterion is prose another LLM wrote. The model split is **not a cost
-> optimization** — a fan-out costs 3–10× the tokens and the leader-to-worker
-> price gap is about 2×; the justification is context isolation and
-> parallelism.
-
-Full doc: [`docs/dev-mode.md`](docs/dev-mode.md) ·
-[pt-BR](docs/dev-mode.pt-BR.md).
-
----
-
-## The drawn method (`huu-devgraph-v1`)
-
-**The answer to the contradiction above.** Instead of letting an LLM planner
-write the topology, **you draw it**: which blocks run, in which order, where a
-decision branches, where the branches rejoin. huu compiles the drawing into an
-ordinary `huu-pipeline-v2` and runs it on the wave scheduler that already exists.
-Nothing in the format lets a model add a node, an edge or a route — the human
-underwrites the **method**, the model supplies the intelligence **inside** each
-node.
-
-Four node kinds: **prompt** (the objective, one per graph, the root), **action**
-(one of the 15 catalog blocks — `recon`, `tdd`, `tests`, `refactor`, `docs`,
-`security-review`, `security-findings`, `custom`…), **research** (a question
-answered on the web, optionally branching the path) and **gate** (an LLM judge
-evaluates your condition in the integration worktree and picks the outcome).
-
-```bash
-huu graph new audit --from portao-de-qualidade   # start from a worked example
-huu graph show audit                             # the topology, as text
-huu graph validate audit                         # the drawing's rules; exits non-zero on any error
-huu graph compile audit --out p.json             # a PORTABLE pipeline
-huu dev "audit the parser" --graph=audit         # run it — no LLM planner
-```
-
-Three surfaces over one core: the **canvas** at `/graph` in the browser (React
-Flow, a palette on every arm's dot, a full inspector, live validation), the
-**`huu graph`** family in a terminal, and the **`[G]`** screen in the TUI, which
-lists, inspects in ASCII, validates and launches. A session with a drawing is
-**exactly one epoch**: Phases A and B do not happen, because the plan already
-exists — you wrote it.
-
-Full doc: [`docs/dev-graph.md`](docs/dev-graph.md) ·
-[pt-BR](docs/dev-graph.pt-BR.md).
-
----
-
 ## Headless / one-command mode
 
 For CI, cron, demos:
@@ -1156,7 +996,7 @@ So nobody confuses intent with done:
 | State | What |
 |---|---|
 | ✅ **Implemented** | **First-run setup** (front-end · runtime · the missing keys, validated against the provider and persisted under `_setup`, with `huu setup` to reopen it); Pipeline JSON v2 (work · check · memory · `dependsOn`/waves); `per-file` and `memory` fan-out; deterministic `--no-ff` merge with an LLM conflict-resolver fallback; Docker sandbox with secret mounts; web UI (default) + TUI (`--cli`); headless `auto` mode; the `jcode` backend (a CLI subprocess) serving both the DeepSeek and OpenRouter providers, plus the no-LLM `stub` backend; **multi-run** (N projects in one process under a shared budget — priority + backfill + agent-exit announcements in the terminal); memory-aware concurrency + memory guard with **host-aware RAM accounting** and honest machine-wide numbers; **truthful kanban** (green = merged, `PAUSED` → TODO); **SSE liveness watchdog** (zombie streams reconnect, the queue survives a refresh); native-shim port isolation; 7 autonomous default pipelines; **per-agent** token/cost telemetry + a real-time summed run total (`totalCost`). |
-| 🟡 **Stabilizing** | **Development mode (`huu dev`) — beta**: the only flow in which an LLM writes the step graph at run time, against differential #2 of the manifesto (**the drawn method** is the deterministic alternative); the OpenRouter provider (back, alongside the default DeepSeek); Pipeline Assistant / Architect flow (TUI). |
+| 🟡 **Stabilizing** | The OpenRouter provider (back, alongside the default DeepSeek); Pipeline Assistant / Architect flow (TUI). |
 | 🧭 **Roadmap** | **mutation score** as a first-class metric (prompts already aim for mutation-surviving assertions, but the pipeline doesn't run the mutator); **web-based pipeline authoring** (TUI-only today); more backends (ACP, Claude Code); **merge/judge cost** in the aggregate total. |
 
 ---
@@ -1186,13 +1026,10 @@ to propose a pipeline, report a bug, or discuss an idea. **CI runs the gate
 on every push and PR** (`.github/workflows/gate.yml` → `scripts/gate.sh`),
 but run `npm run typecheck && npm test` locally before opening one anyway —
 CI only reports after the fact, and the pre-push hook in `.githooks` helps
-you not forget. `bash scripts/gate.sh` reproduces CI exactly — **eleven steps**
+you not forget. `bash scripts/gate.sh` reproduces CI exactly — **ten steps**
 today: typecheck · test · validate-skills · check-acceptance · smoke-defaults ·
-validate-graph · check-pins · check-twins · check-metodo · check-dockerfile ·
-**smoke-dev-dashboard**, the newest one, which drives two real epochs of a
-stub-backed dev session for the sole purpose of proving that the
-`huu dev --cli` kanban wrote no byte to stdout. Development and architecture
-details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+validate-graph · check-pins · check-twins · check-metodo · check-dockerfile.
+Development and architecture details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 

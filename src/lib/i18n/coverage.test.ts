@@ -37,7 +37,6 @@ const DYNAMIC_PREFIXES = [
   'tui.faq.', //           app.tsx FAQ_KEYS
   'tui.step.scope_', //    StepEditor over StepScope
   'tui.editor.pattern_', // PipelineEditor over Pattern
-  'web.dev.method.', //    dev.js over the DevMethodology keys /api/bootstrap serves
 ];
 
 const SCANNED_EXTENSIONS = ['.ts', '.tsx', '.js', '.html'];

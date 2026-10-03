@@ -71,7 +71,7 @@ export const ModelEntrySchema = z.object({
    * Input modalities the model accepts — the machine-readable capability
    * gate, same shape as OpenRouter's `architecture.input_modalities`
    * (verified live 2026-10-03). `image` here is what lets a mode REQUIRE
-   * vision (the dev mode does). ABSENT means UNKNOWN, never "yes": the
+   * image input. ABSENT means UNKNOWN, never "yes": the
    * fail-safe is text-only (clients that guess capabilities either block
    * capable models or 400 mid-run — both documented), so an entry without
    * this field gates as non-vision until curated. Never infer it from the

@@ -78,4 +78,3 @@ export interface FileNode {
 export * from './types/pipeline.js';
 export * from './types/orchestrator.js';
 export * from './types/git.js';
-export * from './types/dev-mode.js';

@@ -64,11 +64,11 @@ executado; nenhum é hipótese.
 
 | # | A ferramenta | O que ela faz | Por que engana aqui |
 |---|---|---|---|
-| 1 | `rg` / `grep` respeitando `.gitignore` | Uma sonda plantada em `.huu/probe/sonda.txt` devolve **0 resultados e exit 1**; com `--no-ignore`, devolve 1. 📏 | `.huu/` é onde **toda auditoria escreve o entregável** (`.huu/audits/**`) e onde o dev mode escreve `goal.md`/`state.json`. Buscar ali sem `--no-ignore` produz "não existe" com exit code de sucesso. |
+| 1 | `rg` / `grep` respeitando `.gitignore` | Uma sonda plantada em `.huu/probe/sonda.txt` devolve **0 resultados e exit 1**; com `--no-ignore`, devolve 1. 📏 | `.huu/` é onde **toda auditoria escreve o entregável** (`.huu/audits/**`) e onde cada superfície escreve `goal.md`/`state.json`. Buscar ali sem `--no-ignore` produz "não existe" com exit code de sucesso. |
 | 2 | `git diff --exit-code` | Com um arquivo novo não-rastreado presente, sai **exit 0**. 📏 | É o critério de aceitação mais tentador ("nada mudou / é determinístico"). Ele não vê arquivo novo. Um card que só **cria** arquivos passa esse critério sem escrever nada. |
 | 3 | `git ls-files` | Não lista untracked: um `src/lib/zz-probe.ts` recém-criado aparece em `find` (1) e não em `git ls-files` (0). 📏 | Todo validador que **conta arquivos** via `git ls-files` fica cego para o arquivo que o card acabou de criar — exatamente o arquivo que ele deveria validar. |
 | 4 | `tsc --noEmit` | `tsconfig.json` tem `include: ["src/**/*"]`, `exclude: ["node_modules","dist","scripts"]` e **`allowJs`/`checkJs` ausentes**. 📏 | O cliente web inteiro (`src/web/client/*.js` — 12 módulos, `app.js` com 3.723 linhas) e **todo o `scripts/`** ficam FORA do typecheck. `npm run typecheck` verde não diz nada sobre eles. |
-| 5 | `git worktree add` | Materializa apenas o que está **commitado**. Documentado em `AGENTS.md` e explorado pelo dev mode (specs de task são arquivos reais commitados antes da run). | Preparação deixada no checkout principal simplesmente **não chega** no agente. A divergência aparece no merge como trabalho a refazer. |
+| 5 | `git worktree add` | Materializa apenas o que está **commitado**. Documentado em `AGENTS.md` e explorado pelas runs (specs de task são arquivos reais commitados antes da run). | Preparação deixada no checkout principal simplesmente **não chega** no agente. A divergência aparece no merge como trabalho a refazer. |
 
 > **Regra.** Escreva as regras de leitura do corpus num arquivo normativo *antes*
 > de contar qualquer coisa, e trate cada uma como **modo de falha**, não como
@@ -122,12 +122,8 @@ existe uma contradição real entre elas:
 | `MANIFESTO.md:139` | *"**Zero planner LLM em runtime.** […] No `huu`, o grafo é o JSON que você escreveu."* — listado como diferencial nº 2 |
 | `AGENTS.md` (seção Development mode) | *"A ÚNICA flow do huu cujo step graph é escrito em **run time**"* — um planner LLM decompõe a meta em fronts |
 
-Não é bug, é uma **exceção legítima e deliberada** (o dev mode reconcilia:
-o humano subscreve a META e o MÉTODO; o planner só DECOMPÕE). Mas ela está
-reconciliada em `AGENTS.md` e na skill `running-dev-mode`, **não** no manifesto —
-o documento mais citado e o único que um recém-chegado lê primeiro. Um agente que
-carregue só o `MANIFESTO.md` e encontre `dev-mode/planner.ts` conclui que o código
-viola a identidade do projeto.
+Não é bug, é uma **exceção legítima e deliberada** (o humano subscreve a META
+e o MÉTODO; o planner só DECOMPÕE).
 
 **Precedência proposta, por domínio (não linear):**
 
@@ -165,10 +161,10 @@ antes de qualquer outra e obriga a re-medição junto com as três de que deriva
 |---|---|
 | Idade ⚠ histórico | **363 commits**, de 2026-05-20 a 2026-08-02 (~74 dias) — medido antes do `v1.0.0 — clean start`; `git log` já não o alcança |
 | Autores ⚠ histórico | 284 `fredericokluser` · 22 `Claude` · 19+2 nome completo · 15 `t` · 1 externo — idem |
-| Total versionado | **223.961 linhas** (`git ls-files \| xargs wc -l`) |
-| `src/` | **450 arquivos, 156.180 linhas** (inclui client JS/CSS/HTML) |
-| `src/` TS+TSX **não-teste** | **76.182 linhas** |
-| Testes | **155 arquivos, 56.038 linhas** → razão teste:código **0,74 : 1** |
+| Total versionado | **155.989 linhas** (`git ls-files \| xargs wc -l`) |
+| `src/` | **354 arquivos, 90.465 linhas** (inclui client JS/CSS/HTML) |
+| `src/` TS+TSX **não-teste** | **51.386 linhas** |
+| Testes | **121 arquivos, 29.565 linhas** → razão teste:código **0,58 : 1** |
 | `docs/` | 37 arquivos, **14.858 linhas** (9 pares en/pt-BR) |
 | Skills | **0** `SKILL.md` — biblioteca migrada para a memória CoALA (registos `skill/<name>`) e apagada em **2026-10-03**; só resta o registo de memória `huu-coala-memory-agent-skill` (symlink) · **0** `LEARNINGS.md` — memória centralizada no CoALA desde **2026-09-27** |
 | `AGENTS.md` | **209 linhas, 10.741 chars ≈ 2,7k tokens** — carregados em **toda** sessão |
@@ -178,11 +174,11 @@ antes de qualquer outra e obriga a re-medição junto com as três de que deriva
 | Higiene de branch | **0** branches `huu/**` órfãos |
 | Marcadores | `TODO`/`FIXME`/`XXX` concentrados em `requeue.test.ts` (8), `dev-graph/node-catalog.ts` (6), `orchestrator/index.ts` (5), `card-focus.test.ts` (5), `types/orchestrator.ts` (4) |
 
-**A razão teste:código de 0,74 : 1 é o número mais informativo da tabela**, e
+**A razão teste:código de 0,58 : 1 é o número mais informativo da tabela**, e
 precisa de contexto para não ser lida como elogio nem como acusação. O playbook de
 origem chegou a 1,3 : 1 porque o oráculo dele era um sistema que ninguém podia
 executar — quase tudo que se escrevia era instrumento de medida. Aqui o oráculo é
-o próprio código, executável, e 0,74 : 1 com 155 arquivos de teste colocados ao
+o próprio código, executável, e 0,58 : 1 com 121 arquivos de teste colocados ao
 lado do módulo é uma cobertura respeitável **em quantidade**. A pergunta que o §7
 faz não é "tem teste suficiente?" e sim **"se isto desaparecer, o que fica
 vermelho?"** — e é aí que aparecem os buracos.
@@ -246,12 +242,12 @@ com `wc -l`) 📏:
 
 | Arquivo | Linhas | Toques | churn×linhas | Papel de singleton |
 |---|---:|---:|---:|---|
-| `CHANGELOG.md` | 1.766 | 84 | 148.344 | **O mais tocado do repositório** — mas o conflito garantido **foi resolvido**: escreve-se um fragmento por card em `.changes/`, consolidado por `scripts/changelog.ts` |
+| `CHANGELOG.md` | 1.578 | 84 | 148.344 | **O mais tocado do repositório** — mas o conflito garantido **foi resolvido**: escreve-se um fragmento por card em `.changes/`, consolidado por `scripts/changelog.ts` |
 | `src/orchestrator/index.ts` | 2.751 | 48 | 132.048 | **O pior hoje.** Loop de etapa + guard + requeue + retry num arquivo. Todo card de orquestração colide |
-| `README.md` + `README.en.md` | 1.234 + 1.226 | 56 + 48 | 69.104 + 58.848 | Gêmeos que precisam ficar em sincronia — agora com paridade **verificada** por `scripts/check-twins.ts` no gate |
-| `src/web/client/styles.css` | 1.852 | 27 | 50.004 | CSS único do cliente |
-| `src/web/server.ts` | 1.330 | 27 | 35.910 | Servidor HTTP+SSE único |
-| `src/web/client/index.html` | 740 | 30 | 22.200 | Markup único do cliente — herdou parte do churn que era do `app.js` |
+| `README.md` + `README.en.md` | 1.073 + 1.063 | 56 + 48 | 69.104 + 58.848 | Gêmeos que precisam ficar em sincronia — agora com paridade **verificada** por `scripts/check-twins.ts` no gate |
+| `src/web/client/styles.css` | 1.626 | 27 | 50.004 | CSS único do cliente |
+| `src/web/server.ts` | 966 | 27 | 35.910 | Servidor HTTP+SSE único |
+| `src/web/client/index.html` | 485 | 30 | 22.200 | Markup único do cliente — herdou parte do churn que era do `app.js` |
 | `src/web/run-manager.ts` | 967 | 20 | 19.340 | Dono do estado multi-run no servidor |
 
 ⚠ **A coluna *Linhas* é medida a cada gate; as colunas *Toques* e *churn×linhas*
@@ -324,8 +320,7 @@ E ela não está sozinha. A família A completa, medida:
 | A2 | **Todo** juiz do catálogo | **Nenhum teste no repositório prova que um juiz consegue devolver `rework`.** Os 5 testes que "testam rework" **injetam a string do veredito** (`check-evaluator.test.ts:96`, `dag-execution.test.ts:170`, `key-rotation.test.ts:273`) ou assertam a *tabela de outcomes*, nunca a condição. Todo juiz poderia sempre aprovar e nada acusaria | catálogo inteiro |
 | A3 | Um step onde **todos** os agentes falharam | `runStageIntegration` acha 0 entradas elegíveis, loga um `warn`, marca o card `skipped` e **`return true`** ⇒ o step é marcado `done` e os dependentes rodam contra uma árvore que nunca recebeu o trabalho | `index.ts:2945-2956`, `3597-3598` |
 | A4 | Um pipeline que pulou metade dos steps | `ready.length === 0` com `pending` não-vazio ⇒ `warn` + `break`; `start()` então define **`status = 'done'`** | `index.ts:3489-3495`, `1577-1578` |
-| A5 | Uma época do dev mode que **não produziu nada** | `landEpoch` devolve `alreadyUpToDate: true` e **nada no repositório lê esse campo**; o CLI sai **0** | `epoch-landing.ts:99`, `dev-cli.ts:518-519` |
-| A6 | `goalComplete: true` | Encerra a sessão com exit 0 e **zero corroboração contra o repo** — e o mesmo `plan` que declara a vitória acabou de **sobrescrever** o `doneWhen` que a define (`state.doneWhen = plan.doneWhen`, incondicional) | `dev-driver.ts:820-827` |
+
 | A7 | Um juiz que tomou 429 / crashou / alucinou o label | O `default: true` aponta pra frente ⇒ **aprova em silêncio**. Documentado e deliberado, e o próprio código chama de *"the worst failure mode in the system"* | `check-evaluator.ts:76-79` |
 | A8 | `CheckStep` sem `maxRuns` | **Não existe default.** `index.ts:3303` só compara quando `maxRuns !== undefined` ⇒ omissão = **loop pago ilimitado**. Três documentos afirmam "default 5" | `index.ts:3303-3304` vs `AGENTS.md:502`, `working-on-orchestrator/SKILL.md:33`, `authoring-pipelines/SKILL.md:28` |
 | A9 | Um merge que falhou sem conflito | No caminho do resolver, `conflicts.length === 0` é tratado como sucesso — mas `GitClient.merge` devolve `{success:false, conflicts:[]}` para **qualquer** falha não-conflito (árvore suja, `index.lock`, hook, timeout). Card fica **verde DONE** e a etapa seguinte parte de um HEAD sem o trabalho. A guarda correta existe 100 linhas antes e não foi repetida | `integration-agent.ts:187-191` vs `:86-93` |
@@ -339,7 +334,7 @@ E ela não está sozinha. A família A completa, medida:
 
 ## 4.2 Família B — Propriedade de arquivo: a garantia que a documentação afirma ter
 
-`docs/dev-mode.md:250-253` traz um cabeçalho literal:
+A documentação já trazia um cabeçalho literal:
 
 > **"Rules huu enforces (that the planner cannot break)"** — *Partition by file
 > ownership*
@@ -347,8 +342,7 @@ E ela não está sozinha. A família A completa, medida:
 **Nada enforça isso.** A busca foi exaustiva e negativa: `prepareStageTasks`
 (`index.ts:3233-3285`) e `decomposeTasks` (`task-decomposer.ts:8-34`) não fazem
 nenhuma comparação de caminho entre tasks; não há lock de arquivo, não há teste
-de disjunção, não há checagem pré-merge em `src/orchestrator/`, `src/git/` ou
-`src/lib/dev-mode/`. O isolamento é **de worktree** — impede pisar em tempo real,
+de disjunção, não há checagem pré-merge em `src/orchestrator/` ou `src/git/`. O isolamento é **de worktree** — impede pisar em tempo real,
 **não** impede o merge limpo que integra código contraditório.
 
 O que existe é **instrumentação pura**, e o código diz isso na cara:
@@ -472,7 +466,7 @@ Cada família é a mesma frase em outro domínio: o grafo é derivado por motor 
 mas nunca validado no construtor (`Orchestrator` **nunca chama**
 `validateTopology` — ele só roda dentro do `superRefine` do schema, ou seja, só em
 pipeline importado de disco; os 6 sítios que constroem `Pipeline` em código,
-**incluindo o dev mode**, passam direto — `pipeline-io.ts:117-119`). O merge é
+passam direto — `pipeline-io.ts:117-119`). O merge é
 determinístico (ótimo) mas nada roda entre dois merges. Os prompts aplicam 7 das
 12 técnicas do playbook em 7/7 pipelines (ótimo) mas as duas técnicas que
 *verificam* — few-shot com exemplo real e SELF-CHECK — estão em **0/7** e **2/7**,
@@ -581,7 +575,7 @@ distinção que o playbook fez questão de marcar:
 | **W3** | 4 | 2–3 | 0–1 | grafo + propriedade de arquivo — o coração do plano |
 | **W4** | 4 | 2–3 | 1 | memória, incerteza e ADR |
 | **W5** | 1 | 5 | 0 | **neck**: `AGENTS.md`, o doc mais compartilhado — sozinha de propósito |
-| **W6** | 4 | 4 | 2 | dev mode — herda write-set, `accept` e ledger |
+
 | **W7** | 4 | 6 | 0–1 | quebrar os singletons medidos no §3 |
 | **W8** | 2 | 3 | 5 | **dogfooding** — preenchedor de paralelismo, folga grande |
 | **W9** | 1 | 7 | 0 | **join** — estado derivado + catálogo de falso-verde vivo |
@@ -707,7 +701,7 @@ derruba.
   ```bash
   test -f METODO.md                                              # existe
   rg -q 'Zero planner LLM em runtime' MANIFESTO.md               # o diferencial segue lá
-  rg -q 'exceção|exceçao|dev mode' MANIFESTO.md                  # …com a exceção nomeada
+  rg -q 'exceção|exceçao' MANIFESTO.md                  # …com a exceção nomeada
   rg -q 'Precedência|precedencia' AGENTS.md                      # regra publicada
   diff <(rg -c '^## ' MANIFESTO.md) <(rg -c '^## ' MANIFESTO.en.md)  # gêmeos em paridade
   ```
@@ -1028,7 +1022,7 @@ derruba.
   npx vitest run -t 'dois agentes mesmo arquivo'       # detecção cruzada pré-merge
   ```
   *hoje: **não existe onde declarar**, e nada compara agente com agente (§4.2).
-  Este card converte em máquina a frase que `docs/dev-mode.md:250` já publica como
+  Este card converte em máquina a frase que a documentação já publicava como
   garantia.*
 
 ### `M3-03` — Gate depois de CADA merge
@@ -1121,7 +1115,7 @@ derruba.
 - **Objetivo.** `docs/adr/` no formato do Apêndice C (com os campos
   `Guarda executável`, `Supera`, `Reafirma explicitamente`, `O que o sign-off NÃO
   autoriza`) e os **três primeiros ADRs**, que são as três decisões que este
-  documento levanta e não pode tomar sozinho: (1) o planner em runtime do dev mode
+  documento levanta e não pode tomar sozinho: (1) o planner em runtime
   vs. o diferencial nº 2 do MANIFESTO; (2) `types.ts` como fonte única de tipos vs.
   o custo medido de singleton (§3); (3) o `default: true` forward dos juízes —
   mantido, com o risco escrito e a mitigação nomeada (`M2-04`).
@@ -1184,82 +1178,6 @@ derruba.
   npx vitest run -t 'skills-library'              # a prosa migrada não quebrou nada
   ```
   *hoje: 520 linhas; os dois greps do meio acusam.*
-
-## W6 — dev mode (4 cards)
-
-### `M6-01` — Partição de write-set no dev mode 🔴 crítico
-- **Objetivo.** A garantia que `docs/dev-mode.md:250-253` **publica como
-  enforçada** e que ninguém enforça. O parser já existe
-  (`parseOwnedPaths`, `review-agent.ts:484-502`): rodá-lo sobre **todos** os specs
-  de uma etapa e recusar (ou avisar duro) quando a união não é disjunta — entre
-  tasks de um front **e** entre fronts da mesma onda. É função pura sobre dados que
-  já estão em disco.
-- **Dono.** `src/lib/dev-mode/write-partition.ts` + chamada no `dev-driver.ts`.
-- **Deps.** M3-02.
-- **Aceitação.**
-  ```bash
-  npx vitest run -t 'write-partition'                  # >=1 teste
-  npx vitest run -t 'dois specs mesmo arquivo recusa'  # o caso vermelho existe
-  ```
-  *hoje: nada compara caminho entre tasks (§4.2).*
-
-### `M6-02` — `verifyCommands` deixa de ser código morto
-- **Objetivo.** `ReviewSpec.verifyCommands` — que o próprio tipo descreve como
-  *"the project's real gate … Running first and opining second is what keeps the
-  loop anchored to something executable"* (`types.ts:212-219`) — **nunca é
-  populado por nenhum caller de produção**. Ligar a resposta do gap
-  `build-test-commands` (que a Fase A **já pergunta**) em
-  `CompileEpochOptions.verifyCommands`. Sem isso, todo crítico do dev mode roda o
-  *fallback*: comandos nomeados por um atlas escrito por LLM, num arquivo que pode
-  ele mesmo ter falhado no merge.
-- **Dono.** `src/lib/dev-mode/plan-to-pipeline.ts`, `dev-driver.ts`.
-- **Deps.** M1-03, M2-03.
-- **Aceitação.**
-  ```bash
-  npx vitest run -t 'verifyCommands populado'
-  rg -c 'verifyCommands' src/lib/dev-mode/dev-driver.ts   # > 0
-  ```
-  *hoje: o grep devolve 0 — o campo só aparece na declaração, no pass-through e em
-  testes.*
-
-### `M6-03` — Honestidade do fim de época
-- **Objetivo.** Três correções pequenas com o mesmo alvo (A5/A6): (a) **consumir**
-  `alreadyUpToDate` — uma época que aterrissou nada não é uma época aterrissada;
-  (b) `goalComplete` exige corroboração (no mínimo: recusar na época 1) e o
-  **diff de `doneWhen`** é impresso no portão de aprovação, porque hoje
-  `state.doneWhen = plan.doneWhen` é sobrescrita incondicional e a trave é julgada
-  contra o valor que a mesma chamada acabou de escrever; (c) `restatedGoal` — o
-  "detector de deriva" documentado — passa a ser **exibido** no gate ou é
-  removido; hoje é coletado e nunca lido.
-- **Dono.** `src/lib/dev-mode/dev-driver.ts`, `dev-cli.ts`, `epoch-landing.ts`.
-- **Deps.** M0-01.
-- **Aceitação.**
-  ```bash
-  npx vitest run -t 'alreadyUpToDate'              # epoca no-op NAO conta como landed
-  npx vitest run -t 'goalComplete epoca 1 recusa'
-  npx vitest run -t 'doneWhen diff no gate'
-  ```
-  *hoje: os três falham; `alreadyUpToDate` é lido por **nada** no repositório.*
-
-### `M6-04` — Observabilidade: o que não pode se perder
-- **Objetivo.** (a) Flush periódico do `RunManifest` (a cada merge) — transforma
-  "irrecuperável" em "recuperável à mão", que é os 80% baratos; (b) corrigir
-  `working-on-orchestrator/SKILL.md:70`, que afirma o oposto do código;
-  (c) `journal.md` entra em `HUU_OWNED_PATHS` (hoje o huu nunca o commita nem o
-  diffa, e ele é o arquivo que a mensagem de `max-epochs` manda o operador ler);
-  (d) o `.gitignore` para de ser varrido pro commit `chore(huu-dev)` com
-  `--no-verify` sem ser diffado contra o HEAD.
-- **Dono.** `src/lib/run-logger.ts`, `src/orchestrator/index.ts` (só a chamada de
-  flush), `src/lib/dev-mode/dev-state.ts`,
-  `.agents/skills/working-on-orchestrator/SKILL.md`.
-- **Deps.** M1-01.
-- **Aceitação.**
-  ```bash
-  npx vitest run -t 'manifest flush incremental'   # manifesto existe em disco MEIO run
-  rg -c 'written incrementally' .agents/skills/working-on-orchestrator/SKILL.md  # == 0
-  npx vitest run -t 'gitignore nao entra sem diff'
-  ```
-  *hoje: um SIGKILL no meio de uma etapa deixa **zero** artefato em `.huu/`.*
 
 ## W7 — quebrar os singletons (4 cards)
 
@@ -1528,11 +1446,11 @@ pedindo para o agente se comportar — é a ferramenta recusando.
 > **Esta é a corroboração mais direta do §4.2 deste documento.** O `huu` hoje faz o
 > oposto: a partição por propriedade de arquivo é **prosa em prompt** repetida em
 > cinco lugares (`dev-protocol.ts:216-226`, `planner-prompts.ts:93-97`, …), e
-> `docs/dev-mode.md:250` a anuncia como *"Rules huu enforces"*. A referência da
+> A documentação anunciava-a como *"Rules huu enforces"*. A referência da
 > indústria diz que o lugar da garantia é o mecanismo, não o texto.
 >
 > **Efeito no plano:** sobe a prioridade de `M3-02` (write-set validado) e
-> `M6-01` (disjunção no dev mode), e sugere um card futuro que os leve à camada de
+> (a disjunção por ficheiro), e sugere um card futuro que os leve à camada de
 > ferramenta do backend — não só à validação pré-merge. Registrar no ledger.
 
 ### C3. O fan-in é onde os fornecedores param — e é aí que o `huu` é sozinho 🔴
@@ -1675,13 +1593,12 @@ O `huu` já se auto-hospedou. Lido dos merges:
               merge(w4-0728-215323-{1,2})          2 fronts
               merge(w5-0728-221935-{1,2,3})        3 fronts
               merge(w6-0728-223928-{1,2,3})        3 fronts
-07-29       merge branch 'feat/dev-mode-v2'
 ```
 
 Três leituras:
 
 1. **Ondas de 1 a 3 fronts, não de 9.** O `DEV_MAX_FRONTS = 4` é o teto, e o uso
-   real ficou em 2-3. Isso é saudável: largura vem de fan-out de hub, e o dev mode
+   real ficou em 2-3. Isso é saudável: largura vem de fan-out de hub, e o modo
    ainda não tem hub largo. Não force.
 2. **Zero branches `huu/**` órfãos** ao fim. A limpeza de worktree funcionou sob
    carga real — é o tipo de coisa que só se prova em dogfooding, e está provado.
@@ -1866,7 +1783,7 @@ motor. Aqui existe um, e o mapeamento é direto:
 | **write-set** (quem escreve onde) | `WorkStep.writes` — **`M3-02` cria** |
 | **aceitação falsificável** | `WorkStep.accept` — **`M1-03` cria, `M2-03` executa** |
 | **revisão adversarial** | `WorkStep.review` — **já existe**, com `blockOn` e `maxRounds` |
-| **handoff com destinatário** | o findings shard do dev mode + `.changes/<card>.md` |
+| **handoff com destinatário** | o findings shard + `.changes/<card>.md` |
 | **portão de onda** | `CheckStep` com `default: true` forward + `Pipeline.mergeGate` (**`M3-03` cria**) |
 
 **Consequência operacional:** depois de W1–W3, este documento pode ser compilado
@@ -2041,7 +1958,6 @@ lista: ***se isto desaparecer, o que fica vermelho?***
 | Qualquer veredito de juiz | nenhum teste prova que um juiz consegue dizer `rework` | A2 |
 | Uma etapa onde todos os agentes falharam | `runStageIntegration` devolve `true`; dependentes rodam | A3 |
 | Um pipeline que pulou metade dos steps | `warn` + `break` ⇒ `status: 'done'` | A4 |
-| Uma época do dev mode que não produziu nada | `alreadyUpToDate` é lido por nada; exit 0 | A5 |
 | `goalComplete: true` | zero corroboração, e o `doneWhen` que a define foi sobrescrito na mesma resposta | A6 |
 | Um juiz que tomou 429 | `default: true` aponta pra frente ⇒ aprova em silêncio | A7 |
 | `CheckStep` sem `maxRuns` | não há default ⇒ loop pago ilimitado; 3 docs afirmam "default 5" | A8 |
@@ -2105,7 +2021,7 @@ O escopo negativo é parte do entregável.
   (`M4-03`), sem decidir por conta própria.
 - **Conteúdo dos 7 pipelines default** além do que a verificação exige. As
   metodologias (Diátaxis, OWASP, Fowler, SonarSource) não estão em discussão aqui.
-- **Escolha de modelo e economia de tokens por papel.** O `dev-model-policy` já
+- **Escolha de modelo e economia de tokens por papel.** A política por papel já
   existe; otimizá-lo é outro documento.
 - **Multi-host.** `ROADMAP.md` §3.5.
 - **Nenhuma estimativa de prazo.** O plano tem 34 cards e 11 ondas; a duração

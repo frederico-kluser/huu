@@ -81,11 +81,9 @@ function printBanner(
   // in the UI; `/simulation` deliberately does not (demo surface).
   if (!inContainer) {
     w(
-      `    \x1b[2m${t('cli.banner_dev_mode')}\x1b[0m  ` +
         withToken(`http://localhost:${port}/dev`, token),
     );
   } else {
-    w(`    \x1b[2m${t('cli.banner_dev_mode')}\x1b[0m  ${t('cli.banner_dev_hint')}`);
   }
   if (token) {
     w(`    \x1b[2m${t('cli.banner_token_required')}\x1b[0m`);

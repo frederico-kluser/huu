@@ -373,8 +373,8 @@ function indentBlock(text: string): string {
 /**
  * The two coordinator-mode review rules (Onda 2.2, from the coordinator
  * leak). Exported as ONE constant because two prompts must state them
- * verbatim — this critic's system prompt and dev mode's `standardsBlock`
- * (`lib/dev-mode/plan-to-pipeline.ts`) — and an inline copy in each file is
+ * verbatim — this critic's system prompt and the `standardsBlock`
+ * (`lib/orchestrator/write-sets.ts`) — and an inline copy in each file is
  * exactly the drift the duplication was already producing.
  */
 export const COORDINATOR_RULES = `Do not rubber-stamp weak work.
@@ -582,7 +582,7 @@ export function buildReviewUserPrompt(ctx: ReviewRoundContext): string {
  * - src/lib/foo.ts — why
  * ```
  *
- * Parsed HERE (rather than in the dev-mode layer) because the orchestrator is
+ * Parsed HERE (rather than in an upper layer) because the orchestrator is
  * where the comparison happens — `finalizeAgent` diffs the committed file set
  * against this list to record {@link AgentStatus.writeSetViolations}. Purely
  * INSTRUMENTATION: nothing is blocked or rewritten. It exists to answer, with

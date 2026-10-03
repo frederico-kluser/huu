@@ -17,8 +17,8 @@
 # ─────────────────────────── LIMITE CONHECIDO ───────────────────────────
 # Com o backend stub, um step de `scope: "memory"` resolve para ZERO tarefas:
 # o arquivo huu-memory-v1 é escrito pelo AGENTE de um step anterior, e o stub
-# nunca escreve nada além do seu próprio STUB_*.md. Logo o formato de enxame do
-# dev mode — recon escreve as specs → fan-out de memória → revisão por tarefa →
+# nunca escreve nada além do seu próprio STUB_*.md. Logo o formato de enxame —
+# recon escreve as specs → fan-out de memória → revisão por tarefa →
 # merge — NÃO executa aqui, em caso nenhum. Por isso o caso 2 usa fan-out
 # per-file: é o único jeito de o laço de revisão rodar de fato sob o stub.
 #

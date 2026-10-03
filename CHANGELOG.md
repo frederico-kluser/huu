@@ -21,54 +21,15 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 > que chegou ao npm. A `[5.3.0]` logo abaixo foi escrita mas **nunca
 > publicada** — não existe tag `v5.3.0`, e o pacote `huu-pipe` nunca recebeu
 > esse número (é por isso que ela não tem link de compare no rodapé) — e o
-> bloco de trabalho do modo dev que vem depois dela também nunca saiu.
-> A 6.0.0 publica os três de uma vez.
->
-> **MUDANÇAS QUE QUEBRAM** — é um major, e são estas três. Cada uma está
-> detalhada nos bullets desta mesma entrada:
->
-> 1. **Os presets de roteamento com id de outro endpoint são RECUSADOS no
->    provedor errado.** `--models=hetero`, `thrifty`, `monoculture` e `roster`
->    fixam ao menos um id que só a OpenRouter serve, então sob
->    `--provider=deepseek` o `huu dev` agora **para na borda com exit 1**, antes
->    de tocar no repositório (`checkDevModelPolicy`, `src/lib/dev-mode/dev-model-policy.ts`).
->    Antes a mesma combinação abria a sessão e só morria dentro do primeiro
->    agente, com worktree e branch já criados. `--models=uniform` continua
->    rodando nos dois provedores. **Se você usava `hetero` no DeepSeek:** troque
->    para `--provider=openrouter` (a mensagem da recusa nomeia o provedor que
->    serve cada id) ou para `--models=uniform`.
-> 2. **O eixo da credencial passou de `backendBound` para `providerBound`**
->    (`src/lib/api-key-registry.ts`). Um spec ligado ao provedor ATIVO é
->    exigido independentemente do campo `required`, e
->    `selectBackend('jcode').apiKeySpecName` passou a ser `undefined` **de
->    propósito** — a autoridade agora é `apiKeySpecNameForProvider(provider)`.
->    Efeito visível: um run pede exatamente a chave que vai gastar, nunca as
->    duas; uma máquina que só tem `OPENROUTER_API_KEY` deixa de ficar bloqueada
->    pedindo `DEEPSEEK_API_KEY`. **Se você integrava pelo campo antigo:** leia o
->    provedor, não o backend.
-> 3. **`EPOCH_MAX_NODE_EXECUTIONS` foi de 50 para 96**
->    (`src/lib/dev-mode/plan-to-pipeline.ts`). O teto por época era estourado
->    por 2304 das 4096 combinações de metodologia que já existiam — `--plan-review`
->    sozinho dá 52 — e uma época estourada morria depois de já ter pago por cada
->    agente. Um pipeline gerado pelo modo dev passa a declarar
->    `maxNodeExecutions: 96`; quem fixou o número antigo em teste ou snapshot
->    precisa atualizá-lo.
 
 ### Added
 
-- **Método desenhado (`huu-devgraph-v1`) — o humano desenha a topologia, o huu compila.** Um formato de grafo em que o HUMANO desenha o método (quais blocos rodam, em que ordem, onde ramifica, onde os ramos se juntam) e um compilador o transforma num `huu-pipeline-v2` comum, rodado pelo escalonador de ondas, pelo leque de memória e pelo merge determinístico já existentes. Isto reforça o MANIFESTO §diferencial-2: no modo dev de hoje um planner LLM escreve a topologia em runtime; com um desenho, o planner **não é chamado** — o humano subscreve o método e o modelo só fornece a inteligência DENTRO de cada nó. Nada no formato deixa um modelo acrescentar um nó, uma aresta ou uma rota.
-  - **Formato** (`src/lib/dev-graph/`): 4 tipos de nó (`prompt` · `action` · `research` · `gate`), catálogo de **15 blocos** com o par `-review` (só relata) / `-findings` (escreve uma tarefa por achado, para o nó seguinte abrir um leque), **46 códigos de erro estáveis + 4 avisos**, e **6 amostras** prontas. O zod é dono da FORMA, o `validateGraph` é dono das regras de produto e **nunca lança** — o editor valida a cada tecla e um throw ali é um canvas em branco.
   - **Retrabalho**: uma aresta marcada `rework: true` é uma rota de VOLTA sem ser um ciclo — o desenho tem duas camadas (dependência = arestas sem `rework`, ativação = todas), e `default-outcome-is-rework` impede que o default seja o laço, porque o default dispara quando o juiz FALHA.
   - **Join `subset`**: relaxar um join tira a DEPENDÊNCIA (de dado e de sucesso), **não** a barreira de merge BSP da onda — dito no tipo, no compilador, no aviso `join-subset-drops-barrier` e na doc.
   - **Pesquisa na web** (`huu-research-v1`): escada de degradação A (busca com chave) → B (busca keyless) → C (`curl` de URL conhecida), que desce por **FALHA**, não só por ausência — binário instalado não é binário utilizável.
-  - **Driver** (`dev-driver.ts`): com um desenho, as Fases A e B não acontecem, a sessão é **exatamente uma época** (`--epochs > 1` é recusado) e um resume sem o desenho é **recusado** em vez de cair no planner.
-  - **Superfícies**: canvas React Flow em `/graph` + `GET|POST|PUT|DELETE /api/graphs/*`; `huu graph list|show|validate|compile|new|rm` no terminal; tela `[G]` na TUI (lista, diagrama ASCII, validação, lançamento); `huu dev --graph=<id|arquivo.json>`.
-  - **Docs**: `docs/dev-graph.md` + gêmeo pt-BR (incluindo uma seção "Limites conhecidos" honesta), seção nova em `docs/dev-mode*.md`, `docs/KEYBOARD.md` e as duas READMEs.
-- **`huu dev --debate` — debate adversarial como a 13ª metodologia selecionável, desligada por padrão.** Entre o recon global e as frentes, o compilador insere uma topologia FIXA de três nós: *Sustentar as escolhas* (escreve `.huu/dev/<sessão>/epoch-N/debate/A.md`, o registro de até seis decisões, cada uma com a alternativa rejeitada, o porquê apontando para um caminho real e a observação que provaria a escolha errada), *Contestar as escolhas* (lê `A.md`, escreve `B.md`, um veredito `SUSTENTADA`/`CONTESTADA` por decisão, com falha prevista e evidência atrás de cada contestação) e *Debate resolvido?*, um check com desfechos ENUMERADOS, teto de duas rodadas e exatamente um `default: true` para a frente. Nenhum dos lados pode editar o arquivo do outro. Como toda metodologia, ela também troca o crítico de cada tarefa para HOLD em vez de waive no teto de rodadas.
 - **O resultado chega às frentes por ARQUIVO COMMITADO**, o único canal passo→passo que o huu tem — o recon de cada frente espera o portão do debate e lê os dois briefs pelo caminho, com contrato explícito: decisão `SUSTENTADA` está resolvida e é implementada, decisão `CONTESTADA` vira risco aceito e nomeado no "Context" do spec afetado (nunca licença para redesenhar), e brief ausente vira finding — nunca um veredito inventado.
 - **A rubrica do juiz é anonimizada por MODELO — e só por modelo.** Ele nunca sabe qual agente nem qual modelo escreveu cada brief, e o prompt do portão não contém nenhuma string de fornecedor, família ou modelo; os arquivos se chamam `A.md` e `B.md` justamente porque um nome de arquivo não é algo que se possa pedir a um modelo para desver. Anonimato de PAPEL nunca esteve em oferta (as cláusulas do portão precisam ler um arquivo como registro e o outro como ataque para poder compará-los) e o documento agora diz isso em vez de prometer mais. Não existe desfecho "o advogado ganhou" para rotear: um debate que escolhe vencedor seria uma IA decidindo o design.
 - **`advocate` e `prosecutor` são papéis de roteamento novos**, com as flags `--advocate-model` / `--prosecutor-model`, e todo preset menos o `monoculture` — que é o braço A/B de propósito — os separa em famílias diferentes. Sem rota, os dois caem no modelo do run: o huu compila assim mesmo e AVISA que é um modelo falando sozinho, porque heterogeneidade é o mecanismo aqui, não um detalhe.
-- **`src/lib/dev-mode/methodology-registry.test.ts`**, que nunca existiu — sem ele, a invariante "exatamente um default para a frente" ficaria desapinada justamente na opção que a introduz. Com a flag desligada, o pipeline compilado é byte-idêntico ao de antes, verificado comparando a estrutura nas 4096 combinações das 12 metodologias pré-existentes.
 - **Restrição de ferramenta por papel.** `AgentTask.readOnly` e `WorkStep.readOnly` fazem o backend entregar à sessão uma allowlist sem `edit`/`write` (filtro duro do pi: o system prompt é reconstruído sem as ferramentas ausentes). Aplicado ao crítico e ao juiz. `bash` permanece — os dois são obrigados a rodar os comandos do projeto antes de concluir —, então é redução, não sandbox.
 - **Disjunção de write-set determinística ANTES do fan-out.** `collideDeclaredOwnership` roda em `prepareStageTasks` sobre as declarações dos specs, acumulada por run, portanto pega a colisão cara: duas frentes paralelas reivindicando o mesmo arquivo. Reporta e registra em `DevEpochEvidence`; nunca bloqueia. `checkWritePartition` passou a delegar ao mesmo núcleo — uma implementação, dois chamadores.
 - **Montagem determinística do digest.** `assembleKnowledgeDigest` constrói o digest em TypeScript a partir dos shards já validados por `KnowledgeBriefSchema`, com corte por orçamento que nunca descarta uma seção nem um "Em aberto". A passada do LLM virou refinamento: usada quando cobre toda lacuna, substituída quando não.
@@ -77,14 +38,8 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 - **Conhecimento acumulado entre épocas.** `readAccumulatedBriefs` varre os shards de todas as épocas anteriores (cada shard carrega seu `gapId`), dedupe por lacuna com a mais nova vencendo e a substituída nomeada, e entrega ao planner como bloco próprio com orçamento separado. As lacunas baseline eram perguntadas só na época 1 e simplesmente se perdiam.
 - **`--max-cost=<usd>`** e `DevStopReason 'cost-ceiling'` — o custo já era coletado por época e não barrava nada. Verificado ENTRE épocas: matar um swarm vivo perde o trabalho e paga os tokens assim mesmo.
 - **Parada graciosa** (`gracefulSignal`): pare depois que a época corrente aterrissar, em vez de perder o merge de frentes que já passaram pelo juiz.
-- **Retomada da execução de uma época.** `DevState.pendingEpoch` — o grafo compilado já era persistido e nunca reusado; um crash na Fase C agora retoma a EXECUÇÃO em vez de recomprar conhecimento e replanejar.
 - **Cadeias de fallback de modelo por papel** — valores aceitam lista por vírgula; vence o primeiro degrau que o registro do pi conhece, o preflight só recusa quando todos são desconhecidos, e degraus mortos viram aviso nomeado.
-- **`DevModeConfig.knowledgeDigestMaxChars`** — o teto do digest (6000) era uma constante que ninguém podia mover, logo ninguém podia medir se estava certa.
 - **`--max-cost` no texto de ajuda, nos dois catálogos** (`cli.help` en + pt-BR).
-- **`docs/dev-harness-audit.md`** — auditoria do harness do modo DEV contra o estado da arte (Claude Code, opencode, OMO), com 18 achados referenciados em `arquivo:linha`, o que já estava certo, e o registro do que foi implementado.
-- `huu dev`: oito metodologias selecionáveis novas, todas desligadas por padrão — `--write-set` (arquivo fora do write-set declarado bloqueia), `--changelog` (Conventional Commits como merge gate + entrada de changelog exigida do crítico), `--diff-budget` (teto de 400 linhas / 12 arquivos por tarefa), `--fitness` (regra de arquitetura do projeto como merge gate, descoberta na fase de conhecimento), `--checklist` (crítico responde checklist item a item com veredito PASS/FAIL/N-A e evidência), `--traceability` (matriz bidirecional requisito ↔ teste, com portão que recusa órfão não declarado), `--characterize` (snapshot do comportamento atual antes de qualquer mudança — o TDD do código sem spec) e `--verify-claims` (segundo agente re-verifica cada afirmação do digest contra o repositório e rebaixa o que não reproduz).
-- `.huu/dev/<sessão>/epoch-N/traceability.md`: matriz de rastreabilidade gerada por `--traceability`.
-- **O roteamento por papel do `huu dev` passa a carregar o PROVEDOR junto com o modelo.** `DevModelPolicy` mapeia papel → (modelo, provedor), e é o provedor de cada degrau que decide o perfil do jcode, a `base_url`, o namespace do id e a variável da credencial — um roster heterogêneo só significa alguma coisa se essas quatro coisas viajarem com o modelo. Uma string simples continua válida em todas as superfícies (flag, corpo de POST, tabela de preset) e agora aceita um prefixo opcional `<provedor>:`, como em `openrouter:anthropic/claude-opus-5` — a única forma que sobrevive ao round-trip por um `Record<string, string>` JSON, que é o que `/api/bootstrap` entrega ao navegador e o que o navegador posta de volta. O prefixo é inequívoco contra os sufixos `:free`/`:nitro` da própria OpenRouter.
 - **Preset novo `--models=roster`**: um endpoint (OpenRouter), cinco fornecedores, cada papel no modelo cujo modo de falha ele menos pode pagar — planner, recon e integração no V4 Pro, worker no V4 Flash, crítico no GPT-5.6 Sol (cross-family em relação aos workers DeepSeek por construção), reporter no GLM-5.3 Flash e juiz no Claude Opus 5, que é o papel cuja falha é SILENCIOSA porque todo check tem `default: true` para a frente.
 - **`npm run dev` agora roda NATIVO, sem Docker** — a nova env `HUU_DEV_NATIVE=1` (só env, nunca flag) pula o re-exec no container para o loop de quem desenvolve o huu: editar `src/` e rodar de novo deixa de custar um `docker build` + `docker run` a cada iteração, e nem precisa do daemon ligado. O CLI imprime um banner ruidoso em todo start (en + pt-BR) porque o isolamento do container e o teto de memória do container ficam ambos ausentes; no Linux o self-wrap do systemd volta a ser alcançável e fornece o teto de kernel.
 - **`npm run dev:docker`** — o comportamento anterior do `npm run dev`: mesmo hot reload, mas atravessando o Docker (refresh do `huu:local` via `scripts/ensure-image.sh` antes), que é o ensaio fiel do que o usuário recebe.
@@ -108,20 +63,15 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 ### Changed
 
 - **Documentação alinhada com a realidade da CI.** `AGENTS.md`/`CLAUDE.md`, os dois READMEs, `docs/operations{,.pt-BR}.md`, `docs/onboarding{,.pt-BR}.md`, `METODO.md §1` e as skills `committing-and-validating`, `writing-tests`, `running-in-docker`, `releasing-versions` e o `catalog.md` afirmavam "não há CI automatizada". Agora descrevem o que de fato existe: a CI roda os 9 passos do `scripts/gate.sh` em todo push e PR, `bash scripts/gate.sh` reproduz isso localmente, e a CI **não** builda imagem, **não** roda smokes de Docker e **não** publica nada — release segue manual.
-- **Prompts compilados do modo DEV são fixo-primeiro**, separados por `DEV_STEP_BOUNDARY`, com teste fixando que nada específico de época, frente ou agente aparece acima da fronteira. Invariante estrutural, não economia de token — o cabeçalho por agente já limita o prefixo compartilhável a poucas centenas de tokens do primeiro turno.
 - **O protocolo do findings shard passou de "escreva DEPOIS do trabalho" para "escreva ENQUANTO trabalha"** — um card que estoura o tempo, é preemptado ou tem o contexto compactado levava junto tudo o que aprendeu.
-- As metodologias passam a ser declaradas num registry único (`src/lib/dev-mode/methodology-registry.ts`). O parse das flags, o texto de uso do CLI, o catálogo da web e os bullets do planner são derivados dele — antes eram quatro listas mantidas à mão que falhavam em silêncio quando uma era esquecida.
 - `Pipeline.mergeGate` passa a ser composto por acumulação: várias metodologias contribuem comandos, encadeados com `&&`. Antes cada opção atribuía o campo, então a segunda a compilar apagava a primeira sem erro nenhum.
 - As cláusulas do juiz de cada frente passam a ser numeradas a partir da lista, não à mão — duas metodologias que acrescentam cláusula não colidem mais no mesmo número.
 - `DevVerifyCommands` ganha o bucket opcional `fitness`, preenchido só a partir de um rótulo `fitness:`/`arch:` explícito, para que ligar `--fitness` não mova um comando para fora do bucket `lint` que `--lint-gate` sempre rodou.
 - O painel de metodologia da web passa a renderizar o texto do catálogo i18n (`web.dev.method.<chave>.label`/`.desc`, en + pt-BR) em vez do inglês cru que o servidor serve. O registry continua declarando QUAIS opções existem; o catálogo declara como elas se leem, então trocar o idioma no ⚙ traduz o painel sem recarregar. As flags de metodologia também entram no `cli.help` dos dois idiomas.
-- **O preflight de modelo voltou — e agora recusa na BORDA.** Ele estava morto desde que `model-registry-check.ts` foi deletado, e foi reconstruído sobre o catálogo (`checkDevModelPolicy`, em `src/lib/dev-mode/dev-model-policy.ts`), com uma epistemologia explícita: RECUSA só diante de contradição positiva (um id que só provedores fora deste run servem), AVISA na ausência de evidência (um id que nenhuma entrada do catálogo menciona). O huu não consegue enumerar o que um endpoint serve — a DeepSeek não publica `/models` e o catálogo ao vivo da OpenRouter saiu na v3.0 — então "não está no JSON" nunca vira recusa, sob pena de o huu ficar inutilizável com qualquer modelo lançado depois dele. A recusa acontece antes de existir worktree, branch ou commit, ressuscitando o stop reason `model-preflight-failed`; antes, `z-ai/glm-5.2` apontado para `api.deepseek.com` só falhava dentro do primeiro agente, com a worktree e o branch já criados.
 - **Os presets existentes passam a declarar o endpoint dos ids que só a OpenRouter serve.** `hetero`, `thrifty` e `monoculture` são presets OpenRouter e não tinham como ser outra coisa (um crítico cross-family precisa de um endpoint que sirva mais de uma família), mas nada dizia isso: rodá-los no DeepSeek nunca pôde funcionar, só falhava mais tarde e pior. Os ids `deepseek/…` continuam SEM prefixo de propósito — os dois endpoints os servem, então uma rota não qualificada é portátil e herda o provedor do run.
-- **A tela `/dev` do navegador deixou de montar um pedido impossível.** Ela pré-preenchia `hetero` enquanto o provedor padrão é `deepseek`, ou seja, o caminho default virava HTTP 400. O servidor continua recusando um corpo impossível; o que mudou é que o cliente não monta mais um: `/api/bootstrap` publica quais presets rodam em cada provedor, o seletor desabilita os demais com tooltip, e a MESMA função que recusa o POST é a que decide isso — sem uma segunda cópia da regra para divergir.
 - `decideReexec` ganhou um ramo `HUU_DEV_NATIVE` logo depois do `HUU_IN_CONTAINER`. As grafias de usuário removidas (`--yolo`, `--no-docker`, `HUU_NO_DOCKER`) continuam mortas e sem qualquer relação com a nova env — o huu segue docker-only como produto.
 - **A documentação passa a distinguir backend de provedor, que era a confusão de CAMADA por trás de tudo.** `AGENTS.md` é o dono declarado dos "fatos correntes do código" (`METODO.md §0.4`) e descrevia backends que não existem mais — e `CLAUDE.md` é symlink para ele, então os dois estavam errados juntos. A regra agora está escrita como regra: backend = COMO o agente é executado (`jcode` por subprocesso, `stub`); provedor = PARA ONDE a chamada vai e QUE credencial ela gasta (`deepseek`, `openrouter`). Um backend serve N provedores — e é daí que decorrem o `apiKeySpecName` do bundle ser `undefined` de propósito e o `providerBound` ser exigido independentemente de `required`. Os dois READMEs, `docs/README.md` e `docs/jcode-setup-guide.md` foram alinhados junto.
 - **O seletor de modelos deixou de ser descrito como "o catálogo ao vivo da OpenRouter (339 hoje)"** — hoje é o catálogo estático do repositório, filtrado pelo provedor ativo.
-- **As skills que o `project-router` obriga todo agente a carregar antes de implementar deixaram de ensinar a união errada.** `integrating-llm-backends` afirmava um `AgentBackendKind` com membros deletados e que um deles era "um backend real"; `running-dev-mode` documentava um preflight cujo arquivo tinha sido apagado. Como o router carrega a skill ANTES da implementação, uma skill errada propaga o erro para todo trabalho futuro. Os docs dos backends removidos viraram stub histórico (oito arquivos fora do escopo ainda os referenciam), preservando a lição transferível: uma chamada LLM auxiliar num provedor diferente do selecionado é um bug de COBRANÇA.
 - **O eixo da credencial passou de `backendBound` para `providerBound`** (`src/lib/api-key-registry.ts`). Um spec ligado ao provedor ATIVO é exigido independentemente do campo `required`, então um run pede exatamente a chave que vai gastar — nunca as duas, nunca nenhuma. Com dois provedores atrás do mesmo backend, a amarração por backend teria feito um único run exigir as DUAS chaves. Consequência direta: `selectBackend('jcode').apiKeySpecName` é `undefined` de propósito — um backend que serve dois provedores não pode nomear credencial, e a autoridade passou a ser `apiKeySpecNameForProvider(provider)`. Antes disso, com só `OPENROUTER_API_KEY` na máquina, o huu não rodava: o único spec `required` era o `deepseek`, e a TUI marcava "key set" numa tela para pedir `DEEPSEEK_API_KEY` na seguinte.
 - **O `config.toml` hermético do jcode passa a ser gerado a partir da tabela de provedores** (`src/orchestrator/backends/jcode/hermetic.ts`): um bloco `[providers.<nome>]` por provedor, com `base_url` vindo do `ProviderInfo` e `api_key_env` vindo do registry de chaves — o mesmo host que os clientes LangChain discam, em vez de duas tabelas mantidas à mão que podiam divergir. Nenhum segredo mora no arquivo: cada perfil só NOMEIA a sua variável.
 - **As chaves dos OUTROS provedores são removidas do ambiente do subprocesso do agente** (`stripForeignProviderKeys`, em `src/orchestrator/backends/jcode/factory.ts`). O agente executa shell arbitrário dentro da worktree; ele passa a ver só a credencial do provedor do run.
@@ -131,19 +81,15 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 
 - **`AutoScaler.shouldSpawn()` — floor of one: degrade to sequential, never to zero.** Em máquina carregada por processos de FORA do huu (navegador/IDE segurando RAM acima do dial), todos os portões de estado de máquina — `stopThreshold` (RAM/CPU ≥ 90%), o freio PSI e o `budgetAdditional() <= 0` do modo MAX — ficavam verdadeiros indefinidamente com zero agentes vivos. Isso não era "mais devagar": era zero agentes PARA SEMPRE (pool girando, custo $0, run que nunca termina). Agora, quando nada está vivo, um agente é sempre admitido nos três modos (auto, MAX e manual), fechando o portão de novo assim que esse agente existe. Espelha o piso que `AdmissionController.shouldAdmit`, `GlobalScheduler.shouldSpawn` e `budgetCeiling()` já tinham. O COOLDOWN deliberadamente NÃO recebe o piso — é uma espera nossa, limitada no tempo e que se libera sozinha, logo nunca trava. Era a causa raiz de 14 testes de integração com git real que só quebravam em máquina carregada.
 - **`minimatch` era importado sem estar declarado — o `npm run typecheck` do repositório reprovava.** `src/lib/pipeline-io.ts:4` faz `import { minimatch } from 'minimatch'` desde a checagem de write-sets disjuntos, mas o pacote não estava no `package.json` nem no `package-lock.json` — nem sequer como dependência transitiva hoisted. Além do typecheck, todo arquivo de teste cuja cadeia de imports passa por `pipeline-io.ts` falhava na carga, antes de rodar um único caso. O HEAD do projeto estava vermelho.
-- **A suíte de testes voltou a descrever o código que existe, e não o que foi removido.** A remoção dos backends antigos passou um find-and-replace pela metade: `src/lib/api-key.test.ts`, `src/lib/api-key-pool.test.ts`, `src/models/catalog.test.ts`, `src/web/api-data.test.ts`, `src/web/server.test.ts`, `src/web/dev-manager.test.ts`, `src/lib/screen-fsm.test.ts` e os três testes do `src/lib/dev-mode/` afirmavam backends deletados, um spec de credencial renomeado pela metade (o POST mandava `deepseek`, as asserções liam `?name=openrouter`) e features que não existem mais. Os casos vivos foram reescritos contra o mundo atual em vez de apagados; os que descreviam proteções REMOVIDAS (o preflight de modelo, o bootstrap de conhecimento) viraram testes de caracterização, para que a proteção perdida ficasse gravada onde o próximo dev tropeça nela em vez de sumir do registro.
 - **Três testes de precedência de credencial estavam VERDES E VAZIOS.** Em `src/lib/api-key.test.ts`, o nome do spec tinha sido trocado mas o corpo continuava definindo a variável de ambiente do spec ANTIGO — então a asserção passava sem exercitar precedência nenhuma. Um teste verde que não prova nada é pior que um vermelho, porque ninguém volta nele.
 - **A CI passou a ser verde de verdade — nunca tinha passado uma vez.** `.github/workflows/gate.yml` existia desde a 5.3.0 e falhava em 100% das execuções, por quatro causas independentes, nenhuma delas quebra real de código: (1) o runner do GitHub não tem identidade git, e a suíte cria repositórios git de verdade e commita neles — 64 testes morriam em `fatal: unable to auto-detect email address`, invisível localmente porque a máquina do dev tem identidade global; (2) `tool_exists` do `scripts/gate.sh` classificava qualquer comando com `/` como caminho de arquivo, então todo passo `npx tsx scripts/<x>.ts` era reportado como "ferramenta nao encontrada" com o script ali no disco; (3) `check-acceptance` e `validate-graph` seguiam marcados `PENDENTE` desde a W1, quando ainda não existiam — e qualquer `PENDENTE` força `exit 1` no gate inteiro por design (METODO M1-01), então a CI era vermelha por construção mesmo com tudo passando; (4) no resumo, `[[ "$fail" -gt 0 ]] && parts+=(…)` retorna 1 quando o contador é zero e, com `set -e` herdado do laço, matava o script antes de imprimir — bug que só dispara numa execução totalmente verde, ou seja, exatamente a que nunca acontecia.
 - **`gate.sh --list-from-ci` agora entende block scalar YAML** (`run: |`), em vez de imprimir um `|` solto e esconder os comandos. Esse modo é o detector de drift entre o registro de passos do `gate.sh` e o workflow — cego, ele não detectava nada.
 - **O teto de execuções por época já estava estourado ANTES desta feature.** `EPOCH_MAX_NODE_EXECUTIONS` valia 50 contra um comentário que estimava "≈ 26". Reproduzindo o loop REAL do escalonador sobre as 8192 combinações de metodologia, com cada portão tomando o braço para trás até o próprio `maxRuns` forçar o default (a estratégia pessimal, verificada como dominante sobre 20 000 aleatórias), o pior caso é 70 sem `--debate` nenhum — e **2304 das 4096 combinações pré-existentes já estouravam 50** (`--plan-review` sozinho dá 52). Uma época que estourava morria em `recordRunError` depois de já ter pago por cada agente até ali, com o passo de selagem nunca rodando. O teto foi re-medido para 96, e um teste novo (`the node-execution budget`) replaya a medição a cada execução e falha se alguma combinação deixar de caber ou se o pior caso sair do valor pinado.
 - **Com `--plan-review`, um rework de plano não re-discute o debate.** Um rework re-pendura o cone a jusante inteiro; com o debate pendurado no recon global, esse cone continha os dois debatedores, então todo rework de plano pagava a discussão de novo (85 execuções de nó na combinação `tdd+planReview+traceability+characterization+debate`). O `rework` do portão do plano passa a mirar um nó abaixo, no PORTÃO do debate, quando ele está ligado — a cobertura é idêntica e a separação é honesta: o portão do plano julga *specs*, o debate julga *design*.
 - **Três portões diziam que o texto do juiz chega aos agentes de retry.** Nada no huu injeta a `reason` de um check em prompt nenhum: um veredito `rework` ou `contestado` é o REGISTRO de por que o passo voltou, lido por um humano no card do check e no log do run. A frase era herdada, não trazida pelo `--debate`, e os três portões passam a dizer isso com as próprias palavras.
-- **O cabeçalho de agente contradizia todo prompt do modo DEV.** `generateAgentSystemPrompt` era herdado de uma ferramenta linear de refactoring e chegava ANTES do prompt do passo: para todo agente de swarm ele renderizava o próprio spec como "o único arquivo que você pode editar" (em `scope: 'memory'`, `task.files` é o BRIEFING, não o alvo), proibia criar arquivos "unless absolutely necessary for the refactoring", proibia comandos git contra o passo TDD que manda commitar, e mandava manter cobertura de teste contra o passo que CONGELA os testes. Para todo papel somente-leitura — crítico, juiz, auditor de plano, reporter — ele dizia "you may read and modify any file… Apply changes using the edit tool" logo acima de "You report. You do NOT write code." Substituído por um cabeçalho neutro cujo escopo de escrita vem do `## Files this task OWNS` do próprio spec (`AgentTask.ownedPaths`). O arquivo não tinha teste nenhum; agora tem nove.
-- **`/skill:project-router` era um comando morto no topo de todo prompt do modo DEV**, por duas razões independentes: o loader hermético passava `noSkills: true` (desligando a descoberta de `.agents/skills`) e o `_expandSkillCommand` do pi só expande quando o texto COMEÇA com `/skill:` — e o cabeçalho do agente sempre vinha antes. Agora as skills do worktree são carregadas via `additionalSkillPaths` (que `noSkills` não suprime), então o pi as lista em `<available_skills>` com descrição e caminho, e o prefixo virou um ponteiro curto e determinístico.
 - **`event-mapper` escutava `auto_compaction_start`, evento que o pi 0.73.x não emite** (o nome real é `compaction_start`). O `case` era código morto: um card com o contexto em thrashing não produzia sinal algum — nem o aviso que o próprio comentário prometia.
 - **O digest de conhecimento podia perder uma lacuna inteira sem deixar rastro.** `readKnowledgeDigest` só caía para os shards quando o digest estava AUSENTE, nunca quando estava ERRADO, e o planner cego não distingue seção faltante de "nada a saber aqui".
 - **`WorkStep.writes` nunca chegava ao agente.** O campo era declarável, validado estaticamente entre passos concorrentes e conferido depois do fato — mas o agente jamais era informado dele, que é o único uso capaz de PREVENIR a violação em vez de registrá-la.
-- **Uma sessão do modo dev podia sumir EM SILÊNCIO se o huu morresse no meio de uma escrita.** `src/lib/dev-mode/dev-state.ts` gravava `state.json` e `goal.md` com `writeFileSync` cru; um arquivo truncado não dá erro na leitura — `readDevState` devolve `null`, e `null` significa "não oferecer resume". A sessão desaparecia sem uma mensagem e a época 1 replanejava do zero. As duas escritas passam a ser atômicas (arquivo temporário irmão + `rename`), o padrão que `graph-store.ts`, `surf-research.ts` e `jcode/hermetic.ts` já usavam. O `rename` instala um inode NOVO criado com `0666 & ~umask`, então um `state.json` que o usuário tivesse deixado em `0600` voltava `0644`: o mode é lido antes e reaplicado depois. O escopo é morte de PROCESSO, não queda de energia — sem `fsync`, e o docstring diz isso em vez de prometer mais.
 - **`npm start` nunca conseguiu construir a imagem num Docker sem o plugin `buildx` — e como o huu é docker-only, isso não degradava uma feature, impedia o produto inteiro de subir.** O build morria no `Step 4/40` com `the --mount option requires BuildKit`: `Dockerfile:25` e `:55` usavam `RUN --mount=type=cache,target=/root/.npm`, sintaxe que só o frontend BuildKit entende, presente desde o commit `26d093b` (v1.0.0). `DOCKER_BUILDKIT=1` não resolvia (sem o plugin ele falha com `BuildKit is enabled but the buildx component is missing or broken`), e o `buildx` é um pacote separado que o README nunca listou como pré-requisito — ele prometia apenas Node.js ≥ 20, `git` e Docker. Os dois mounts foram removidos e os 40 steps passam a construir no builder clássico. O custo é quase nulo, medido antes de cortar: o mount da linha 55 embrulhava `npm prune --omit=dev`, que não baixa nada, e o da linha 25 só paga quando o `package-lock.json` muda — com o lockfile intacto o cache de CAMADA já pula o step inteiro.
 - **`scripts/ensure-image.sh` mostrava o erro cru do Docker e deixava o usuário sem próximo passo.** Agora ele captura a saída do build e traduz as falhas conhecidas na linha de comando que conserta cada uma: sintaxe BuildKit-only no Dockerfile (aponta para `scripts/check-dockerfile.ts`, que nomeia a linha), `DOCKER_BUILDKIT=1` forçado sem o plugin, daemon fora do ar, `permission denied` no `docker.sock`, disco cheio e falha de DNS dentro do build. Em qualquer caso ele imprime o comando exato para reproduzir e o caminho do log completo, e aborta — rodar uma `huu:local` velha em silêncio é exatamente o que esse script existe para impedir.
 - **A config headless publicada no README estava QUEBRADA.** Ela trazia `"backend": "pi"`, que reprova no `AgentBackendKindSchema` (`z.enum(['jcode', 'stub'])`) — quem copiasse o exemplo recebia erro de validação. O escape hatch documentado também era `HUU_PI_HERMETIC`, variável que nada mais lê; a real é `HUU_JCODE_HERMETIC`.
@@ -151,7 +97,6 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 - **Primeiro pino `arquivo:linha@sha1` da biblioteca de skills**, ancorado na declaração de `AgentBackendKind` em `src/orchestrator/backends/registry.ts`, para que a próxima remoção de backend quebre o gate em vez de envenenar agentes. Ele disparou na primeira oportunidade e acertou: a declaração andou uma linha quando o trabalho do provedor acrescentou uma linha ao doc-comment, com sha1 IDÊNTICO — assinatura de drift puro de número de linha, e não de fato. Reancorado com `scripts/pin.ts`.
 - **`GIT_DIR` herdado do ambiente sobrescrevia o `cwd` de todo git que o huu dispara.** `nonInteractiveGitEnv()` montava o ambiente do filho como `{ ...process.env, …as quatro variáveis anti-prompt }`, e as variáveis que dizem ao git QUAL repositório usar (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_NAMESPACE`, `GIT_PREFIX`) vencem o `cwd` explícito. Um huu invocado de um hook do git, de um `git rebase --exec` ou de um passo de CI que as define apontaria cada commit de agente, cada merge e cada exclusão de branch para o repositório do CHAMADOR. Agora são removidas: o `cwd` decide o repositório, e o valor correto para elas é ausente.
 - **O hook opt-in de pre-push falhava 248 testes quando rodado de uma git worktree.** `git push` de uma worktree vinculada exporta `GIT_DIR=<principal>/.git/worktrees/<nome>` para os hooks (de um clone normal, não exporta), então os helpers de teste que disparam `execFileSync('git', args, { cwd: tmpdir })` operavam neste repositório em vez do temporário — falhando como erros de asserção comuns, sem nada que nomeasse o ambiente. O hook agora limpa essas variáveis antes do gate.
-- **Os sete subsistemas LangChain do huu discavam a string literal `undefined/` como `baseURL`.** Em `src/lib/llm-client-factory.ts`, `ctx.deepseekEndpoint?.trim().replace(/\/+$/, '') + '/' || DEEPSEEK_BASE_URL` avalia como `(undefined + '/') || DEFAULT`, porque `+` liga mais forte que `||` — e `"undefined/"` é truthy, então o default era inalcançável. Como nenhum call site define `deepseekEndpoint`, era esse o valor que TODOS recebiam: o planner do modo dev, o `assistant-architect`, o `assistant-client`, o `project-recon`, o `recon-selector`, o `llm-suggest-files` e o `assistant-check-feasibility`. O override passa a ser resolvido ANTES da normalização, e o default e o override compartilham a mesma forma canônica (sem barra no fim). Um override que normaliza para vazio agora é RECUSADO em vez de degradar em silêncio — um `baseURL` vazio faz o SDK da OpenAI cair em `api.openai.com` e mandar a chave do provedor para o host errado.
 - **Os números medidos do `METODO.md §1` e `§3` estavam até 97% fora e nada reprovava.** `scripts/check-metodo.ts` existia e detectava a deriva corretamente, mas não estava em nenhum gate — ninguém o executava. Todos os valores foram remedidos: total versionado 135.866 → **167.212** linhas, testes 116 → **142** arquivos, skills 20 → **22**, `AGENTS.md` 520 → **145** linhas. A linha "Verificação automática" ainda dizia **zero CI**.
 - **A tabela de singletons do §3 descrevia arquivos que já não existem assim.** `src/web/client/app.js` era o pior ofensor com 3.723 linhas e hoje tem **113** (o cliente virou ~15 módulos ESM); `src/lib/types.ts` era 1.235 e hoje tem **84** (virou o diretório `src/lib/types/`). A tabela foi recalculada por churn×linhas e a prosa passou a registrar que o diagnóstico **foi executado** — hoje o pior singleton é `src/orchestrator/index.ts`.
 - **Nenhum modelo do catálogo rodava pelo caminho DeepSeek nativo.** O catálogo do huu tem a forma da OpenRouter (`vendor/modelo`) e o backend jcode passa `--model` VERBATIM, mas `api.deepseek.com` só conhece os próprios modelos pelo nome NU: o `config.toml` declarava `deepseek-v4-pro` enquanto o huu mandava `deepseek/deepseek-v4-flash`, e o endpoint respondia "model not found". Cada provedor passa a declarar o seu `modelNamespace`, e `modelIdForProvider` remove APENAS o prefixo do PRÓPRIO provedor — um id de vendor alheio sai intacto, de propósito, para o endpoint dizer "unknown model" em vez de o huu mastigá-lo num id que só parece plausível. É uma regra, não uma tabela de tradução.
@@ -193,7 +138,6 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 - **`Orchestrator.start()` agora valida o próprio grafo** — `validateTopology` chamada antes do switch de modo.
 - **Propagação de falha** — step com zero trabalho produzido não mente `done`; `ready.length === 0` com pending não-vazio é erro.
 - **Wave scheduler** — CheckStep não preempta work steps que vêm antes no array.
-- **Dev mode** — write-set partition enforçada, `verifyCommands` ligado, `alreadyUpToDate` não conta como landed, `goalComplete` recusado na época 1.
 - **Manifesto com flush incremental** — manifesto escrito em disco a cada merge de etapa, não só no `finally`.
 - **`AGENTS.md`** — 540 → 135 linhas (roteador, não duplicata de skills).
 - **`src/web/client/app.js`** — 3723 → 97 linhas, extraído em 7 módulos por tela.
@@ -208,88 +152,6 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 - **`validate-skills.sh`** ligado ao `npm test` com checks de vocabulário, TTL de frescor e nomes de backend.
 - **Sonda negativa dos juízes** — 6 testes provam que condições de juiz conseguem dizer `rework`.
 - **Importações cruzadas do cliente web** — corrigidas após split do `app.js`.
-- **`pre-push` hook** — agora chama `scripts/gate.sh`.
-
-## Trabalho não lançado entre a 5.2.0 e a 5.3.0 — modo de desenvolvimento
-
-> *Este bloco era um SEGUNDO `## [Unreleased]`, abaixo de `[5.3.0]` — um
-> changelog malformado, com dois "não lançados" ao mesmo tempo. Ele nunca
-> recebeu número de versão nem tag: é o trabalho que introduziu o modo de
-> desenvolvimento e ficou parado entre a 5.2.0 (última no npm) e a `[5.3.0]`
-> (escrita, nunca publicada). Nada foi apagado nem reordenado — só o título
-> mudou, para dizer o que este bloco de fato é. Todo o conteúdo daqui sai para
-> o público na 6.0.0.*
-
-### Added
-
-- **Modo de desenvolvimento (`huu dev "<objetivo>"` e a rota web `/dev`).** O
-  primeiro fluxo do huu cujo **grafo de passos é escrito em tempo de
-  execução**: você escreve o objetivo, um planejador o decompõe em **frentes**
-  paralelas, e cada frente vira `recon → enxame de worktrees (scope memory) →
-  juiz`. O plano é compilado num pipeline `huu-pipeline-v2` comum com arestas
-  `dependsOn`, então o escalonador de ondas, o fan-out de memória, o
-  roteamento de juízes e o merge determinístico por estágio rodam **sem
-  nenhuma mudança**. Frentes independentes ficam prontas na mesma onda e
-  dividem um único pool de workers.
-  - **Fase 0 — portão de knowledge.** Antes de qualquer desenvolvimento o huu
-    sonda o repositório (`src/lib/knowledge-detect.ts`: `catalog.md`, skill
-    roteadora por frontmatter `type: router` ou pelos nomes convencionais,
-    com fallback para `.claude/skills/`). Ausente ⇒ roda o pipeline embutido
-    `huu Knowledge System` em modo **MAX** (`greedy`) — o máximo de swarm que
-    a máquina admite — e aterrissa o resultado antes da primeira época.
-  - **Autonomia é escolha sua:** `--autonomous` (padrão) ou `--approve-each`,
-    que mostra o plano de cada época e espera confirmação (na web, um portão
-    de aprovação que sobrevive a um refresh).
-  - **Quadro-negro versionado** em `.huu/dev/`: `goal.md` (verbatim, nenhum
-    agente reescreve), `state.json` (`huu-devstate-v1`), `journal.md` e um
-    `epoch-<N>/` por época com atlas, findings, relatório e **uma spec
-    markdown por tarefa** — specs são arquivos reais porque
-    `resolveMemoryFiles` derruba caminhos inexistentes, e de quebra o plano
-    fica auditável no git.
-  - **Aterrissagem entre épocas.** Um run deixa o trabalho em
-    `huu/<runId>/integration` e remove o worktree de integração — então a
-    época N+1 não veria nada. O huu passou a fazer `merge --no-ff` desse
-    branch no seu branch de trabalho entre épocas, recusando na largada se
-    houver trabalho não commitado que não seja dele, e commitando o que ele
-    mesmo escreve (incluindo o `.gitignore` que `Orchestrator.start()`
-    ajusta) antes de cada merge.
-  - **Switch de modo na web.** Um controle no topo com as duas formas de
-    começar trabalho lado a lado: **Pipelines** (você já tem o método) e
-    **Development** (você tem um objetivo). Cada metade é uma rota de verdade
-    (`/` e `/dev`) — favoritável, copiável, abre em nova aba — mas um clique
-    simples troca a view NO LUGAR com `pushState` em vez de recarregar, o que
-    dropparia o stream SSE, o quadro de runs e a fila meio montada. O switch
-    some no quadro de um run (seria uma forma silenciosa de sair de uma
-    execução ao vivo), e a metade Development ganha um ponto pulsante enquanto
-    uma sessão roda — âmbar quando um plano está travado esperando aprovação.
-    Os links carregam o `?token=` quando `HUU_WEB_TOKEN` está configurado (um
-    `href` cru levaria a uma tela cujas chamadas de API dariam 401), e o banner
-    do `huu` passou a imprimir a URL `/dev` no boot.
-  - Junto veio uma correção de layout: `.stage` virou coluna flex com
-    `min-height: 0` nas views — sem isso, uma barra acima de views com
-    `height: 100%` empurrava o rodapé para fora do `overflow: hidden` do
-    `.stage`, cortando conteúdo inalcançável.
-  - **Formulário redesenhado.** O objetivo virou o campo central, com **ditado
-    por microfone**: o navegador grava, re-codifica em WAV mono 16 kHz (a
-    OpenRouter aceita wav/mp3/ogg/… e **rejeita** o webm que o `MediaRecorder`
-    produz por default) e `POST /api/dev/transcribe` transcreve com
-    `google/gemini-3.1-flash-lite` — a variante do 3.1-flash que aceita áudio;
-    `google/gemini-3.1-flash` não existe com modalidade de áudio. Override por
-    `HUU_TRANSCRIBE_MODEL`; a transcrição é ANEXADA ao que já estiver escrito.
-    A pasta do projeto deixou de ser um input de texto e virou **o mesmo
-    navegador de arquivos do fluxo de pipelines**, de seleção única (uma sessão
-    aterrissa num repo só), com badge de git repo e pré-seleção. As frentes
-    paralelas viraram um segmented **Auto | Manual** espelhando o controle de
-    concorrência dos pipelines. Layout centralizado.
-  - **Sem teto de épocas na web.** Uma sessão roda até o planejador reportar o
-    objetivo concluído ou você abortar — `DevModeConfig.maxEpochs` indefinido
-    agora significa ILIMITADO, com um backstop interno de segurança
-    (`DEV_UNBOUNDED_EPOCH_BACKSTOP`) que não é um limite de produto, é o que
-    separa uma sessão desacompanhada de um loop infinito. O CLI mantém o
-    `--epochs` padrão 3: um run headless pode estar desacompanhado e não tem
-    botão de Abort.
-  - Docs: [`docs/dev-mode.pt-BR.md`](docs/dev-mode.pt-BR.md) ·
-    [EN](docs/dev-mode.md).
 
 - **The TUI runs N PROJECTS, not N pipelines in one repo.** `P` on the Welcome
   screen opens the folder browser in **multi-mark** mode (`SPACE` marks,
@@ -344,19 +206,6 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
     comprovada. A divisão de modelos nunca é vendida como economia: um fan-out
     custa 3–10× os tokens de um agente único e a diferença de preço é ~2×; a
     justificativa é isolamento de contexto e paralelismo.
-  - **`WorkStep.review` — loop gerador→crítico por tarefa**, e é **schema
-    público**, não um detalhe do dev mode: qualquer pipeline pode declarar. Cada
-    tarefa é auditada por um revisor separado **na worktree do próprio worker**,
-    antes de o branch entrar no merge do estágio; achados bloqueantes voltam ao
-    MESMO agente, na mesma sessão. A convergência é **mecânica e por
-    severidade** (`blockOn`, default `blocker`+`major`) — o `verdict` que o
-    crítico escreve é logado e **não decide**. E **toda falha é forward-default:
-    o trabalho mergeia** (crítico que estoura, não responde ou não produz JSON
-    parseável ⇒ `unavailable` ⇒ zero bloqueio; cap de rodadas com bloqueio
-    aberto ⇒ *waive* com os achados registrados). Errar o card faria
-    `runStageIntegration` excluí-lo e transformar "90% certo com um achado
-    major" em nada. Ver
-    [`docs/pipeline-json-guide.md`](docs/pipeline-json-guide.md#per-task-review-review).
   - **Roteamento de modelo por papel** (`planner` · `recon` · `worker` ·
     `critic` · `reporter` · `judge` · `integration`) com presets `hetero`
     (default do preset, crítico **cross-family**), `thrifty`, `monoculture` e
@@ -368,13 +217,6 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
     roda pelo cliente de saída estruturada (LangChain → OpenRouter), não pelo
     registry do pi, que é justamente por que `z-ai/glm-5.2` funciona ali e em
     lugar nenhum mais.
-  - **Resume e branches órfãos.** `readDevState` volta a ser usado: uma sessão
-    com o MESMO objetivo e não concluída pode ser retomada (mesmo `sessionId`,
-    numeração de época continuada, histórico e evidência já alimentando o
-    replano); `--resume`/`--no-resume` no CLI, um portão na web. Branches
-    `huu/*/integration` que o HEAD nunca absorveu são detectados e oferecidos
-    para aterrissar (`--land-orphans`) — trabalho realmente perdido que o
-    `git status` não mostra. Sem callback: avisa e segue; nunca bloqueia.
   - **Replanejamento com evidência estruturada** (`DevEpochEvidence`:
     `diffStat` capado, veredictos, achados *waived*, contagem de tarefas,
     aterrissagem) e `costUsd` por época somando **os dois runs**. Nas épocas ≥ 2
@@ -389,21 +231,9 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
     rotação **por tentativa** com classificação de erro de provider, burn de
     auth *duplo-gated* por sonda, e cinco endpoints `⚙` na web que devolvem só
     valor mascarado + estado.
-  - Docs: [`docs/dev-mode.pt-BR.md`](docs/dev-mode.pt-BR.md) ·
-    [EN](docs/dev-mode.md) — incluindo a seção que diz, sem enfeite, o que
-    **piora**: o merge passa a ser guardado por um crítico por tarefa cujo
-    critério é texto que outro LLM escreveu.
 
 ### Fixed
 
-- **Conflito programado por design no `findings.json` do dev mode.** Todo
-  agente do enxame era obrigado a anexar ao MESMO arquivo. Uma wave de fan-out
-  tem N agentes fazendo isso, todos commitam, e o merge do estágio é
-  sequencial — então toda branch depois da primeira conflitava e a wave inteira
-  caía no resolvedor LLM. Agora a memória compartilhada é um arquivo POR
-  ESCRITOR (`.huu/dev/epoch-N/findings/<escritor>.json`): leitura é comum
-  (varre o diretório), escrita é exclusiva. Nomes distintos mergeiam sem
-  conflito; a consolidação e o portão passaram a ler todos os shards.
 - **O resolvedor de conflito não tinha timeout.** Era a única chamada de agente
   do run sem teto de wall-clock: um resolvedor travado parava o estágio — e
   portanto o run inteiro — para sempre, sem card para retentar e sem erro para
@@ -482,24 +312,6 @@ changes bump the MAJOR version (in the pre-1.0 phase they rode MINOR bumps).
 - Kanban focus navigation moved out of `RunDashboard` into the shared pure
   `src/lib/card-focus.ts`, so both dashboards group columns through
   `agentCardState` and cannot drift from the board.
-- **QUEBRA — o quadro-negro do dev mode passou a ser namespaced por sessão.**
-  O que era `.huu/dev/epoch-N/…` agora é `.huu/dev/<sessionId>/epoch-N/…`; só
-  `goal.md`, `state.json` e `journal.md` continuam na raiz `.huu/dev/`. Árvores
-  `.huu/dev/epoch-N/` de sessões antigas **ficam inertes** — nada as lê, nada as
-  apaga, e o `journal.md` preserva o histórico. Não é arrumação: o fan-out
-  resolve `filesFrom` a partir da worktree de INTEGRAÇÃO, que ramifica do seu
-  checkout, e depois de uma sessão anterior ter aterrissado esse checkout
-  contém um `epoch-1/<frontId>/tasks.json` **commitado**. `resolveMemoryFiles`
-  não faz checagem de validade nenhuma, só `existsSync`, e ids de frente são
-  semânticos (`api`, `cli`, `tests`) — então uma sessão nova cujo recon
-  falhasse dispararia o **enxame da sessão anterior**, em silêncio. Um segmento
-  de path torna a colisão impossível em vez de improvável.
-- **QUEBRA — `DEV_STATE_FORMAT` foi para `huu-devstate-v2`.** `readDevState` já
-  devolvia `null` para um `_format` diferente, então um `state.json` v1
-  **degrada para "sem resume"** e a sessão começa do zero: não há código de
-  migração e não haverá. O arquivo não é apagado nem reescrito enquanto a nova
-  sessão não persistir por cima; o único efeito é que a oferta de retomada não
-  aparece para estado escrito por uma versão anterior.
 
 ## [5.2.0] - 2026-07-04
 

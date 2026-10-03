@@ -863,165 +863,6 @@ Controles:
 
 ---
 
-## Modo de desenvolvimento (`huu dev`) — beta
-
-> 🚧 **Beta, e o motivo é o manifesto.** É o **único** fluxo do huu em que um
-> LLM escreve o grafo de passos **em tempo de execução** — contra o
-> diferencial #2 do [MANIFESTO](MANIFESTO.md) ("zero planner LLM em runtime")
-> e contra o "não é uma ferramenta para desenvolver features novas". A
-> contradição é assumida, não escondida: o quadro no fim desta seção diz onde
-> ela dói e o que sobrevive a ela. Com o portão desligado — o padrão —
-> **ninguém assina o plano**; `--approve-each` devolve essa assinatura, e o
-> **Método desenhado** (`huu-devgraph-v1`, logo abaixo) é a mesma ideia sem
-> planner LLM nenhum.
-
-O único fluxo do huu cujo **grafo de passos é escrito em tempo de execução**.
-Você escreve o objetivo; um planejador o decompõe em **frentes** paralelas;
-cada frente vira `recon → enxame de agentes em worktrees (cada tarefa revisada
-por um crítico antes do merge) → juiz`.
-
-```bash
-# Autônomo — O PADRÃO: planeja e roda todas as épocas sem perguntar nada
-huu dev "migrar o parser para streaming sem quebrar a API pública" \
-    --model=anthropic/claude-sonnet-4
-
-# Optando POR um portão humano a cada época
-huu dev "extrair o cliente HTTP para um pacote próprio" \
-    --model=anthropic/claude-sonnet-4 --approve-each --epochs=2
-```
-
-Na web, um **switch** no topo com as duas formas de começar trabalho lado a
-lado — `Pipelines` (você já tem o método) e `Development` (você tem um
-objetivo). Cada metade é uma rota de verdade (`/` e `/dev`, favoritáveis), mas
-o clique troca a view sem recarregar, então o stream SSE e o quadro de runs
-sobrevivem.
-
-**Duas superfícies para acompanhar — uma no terminal, outra na web.** No
-terminal, `huu dev "<objetivo>" --cli` desenha um **kanban ao vivo** (o mesmo
-`RunKanban` do dashboard de pipelines) em vez do log corrido — e pinta em
-**stderr**, então o objeto JSON que o `huu dev` escreve em **stdout segue byte
-a byte idêntico** e nenhum script que consome essa saída quebra. É opt-in
-explícito (`--cli`, `--tui` ou `HUU_CLI=1`); um `huu dev` puro mantém o log de
-sempre, e sem stderr TTY (pipe, arquivo de log, CI) o huu avisa uma vez e
-mantém o log corrido em vez de desenhar um quadro que ninguém pode ler. Os três
-portões `y/N` — `--approve-each`, retomar uma sessão anterior e aterrissar
-branches órfãos — são respondidos **dentro do frame**, porque o Ink segura o
-stdin em raw mode, com a semântica de sempre: `y`/`s` = sim, **qualquer outra
-tecla, inclusive ENTER, = não**. `Ctrl+C` desmonta e sai `130`.
-
-Na web, com `--debate` ligado, a `/dev` ganha um botão **Debate** que abre os
-dois lados como conversa: **ao vivo** pelo firehose de saída dos agentes (o
-frame SSE `agent-stream`, que **não é throttled** — é literalmente o advogado e
-o promotor enquanto escrevem) e **assentado** depois, quando `GET
-/api/dev/debate` lê os `A.md`/`B.md` já mergeados e os parseia **no servidor**.
-O ao vivo não vem de arquivo, e isso é contraintuitivo o suficiente pra dizer
-em voz alta: cada brief é escrito **dentro do worktree isolado do seu agente**
-e só chega ao caminho canônico depois do merge da onda, então uma UI que
-observasse o arquivo o veria aparecer **pronto**, nunca enchendo — não existe
-JSON de debate pra acompanhar. Sem `--debate` (que vem **desligado**) o botão
-nem aparece, e **no terminal não existe painel de debate**: o kanban é do
-terminal, o chat é da web.
-
-**Fase 0 — portão de knowledge.** Antes de desenvolver, o huu verifica se o
-projeto tem knowledge-skills (`.agents/skills/catalog.md`, skill roteadora, ou
-`.claude/skills/`). Se não tiver, roda o pipeline `huu Knowledge System` em
-modo **MAX** — o máximo de swarm que a máquina admite — e aterrissa o
-resultado antes da primeira época.
-
-**Fase 1..N — épocas.** Cada época é `planejar → (aprovar) → rodar →
-aterrissar → replanejar`. O plano vira um pipeline `huu-pipeline-v2` comum com
-arestas `dependsOn`, então o escalonador de ondas, o fan-out `scope: memory`,
-os juízes e o merge determinístico rodam **sem nenhuma mudança**. Frentes
-independentes ficam prontas na mesma onda e dividem um pool de workers.
-
-**Metodologias — 13 caixinhas, todas desligadas por padrão.** `--tdd`,
-`--plan-review`, `--write-set`, `--verify-claims`, `--debate` e mais oito
-mudam o que a época **exige**; sem nenhuma delas o pipeline compilado é o de
-sempre, byte por byte. A 13ª é `--debate`: antes de qualquer frente começar,
-dois agentes argumentam as decisões do plano — um sustenta (`A.md`), o outro
-contesta (`B.md`), um veredito `SUSTENTADA`/`CONTESTADA` por decisão — e um
-juiz de rubrica **anonimizada por modelo** fecha o registro. Não existe
-desfecho "o advogado ganhou": decisão sustentada é implementada, decisão
-contestada vira risco nomeado no spec da frente. Ligar *qualquer* metodologia
-também troca o crítico de cada tarefa para HOLD (para o card e espera um
-humano) em vez de waive silencioso no teto de rodadas.
-
-**Roteamento por papel — `--models=<preset>`.** Os nove papéis (`planner`,
-`recon`, `worker`, `critic`, `reporter`, `judge`, `integration`, `advocate`,
-`prosecutor`) podem cair em modelos diferentes, e cada rota carrega o
-**provedor** junto com o id — `openrouter:anthropic/claude-opus-5`. Presets:
-`uniform` (tudo no modelo do run, o comportamento de sempre), `hetero`,
-`thrifty`, `monoculture` e `roster` — este último cinco fornecedores sobre um
-endpoint só, um por papel. Flags por papel (`--critic-model=`,
-`--judge-model=`, `--advocate-model=`, …) sobrescrevem o preset, e um valor
-pode ser uma **cadeia de fallback** separada por vírgula.
-
-**Preflight de modelo — a recusa acontece na borda.** Um papel roteado para um
-id que o catálogo coloca em OUTRO endpoint é **recusa com exit 1**, antes de
-existir worktree ou branch: `hetero`, `thrifty`, `monoculture` e `roster` fixam
-ids que só a OpenRouter serve, então sob `--provider=deepseek` eles param na
-linha de comando em vez de morrer dentro do primeiro agente. Ausência de
-evidência é **aviso**, nunca recusa — um id que nenhuma entrada do catálogo
-menciona roda assim mesmo, porque o catálogo é lista de recomendação, não
-registro. Na `/dev`, os presets que o provedor ativo não roda vêm
-**desabilitados** com tooltip dizendo qual provedor os serve, decidido pela
-MESMA função que recusa o POST.
-
-> **Isto contraria o manifesto?** Contraria, em dois pontos, e o doc diz isso
-> com todas as letras: o diferencial #2 é "zero planner LLM em runtime", e o
-> manifesto afirma que o huu "não é uma ferramenta para desenvolver features
-> novas". O que se sustenta é a fronteira: o humano assina o **objetivo**
-> (verbatim em `.huu/dev/goal.md`, nenhum agente reescreve) e o **método** (a
-> forma da época é do huu, fixa e revalidada pelo `PipelineSchema` — nem o
-> plano nem a requisição de conhecimento carregam `steps`, `dependsOn` ou
-> paths), e todo caminho termina num juiz. **Autonomia é o padrão**:
-> `--approve-each` é o portão opt-in, `--autonomous` só declara o padrão em
-> voz alta. E o que piora: o merge passa a ser gated por um crítico *por
-> tarefa* cujo critério é texto que outro LLM escreveu. A divisão de modelos
-> **não é economia** — multi-agente custa 3-10× os tokens e a diferença de
-> preço entre líder e worker é ~2×; a justificativa é isolamento de contexto e
-> paralelismo.
-
-Doc completa: [`docs/dev-mode.pt-BR.md`](docs/dev-mode.pt-BR.md) ·
-[EN](docs/dev-mode.md).
-
----
-
-## Método desenhado (`huu-devgraph-v1`)
-
-**A resposta à contradição acima.** Em vez de deixar um planner LLM escrever a
-topologia, **você a desenha**: quais blocos rodam, em que ordem, onde uma decisão
-ramifica, onde os ramos voltam a se juntar. O huu compila o desenho num
-`huu-pipeline-v2` comum e o roda no escalonador de ondas que já existe. Nada no
-formato permite que um modelo acrescente um nó, uma aresta ou uma rota — o humano
-subscreve o **método**, o modelo fornece a inteligência **dentro** de cada nó.
-
-Quatro tipos de nó: **prompt** (o objetivo, um por grafo, a raiz), **ação** (um
-dos 15 blocos do catálogo — `recon`, `tdd`, `tests`, `refactor`, `docs`,
-`security-review`, `security-findings`, `custom`…), **pesquisa** (uma pergunta na
-internet que pode ramificar o caminho) e **verificação** (um juiz LLM avalia a
-sua condição no worktree de integração e escolhe a saída).
-
-```bash
-huu graph new auditoria --from portao-de-qualidade   # começa de uma amostra
-huu graph show auditoria                             # a topologia, em texto
-huu graph validate auditoria                         # as regras do desenho; sai != 0 se houver erro
-huu graph compile auditoria --out p.json             # um pipeline PORTÁTIL
-huu dev "auditar o parser" --graph=auditoria         # roda — sem planner LLM
-```
-
-Três superfícies sobre um núcleo só: o **canvas** em `/graph` no navegador
-(React Flow, paleta na bolinha de cada braço, inspector completo, validação ao
-vivo), a família **`huu graph`** no terminal, e a tela **`[G]`** na TUI, que lista,
-inspeciona em ASCII, valida e lança. Uma sessão com desenho é **exatamente uma
-época**: as Fases A e B não acontecem, porque o plano já existe — quem o escreveu
-foi você.
-
-Doc completa: [`docs/dev-graph.pt-BR.md`](docs/dev-graph.pt-BR.md) ·
-[EN](docs/dev-graph.md).
-
----
-
 ## Modo headless / um-comando
 
 Pra CI, cron, demos:
@@ -1163,7 +1004,7 @@ Pra ninguém confundir intenção com pronto:
 | Estado | O quê |
 |---|---|
 | ✅ **Implementado** | **Setup de primeira execução** (interface · runtime · as chaves que faltam, validadas contra o provedor e persistidas sob `_setup`, com `huu setup` pra reabrir); Pipeline JSON v2 (work · check · memory · `dependsOn`/ondas); fan-out `per-file` e `memory`; merge determinístico `--no-ff` com fallback de conflito por agente LLM; sandbox Docker com secret-mounts; UI web (padrão) + TUI (`--cli`); modo headless `auto`; backend `jcode` (subprocesso CLI) servindo os provedores DeepSeek e OpenRouter, mais o backend `stub` sem LLM; **multi-run** (N projetos num processo sob um orçamento compartilhado — prioridade + backfill + anúncios de saída de agente no terminal); concorrência memória-aware + guarda de memória com **contabilidade de RAM host-aware** e números honestos do tamanho da máquina; **kanban verídico** (verde = mesclado, `PAUSED` → TODO); **watchdog de liveness SSE** (streams zumbis reconectam, a fila sobrevive a um refresh); isolamento de portas via shim nativo; 7 pipelines default autônomas; telemetria de tokens/custo **por agente** + total agregado da run (`totalCost`) somado em tempo real. |
-| 🟡 **Estabilizando** | **Modo de desenvolvimento (`huu dev`) — beta**: é o único fluxo em que um LLM escreve o grafo de passos em runtime, contra o diferencial #2 do manifesto (o **Método desenhado** é a alternativa determinística); provedor OpenRouter (reintroduzido — o padrão é DeepSeek); Pipeline Assistant / Architect flow (TUI). |
+| 🟡 **Estabilizando** | Provedor OpenRouter (reintroduzido — o padrão é DeepSeek); Pipeline Assistant / Architect flow (TUI). |
 | 🧭 **Roadmap** | **mutation score** como métrica de primeira classe (hoje os prompts miram asserções mutation-surviving, mas o pipeline não roda o mutador); **autoria de pipeline pela web** (hoje só TUI); mais backends (ACP, Claude Code); **custo de merge/judge** no total agregado. |
 
 ---
@@ -1194,11 +1035,9 @@ o gate em todo push e PR** (`.github/workflows/gate.yml` →
 `scripts/gate.sh`), mas rode `npm run typecheck && npm test` localmente
 antes de abrir um — a CI só avisa depois, e o hook de pre-push em
 `.githooks` ajuda a não esquecer. `bash scripts/gate.sh` reproduz a CI
-exatamente — hoje **onze passos**: typecheck · test · validate-skills ·
+exatamente — hoje **dez passos**: typecheck · test · validate-skills ·
 check-acceptance · smoke-defaults · validate-graph · check-pins · check-twins ·
-check-metodo · check-dockerfile · **smoke-dev-dashboard**, o mais novo, que
-dirige duas épocas de verdade de uma sessão dev com backend stub só pra provar
-que o kanban do `huu dev --cli` não escreveu um byte em stdout. Detalhes de
+check-metodo · check-dockerfile. Detalhes de
 desenvolvimento e arquitetura em
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 

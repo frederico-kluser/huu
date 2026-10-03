@@ -30,7 +30,7 @@ describe('buildChatClient baseURL', () => {
     // REGRESSION: `endpoint?.trim().replace(…) + '/' || DEFAULT` parsed as
     // `(undefined + '/') || DEFAULT`, because `+` binds tighter than `||`. The
     // literal string "undefined/" is truthy, so the default was unreachable and
-    // all seven helpers (dev-mode planner, assistant-architect, assistant-client,
+    // all the helpers (assistant-architect, assistant-client,
     // project-recon, recon-selector, llm-suggest-files, check-feasibility) built
     // their client against `baseURL: "undefined/"`.
     const client = buildChatClient(deepseekCtx, { modelId: 'deepseek/deepseek-v4-pro' });

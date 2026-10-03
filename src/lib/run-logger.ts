@@ -182,11 +182,11 @@ export class RunLogger {
  * SCOPE, exactly: death of the process. Neither the temp file nor its
  * directory is `fsync`ed, so a power cut or a kernel panic is NOT covered — a
  * rename can be atomic and still not have reached the platter. Nothing in
- * `src/` fsyncs; matching the neighbours (this file's own `dev-mode/dev-state.ts`
+ * `src/` fsyncs; matching the neighbours (this file's own
  * twin included) is worth more than a durability guarantee only this one call
  * site would carry.
  *
- * Same recipe as `dev-mode/dev-state.ts`'s `writeFileEnsuringDir` (and
+ * Same recipe as the other staged-write helpers (and
  * `dev-graph/graph-store.ts`, `jcode/hermetic.ts`) — duplicated here rather
  * than shared, matching how each of those sites already duplicates it for its
  * own target file rather than routing through one helper.

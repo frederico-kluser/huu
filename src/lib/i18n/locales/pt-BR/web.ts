@@ -41,13 +41,6 @@ export const webPtBR = {
   'web.top.stop_queue_title': 'Parar a fila inteira',
   'web.top.theme': 'Alternar tema',
 
-  'web.mode.aria': 'Modo de trabalho',
-  'web.mode.pipelines': 'Pipelines',
-  'web.mode.pipelines_sub': 'Você já tem o método',
-  'web.mode.development': 'Desenvolvimento',
-  'web.mode.development_sub': 'Você tem um objetivo',
-  'web.mode.graph': 'Desenho do método',
-  'web.mode.graph_sub': 'Você desenha o método',
 
   'web.launch.title': 'Rodar um pipeline',
   'web.launch.subtitle':
@@ -69,7 +62,6 @@ export const webPtBR = {
   'web.folder.home': '⌂ Início',
   'web.folder.home_title':
     'Ir para a raiz do workspace (HUU_WORKSPACE, por padrão sua pasta pessoal)',
-  'web.folder.home_title_short': 'Ir para a raiz do workspace',
   'web.folder.parent': '↑ Acima',
   'web.folder.mark_all': '☑ Marcar todas',
   'web.folder.mark_all_n': '☑ Marcar todas ({count})',
@@ -372,282 +364,33 @@ export const webPtBR = {
     'Cada execução sorteia a mistura completa de cenários — streaming, reenfileiramentos da guarda de memória (↻), retentativas, merges de estágio e o laço de retrabalho do juiz.',
   'web.sim.back': '← Voltar ao huu',
 
-  'web.dev.title': 'Modo desenvolvimento',
-  'web.dev.beta_badge': 'BETA',
-  'web.dev.prints_label': 'Screenshots',
-  'web.dev.prints_hint':
-    'Opcional — PNG/JPEG/WebP/GIF, máx. 8 × 5MB. Cada print é ANALISADO pelo modelo via side-call de visão com disclosure. Prints podem conter segredos, notificações ou dados de clientes: os ficheiros que escolher são exatamente o que sai da máquina.',
-  'web.dev.beta_title':
-    'Beta — o modo dev pode mudar ou desaparecer sem aviso; sem SLA; não usar em produção. Feedback: abra uma issue com a versão do huu.',
-  'web.dev.subtitle':
-    'Escreva o objetivo — o huu cria as skills de agente do projeto quando ele não tem nenhuma, depois planeja e roda épocas de <strong>frentes</strong> paralelas, cada uma abrindo um enxame de agentes em worktrees e fechando num juiz. Você subscreve o objetivo; o planejador só o decompõe.',
-  'web.dev.goal': 'Objetivo',
-  'web.dev.goal_placeholder':
-    'ex.: migrar o parser para streaming sem quebrar a API pública',
-  'web.dev.chars': '{count} caracteres',
-  'web.dev.mic_title': 'Ditar o objetivo (segure ou clique para gravar)',
-  'web.dev.mic_stop': 'Parar e transcrever',
-  'web.dev.mic_hint':
-    'Clique no microfone para ditar — transcrito pelo Gemini via sua chave do OpenRouter.',
-  'web.dev.mic_unsupported': 'Este navegador não consegue gravar áudio',
-  'web.dev.mic_denied': 'Permissão de microfone negada',
-  'web.dev.mic_absent': 'Nenhum microfone disponível',
-  'web.dev.mic_recording': 'Gravando — clique de novo para parar e transcrever.',
-  'web.dev.mic_nothing': 'Nada foi gravado.',
-  'web.dev.mic_transcribing': 'Transcrevendo…',
-  'web.dev.mic_no_speech': 'Nenhuma fala detectada nesse trecho.',
-  'web.dev.mic_done': 'Transcrito com {model}.',
-  'web.dev.mic_failed': 'A ditadura falhou.',
-  'web.dev.project': 'Projeto',
-  'web.dev.project_selected': 'Projeto selecionado',
-  'web.dev.project_use': 'Usar esta pasta como o projeto',
-  'web.dev.model_fallback': 'Modelo para todos os papéis (o servidor não tem tabela de papéis)',
-  'web.dev.model_placeholder': 'ex.: anthropic/claude-sonnet-4',
-  'web.dev.route_roles': 'Roteie cada papel para o seu próprio modelo',
-  'web.dev.preset': 'Preset',
-  'web.dev.roles_hint':
-    'Dividir papéis entre modelos <strong>não</strong> é otimização de custo — um fan-out custa várias vezes um agente único, enquanto a diferença de preço entre esses modelos é de cerca de 2×. O ponto é isolamento de contexto, paralelismo e, para o crítico, uma segunda opinião de outro fornecedor.',
-  'web.dev.methodology': 'Metodologia',
-  'web.dev.methodology_hint':
-    'Tudo DESLIGADO por padrão — sem nada marcado, a sessão compila exatamente o pipeline que compila hoje. Cada opção muda a ESTRUTURA compilada (passos, portões, rubricas); nenhuma dá campos novos ao modelo.',
   // Os checkboxes de metodologia. Chaveados pelo campo de `DevMethodology`
   // para o navegador renderizar o texto do CATÁLOGO, não o inglês cru que o
   // servidor serve a partir de `methodology-registry.ts` — aquele registry
   // declara QUAIS opções existem; estas chaves declaram como elas se LEEM.
-  'web.dev.method.tdd.label': 'TDD',
-  'web.dev.method.tdd.desc':
-    'Cada frente escreve os testes primeiro (e os vê falhar) antes de implementar.',
-  'web.dev.method.lintGate.label': 'Portão de lint',
-  'web.dev.method.lintGate.desc':
-    'O lint/typecheck do projeto vira um portão de merge determinístico — falhou, o merge é desfeito.',
-  'web.dev.method.standards.label': 'Validação de padrões',
-  'web.dev.method.standards.desc':
-    'O atlas da época e as convenções do projeto viram rubrica obrigatória para todo crítico.',
-  'web.dev.method.planReview.label': 'Validação das escolhas',
-  'web.dev.method.planReview.desc':
-    'Um agente audita as decisões do plano antes do fan-out, com um retorno para o recon.',
-  'web.dev.method.writeSet.label': 'Write-set declarado',
-  'web.dev.method.writeSet.desc':
-    'Tarefa que escreve arquivo fora do que seu spec declara é bloqueada — pelo crítico antes do merge e pelo juiz da frente depois dele.',
-  'web.dev.method.changelogGate.label': 'Disciplina de changelog',
-  'web.dev.method.changelogGate.desc':
-    'Assuntos de commit têm que ser Conventional Commits, e mudança visível ao usuário tem que levar entrada de changelog no mesmo diff.',
-  'web.dev.method.diffBudget.label': 'Lotes pequenos',
-  'web.dev.method.diffBudget.desc':
-    'O diff de cada tarefa tem teto de linhas e arquivos no merge, para nenhuma mudança passar do tamanho em que a revisão deixa de funcionar.',
-  'web.dev.method.fitnessFunctions.label': 'Regras de arquitetura',
-  'web.dev.method.fitnessFunctions.desc':
-    'A checagem de dependências/camadas do projeto roda como portão de merge, e suas regras declaradas viram rubrica citável para todo crítico.',
-  'web.dev.method.checklistReview.label': 'Revisão por checklist',
-  'web.dev.method.checklistReview.desc':
-    'Todo crítico responde um checklist fixo item a item — PASS/FAIL/N-A com evidência — em vez de escrever prosa livre.',
-  'web.dev.method.traceability.label': 'Matriz de rastreabilidade',
-  'web.dev.method.traceability.desc':
-    'Depois do fan-out, um agente mapeia cada critério para o teste que o resolve e de volta, e um check recusa órfão nas duas direções.',
-  'web.dev.method.characterization.label': 'Testes de caracterização',
-  'web.dev.method.characterization.desc':
-    'Cada frente registra o comportamento observável de hoje como snapshots commitados ANTES de mudar qualquer coisa; divergência depois disso tem que ser aprovada explicitamente.',
-  'web.dev.method.chainOfVerification.label': 'Verificação de afirmações',
-  'web.dev.method.chainOfVerification.desc':
-    'Na fase de conhecimento, um segundo agente re-checa cada afirmação contra o repositório e rebaixa o que não consegue reproduzir — nada inventado chega ao plano.',
   // O efeito colateral está DENTRO da descrição de propósito. `--debate` é a
   // única opção que não acrescenta rubrica nem portão próprio, então o crítico
   // passar a SEGURAR é um comportamento que o usuário ganha sem pedir se não
   // estiver dito aqui.
-  'web.dev.method.debate.label': 'Debate adversarial',
-  'web.dev.method.debate.desc':
-    'Dois agentes de famílias de modelo diferentes discutem as decisões de design da época antes de qualquer frente começar, e um juiz de rubrica anonimizada decide — com teto de duas rodadas. Como toda opção daqui, também faz a tarefa bloqueada esperar por um humano em vez de waive no teto de rodadas.',
-  /* QUEM ESCREVE A TOPOLOGIA. Ou o planner LLM decompõe o objetivo (o que o
-     modo dev sempre fez), ou o huu compila um método que o humano DESENHOU no
-     canvas. Os dois são exclusivos, e o desenho vence sempre que estiver posto. */
-  'web.dev.method_source': 'Método',
-  'web.dev.method_source_planner': 'Planner LLM',
-  'web.dev.method_source_graph': 'Método que você desenhou',
-  'web.dev.method_source_hint_planner':
-    'O planner decompõe seu objetivo em frentes paralelas, época após época. Ele escreve a topologia; você assembla o objetivo.',
-  'web.dev.method_source_hint_graph':
-    'O huu compila o desenho exatamente como você desenhou: uma época, sem planner, sem passo inventado.',
-  'web.dev.graph_pick': 'Método salvo',
-  'web.dev.graph_pick_placeholder': 'Escolha um método…',
-  'web.dev.graph_pick_empty':
-    'Este projeto ainda não tem método salvo — desenhe um no canvas e salve.',
-  'web.dev.graph_pick_failed': 'Não deu para listar os métodos salvos: {message}',
-  'web.dev.graph_invalid_tag': 'com problemas',
-  'web.dev.graph_meta': '{nodes} nó(s) · {edges} ligação(ões)',
-  'web.dev.graph_open_canvas': 'Abrir o canvas',
-  'web.dev.err_no_graph': 'Escolha o método desenhado, ou volte para o planner LLM',
-  'web.dev.err_graph_invalid':
-    'Esse método ainda tem problemas — conserte no canvas antes de rodar',
+  
   /* NÃO escondido, AVISADO. O driver carrega os dois como metadado da sessão e
      nenhum dos dois é compilado num desenho, então a interface honesta é o
      painel continuar ali com uma frase dizendo o que ele faz e o que não faz. */
-  'web.dev.graph_meta_only': 'não é compilado no desenho',
-  'web.dev.graph_meta_warning':
-    'Um método desenhado é compilado a partir do <strong>desenho</strong>. O huu registra estas escolhas na sessão e devolve elas para você, mas não as transforma em passos nem em portões — o que roda é o que você desenhou.',
-  'web.dev.how_it_runs': 'Como roda',
-  'web.dev.approval': 'Aprovação',
-  'web.dev.autonomous': 'Autônomo',
-  'web.dev.approve_each': 'Aprovar cada época',
-  'web.dev.approval_hint_auto':
-    'Roda até o objetivo ser reportado como concluído, ou até você parar. Não há limite de épocas.',
-  'web.dev.approval_hint_each':
-    'O plano de cada época espera sua aprovação antes de qualquer agente rodar.',
-  'web.dev.fronts': 'Frentes paralelas',
-  'web.dev.fronts_hint':
-    'Auto deixa o planejador escolher (até 4). Manual fixa o teto — o compilador o impõe, não só o prompt.',
-  'web.dev.start': 'Iniciar o desenvolvimento',
-  'web.dev.merge_warning':
-    'Toda época termina num merge na sua branch atual, então commite ou guarde seu trabalho antes.',
-  'web.dev.session': 'Sessão',
-  'web.dev.gate_plan': 'Este plano está esperando por você',
-  'web.dev.run_epoch': 'Rodar esta época',
-  'web.dev.stop_session': 'Parar a sessão',
-  'web.dev.gate_resume': 'Continuar a sessão anterior?',
-  'web.dev.resume_accept': 'Continuar',
-  'web.dev.resume_reject': 'Começar do zero',
-  'web.dev.gate_orphan': 'Branches do huu de uma execução anterior sem merge',
-  'web.dev.orphan_land': 'Aterrissar',
-  'web.dev.orphan_ignore': 'Ignorar e continuar',
-  'web.dev.abort': 'Abortar a sessão',
-  'web.dev.back_to_dev': '← Modo de desenvolvimento',
-  'web.dev.err_no_goal': 'Escreva o objetivo primeiro',
-  'web.dev.err_no_model': 'Escolha um modelo para cada papel',
-  'web.dev.err_no_dir': 'Escolha a pasta do projeto',
-  'web.dev.err_preset_provider':
-    'O preset “{preset}” só roda em {providers} — troque de provedor, ou escolha um preset que este atenda.',
-  'web.dev.session_started': 'Sessão iniciada ({id})',
-  'web.dev.row_goal': 'Objetivo',
-  'web.dev.row_project': 'Projeto',
-  'web.dev.row_session': 'Sessão',
-  'web.dev.row_models': 'Modelos',
-  'web.dev.row_knowledge': 'Knowledge',
-  'web.dev.row_stopped': 'Encerrou',
-  'web.dev.row_progress': 'Progresso',
-  'web.dev.resumed': 'retomada',
-  'web.dev.no_epoch_cap': 'sem teto — roda até concluir',
-  'web.dev.done_when': 'Pronto quando: {text}',
-  'web.dev.front_max': 'até {count} agente(s)',
-  'web.dev.front_after': 'depois de {list}',
-  'web.dev.front_parallel': 'paralelo',
-  'web.dev.epoch_n': 'Época {n}',
-  'web.dev.progress': '{done} época(s) concluída(s) · continua na {next}',
-  'web.dev.resume_generic':
-    'Uma sessão anterior com este mesmo objetivo pode continuar de onde parou.',
-  'web.dev.commits_ahead': '{count} commit(s) à frente',
-  'web.dev.no_branches': 'Nenhum branch listado.',
 
   /* O painel de sessão, quando a sessão é um DESENHO. `drawnMethod` chega no
      primeiro frame; `graph` só depois que o desenho compila. */
-  'web.dev.row_method': 'Método desenhado',
-  'web.dev.method_head': '{name} — seu desenho, compilado como você desenhou',
-  'web.dev.method_nodes': 'Nós, na ordem em que rodam',
-  'web.dev.method_root': 'Os artefatos caem em {path}',
-  'web.dev.method_steps': '{count} passo(s)',
-  'web.dev.method_compiling': 'Compilando o desenho…',
-  'web.dev.plan_warnings': 'Leia isto antes de aprovar',
 
   /* O portão de retomada, quando a sessão em disco era um DESENHO. */
-  'web.dev.resume_method': 'Método desenhado',
-  'web.dev.resume_method_ready':
-    'É o método selecionado aqui, então continuar reenvia ele.',
-  'web.dev.resume_method_missing':
-    'Continuar exige exatamente este método. O huu vai reenviar “{id}” para você — sem ele a retomada é recusada (uma sessão aberta como desenho nunca é entregue ao planner).',
-  'web.dev.resume_accept_with_graph': 'Continuar com “{name}”',
-  'web.dev.resume_restarting': 'Reenviando o método desenhado “{id}”…',
-  'web.dev.resume_restart_failed':
-    'Não deu para reiniciar a sessão com “{id}”: {message}',
 
-  'web.role.inherits': 'herda o modelo do worker',
-  'web.role.planner': 'Planejador',
-  'web.role.planner_hint':
-    'O orquestrador cego — sem ferramentas, sem leitura de arquivos, sem digest do repositório. Uma chamada estruturada, não um agente pi, então um id que o registro do pi nunca ouviu falar é aceitável aqui e fatal em qualquer outro lugar.',
-  'web.role.recon': 'Recon',
-  'web.role.recon_hint':
-    'Reconhecimento global e por frente — a recuperação que o planejador delega em vez de pular.',
-  'web.role.worker': 'Worker',
-  'web.role.worker_hint': 'O fan-out de memória: os agentes que realmente escrevem o código.',
-  'web.role.critic': 'Crítico',
-  'web.role.critic_hint':
-    'Revisa o diff de cada tarefa na worktree do worker ANTES do merge. De outra família que o worker de propósito — um modelo auditando a própria família é a suposição mais frágil deste desenho.',
-  'web.role.reporter': 'Relator',
-  'web.role.reporter_hint': 'Consolidar e selar — prosa mecânica sobre um diff.',
-  'web.role.judge': 'Juiz',
-  'web.role.judge_hint':
-    'Verificação da frente e o portão da época. Toda verificação tem um resultado padrão para a frente, então um juiz que falha APROVA EM SILÊNCIO — o único lugar onde manter o modelo forte.',
-  'web.role.integration': 'Integração',
-  'web.role.integration_hint': 'O resolvedor de conflitos de merge.',
   /* ---- O chat do debate adversarial (só com `--debate`) ---- */
-  'web.debate.open': 'Debate',
-  'web.debate.open_title': 'Ver os dois lados discutirem o desenho desta época',
-  'web.debate.title': 'O debate sobre o desenho desta época',
-  'web.debate.subtitle':
-    'Dois agentes discutem o desenho: um sustenta o record, o outro ataca. Você vê os dois escrevendo, e lê os briefs assim que eles entram no merge.',
-  'web.debate.refresh': 'Recarregar os briefs',
-  'web.debate.epoch_round': 'Época {epoch} · {rounds} rodada(s)',
-  'web.debate.round': 'Rodada {n}',
-  'web.debate.gate': 'Portão',
-  'web.debate.gate_pending': 'O portão ainda não julgou esta rodada.',
-  'web.debate.live': 'escrevendo agora',
-  'web.debate.waiting': 'ainda não começou a escrever',
-  'web.debate.settled': 'brief no merge',
   // TRÊS FATOS DIFERENTES, três frases diferentes. Eles colidiam: `silent` era
   // impresso tanto para um lado que CRASHOU quanto para uma rodada cuja
   // narração ao vivo simplesmente saiu da memória — e os dois liam como uma
   // escolha deliberada de não escrever. Só `silent` é uma afirmação sobre o
   // DEBATE (o servidor leu o arquivo e não havia nenhum); os outros dois são
   // afirmações sobre o agente e sobre a UI.
-  'web.debate.silent': 'Este lado não escreveu nada — o portão ainda pode seguir em frente.',
-  'web.debate.failed': 'o agente falhou',
-  'web.debate.failed_note':
-    'O agente deste lado falhou antes de terminar, então nada do brief dele entrou no merge.',
-  'web.debate.unrecoverable':
-    'A narração desta rodada não ficou disponível — o huu só a guarda enquanto ela passa ao vivo. Se este lado escreveu algo, não dá para saber por aqui.',
-  'web.debate.unparsed':
-    'O huu não conseguiu ler o esqueleto deste brief, então ele aparece exatamente como foi escrito.',
-  'web.debate.missing_sections': 'Faltando: {list}',
-  'web.debate.decisions': 'Decisões',
-  'web.debate.risks': 'Riscos assumidos',
-  'web.debate.verdicts': 'Veredito por decisão',
-  'web.debate.objections': 'Objeções',
-  'web.debate.chosen': 'Escolhido',
-  'web.debate.rejected': 'Rejeitado',
-  'web.debate.why': 'Por quê',
-  'web.debate.falsify': 'O que falsificaria',
-  'web.debate.failure': 'Falha prevista',
-  'web.debate.evidence': 'Evidência',
-  'web.debate.cheaper': 'Alternativa mais barata',
-  'web.debate.contested': 'Contestadas: {list}',
-  'web.debate.unjudged': 'Declaradas e nunca julgadas: {list}',
-  'web.debate.orphans': 'Julgadas e nunca declaradas: {list}',
-  'web.debate.empty': 'Ninguém disse nada ainda.',
-  'web.debate.load_failed': 'Não deu para ler os briefs do merge: {message}',
-  'web.debate.matched_structure':
-    'Os passos do debate foram renomeados — o huu os achou pela estrutura.',
 
-  'web.role.advocate': 'Advogado',
-  'web.role.advocate_hint':
-    'Escreve o registro de decisões da época quando o debate adversarial está ligado. Só é usado com a opção Debate adversarial — e NÃO pode ser da mesma família do promotor, senão o debate é um modelo falando sozinho.',
-  'web.role.prosecutor': 'Promotor',
-  'web.role.prosecutor_hint':
-    'Ataca esse registro, um veredito por decisão. A outra metade do par do debate — roteie para uma família diferente da do advogado.',
 
-  'web.preset.hetero': 'Hetero ★',
-  'web.preset.hetero_hint':
-    'Líder cego forte, enxame barato e um crítico de outra família.',
-  'web.preset.thrifty': 'Econômico',
-  'web.preset.thrifty_hint':
-    'Hetero com o relator rebaixado — ele só escreve prosa sobre um diff.',
-  'web.preset.monoculture': 'Monocultura',
-  'web.preset.monoculture_hint':
-    'LINHA DE BASE A/B, não uma recomendação: todo papel — inclusive o crítico — no próprio modelo do worker. É exatamente a configuração que a evidência aponta como a mais frágil; existe para o crítico de outra família poder ser medido contra ela.',
-  'web.preset.roster': 'Elenco',
-  'web.preset.roster_hint':
-    'Um endpoint, cinco fabricantes: o modelo mais forte no juiz (cuja falha é silenciosa), o promotor de outra família que os workers e o flash barato no fan-out.',
-  'web.preset.uniform': 'Uniforme',
-  'web.preset.uniform_hint':
-    'Todo papel no mesmo modelo — o que estiver no campo do worker. O comportamento anterior ao roteamento.',
-  'web.preset.needs_provider':
-    'Indisponível neste provedor: estes ids são servidos por {providers}.',
 
   /* ── O desenho do método (/graph) ──────────────────────────────────────────
      Só chrome. Toda REGRA que a tela enuncia — por que uma ligação foi
@@ -656,171 +399,19 @@ export const webPtBR = {
      essas mensagens não são chaves daqui. Uma tabela, uma voz: uma segunda
      cópia dos 45 códigos seria uma segunda autoridade no instante em que um
      dos lados fosse editado. */
-  'web.graph.untitled': 'Método sem nome',
-  'web.graph.name_label': 'Nome do método',
-  'web.graph.id_title': 'O id que nomeia este método no disco',
-  'web.graph.save': 'Salvar',
-  'web.graph.saving': 'Salvando…',
-  'web.graph.saved': '“{name}” salvo',
-  'web.graph.save_failed': 'Salvamento recusado: {message}',
-  'web.graph.validate': 'Conferir',
-  'web.graph.validate_failed': 'Não dá para conferir agora: {message}',
-  'web.graph.sample_label': 'Abrir um exemplo pronto',
-  'web.graph.sample_placeholder': 'Abrir um exemplo…',
-  'web.graph.sample_failed': 'Não foi possível abrir o exemplo: {message}',
-  'web.graph.catalog_failed': 'O catálogo de blocos não carregou: {message}',
-  'web.graph.node_count': '{nodes} nós · {edges} ligações',
-  'web.graph.status_checking': 'Conferindo…',
-  'web.graph.status_ok': 'Nada a corrigir',
-  'web.graph.status_errors': '{count} problema(s)',
-  'web.graph.status_warnings': '{count} observação(ões) — nada quebrado',
 
-  'web.graph.node.next': 'Próximo passo',
-  'web.graph.node.next_open': 'Abrir a paleta: o que vem depois deste passo',
-  'web.graph.node.arm_open': 'Abrir a paleta do braço “{arm}”',
-  'web.graph.node.in': 'Ligações que chegam',
-  'web.graph.node.issues': '{count} problema(s) neste nó',
-  'web.graph.node.warnings': '{count} observação(ões) neste nó',
 
-  'web.graph.palette.title': 'O que vem agora?',
-  'web.graph.palette.from': 'A partir de “{label}”',
-  'web.graph.palette.from_arm': 'A partir de “{label}” · braço “{arm}”',
-  'web.graph.palette.empty':
-    'O catálogo não serviu bloco nenhum, então não há o que oferecer. Reabra esta tela para buscá-lo de novo.',
-  'web.graph.palette.hint': '↑↓ para mover · Enter para adicionar · Esc para fechar',
-  'web.graph.palette.blocked': 'Nada pode ser adicionado neste ponto.',
 
-  'web.graph.inspector.title': 'Nó',
-  'web.graph.inspector.empty': 'Escolha um nó no desenho para editá-lo.',
-  'web.graph.inspector.label': 'Rótulo',
-  'web.graph.inspector.block': 'Bloco',
-  'web.graph.inspector.issues': 'Relatado aqui',
-  'web.graph.inspector.delete': 'Excluir nó',
-  'web.graph.inspector.text_goal': 'Objetivo deste método',
-  'web.graph.inspector.text_prompt': 'Prompt (substitui o modelo do próprio bloco)',
-  'web.graph.inspector.text_query': 'Pergunta que esta pesquisa responde',
-  'web.graph.inspector.text_condition': 'Condição que o juiz verifica',
-  'web.graph.inspector.join': 'Espera por',
-  'web.graph.inspector.join_all': 'Esperar todos',
-  'web.graph.inspector.join_subset': 'Esperar apenas os que eu marcar',
-  'web.graph.inspector.join_none': 'Ainda não chega nada neste nó.',
-  'web.graph.inspector.join_root': 'A entrada do prompt é a raiz do método: ela não espera ninguém.',
-  'web.graph.inspector.join_honest':
-    'Relaxar o join tira a DEPENDÊNCIA — este passo deixa de esperar os braços que você desmarcou, e deixa de falhar quando eles falham. NÃO tira a barreira de merge da onda: o huu continua mesclando todos os braços do estágio antes de o próximo começar.',
 
   /* A vida do método: a biblioteca, o id no disco, a compilação. */
-  'web.graph.library': 'Métodos',
-  'web.graph.library_empty': 'Nenhum método salvo neste projeto ainda.',
-  'web.graph.library_failed': 'Não foi possível listar os métodos: {message}',
-  'web.graph.open_failed': 'Não foi possível abrir “{id}”: {message}',
-  'web.graph.id_label': 'Id no disco',
-  'web.graph.rename': 'Trocar o id',
-  'web.graph.rename_warn':
-    'Renomear não existe: o huu vai APAGAR “{from}” e salvar “{to}”. Quem apontava para o arquivo antigo deixa de encontrá-lo.',
-  'web.graph.rename_apply': 'Apagar e salvar',
-  'web.graph.renamed': '“{from}” agora é “{to}”',
-  'web.graph.rename_orphan':
-    '“{to}” foi salvo, mas “{from}” não pôde ser apagado ({message}) — os dois existem agora.',
-  'web.graph.rename_failed': 'Não deu para trocar o id: {message}',
-  'web.graph.compile': 'Compilar',
-  'web.graph.compiling': 'Compilando…',
-  'web.graph.compile_ok': '{count} passo(s) — é isto que vai rodar',
-  'web.graph.compile_failed': 'Não compila: {message}',
-  'web.graph.compile_close': 'Fechar',
-  'web.graph.compile_depends': 'espera por',
-  'web.graph.compile_default': 'padrão',
-  'web.graph.compile_check': 'verificação',
-  'web.graph.compile_work': 'trabalho',
 
   /* Rodar o desenho. O canvas não inicia a sessão sozinho: ele entrega o método
      para o modo de desenvolvimento, que é dono do objetivo, do projeto e do
      roteamento de modelos. A outra ponta está em `web.dev.method_source_*`. */
-  'web.graph.run': 'Rodar este método',
-  'web.graph.run_title': 'Abrir o modo de desenvolvimento com este método já selecionado',
-  'web.graph.run_ready': 'Roda como UMA época — o planner nunca é chamado.',
-  'web.graph.run_blocked_checking': 'Conferindo o desenho…',
-  'web.graph.run_blocked_check_failed':
-    'A conferência não rodou ({message}) — confira de novo antes de rodar.',
-  'web.graph.run_blocked_invalid': '{count} problema(s) para resolver antes de rodar.',
-  'web.graph.run_blocked_unsaved':
-    'Salve primeiro — o huu roda o método que está no disco, não o que está na tela.',
-  'web.graph.run_handoff': '“{name}” selecionado — escreva o objetivo e comece.',
 
   /* A pesquisa: o que ela devolve e o que cada resposta aciona. */
-  'web.graph.inspector.use_context': 'Ler o que este repositório já sabe',
-  'web.graph.inspector.use_context_hint':
-    'Ligado: o agente lê os artefatos que as etapas anteriores produziram — e o próprio repositório — ANTES de formular a busca, então a pergunta nasce ancorada. Desligado: ele responde só com o modelo e a web.',
-  'web.graph.inspector.output_kind': 'O que esta pesquisa devolve',
-  'web.graph.inspector.output_boolean': 'Sim / não',
-  'web.graph.inspector.output_choice': 'Múltipla escolha',
-  'web.graph.inspector.output_info': 'Informativa',
-  'web.graph.inspector.output_boolean_hint':
-    'Uma afirmação a definir. O juiz responde por um dos dois braços, e cada braço pode acionar um trabalho diferente.',
-  'web.graph.inspector.output_choice_hint':
-    'Uma resposta entre as opções que você cadastrar. Cada opção é um braço, e cada braço pode acionar um trabalho diferente.',
-  'web.graph.inspector.output_info_hint':
-    'Não há nada a configurar: uma pesquisa informativa não tem saída para rotear. O que ela descobrir entra como CONTEXTO na etapa seguinte.',
 
   /* Os braços e o comportamento cadastrado em cada um. */
-  'web.graph.inspector.arms': 'Saídas, e o que cada uma aciona',
-  'web.graph.inspector.choices': 'Opções, e o que cada uma aciona',
-  'web.graph.inspector.outcomes': 'Vereditos, e o que cada um aciona',
-  'web.graph.inspector.arm_goes_to': 'Aciona “{label}”',
-  'web.graph.inspector.arm_goes_back_to': 'VOLTA para “{label}” — retrabalho',
-  'web.graph.inspector.arm_empty': 'Sem comportamento cadastrado',
-  'web.graph.inspector.arm_configure': 'Escolher o que ela aciona',
-  'web.graph.inspector.arm_add': 'Adicionar',
-  'web.graph.inspector.arm_add_label': 'Nome da nova opção',
-  'web.graph.inspector.arm_remove': 'Remover',
-  'web.graph.inspector.arm_min_two':
-    'Uma ramificação precisa de pelo menos duas saídas — com uma só não há o que decidir.',
-  'web.graph.inspector.arm_id_taken':
-    '“{id}” já é uma saída deste nó. Dê outro nome a esta.',
-  'web.graph.inspector.arm_id_invalid':
-    'Dê um nome com letras ou números: o id derivado dele é o que roteia a execução.',
-  'web.graph.inspector.arm_id_frozen':
-    'O id roteia a execução e toda ligação que o cita, então ele é definido uma vez. Renomeie o texto, não o id.',
-  'web.graph.inspector.default_outcome': 'Saída padrão',
-  'web.graph.inspector.default_hint':
-    'Ela dispara quando o juiz falha, estoura o tempo ou responde algo desconhecido — ninguém a escolhe. Por isso tem que ser a rota SEGURA para a frente, nunca o laço de volta.',
-  'web.graph.inspector.rework_tag': 'retrabalho',
-  'web.graph.inspector.rework_title': 'Mandar o trabalho de volta',
-  'web.graph.inspector.rework_hint':
-    'Escolha o veredito que volta e o passo para onde ele volta. Só um passo que já rodou pode receber, e a saída padrão nunca pode ser a que dá o laço.',
-  'web.graph.inspector.rework_arm': 'Do braço…',
-  'web.graph.inspector.rework_target': 'De volta para…',
-  'web.graph.inspector.rework_create': 'Desenhar o braço que volta',
-  'web.graph.inspector.rework_none': 'Nada roda antes deste nó, então não há para onde voltar.',
-  'web.graph.inspector.switch_warn':
-    '{count} ligação(ões) saem de braços que esta troca elimina. Elas vão junto.',
-  'web.graph.inspector.switch_apply': 'Trocar e remover as ligações',
-  'web.graph.inspector.switch_cancel': 'Cancelar',
 
   /* A ação: o que ela roda, sobre o quê, e em que largura. */
-  'web.graph.inspector.template': 'O que este bloco roda',
-  'web.graph.inspector.template_missing': 'O catálogo não traz modelo para este bloco.',
-  'web.graph.inspector.fanout': 'Abrir em frentes sobre o que uma etapa anterior achou',
-  'web.graph.inspector.fanout_off': 'Não abrir em frentes',
-  'web.graph.inspector.fanout_none':
-    'Nenhum passo antes deste escreve uma lista para abrir em frentes. Um bloco que produz lista — o Reconhecimento, por exemplo — precisa rodar antes.',
-  'web.graph.inspector.fanout_implies':
-    'Escolher um define o escopo como “um agente por item achado”: é isso que abrir em frentes É, então o escopo deixa de ser uma escolha à parte.',
-  'web.graph.inspector.scope': 'Escopo',
-  'web.graph.inspector.scope_default': 'O do próprio bloco ({scope})',
-  'web.graph.inspector.scope_project': 'Uma tarefa sobre o projeto inteiro',
-  'web.graph.inspector.scope_per_file': 'Um agente por arquivo que você escolher',
-  'web.graph.inspector.scope_memory': 'Um agente por item achado',
-  'web.graph.inspector.scope_flexible': 'Livre',
-  'web.graph.inspector.files': 'Arquivos (um por linha)',
-  'web.graph.inspector.max_files': 'Teto das frentes',
-  'web.graph.inspector.max_files_hint': 'Cada item é um agente, então este é um limite que você subscreve.',
-  'web.graph.inspector.max_runs': 'Teto de visitas',
-  'web.graph.inspector.max_runs_hint':
-    'Quantas vezes esta verificação pode ser alcançada numa execução. É o que limita um braço que volta.',
-  'web.graph.inspector.review': 'Rodar o crítico em cada tarefa',
-  'web.graph.inspector.review_hint':
-    'Um segundo agente revisa o que o primeiro escreveu e devolve até os achados deixarem de ser graves.',
-  'web.graph.inspector.model': 'Modelo deste nó',
-  'web.graph.inspector.model_hint': 'Vazio: o modelo da própria execução.',
-  'web.graph.inspector.notes': 'Suas anotações (nunca vão para um agente)',
 } as const;

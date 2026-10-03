@@ -31,20 +31,13 @@ A correcao estrutural foi criar **uma fabrica central**
 deixar cada call site escolher seu proprio endpoint. Esse seam continua sendo o
 mecanismo hoje: os seis call sites (`assistant-client.ts`,
 `assistant-architect.ts`, `assistant-check-feasibility.ts`,
-`llm-suggest-files.ts`, `recon-selector.ts`, `project-recon.ts`) mais o planner
-do dev mode (`dev-mode/planner.ts`) passam todos por `buildChatClient`.
-
-Onde a regra volta a morder: **roteamento por papel** (`DevModelPolicy` —
-planner/recon/worker/critic/reporter/judge/integration). Um papel roteado para
-um id de modelo que o provedor selecionado nao serve nao e apenas um erro de
-configuracao — e a mesma classe de bug, com a mesma consequencia. Ao alargar o
-roteamento, verifique o par (papel → provedor), nunca so (papel → id).
+`llm-suggest-files.ts`, `recon-selector.ts`, `project-recon.ts`) passam todos
+por `buildChatClient`.
 
 Ponto de atencao correlato, ainda no codigo: `src/lib/transcribe.ts` fala
-direto com `https://openrouter.ai/api/v1/chat/completions` (transcricao de audio
-do campo de goal do dev mode). E o unico caminho que ainda sai para outro
-provedor; se ele passar a ser cobrado no fluxo padrao, cai exatamente nesta
-regra.
+direto com `https://openrouter.ai/api/v1/chat/completions` (transcricao de audio). E o
+unico caminho que ainda sai para outro provedor; se ele passar a ser cobrado
+no fluxo padrao, cai exatamente nesta regra.
 
 ## Para onde ir agora
 

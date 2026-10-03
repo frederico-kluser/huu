@@ -411,7 +411,7 @@ export interface OrchestratorState {
    * Declared-vs-declared, so it is knowable while it still means something —
    * unlike `AgentStatus.writeSetViolations`, which is actual-vs-declared and
    * only exists once the writes already happened. Reported, never blocked:
-   * a driver folds it into its own evidence (dev mode hands it to the next
+   * a driver folds it into its own evidence (a driver hands it to the next
    * planner). Omitted when there are none.
    */
   declaredWriteCollisions?: Array<{ path: string; specs: string[] }>;

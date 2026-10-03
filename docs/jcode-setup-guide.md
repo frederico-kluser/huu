@@ -274,9 +274,8 @@ npm start -- --backend=deepseek
 > `src/web/interface-mode.ts`) -- todos por `startsWith`, portanto **so** na
 > forma com sinal de igual. Um flag desconhecido nao e validado: sobra no
 > array de argumentos, onde apenas o primeiro elemento vira subcomando
-> (`run`, `auto`, `dev`, `status`, ...). Um `--model deepseek-v4-pro` solto
-> seria, entao, ignorado em silencio. O unico `--model=<id>` do repositorio
-> pertence ao subcomando `huu dev` (`src/lib/dev-mode/dev-cli.ts`).
+> (`run`, `auto`, `status`, ...). Um `--model deepseek-v4-pro` solto
+> seria, entao, ignorado em silencio.
 >
 > O modelo vem de dentro do huu: pelo seletor de modelo da TUI/web, ou pelo
 > campo `modelId` do JSON em `huu auto <pipeline> --config <config.json>`.

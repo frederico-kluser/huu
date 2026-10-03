@@ -74,10 +74,10 @@ export interface DeclaredOwnershipCollision {
  * a directory claim (`src/api/`) that contains another spec's file claim
  * (`src/api/routes.ts`). A spec claiming its own file twice is not a collision.
  *
- * Lives here — the orchestrator's write-set module — rather than in dev mode,
+ * Lives here — the orchestrator's write-set module — so every upper layer
  * because the SAME answer must serve two callers that used to be independent:
  * the pre-fan-out check (over the specs `resolveMemoryFiles` just resolved) and
- * dev mode's post-landing `checkWritePartition`. One implementation is what
+ * can share one post-landing `checkWritePartition`. One implementation is what
  * keeps them from ever disagreeing about the same specs.
  *
  * Pure. Never throws.
