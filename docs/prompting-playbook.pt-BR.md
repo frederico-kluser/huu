@@ -5,7 +5,8 @@
 > **pequenos**.
 >
 > English: [prompting-playbook.md](prompting-playbook.md) ·
-> Knowledge skill: [`.agents/skills/authoring-agent-prompts/SKILL.md`](../.agents/skills/authoring-agent-prompts/SKILL.md) ·
+> Registro de conhecimento: `skill/authoring-agent-prompts` na memória CoALA
+> local do projeto (recall/search no início da tarefa) ·
 > Referência de schema: [pipeline-json-guide.md](pipeline-json-guide.md)
 
 O huu roda agentes LLM em git worktrees isolados através de pipelines

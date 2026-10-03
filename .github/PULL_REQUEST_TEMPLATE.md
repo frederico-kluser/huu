@@ -7,7 +7,7 @@ Antes de pedir review, confirme:
 - [ ] Números do §1 do METODO.md conferem com `npx tsx scripts/check-metodo.ts`
 - [ ] Mudanças em `types.ts` estão documentadas no corpo do PR
 - [ ] Se é pipeline default novo ou alterado: `registry.test.ts` segue verde
-- [ ] Se é skill nova ou alterada: `validate-skills.sh` passa e o `catalog.md` reflete
+- [ ] Se é conhecimento novo ou alterado: registrado na memória CoALA (`coala.py add …`, com `--key` para suplantar) e `scripts/validate-skills.sh` segue verde
 - [ ] Se é doc: o gêmeo (pt-BR ⇄ en) foi atualizado, e `diff <(rg -c '^## ' X.md) <(rg -c '^## ' X.en.md)` sai limpo
 - [ ] CHANGELOG: entrada em `[Unreleased]` ou fragmento em `.changes/`
 

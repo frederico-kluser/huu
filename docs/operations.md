@@ -816,8 +816,10 @@ requests are welcome.
 
 Ground rules:
 
-- Read the relevant skill under `.agents/skills/` before changing a
-  layer you're not familiar with.
+- Consult the project's local CoALA memory before changing a
+  layer you're not familiar with:
+  `python3 .agents/huu-coala-memory-agent-skill/scripts/coala.py recall "<task>" --budget 1500`
+  (the archived skills are `skill/<name>` records, recovered with `search`).
 - Prefer **Conventional Commits** (`feat:`, `fix:`, `refactor:`,
   `docs:`, …).
 - Never force-push to `main`.

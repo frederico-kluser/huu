@@ -110,10 +110,12 @@ Consequência direta, e é a frase que organiza a Parte §7 inteira:
 ## 0.4 Regra de precedência (o documento que vence) ✍️
 
 Antes da primeira onda paralela, é preciso nomear quem vence — senão dois agentes
-escolhem fontes diferentes e **os dois "acertam"**. O `huu` tem hoje seis
+escolhem fontes diferentes e **os dois "acertam"**. O `huu` tinha seis
 superfícies normativas (`MANIFESTO.md`, `ROADMAP.md`, `AGENTS.md`,
 `.agents/skills/catalog.md`, as 20 `SKILL.md`, `docs/**`) e **nenhuma regra
-escrita de precedência**. E já existe uma contradição real entre elas:
+escrita de precedência** (as duas superfícies de skill migraram para a memória
+CoALA em **2026-10-03** — ver §8.1; o lugar delas é hoje a base CoALA). E já
+existe uma contradição real entre elas:
 
 | Onde | O que afirma |
 |---|---|
@@ -133,8 +135,8 @@ viola a identidade do projeto.
 identidade / o que o huu é e não é ......... MANIFESTO.md         (vence sempre)
 método / como se desenvolve aqui ........... METODO.md  (este)
 recursos / RAM, PSI, cgroup, admissão ...... ROADMAP.md
-fatos correntes do código .................. AGENTS.md → skill do domínio
-"como fazer X" ............................. .agents/skills/<dominio>/SKILL.md
+fatos correntes do código .................. AGENTS.md → memória CoALA (registos do domínio)
+"como fazer X" ............................. memória CoALA (registos `skill/*` + procedimentais)
 tutorial / referência de usuário ........... docs/**
 ```
 
@@ -168,8 +170,8 @@ antes de qualquer outra e obriga a re-medição junto com as três de que deriva
 | `src/` TS+TSX **não-teste** | **76.182 linhas** |
 | Testes | **155 arquivos, 56.038 linhas** → razão teste:código **0,74 : 1** |
 | `docs/` | 37 arquivos, **14.858 linhas** (9 pares en/pt-BR) |
-| Skills | **20** `SKILL.md` + `catalog.md` + skill de memória `huu-coala-memory-agent-skill` (symlink) · **0** `LEARNINGS.md` — memória centralizada no CoALA desde **2026-09-27** |
-| `AGENTS.md` | **190 linhas, 9.335 chars ≈ 2,4k tokens** — carregados em **toda** sessão |
+| Skills | **0** `SKILL.md` — biblioteca migrada para a memória CoALA (registos `skill/<name>`) e apagada em **2026-10-03**; só resta o registo de memória `huu-coala-memory-agent-skill` (symlink) · **0** `LEARNINGS.md` — memória centralizada no CoALA desde **2026-09-27** |
+| `AGENTS.md` | **209 linhas, 10.741 chars ≈ 2,7k tokens** — carregados em **toda** sessão |
 | Pipelines default | 7 pipelines, 14 módulos, **4.321 linhas** |
 | Verificação automática | gate local (`typecheck` + `test`) **e CI**: `.github/workflows/gate.yml` roda os **11 passos** de `scripts/gate.sh` em todo push/PR; `core.hooksPath` segue opt-in |
 | Dogfooding ⚠ histórico | **17 merges de onda** do próprio huu (`merge(w4…w6-…): wave N front`), todos em **2026-07-28** (45 commits nesse dia) — anterior ao `clean start` |
@@ -1415,6 +1417,18 @@ e **nudge de roteamento** (~130 tokens repetindo a regra do router, porque
 > onde o aprendizado vive e como se escreve: `coala.py add`, com supersessão
 > por `--key` — nunca reescrita, nunca apagado. A referência a `LEARNINGS.md`
 > abaixo e no §8.2 é história, não procedimento.
+
+> **Override datado (2026-10-03).** Supero a redação desta secção — e toda a
+> referência a `.agents/skills/**`, `catalog.md`, `SKILL.md`, `project-router`
+> e `agent-skills.md` neste documento — no que descreve a SUPERFÍCIE de
+> conhecimento: a biblioteca de skills inteira (`project-router` + 19
+> `SKILL.md` + `catalog.md` + `agent-skills.md`) foi migrada para a base CoALA
+> (22 registos `skill/<name>`, conteúdo integral — zero perda) e **apagada**.
+> O conhecimento lê-se com `coala.py recall/search` e escreve-se com
+> `coala.py add`; o `scripts/validate-skills.sh` (gate) passou a guardar o
+> estado memory-only — um `SKILL.md`, `catalog.md`, `LEARNINGS.md` ou
+> `agent-skills.md` que reapareça FALHA o gate. As menções a skills abaixo
+> (§0.4, §4, §6, M2-05, apêndices) são história, não procedimento.
 
 O sistema atual tem **uma** camada (forma: `scripts/validate-skills.sh`,
 ligada ao gate). O plano acrescenta as outras duas, e é importante dizer o que

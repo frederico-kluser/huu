@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Mutation: resurrect catalog.md under .agents/skills/ — the memory-only guard
-# MUST detect it (the skill library was migrated to the CoALA base on 2026-10-03).
+# Mutation: a skill dir grows back under .agents/skills/ — the memory-only guard
+# MUST detect it (knowledge lives only in the CoALA base since 2026-10-03).
 # Message: "the skill library was migrated to the CoALA base"
 set -euo pipefail
 TMP=$(mktemp -d)
@@ -18,15 +18,16 @@ cp "$ROOT/scripts/validate-skills.sh" "$TMP/validate-skills.sh"
 chmod +x "$TMP/validate-skills.sh"
 sed -i "s|root=\".*\"|root=\"$TMP\"|" "$TMP/validate-skills.sh"
 
-# The defect: a catalog.md grows back.
-echo "# catalog — should not exist" > "$TMP/.agents/skills/catalog.md"
+# The defect: a rogue skill appears.
+mkdir -p "$TMP/.agents/skills/rogue-skill"
+echo '# rogue' > "$TMP/.agents/skills/rogue-skill/SKILL.md"
 
 OUTPUT=$(cd "$TMP" && bash "$TMP/validate-skills.sh" 2>&1) || true
 
 if echo "$OUTPUT" | grep -q "the skill library was migrated to the CoALA base"; then
-  echo "PASS validate-skills-catalog: resurrected catalog.md detected"
+  echo "PASS validate-skills-rogue-skill: rogue skill detected"
 else
-  echo "FAIL validate-skills-catalog: expected 'the skill library was migrated to the CoALA base'"
+  echo "FAIL validate-skills-rogue-skill: expected 'the skill library was migrated to the CoALA base'"
   echo "--- output ---"
   echo "$OUTPUT"
   echo "---"

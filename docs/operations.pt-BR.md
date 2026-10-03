@@ -835,8 +835,11 @@ requests são bem-vindos.
 
 Regras básicas:
 
-- Leia a skill relevante sob `.agents/skills/` antes de mudar uma
-  camada com a qual você não tem familiaridade.
+- Consulte a memória CoALA local do projeto antes de mudar uma
+  camada com a qual você não tem familiaridade:
+  `python3 .agents/huu-coala-memory-agent-skill/scripts/coala.py recall "<tarefa>" --budget 1500`
+  (as skills arquivadas são registros `skill/<name>`, recuperáveis com
+  `search`).
 - Prefira **Conventional Commits** (`feat:`, `fix:`, `refactor:`,
   `docs:`, …).
 - Nunca force-push em `main`.

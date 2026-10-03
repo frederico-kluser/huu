@@ -42,24 +42,25 @@ npm test
 npm run typecheck
 ```
 
-## Agent Skills
+## Knowledge & Memory
 
-Every task in this repo routes through the skill system under
-`.agents/skills/` (source of truth, mirrored into `.claude/skills/` via
-per-skill symlinks — regenerate with
-`.agents/skills/project-router/scripts/sync-skill-links.sh`).
+All durable project knowledge lives in the project's CoALA memory
+(`.agents/huu-coala-memory-agent-skill/` — episodic, semantic and procedural
+records + budgeted working memory over SQLite). The former skill library —
+`project-router` + 19 `SKILL.md` + `catalog.md` + `agent-skills.md` — was
+migrated into that base as `skill/<name>` records and **deleted on 2026-10-03**;
+the per-skill `LEARNINGS.md` files went the same way on 2026-09-27. There are
+no skill files to load and no router: **load knowledge FROM MEMORY, before
+implementation**:
 
-Start at **`project-router`**: it classifies the task, assembles the skill
-chain from `.agents/skills/catalog.md` (the canonical routing index), loads
-the knowledge BEFORE implementation, and guarantees each task skill runs its
-`<aprender>` step at the end. All durable memory is centralized in the
-project's CoALA memory (`huu-coala-memory-agent-skill`): orient with `recall`
-at task start, record durable learnings with `add` at task end — provenance
-and supersession, never secrets. There are no per-skill `LEARNINGS.md`
-files: skill bodies are hand-curated (one writer per surface), and facts that
-change are superseded in memory, never rewritten.
+- orient at task start: `python3 .agents/huu-coala-memory-agent-skill/scripts/coala.py recall "<task>" --budget 1500`
+- recover knowledge: `… search "<terms>" --limit 5` (archived skills are records `skill/<name>`)
+- learn at task end: `… add --type episodic|semantic|procedural --content "…" [--key <subject>]` — provenance and supersession (`--key`), never secrets, never rewrites.
 
-The catalog is canonical — consult it, not this paragraph, for the current list.
+Facts that change are superseded in memory, never rewritten. The gate keeps
+the old shape from growing back: `scripts/validate-skills.sh` (step
+`validate-skills`) FAILS on a stray `SKILL.md`, `catalog.md`, `LEARNINGS.md`
+or `agent-skills.md`.
 
 ## Document precedence (which source wins)
 
@@ -70,8 +71,8 @@ subject domain** wins. Precedence, by domain:
 identidade / o que o huu é e não é ......... MANIFESTO.md         (vence sempre)
 método / como se desenvolve aqui ........... METODO.md
 recursos / RAM, PSI, cgroup, admissão ...... ROADMAP.md
-fatos correntes do código .................. AGENTS.md → skill do domínio
-"como fazer X" ............................. .agents/skills/<dominio>/SKILL.md
+fatos correntes do código .................. AGENTS.md → memória CoALA (registos do domínio)
+"como fazer X" ............................. memória CoALA (registos `skill/*` + procedimentais)
 tutorial / referência de usuário ........... docs/**
 ```
 
@@ -93,7 +94,8 @@ defines this as enforceable by machine in a future wave.
               web/ (node:http + SSE server + vanilla-JS browser client)
               ui/components/ (Ink React views — the --cli TUI)
                 ↓ (both front-ends can host N concurrent runs via the
-                  GlobalScheduler — see the working-on-orchestrator skill)
+                  GlobalScheduler — see the `skill/working-on-orchestrator`
+                  record in the CoALA memory)
               orchestrator/ (worker pool, stage lifecycle, merge;
                 global-scheduler.ts multiplexes N runs)
                 ↓
@@ -182,15 +184,16 @@ contains a credential — only the `api_key_env` name.
 
 ## Release procedure
 
-See `.agents/skills/releasing-versions/SKILL.md` for the full step-by-step.
+The full step-by-step lives in the CoALA memory (`skill/releasing-versions`;
+recall/search it at task start).
 Quick reference: bump version + CHANGELOG → validate locally → tag + push.
 The GHCR multi-arch publish is optional; `scripts/deploy.ts` is the canonical
 interactive flow.
 
 ## References (load on demand)
 
-- Skill catalog (canonical): `.agents/skills/catalog.md` — router: `project-router`
-- Human overview of the skill system: `agent-skills.md`
+- Project knowledge: the CoALA memory — `coala.py recall/search` (the skill
+  library is archived there as `skill/<name>` records since 2026-10-03)
 
 <!-- BEGIN:coala-memory (gerido por coala-agent-skill — não editar dentro do bloco) -->
 ## Memória CoALA local do projeto

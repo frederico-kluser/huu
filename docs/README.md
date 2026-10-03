@@ -49,9 +49,11 @@ determinístico ao fim de cada estágio.
 ## Outros recursos
 
 - [CHANGELOG](../CHANGELOG.md) — histórico de versões (Keep a Changelog).
-- [`.agents/skills/catalog.md`](../.agents/skills/catalog.md) — o sistema de
-  skills que roteia toda tarefa neste repo (comece pela `project-router`;
-  17 skills: router, conhecimento, tarefa e meta). Visão humana em
-  [`agent-skills.md`](../agent-skills.md).
+- Memória CoALA local do projeto — onde vive todo o conhecimento durável
+  deste repo. Orientação no início da tarefa:
+  `python3 .agents/huu-coala-memory-agent-skill/scripts/coala.py recall "<tarefa>" --budget 1500`
+  (a biblioteca de skills foi migrada para a memória CoALA e apagada em
+  2026-10-03; as skills arquivadas são registros `skill/<name>`, recuperáveis
+  com `search`; no fim, `add --type episodic|semantic|procedural --content "…"`).
 - [`CLAUDE.md`](../CLAUDE.md) / [`AGENTS.md`](../AGENTS.md) — instruções para
   agentes de IA que trabalham neste repositório.

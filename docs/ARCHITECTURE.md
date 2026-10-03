@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the layered structure of `huu` and the design decisions behind it. For onboarding-level guidance, contributors should also consult the relevant `.agents/skills/<domain>/SKILL.md`.
+This document describes the layered structure of `huu` and the design decisions behind it. For onboarding-level guidance, contributors should also consult the project's local CoALA memory — `python3 .agents/huu-coala-memory-agent-skill/scripts/coala.py recall "<task>" --budget 1500` (the skill library was migrated there and deleted on 2026-10-03).
 
 ## Layered tree
 
@@ -90,7 +90,7 @@ scripts/
 └── smoke-image.sh, smoke-pipeline.sh
 ```
 
-Dependencies flow **downward only**: the UI never imports the orchestrator's internals, and the orchestrator never imports the UI. See [`.agents/skills/architecture-conventions/SKILL.md`](../.agents/skills/architecture-conventions/SKILL.md) for the full set of layering rules.
+Dependencies flow **downward only**: the UI never imports the orchestrator's internals, and the orchestrator never imports the UI. See the `skill/following-architecture-conventions` record in the project's CoALA memory for the full set of layering rules.
 
 ## How a run unfolds
 
@@ -123,12 +123,12 @@ Dependencies flow **downward only**: the UI never imports the orchestrator's int
 
 1. **Preflight** validates repo state (clean tree, valid base branch, push capability where relevant).
 2. The **integration worktree** is created on a disposable branch named `huu/<runId>/integration`.
-3. Per stage, the orchestrator decomposes the step into tasks — one whole-project task, one per picked file, or (`scope: "memory"`) one per path listed in a `huu-memory-v1` file an **earlier step wrote**, read from the integration worktree with per-entry hints reaching prompts via `$hint` (see [`memory-scope.md`](memory-scope.md)) — allocates them to a bounded worker pool, and lets each agent work in its own worktree under `<repo>/.huu-worktrees/<runId>/`. Each worktree also receives a per-agent TCP port window (`.env.huu`) and a `.huu-bin/with-ports` shim — see [`PORT-SHIM.md`](PORT-SHIM.md) and the [`isolating-agent-ports`](../.agents/skills/isolating-agent-ports/SKILL.md) skill.
+3. Per stage, the orchestrator decomposes the step into tasks — one whole-project task, one per picked file, or (`scope: "memory"`) one per path listed in a `huu-memory-v1` file an **earlier step wrote**, read from the integration worktree with per-entry hints reaching prompts via `$hint` (see [`memory-scope.md`](memory-scope.md)) — allocates them to a bounded worker pool, and lets each agent work in its own worktree under `<repo>/.huu-worktrees/<runId>/`. Each worktree also receives a per-agent TCP port window (`.env.huu`) and a `.huu-bin/with-ports` shim — see [`PORT-SHIM.md`](PORT-SHIM.md) and the `skill/isolating-agent-ports` record in the project's CoALA memory.
 4. As soon as all tasks for the stage finish, branches are merged serially into the integration worktree. In the rare case where a poorly-decomposed pipeline produces overlapping edits in the same stage, an integration agent backed by a real LLM resolves the conflict on a side worktree. Failed or timed-out tasks are retried up to `maxRetries` times in fresh worktrees.
 5. The next stage branches off the **HEAD of the updated integration**, so each step sees the changes from every previous step. **Conditional steps (`type: "check"`, v2)** insert decision nodes into this flow: a judge agent runs in the integration worktree (no commits, shell access only), emits a JSON verdict, and the cursor jumps to the matching outcome's `nextStepName`. Loops back to earlier steps re-execute on top of the current HEAD — the integration worktree is monotonic, it never rewinds. See [`docs/pipeline-json-guide.md`](pipeline-json-guide.md#conditional-steps-check-nodes) for the schema and `orchestrator/check-evaluator.ts` for the judge spawner.
 6. Cleanup removes the integration worktree. Per-agent branches are preserved as artifacts; logs land under `.huu/`.
 
-> See [`.agents/skills/orchestrating-git-worktrees/SKILL.md`](../.agents/skills/orchestrating-git-worktrees/SKILL.md) for the full lifecycle, branch naming, merge strategy, and conflict-resolution rules.
+> See the `skill/orchestrating-git-worktrees` record in the project's CoALA memory for the full lifecycle, branch naming, merge strategy, and conflict-resolution rules.
 
 ## Authoring layer (pipeline assistant + project recon)
 
@@ -279,11 +279,11 @@ Key invariants:
 
 ## Agent skills
 
-The `.agents/skills/` directory contains the skill system every task in this repo routes through (source of truth, mirrored into `.claude/skills/` via per-skill symlinks). It is also the canonical reference if you are extending `huu`.
+The skill library every task in this repo used to route through (source of truth in `.agents/skills/`, mirrored into `.claude/skills/` via per-skill symlinks) was migrated into the project's local CoALA memory and deleted on 2026-10-03. It is still the canonical reference if you are extending `huu` — as 22 `skill/<name>` records (the archived router, catalog and skill bodies) reachable through the memory.
 
-Start at [`project-router`](../.agents/skills/project-router/SKILL.md); the canonical routing index is [`catalog.md`](../.agents/skills/catalog.md) — 18 skills: 1 router · 9 knowledge (architecture, orchestrator, git worktrees, LLM backends, ports, Docker, tests, docs, agent-prompts) · 6 task (pipelines, default pipelines, TUI, web UI, commit gate, release) · 2 meta (evolution, consolidate).
+There is no skill file to load and no router: **load knowledge FROM MEMORY, before implementation**. Orient at task start with `python3 .agents/huu-coala-memory-agent-skill/scripts/coala.py recall "<task>" --budget 1500`; recover knowledge with `… search "<terms>" --limit 5` (the archived skills are records `skill/<name>`); learn at task end with `… add --type episodic|semantic|procedural --content "…" [--key <subject>]`.
 
-A human-facing overview of how the system works (routing, LEARNINGS, evolution, consolidation) lives at [`agent-skills.md`](../agent-skills.md).
+Facts that change are superseded in memory, never rewritten. The gate keeps the old shape from growing back: `scripts/validate-skills.sh` fails if a file from the deleted skill library reappears in the tree.
 
 ## Logs and debugging
 

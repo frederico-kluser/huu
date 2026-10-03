@@ -4,7 +4,8 @@
 > agents, distilled to survive across providers and **small** models.
 >
 > Português: [prompting-playbook.pt-BR.md](prompting-playbook.pt-BR.md) ·
-> Knowledge skill: [`.agents/skills/authoring-agent-prompts/SKILL.md`](../.agents/skills/authoring-agent-prompts/SKILL.md) ·
+> Knowledge record: `skill/authoring-agent-prompts` in the project's CoALA
+> memory (recall/search it at task start) ·
 > Schema reference: [pipeline-json-guide.md](pipeline-json-guide.md)
 
 huu runs LLM agents in isolated git worktrees through deterministic

@@ -1180,7 +1180,7 @@ Pra ninguém confundir intenção com pronto:
 | **Internals do isolamento de portas** | [`docs/PORT-SHIM.md`](docs/PORT-SHIM.md) |
 | **Referência de teclado** | [`docs/KEYBOARD.md`](docs/KEYBOARD.md) |
 | **Idioma da interface (en / pt-BR)** | [`docs/i18n.pt-BR.md`](docs/i18n.pt-BR.md) |
-| **Catálogo de skills de agente** | [`agent-skills.md`](agent-skills.md) |
+| **Memória CoALA (conhecimento do projeto)** | [`.agents/huu-coala-memory-agent-skill/SKILL.md`](.agents/huu-coala-memory-agent-skill/SKILL.md) |
 | **Changelog** | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ---

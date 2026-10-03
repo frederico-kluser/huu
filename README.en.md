@@ -1173,7 +1173,7 @@ So nobody confuses intent with done:
 | **Port isolation internals** | [`docs/PORT-SHIM.md`](docs/PORT-SHIM.md) |
 | **Keyboard reference** | [`docs/KEYBOARD.md`](docs/KEYBOARD.md) |
 | **UI language (en / pt-BR)** | [`docs/i18n.md`](docs/i18n.md) |
-| **Agent skills catalog** | [`agent-skills.md`](agent-skills.md) |
+| **CoALA memory (project knowledge)** | [`.agents/huu-coala-memory-agent-skill/SKILL.md`](.agents/huu-coala-memory-agent-skill/SKILL.md) |
 | **Changelog** | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ---

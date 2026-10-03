@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Mutation: resurrect catalog.md under .agents/skills/ — the memory-only guard
-# MUST detect it (the skill library was migrated to the CoALA base on 2026-10-03).
-# Message: "the skill library was migrated to the CoALA base"
+# Mutation: a stray LEARNINGS.md appears — the memory-only guard MUST detect it
+# (the per-skill journal was migrated to the CoALA base on 2026-09-27).
+# Message: "stray LEARNINGS.md"
 set -euo pipefail
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -18,15 +18,15 @@ cp "$ROOT/scripts/validate-skills.sh" "$TMP/validate-skills.sh"
 chmod +x "$TMP/validate-skills.sh"
 sed -i "s|root=\".*\"|root=\"$TMP\"|" "$TMP/validate-skills.sh"
 
-# The defect: a catalog.md grows back.
-echo "# catalog — should not exist" > "$TMP/.agents/skills/catalog.md"
+# The defect: the distributed journal grows back.
+echo '# Learnings' > "$TMP/.agents/skills/LEARNINGS.md"
 
 OUTPUT=$(cd "$TMP" && bash "$TMP/validate-skills.sh" 2>&1) || true
 
-if echo "$OUTPUT" | grep -q "the skill library was migrated to the CoALA base"; then
-  echo "PASS validate-skills-catalog: resurrected catalog.md detected"
+if echo "$OUTPUT" | grep -q "stray LEARNINGS.md"; then
+  echo "PASS validate-skills-learnings: stray LEARNINGS.md detected"
 else
-  echo "FAIL validate-skills-catalog: expected 'the skill library was migrated to the CoALA base'"
+  echo "FAIL validate-skills-learnings: expected 'stray LEARNINGS.md'"
   echo "--- output ---"
   echo "$OUTPUT"
   echo "---"

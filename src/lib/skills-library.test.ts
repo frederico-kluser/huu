@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(fileURLToPath(import.meta.url), '..', '..', '..');
-// The library gate lives in scripts/ since the memory centralization
-// (2026-09-27): the meta-skill-consolidate skill that used to host it was deleted.
+// The guard lives in scripts/ since the memory centralization (2026-09-27):
+// the meta-skill-consolidate skill that used to host it was deleted. Since the
+// library migration (2026-10-03) its subject is not a library any more — the
+// whole thing (project-router + 19 SKILL.md + catalog.md + agent-skills.md)
+// lives in the CoALA base (.agents/huu-coala-memory-agent-skill/memory/
+// coala.sqlite, records `skill/<name>`) and the guard enforces that this
+// retired shape STAYS retired. The M2-05 checks that validated library bodies
+// (TTL freshness, removed-backend vocabulary) died with their surface.
 const script = join(root, 'scripts', 'validate-skills.sh');
 const skillsDir = join(root, '.agents', 'skills');
-const claudeSkillsDir = join(root, '.claude', 'skills');
 
 function runValidator(): string {
   return execFileSync('bash', [script], { encoding: 'utf-8', timeout: 30_000 });
@@ -25,210 +30,93 @@ function runValidatorExpectFail(): string {
   }
 }
 
-/** Set up a temp skill dir + catalog entry + symlink. Returns cleanup fn. */
-function setupTempSkill(name: string, skillBody: string): () => void {
-  const testDir = join(skillsDir, name);
-  const catalogPath = join(skillsDir, 'catalog.md');
-  const catalogOrig = readFileSync(catalogPath, 'utf-8');
-  const linkPath = join(claudeSkillsDir, name);
-  let linkCreated = false;
-
-  // Ensure clean state
-  if (existsSync(testDir)) rmSync(testDir, { recursive: true });
-  if (existsSync(linkPath)) rmSync(linkPath);
-
-  mkdirSync(testDir, { recursive: true });
-  if (!existsSync(claudeSkillsDir)) mkdirSync(claudeSkillsDir, { recursive: true });
-
-  writeFileSync(join(testDir, 'SKILL.md'), skillBody);
-
-  symlinkSync(testDir, linkPath);
-  linkCreated = true;
-
-  writeFileSync(catalogPath, catalogOrig + `\n- [${name}](${name}/SKILL.md) \`knowledge\` — test skill.\n`);
-
+/** Create paths (files with optional content) and return a cleanup fn. */
+function withRetiredShape(files: Array<{ path: string; content?: string }>): () => void {
+  const created: string[] = [];
+  const createdDirs: string[] = [];
+  for (const f of files) {
+    const dir = join(f.path, '..');
+    // Track only the directories WE create — pruning must never reach
+    // skillsDir itself (a LEARNINGS.md directly under it has skillsDir as
+    // parent; removing that took the memory registration with it once).
+    if (!existsSync(dir)) createdDirs.push(dir);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(f.path, f.content ?? '');
+    created.push(f.path);
+  }
   return () => {
-    // Remove symlink first
-    if (linkCreated && existsSync(linkPath)) unlinkSync(linkPath);
-    if (existsSync(testDir)) rmSync(testDir, { recursive: true });
-    // Restore catalog
-    writeFileSync(catalogPath, catalogOrig);
+    for (const p of created.reverse()) rmSync(p, { force: true });
+    for (const dir of createdDirs.reverse()) {
+      if (dir !== skillsDir) rmSync(dir, { recursive: true, force: true });
+    }
   };
 }
 
 describe('skills-library', () => {
-  it('validate-skills.sh exits 0 for the real skill library', () => {
+  it('validate-skills.sh exits 0 for the memory-only state', () => {
     const out = runValidator();
     expect(out).toContain('OK');
   });
 
-  it('validate-skills.sh catches token-over-cap skills', () => {
-    const name = 'token-cap-test';
-    let body = '';
-    for (let i = 0; i < 600; i++) {
-      body += `Line ${String(i).padStart(4, '0')}: content to exceed the token budget cap limit\n`;
-    }
-
-    const skillMd = `---
-name: ${name}
-description: Temporary skill for token-cap validation testing.
-metadata:
-  type: knowledge
----
-
-# Token Cap Test
-
-${body}
-`;
-
-    const cleanup = setupTempSkill(name, skillMd);
+  // Regression: the retired shape grows back silently unless the gate names
+  // it ("Ausência não falha sozinha" — METODO §0.1). Each test resurrects one
+  // piece of the 2026-10-03 migration and demands the FAIL.
+  it('validate-skills.sh catches a skill growing back under .agents/skills', () => {
+    const cleanup = withRetiredShape([
+      { path: join(skillsDir, 'rogue-skill-test', 'SKILL.md'), content: '# rogue\n' },
+    ]);
     let out = '';
     try {
       out = runValidatorExpectFail();
     } finally {
       cleanup();
     }
-    expect(out).toMatch(/FAIL\[token-cap-test\]/);
+    expect(out).toMatch(/FAIL\[library\].*skill library was migrated to the CoALA base/);
   });
 
-  it('validate-skills.sh rejects stale skills (>90d TTL)', () => {
-    const name = 'ttl-test-tmp';
-
-    const skillMd = `---
-name: ${name}
-description: Temporary skill for TTL validation testing.
-metadata:
-  type: knowledge
----
-
-# TTL Test
-`;
-
-    const cleanup = setupTempSkill(name, skillMd);
+  it('validate-skills.sh catches a resurrected catalog.md', () => {
+    const cleanup = withRetiredShape([
+      { path: join(skillsDir, 'catalog.md'), content: '# catalog — should not exist\n' },
+    ]);
     let out = '';
-
-    // Backdate the skill to >300 days ago
-    const skillPath = join(skillsDir, name, 'SKILL.md');
-    const oldTime = new Date('2025-03-01T00:00:00Z');
-    utimesSync(skillPath, oldTime, oldTime);
-
     try {
       out = runValidatorExpectFail();
     } finally {
       cleanup();
     }
-    expect(out).toContain('TTL expired');
-    expect(out).toContain(name);
+    expect(out).toMatch(/FAIL\[library\].*catalog\.md.*skill library was migrated to the CoALA base/);
   });
 
-  // Memory centralization (2026-09-27): the distributed memory (per-skill
-  // LEARNINGS.md) was migrated to the CoALA base and deleted. The gate must
-  // fail when the retired shape reappears — otherwise the memory silently
-  // forks back into N files.
+  it('validate-skills.sh catches a resurrected agent-skills.md', () => {
+    const cleanup = withRetiredShape([
+      { path: join(root, 'agent-skills.md'), content: '# overview — should not exist\n' },
+    ]);
+    let out = '';
+    try {
+      out = runValidatorExpectFail();
+    } finally {
+      cleanup();
+    }
+    expect(out).toMatch(/FAIL\[overview\].*skill-system overview was migrated to the CoALA base/);
+  });
+
+  // Memory centralization (2026-09-27): the distributed per-skill journal was
+  // migrated to the CoALA base and deleted. A reappearance forks the memory
+  // back into N files, so it stays a FAIL.
   it('validate-skills.sh rejects a stray LEARNINGS.md (memory centralized in CoALA)', () => {
-    const name = 'stray-learnings-test';
-
-    const skillMd = `---
-name: ${name}
-description: Temporary skill for stray-LEARNINGS validation testing.
-metadata:
-  type: knowledge
----
-
-# Stray Learnings Test
-`;
-
-    const cleanup = setupTempSkill(name, skillMd);
-    let out = '';
-    try {
-      writeFileSync(
-        join(skillsDir, name, 'LEARNINGS.md'),
-        '# Learnings\n\n<!-- entries below this line -->\n- [2026-09-27][source:agent][task:test][probation] Should not live here.\n',
-      );
-      out = runValidatorExpectFail();
-    } finally {
-      cleanup();
-    }
-    expect(out).toMatch(/FAIL\[stray-learnings-test\].*stray LEARNINGS\.md/);
-  });
-
-  // Regression: the old "backend name consistency check" derived its grep
-  // alternation FROM the valid kinds in registry.ts, so its `err` branch was
-  // UNREACHABLE — `AgentBackendKind = 'pi' | 'azure' | 'stub'` sat in a real
-  // SKILL.md for weeks while the validator printed OK. These two tests pin
-  // both halves of the replacement: it must fail on a live assertion, and it
-  // must stay quiet on a historical mention.
-  it('validate-skills.sh catches a REMOVED backend asserted as live', () => {
-    const name = 'removed-backend-live-test';
-
-    const skillMd = `---
-name: ${name}
-description: Temporary skill for removed-backend liveness testing.
-metadata:
-  type: knowledge
----
-
-# Removed Backend Test
-
-\`AgentBackendKind = 'pi' | 'azure' | 'stub'\` — three kinds.
-Note: azure IS a real backend, and \`backends/pi/\` holds the factory.
-Run it with \`--backend=pi\`; the pi agent reads your AGENTS.md.
-`;
-
-    const cleanup = setupTempSkill(name, skillMd);
+    const cleanup = withRetiredShape([
+      { path: join(skillsDir, 'LEARNINGS.md'), content: '# Learnings\n' },
+    ]);
     let out = '';
     try {
       out = runValidatorExpectFail();
     } finally {
       cleanup();
     }
-    expect(out).toMatch(/FAIL\[removed-backend-live-test\].*REMOVED backend as live/);
-    // Every one of the four shapes must be caught, not just the first.
-    expect(out).toMatch(/line 10 asserts a REMOVED backend as live/);
-    expect(out).toMatch(/line 11 asserts a REMOVED backend as live/);
-    expect(out).toMatch(/line 12 asserts a REMOVED backend as live/);
+    expect(out).toMatch(/FAIL\[learnings\].*stray LEARNINGS\.md/);
   });
 
-  it('validate-skills.sh allows HISTORICAL mentions of a removed backend', () => {
-    const name = 'removed-backend-history-test';
-
-    const skillMd = `---
-name: ${name}
-description: Temporary skill for removed-backend historical-mention testing.
-metadata:
-  type: knowledge
----
-
-# Removed Backend History
-
-\`pi\` and \`azure\` were deleted in v3.0, so \`backends/pi/\` no longer exists.
-The pi backend was the default until v3.0; the azure backend is gone.
-\`docs/pi-coding-agent.md\` survives only as a REMOVED-backend marker.
-`;
-
-    const cleanup = setupTempSkill(name, skillMd);
-    let out = '';
-    try {
-      out = runValidator();
-    } finally {
-      cleanup();
-    }
-    expect(out).toContain('OK');
-    expect(out).not.toContain(name);
-  });
-
-  it('validate-skills.sh catches non-existent catalog entries', () => {
-    const catalogPath = join(skillsDir, 'catalog.md');
-    const catalogOrig = readFileSync(catalogPath, 'utf-8');
-
-    writeFileSync(catalogPath, catalogOrig + '\n- [nonexistent-skill](nonexistent-skill/SKILL.md) `knowledge` — phantom.\n');
-
-    let out = '';
-    try {
-      out = runValidatorExpectFail();
-    } finally {
-      writeFileSync(catalogPath, catalogOrig);
-    }
-    expect(out).toMatch(/FAIL\[catalog\].*nonexistent-skill/);
-  });
+  // The missing-memory-skill branch moves the whole fixture (it cannot mutate
+  // the real memory skill), so it is exercised by the adversarial selfcheck:
+  // scripts/selfcheck/mutations/validate-skills-no-memory.sh.
 });
