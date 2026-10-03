@@ -9,6 +9,7 @@ import { $, S, api, pipeIcon, sessionKey, setSessionKey, activeKeySpecName, prov
 import { renderQueue, commitBatch, setAddBtnLabel, addLabel, renderLaunchRunning } from './queue.js';
 import { renderActiveRun } from './board.js';
 import { t } from '../i18n.js';
+import { openBuilder } from './builder.js';
 
 /* ---------------- Guided-launch wizard (steps) ----------------
    Four steps toggled by goStep(): 1 pick pipeline · 2 mark projects ·
@@ -29,7 +30,12 @@ export function renderStepper() {
     const n = +chip.dataset.step;
     chip.classList.toggle('is-current', n === step);
     chip.classList.toggle('is-done', n < step);
-    chip.classList.toggle('is-disabled', !canGoStep(n));
+    const ok = canGoStep(n);
+    chip.classList.toggle('is-disabled', !ok);
+    // A greyed chip with no explanation forces recall ("why can't I?").
+    chip.setAttribute('aria-disabled', ok ? 'false' : 'true');
+    if (ok) chip.removeAttribute('title');
+    else chip.setAttribute('title', t('web.launch.step_locked'));
   }
 }
 
@@ -64,28 +70,85 @@ $('addAnotherBtn').addEventListener('click', () => {
 });
 
 /* ---------------- Launch: pipeline gallery ---------------- */
+let galleryQuery = '';
+
 export function renderGallery() {
   const g = $('pipelineGallery');
-  $('pipeCount').textContent = S.pipelines.length ? `${S.pipelines.length}` : '';
-  if (!S.pipelines.length) { g.innerHTML = `<div class="lane__empty">${esc(t('web.launch.no_pipelines'))} <code>pipelines/</code>.</div>`; return; }
+  const count = $('pipeCount');
+  const q = galleryQuery.trim().toLowerCase();
+  const all = S.pipelines || [];
+  const list = q
+    ? all.filter((p) => `${p.name} ${p.description || ''}`.toLowerCase().includes(q))
+    : all;
+  // The count says WHAT it counts (audit: a bare number forces recall).
+  if (count) {
+    count.textContent = q
+      ? t('web.launch.count_filtered', { n: list.length, total: all.length })
+      : t('web.launch.count_label', { n: all.length });
+  }
+
+  // The CONSTRUCTION entry always comes first: "build a pipeline" is a primary
+  // action of this screen, not something to hunt for in a menu.
+  const build = document.createElement('button');
+  build.type = 'button';
+  build.className = 'pipe-card pipe-card--build';
+  build.innerHTML = `
+    <div class="pipe-card__icon pipe-card__icon--ai"><i class="ai-spark" aria-hidden="true"></i></div>
+    <div>
+      <div class="pipe-card__name">${esc(t('web.builder.gallery_card_title'))}</div>
+      <div class="pipe-card__desc">${esc(t('web.builder.gallery_card_desc'))}</div>
+    </div>
+    <div class="pipe-card__badges"><span class="tag tag--ai">${esc(t('web.builder.ai_model_chip'))}</span></div>`;
+  build.addEventListener('click', () => openBuilder());
+
+  if (!all.length) {
+    g.innerHTML = '';
+    g.appendChild(build);
+    const empty = document.createElement('div');
+    empty.className = 'lane__empty';
+    empty.innerHTML = `${esc(t('web.launch.no_pipelines'))} <code>pipelines/</code>.`;
+    g.appendChild(empty);
+    return;
+  }
+
   g.innerHTML = '';
-  for (const p of S.pipelines) {
+  g.appendChild(build);
+  if (!list.length) {
+    const none = document.createElement('div');
+    none.className = 'lane__empty';
+    none.textContent = t('web.launch.no_search_results');
+    g.appendChild(none);
+    return;
+  }
+  for (const p of list) {
+    const selected = !!(S.selectedPipe && S.selectedPipe.name === p.name);
     const el = document.createElement('button');
     el.type = 'button';
-    el.className = 'pipe-card' + (S.selectedPipe && S.selectedPipe.name === p.name ? ' sel' : '');
+    el.className = 'pipe-card' + (selected ? ' sel' : '');
+    el.setAttribute('aria-pressed', selected ? 'true' : 'false');
     el.innerHTML = `
       <div class="pipe-card__icon">${pipeIcon(p.name)}</div>
       <div>
-        <div class="pipe-card__name">${esc(p.name)} ${p.isDefault ? '<span class="star" title="default">★</span>' : ''}</div>
+        <div class="pipe-card__name">${esc(p.name)}</div>
         ${p.description ? `<div class="pipe-card__desc">${esc(p.description)}</div>` : ''}
-        <div class="pipe-card__sub">${p.workSteps} work · ${p.checkSteps} check · ${p.stepCount} steps</div>
+        <div class="pipe-card__sub">${esc(t('web.launch.card_meta', { work: p.workSteps, check: p.checkSteps, steps: p.stepCount }))}</div>
       </div>
       <div class="pipe-card__badges">
-        ${p.isDefault ? '<span class="tag tag--default">default</span>' : ''}
+        ${p.isDefault ? `<span class="tag tag--default">${esc(t('web.launch.default_badge'))}</span>` : ''}
         <span class="tag tag--src">${esc(p.source)}</span>
       </div>`;
     el.addEventListener('click', () => selectPipeline(p));
     g.appendChild(el);
+  }
+}
+
+export function wireGallery() {
+  const search = /** @type {HTMLInputElement|null} */ ($('pipeSearch'));
+  if (search) {
+    search.addEventListener('input', () => {
+      galleryQuery = search.value;
+      renderGallery();
+    });
   }
 }
 
@@ -567,7 +630,10 @@ export function updateRunBtn() {
   // The form now ADDS a project to the queue; a key isn't required to add (it's
   // resolved per project at run time, and the queued item shows a "key needed"
   // marker until then). Enable as soon as a pipeline is selected.
-  /** @type {HTMLButtonElement} */ ($('addBtn')).disabled = !S.selectedPipe;
+  const addBtn = /** @type {HTMLButtonElement} */ ($('addBtn'));
+  addBtn.disabled = !S.selectedPipe;
+  if (addBtn.disabled) addBtn.setAttribute('title', t('web.launch.add_hint'));
+  else addBtn.removeAttribute('title');
 }
 
 
@@ -747,6 +813,8 @@ export function showView(which) {
   $('viewLaunch').hidden = which !== 'launch';
   $('viewRun').hidden = which !== 'run';
   $('viewSim').hidden = which !== 'sim';
+  const vb = $('viewBuilder');
+  if (vb) vb.hidden = which !== 'builder';
   // The mode switch only makes sense while CHOOSING work. On the board (or the
   // synthetic /simulation surface) it would be a way to silently navigate away
   // from a live run, so it hides.

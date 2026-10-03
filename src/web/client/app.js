@@ -7,9 +7,10 @@
 import { esc, toast } from './modules/utils.js';
 import { $, S, api, applyTheme, withTok, TOKEN, pipeIcon, sessionKey, setSessionKey, backendSpecName, providerInfoById, providerReady, providerBackend, parseRamPercent, syncTimeoutField, DEFAULT_MODEL_ID } from './modules/state.js';
 
-import { goStep, renderGallery, selectPipelineByName } from './modules/launch.js';
+import { goStep, renderGallery, selectPipelineByName, wireGallery } from './modules/launch.js';
 
 import { renderQueue, restoreQueue, refreshHistoryBadge } from './modules/queue.js';
+import { openBuilder, wireBuilder } from './modules/builder.js';
 
 import { loadSettings, saveSettings } from './modules/settings.js';
 
@@ -84,6 +85,11 @@ export async function boot() {
   renderQueue();
   syncTimeoutField();
   refreshHistoryBadge();
+  wireGallery();
+  wireBuilder();
+  // Deep link: /?builder opens the construction mode directly (bookmarkable,
+  // same idea as the pickable steps). Harmless otherwise.
+  if (location.search.includes('builder') || location.hash.includes('builder')) openBuilder();
 }
 
 boot().catch((e) => {

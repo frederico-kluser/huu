@@ -997,3 +997,106 @@ describe('web server — folder-picker workspace (HUU_WORKSPACE)', () => {
 // a 500. The status is the only handle a browser (or a log) has on "retry with
 // a different body" versus "huu broke", and 500 says the wrong one.
 
+
+describe('web server — pipeline construction (AI editor + save)', () => {
+  let repo: string;
+  let server: Server;
+  let base: string;
+
+  beforeEach(async () => {
+    repo = mkdtempSync(join(tmpdir(), 'huu-web-build-'));
+    setupRepo(repo);
+    ({ server } = createWebServer({ cwd: repo, defaultAutoScale: true, token: 'sekret' }));
+    base = await listenEphemeral(server);
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it('gates the AI editor behind the token like every other data route', async () => {
+    expect((await fetch(base + '/api/pipeline-ai')).status).toBe(401);
+    expect(
+      (await fetch(base + '/api/pipeline-ai?token=sekret', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'quero testes', apiKey: 'stub' }),
+      })).status,
+    ).toBe(200);
+  });
+
+  it('400s an empty message instead of spending a model call', async () => {
+    const res = await fetch(base + '/api/pipeline-ai?token=sekret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: '   ', apiKey: 'stub' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns an option question first (free-text option last)', async () => {
+    const res = await fetch(base + '/api/pipeline-ai?token=sekret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'quero uma pipeline de auditoria', apiKey: 'stub' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.turn.done).toBe(false);
+    expect(body.turn.question.length).toBeGreaterThan(0);
+    const opts = body.turn.options;
+    expect(opts.length).toBeGreaterThanOrEqual(2);
+    expect(opts[opts.length - 1].isFreeText).toBe(true);
+  });
+
+  it('walks to an apply turn from the transcript (stub is history-driven)', async () => {
+    const res = await fetch(base + '/api/pipeline-ai?token=sekret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'relatar apenas',
+        apiKey: 'stub',
+        history: [
+          { role: 'user', text: 'quero uma pipeline de auditoria' },
+          { role: 'assistant', text: 'pergunta 1' },
+          { role: 'user', text: 'auditoria de segurança' },
+          { role: 'assistant', text: 'pergunta 2' },
+        ],
+      }),
+    });
+    const body = await res.json();
+    expect(body.turn.done).toBe(true);
+    expect(body.turn.note.length).toBeGreaterThan(0);
+    expect(Array.isArray(body.turn.pipeline.steps)).toBe(true);
+    expect(body.turn.pipeline.steps.length).toBeGreaterThan(0);
+  });
+
+  it('saves a valid pipeline and rejects a broken one with the reason', async () => {
+    const ok = await fetch(base + '/api/pipelines/save?token=sekret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pipeline: {
+          name: 'Pipeline Nova',
+          steps: [{ name: '1. Ler', prompt: 'Read the repo.', files: ['**/*'] }],
+        },
+      }),
+    });
+    expect(ok.status).toBe(200);
+    const okBody = await ok.json();
+    expect(okBody.name).toBe('Pipeline Nova');
+    expect(
+      (okBody.pipelines as { name: string }[]).some((p) => p.name === 'Pipeline Nova'),
+    ).toBe(true);
+
+    const bad = await fetch(base + '/api/pipelines/save?token=sekret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pipeline: { name: 'Quebrada', steps: [] } }),
+    });
+    expect(bad.status).toBe(400);
+    const badBody = await bad.json();
+    expect(String(badBody.error)).toMatch(/pipeline invalida/i);
+  });
+});

@@ -116,6 +116,9 @@
         <section class="wizard-step" id="step1">
           <div class="panel glass panel--pipelines">
             <div class="panel__title"><span data-i18n="web.launch.pick_pipeline">Pick a pipeline</span><span class="count" id="pipeCount"></span></div>
+            <div class="gallery-tools">
+              <input type="search" id="pipeSearch" class="gallery-search" data-i18n-placeholder="web.launch.search_ph" placeholder="Filtrar pipelines…" data-i18n-aria-label="web.launch.search_aria" />
+            </div>
             <div class="pipeline-gallery" id="pipelineGallery">
               <div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div>
             </div>
@@ -367,6 +370,45 @@
         </div>
 
         <div class="sim-foot"><a class="muted sim-back" href="/" data-i18n="web.sim.back">← Back to huu</a></div>
+      </section>
+      <!-- BUILDER VIEW — pipeline construction mode (form + AI editor) -->
+      <section class="view view--builder" id="viewBuilder" hidden>
+        <div class="builder-head">
+          <button type="button" class="btn btn--ghost btn--sm" id="builderBack">← <span data-i18n="web.builder.back">Pipelines</span></button>
+          <h2 class="builder-title" data-i18n="web.builder.title">Construtor de pipelines</h2>
+          <span class="chip chip--ai"><i class="ai-spark" aria-hidden="true"></i><span data-i18n="web.builder.ai_model_chip">MiMo V2.6 Pro</span></span>
+        </div>
+        <div class="builder-grid">
+          <div class="panel glass">
+            <div class="panel__title"><span data-i18n="web.builder.draft_heading">Rascunho</span></div>
+            <label class="field">
+              <span data-i18n="web.builder.name_label">Nome</span>
+              <input id="builderName" data-i18n-placeholder="web.builder.name_ph" placeholder="ex.: Auditoria de segurança" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span data-i18n="web.builder.desc_label">Descrição</span>
+              <input id="builderDesc" data-i18n-placeholder="web.builder.desc_ph" placeholder="uma frase sobre o que a pipeline faz" autocomplete="off" />
+            </label>
+            <div id="builderSteps"></div>
+            <div class="builder-foot">
+              <button type="button" class="btn btn--ghost btn--sm" id="builderAddStep">＋ <span data-i18n="web.builder.add_step">Adicionar passo</span></button>
+              <button type="button" class="btn btn--ghost btn--sm" id="builderJsonToggle" data-i18n="web.builder.json_show">Ver JSON</button>
+              <button type="button" class="btn btn--primary" id="builderSave" data-i18n="web.builder.save">Guardar pipeline</button>
+            </div>
+            <p class="muted wizard-hint" id="builderSaveHint" data-i18n="web.builder.save_hint">Nome e pelo menos um passo são necessários para guardar.</p>
+            <pre class="builder-json" id="builderJson" hidden></pre>
+          </div>
+          <div class="panel glass panel--ai">
+            <div class="panel__title"><i class="ai-spark" aria-hidden="true"></i><span data-i18n="web.builder.ai_heading">Editor com IA</span></div>
+            <p class="muted wizard-hint" data-i18n="web.builder.ai_intro">Descreva o que quer em linguagem natural. O editor propõe perguntas quando algo está em aberto e devolve a pipeline completa — nada é aplicado sem você confirmar.</p>
+            <div class="builder-log" id="builderLog" aria-live="polite"></div>
+            <div class="builder-busy" id="builderAiBusy" hidden aria-hidden="true"><span class="skeleton-line"></span><span class="skeleton-line"></span></div>
+            <div class="builder-input">
+              <textarea id="builderAiInput" rows="2" data-i18n-placeholder="web.builder.ai_input_ph" placeholder="ex.: uma pipeline que audite segurança e escreva testes"></textarea>
+              <button type="button" class="btn btn--primary" id="builderAiSend" data-i18n="web.builder.ai_send">Enviar</button>
+            </div>
+          </div>
+        </div>
       </section>
 
 

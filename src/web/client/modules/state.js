@@ -174,4 +174,12 @@ export const S = {
     id: '',
   },
   lastBudget: null,
+
+  // Pipeline construction mode: the builder form + the AI editor transcript.
+  builder: {
+    draft: { name: '', description: '', steps: [{ name: '1. ', prompt: '', scope: 'project', dependsOn: '' }] },
+    transcript: [],
+    busy: false,
+    jsonOpen: false,
+  },
 };

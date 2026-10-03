@@ -55,6 +55,14 @@ import {
   saveKeyPool,
 } from '../lib/api-key-pool.js';
 import { WebRunManager, pickRunKey, type RunSnapshot, type StartRunParams } from './run-manager.js';
+import {
+  DEFAULT_EDITOR_MODEL,
+  buildPipelineEditorSystemPrompt,
+  composeEditorMessages,
+  createEditorChat,
+  type EditorHistoryEntry,
+} from '../lib/pipeline-ai-editor.js';
+import { parsePipelineFromJson, savePipelineToMemory } from '../lib/pipeline-io.js';
 import { termLog } from './terminal-log.js';
 import {
   DEFAULT_LOCALE,
@@ -283,6 +291,83 @@ export function createWebServer(opts: WebServerOptions): {
           : getPipelineByName(opts.cwd, name);
       if (!pipeline) return sendJson(res, 404, { error: 'pipeline not found' });
       return sendJson(res, 200, { pipeline });
+    }
+    // ── PIPELINE CONSTRUCTION ─────────────────────────────────────────
+    // The AI editor of the construction mode: the user's plain-language
+    // request (+ current draft + short transcript) becomes ONE structured
+    // turn — a clarifying question or the COMPLETE pipeline. Every piece of
+    // format knowledge lives in the system prompt (pipeline-ai-editor.ts).
+    // Served on the OpenRouter credential: the editor model
+    // (`xiaomi/mimo-v2.6-pro`) lives there.
+    if (method === 'POST' && path === '/api/pipeline-ai') {
+      const body = await readJsonBodyOr400(req, res);
+      if (!body) return;
+      const message = typeof body.message === 'string' ? body.message.trim() : '';
+      if (!message) {
+        return sendJson(res, 400, { error: 'message: esperado texto com o pedido.' });
+      }
+      const draftJson =
+        body.draft && typeof body.draft === 'object' && !Array.isArray(body.draft)
+          ? JSON.stringify(body.draft)
+          : null;
+      const history: EditorHistoryEntry[] = Array.isArray(body.history)
+        ? (body.history as unknown[])
+            .filter((h): h is EditorHistoryEntry => {
+              const e = h as { role?: unknown; text?: unknown };
+              return (e.role === 'user' || e.role === 'assistant') && typeof e.text === 'string' && e.text.trim().length > 0;
+            })
+            .slice(-12)
+        : [];
+      const modelId =
+        typeof body.modelId === 'string' && body.modelId.trim()
+          ? body.modelId.trim()
+          : DEFAULT_EDITOR_MODEL;
+      const picked = pickRunKey(
+        typeof body.apiKey === 'string' ? body.apiKey : undefined,
+        manager.getWebKey('openrouter'),
+        findSpec('openrouter'),
+      );
+      if (!picked.value) {
+        return sendJson(res, 400, {
+          error: 'Chave OpenRouter em falta — valide uma chave em Config (o editor corre em openrouter).',
+        });
+      }
+      try {
+        const { models } = await listModelsForBackend(opts.cwd, 'jcode', '', 'openrouter');
+        const chat = createEditorChat({
+          apiKey: picked.value,
+          modelId,
+          llmContext: { backend: 'jcode', provider: 'openrouter', apiKey: picked.value },
+        });
+        const systemPrompt = buildPipelineEditorSystemPrompt({ models, draftJson });
+        const messages = composeEditorMessages({ systemPrompt, history, message });
+        const turn = await chat.invokeStructured(messages);
+        return sendJson(res, 200, { ok: true, turn, modelId: chat.modelId });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return sendJson(res, 502, { error: `editor: ${msg}` });
+      }
+    }
+    // Land a constructed pipeline into the memory-backed store so it shows up
+    // in the gallery like any other. The REAL parser validates it — a bad
+    // pipeline is a 400 with the reason, never a silent save.
+    if (method === 'POST' && path === '/api/pipelines/save') {
+      const body = await readJsonBodyOr400(req, res);
+      if (!body) return;
+      try {
+        const pipeline = parsePipelineFromJson(
+          JSON.stringify({ _format: 'huu-pipeline-v2', pipeline: body.pipeline }),
+        );
+        savePipelineToMemory(pipeline);
+        return sendJson(res, 200, {
+          ok: true,
+          name: pipeline.name,
+          pipelines: listPipelinesInfo(opts.cwd),
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return sendJson(res, 400, { error: `pipeline invalida: ${msg}` });
+      }
     }
     if (method === 'GET' && path === '/api/providers') {
       return sendJson(res, 200, { providers: listProvidersInfo() });
