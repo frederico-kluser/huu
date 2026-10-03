@@ -32,20 +32,43 @@ const _PROVIDER_UNIONS_MATCH: SameProviders = true;
  * one. Keep in sync with the FIRST entry of `recommended-models.json` (the
  * shipped catalog) and of `DEFAULT_RECOMMENDED_MODELS` below (the in-code
  * fallback used when that file is absent or fails to parse). The web client
- * mirrors this string in `src/web/client/app.js` (vanilla JS, no TS import).
+ * mirrors this string in `src/web/client/modules/state.js` (vanilla JS, no TS
+ * import).
+ *
+ * `xiaomi/mimo-v2.6-pro` since 2026-10-03: every mode SUGGESTS it, and it is
+ * omni-modal (input text+image+video+audio — OpenRouter `input_modalities`,
+ * verified live), so the dev mode's vision requirement and the default
+ * suggestion never collide. The whole MiMo family is NOT uniformly visual
+ * (mimo-v2.5-pro is text-only): capability rides on `inputModalities`, never
+ * on the name.
  */
-export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-flash';
+export const DEFAULT_MODEL_ID = 'xiaomi/mimo-v2.6-pro';
 
 const DEFAULT_RECOMMENDED_MODELS: readonly ModelEntry[] = [
   {
     id: DEFAULT_MODEL_ID,
+    label: 'MiMo V2.6 Pro',
+    inputPrice: 0.435,
+    outputPrice: 0.87,
+    description:
+      '★ default — omni-modal (texto+imagem+vídeo+áudio), reasoning forte, long-context. O sugerido em todos os modos; o modo DEV exige visão e este modelo tem.',
+    bestFor: ['general', 'coding', 'reasoning'],
+    tier: 'flagship',
+    // OpenRouter-namespaced (`xiaomi/…`): api.deepseek.com serves only its own
+    // models — same rule as the minimax entry below.
+    provider: 'openrouter',
+    inputModalities: ['text', 'image', 'video', 'audio'],
+  },
+  {
+    id: 'deepseek/deepseek-v4-flash',
     label: 'DeepSeek V4 Flash',
     inputPrice: 0.09,
     outputPrice: 0.18,
     description:
-      'Default — fast, cheap, capable (1M context, tools + reasoning). The general-purpose default for running pipeline steps.',
+      'Fast, cheap, capable (1M context, tools + reasoning). The workhorse default for running pipeline steps without vision.',
     bestFor: ['fast', 'cheap', 'coding'],
     tier: 'fast',
+    inputModalities: ['text'],
   },
   {
     id: 'minimax/minimax-m2.7',
@@ -56,6 +79,7 @@ const DEFAULT_RECOMMENDED_MODELS: readonly ModelEntry[] = [
       'Fast and cheap — use for simple steps, per-file, parallel fan-out (lint, rename, JSDoc, translate, boilerplate).',
     bestFor: ['cheap', 'fast'],
     tier: 'fast',
+    inputModalities: ['text'],
     // OpenRouter-namespaced (`minimax/…`): api.deepseek.com serves only its own
     // models, so an entry whose vendor segment is someone else's can ONLY be
     // reached through the aggregator. Offering it under `deepseek` is offering
@@ -71,6 +95,7 @@ const DEFAULT_RECOMMENDED_MODELS: readonly ModelEntry[] = [
       'Deep thinking, agentic, heavy coding — use for complex steps, multi-file, reasoning, cross-file refactors.',
     bestFor: ['coding', 'reasoning', 'agentic'],
     tier: 'workhorse',
+    inputModalities: ['text', 'image'],
     provider: 'openrouter',
   },
 ];
@@ -138,6 +163,36 @@ export function loadRecommendedModels(
  */
 function providerFor(m: ModelEntry): LlmProvider {
   return m.provider ?? 'deepseek';
+}
+
+/**
+ * Whether an entry ACCEPTS IMAGE input — the one question the dev mode's
+ * vision gate asks. Deliberately strict: absent `inputModalities` is UNKNOWN
+ * and answers `false` (fail-safe text-only). Gating a capable model out is a
+ * visible, fixable complaint; sending an image that dies mid-run — or gets
+ * silently dropped — is neither. Override lives in the catalog entry, not in
+ * code: curate `inputModalities` and the gate follows.
+ */
+export function modelAcceptsImage(m: ModelEntry): boolean {
+  return m.inputModalities?.includes('image') ?? false;
+}
+
+/**
+ * The model a picker should PRESELECT: `preferredId` when the roster offers
+ * it, otherwise the roster's first entry. The canonical default
+ * ({@link DEFAULT_MODEL_ID}) is a SUGGESTION, not a summons — it rides one
+ * provider (`xiaomi/…` is OpenRouter-namespaced), so on another provider's
+ * roster it is physically absent and the picker must open on a real option
+ * instead of a value the endpoint would answer "model not found" to.
+ * Mirrors the web client's `launch.js` seed logic (vanilla JS, no TS import).
+ */
+export function resolveSuggestedModel(
+  models: readonly ModelEntry[],
+  preferredId: string | undefined,
+): string | undefined {
+  if (!models.length) return undefined;
+  if (preferredId && models.some((m) => m.id === preferredId)) return preferredId;
+  return models[0].id;
 }
 
 export function formatPrice(price: number | undefined | null): string {

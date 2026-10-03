@@ -1850,3 +1850,11 @@ input[type='range'] { flex: 1; accent-color: var(--accent); }
 +  .mv-diff-row { grid-template-columns: 1fr; }
 +  .mv-diff-cols { grid-template-columns: 1fr; min-width: 0; }
 +}
+
+/* Dev-mode BETA label — persistent, visible, language-neutral badge. Not
+   magenta: theme.ai is reserved for AI-driven UI (visual conventions). */
+.beta-badge {
+  display: inline-block; vertical-align: middle; margin-left: 8px; padding: 2px 8px;
+  border: 1px solid var(--warn, #d97706); border-radius: 999px;
+  color: var(--warn, #d97706); font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+}

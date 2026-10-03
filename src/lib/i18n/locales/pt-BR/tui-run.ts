@@ -144,6 +144,7 @@ export const tuiRunPtBR = {
   'tui.multi.shared_concurrency': 'a concorrência é compartilhada entre as execuções',
   // ── modo dev (`huu dev --cli`): o quadro vivo das épocas ───────────────────
   'tui.dev.title': 'modo dev',
+  'tui.dev.beta_badge': 'BETA',
   'tui.dev.goal': 'objetivo',
   'tui.dev.epochs': 'épocas',
   'tui.dev.epoch': 'época',

@@ -373,6 +373,12 @@ export const webPtBR = {
   'web.sim.back': '← Voltar ao huu',
 
   'web.dev.title': 'Modo desenvolvimento',
+  'web.dev.beta_badge': 'BETA',
+  'web.dev.prints_label': 'Screenshots',
+  'web.dev.prints_hint':
+    'Opcional — PNG/JPEG/WebP/GIF, máx. 8 × 5MB. Cada print é ANALISADO pelo modelo via side-call de visão com disclosure. Prints podem conter segredos, notificações ou dados de clientes: os ficheiros que escolher são exatamente o que sai da máquina.',
+  'web.dev.beta_title':
+    'Beta — o modo dev pode mudar ou desaparecer sem aviso; sem SLA; não usar em produção. Feedback: abra uma issue com a versão do huu.',
   'web.dev.subtitle':
     'Escreva o objetivo — o huu cria as skills de agente do projeto quando ele não tem nenhuma, depois planeja e roda épocas de <strong>frentes</strong> paralelas, cada uma abrindo um enxame de agentes em worktrees e fechando num juiz. Você subscreve o objetivo; o planejador só o decompõe.',
   'web.dev.goal': 'Objetivo',

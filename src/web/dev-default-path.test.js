@@ -58,7 +58,7 @@ import {
 /* `state.js` reads `location` at import, so it cannot be loaded in a node
    environment; this mirrors its `DEFAULT_MODEL_ID` — the last resort the form
    falls back to when a preset pins no role at all (`uniform`). */
-const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-flash';
+const DEFAULT_MODEL_ID = 'xiaomi/mimo-v2.6-pro';
 
 function setupRepo(dir) {
   execSync('git init --initial-branch=main', { cwd: dir, encoding: 'utf8' });

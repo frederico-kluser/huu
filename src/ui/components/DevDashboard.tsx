@@ -471,6 +471,13 @@ function DevHeader({ view, cols }: { view: DevDashboardView; cols: number }): Re
         <Text bold color={theme.ai}>
           {t('tui.dev.title')}
         </Text>
+        {/* BETA is a promise about trust, not decoration: the dev mode may
+            change or disappear without notice (no SLA, not for production).
+            Deliberately NOT magenta — theme.ai is AI-driven UI only. */}
+        <Text bold color={theme.warning}>
+          {' '}
+          {t('tui.dev.beta_badge')}
+        </Text>
         <Text dimColor>{'  ·  '}</Text>
         <Text>
           {t('tui.dev.goal')}{' '}

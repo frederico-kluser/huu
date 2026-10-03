@@ -180,7 +180,7 @@ describe('parseDevCliArgs — model routing', () => {
     // The run-level fallback still has to be a real id — an unstamped step and
     // the knowledge bootstrap run both use it. The worker's model is it, and it
     // is the bare id: `AppConfig.modelId` has never carried a provider.
-    expect(opts.modelId).toBe('deepseek/deepseek-v4-pro');
+    expect(opts.modelId).toBe('xiaomi/mimo-v2.6-flash');
   });
 
   it('keeps --model REQUIRED when routing leaves roles uncovered', () => {
@@ -306,15 +306,16 @@ describe('parseDevCliArgs — the parser reads SHAPE, the preflight reads catalo
   });
 
   it('parses the planner id the factory default depends on', () => {
-    // `z-ai/glm-5.2` never belonged to an agent-backend catalog ON PURPOSE:
-    // the blind orchestrator is a structured-output call, not an agent. The
-    // shipped `hetero` preset routes the planner there — now saying out loud
-    // that only OpenRouter serves it.
+    // The parser reads SHAPE: an explicit --planner id is taken as typed (a
+    // structured-output call may name any id — the preflight reads catalogs,
+    // not this layer). The SHIPPED hetero planner is the omni flagship since
+    // the vision-only turn (2026-10-03), and it says out loud that only
+    // OpenRouter serves it.
     const opts = parseOk(['g', '--model=deepseek/deepseek-v4-pro', `--${DEV_MODEL_ROLE_FLAGS.planner}=z-ai/glm-5.2`]);
     expect(opts.models?.planner).toEqual({ model: 'z-ai/glm-5.2' });
-    expect(DEV_MODEL_PRESETS.hetero.planner).toBe('openrouter:z-ai/glm-5.2');
+    expect(DEV_MODEL_PRESETS.hetero.planner).toBe('openrouter:xiaomi/mimo-v2.6-pro');
     expect(parseOk(['g', '--models=hetero']).models?.planner).toEqual({
-      model: 'z-ai/glm-5.2',
+      model: 'xiaomi/mimo-v2.6-pro',
       provider: 'openrouter',
     });
   });
@@ -440,8 +441,10 @@ describe('formatModelRouting', () => {
     for (const role of DEV_MODEL_ROLES) expect(block, role).toContain(role);
     expect(block).toContain('moonshotai/kimi-k2.6');
     // The roles that pin an endpoint say so; the ones that inherit do not.
-    // `hetero` pins three: planner, critic and the debate's prosecutor.
-    expect(block.match(/@openrouter/g)).toHaveLength(3);
+    // Since the vision-only turn (2026-10-03) EVERY hetero route pins its
+    // endpoint: the omni/swarm ids are OpenRouter-namespaced, so the run's
+    // provider is never ambiguous. Nine roles, nine markers.
+    expect(block.match(/@openrouter/g)).toHaveLength(DEV_MODEL_ROLES.length);
     // The planner id is shown WITH the reason it is exempt from the preflight.
     expect(block).toContain('structured output');
     expect(block).not.toContain('← --model');
@@ -449,6 +452,32 @@ describe('formatModelRouting', () => {
     const uniform = formatModelRouting(resolveDevModels(undefined, 'fallback/one'), undefined);
     expect(uniform.match(/← --model/g)).toHaveLength(DEV_MODEL_ROLES.length);
     expect(uniform).not.toContain('preset');
+  });
+});
+
+describe('parseDevCliArgs — screenshots (--print / --capture)', () => {
+  it('collects every --print and classifies --capture modes', () => {
+    const opts = parseOk(['g', '--model=m/x', '--print=a.png', '--print=b.jpg', '--capture=window']);
+    expect(opts.printPaths).toEqual(['a.png', 'b.jpg']);
+    expect(opts.capture).toBe('window');
+
+    const space = parseOk(['g', '--model=m/x', '--print', 'c.webp']);
+    expect(space.printPaths).toEqual(['c.webp']);
+
+    // Bare --capture = interactive REGION: the safest review default (the
+    // user points at exactly what may leave the machine).
+    const bare = parseOk(['g', '--model=m/x', '--capture']);
+    expect(bare.capture).toBe('region');
+    expect(bare.printPaths).toEqual([]);
+
+    const none = parseOk(['g', '--model=m/x']);
+    expect(none.printPaths).toEqual([]);
+    expect(none.capture).toBeUndefined();
+  });
+
+  it('rejects an unknown --capture mode by name', () => {
+    expect(parseFail(['g', '--model=m/x', '--capture=desktop'])).toContain('--capture=desktop');
+    expect(parseFail(['g', '--model=m/x', '--capture=desktop'])).toContain('--capture=window');
   });
 });
 

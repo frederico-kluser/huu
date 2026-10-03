@@ -183,8 +183,19 @@ export type DevModelPreset = 'hetero' | 'thrifty' | 'monoculture' | 'roster' | '
  * refuse a provider mismatch WITHOUT consulting a catalog that may not ship
  * with the audited repository.
  */
-const DS = 'deepseek/deepseek-v4-pro';
-const DS_FLASH = 'deepseek/deepseek-v4-flash';
+// VISION-ONLY since 2026-10-03: the dev mode takes screenshots (its own
+// capture plus the user's prints) and gates on image input, so every preset
+// model must accept images — the gate refuses the session otherwise. These
+// three ids are the live-verified vision tiers (OpenRouter
+// `architecture.input_modalities`, 2026-10-03): flagship omni, cheap omni,
+// cheapest vision flash. All three are OpenRouter-namespaced (a single-vendor
+// endpoint cannot serve them), so they carry the `openrouter:` prefix that
+// makes a preset self-describing. Prices mirror the old DeepSeek tiers
+// (0.435/0.87 and 0.14/0.87→0.14/0.28 per Mtok), so the economics the
+// comments below describe still hold — only the family changed.
+const SWARM = 'openrouter:xiaomi/mimo-v2.6-flash';
+const DEMOTED = 'openrouter:z-ai/glm-5.3-flash';
+const LEADER = 'openrouter:xiaomi/mimo-v2.6-pro';
 
 export const DEV_MODEL_PRESETS = {
   /**
@@ -193,38 +204,38 @@ export const DEV_MODEL_PRESETS = {
    * An OPENROUTER preset, and it cannot be anything else: a cross-family critic
    * needs an endpoint that fronts more than one family, and OpenRouter is the
    * only one huu speaks. Run it with `--provider=openrouter`; on DeepSeek the
-   * preflight refuses it by name instead of letting `z-ai/glm-5.2` reach
+   * preflight refuses it by name instead of letting a preset id reach
    * api.deepseek.com.
    */
   hetero: {
-    planner: 'openrouter:z-ai/glm-5.2',
-    recon: DS,
-    worker: DS,
+    planner: LEADER,
+    recon: SWARM,
+    worker: SWARM,
     critic: 'openrouter:moonshotai/kimi-k2.6',
-    reporter: DS,
-    judge: DS,
-    integration: DS,
+    reporter: SWARM,
+    judge: SWARM,
+    integration: SWARM,
     // The debate pair reuses the two families this preset ALREADY pays for —
-    // the DeepSeek family that writes the code and the Moonshot family that
+    // the MiMo family that writes the code and the Moonshot family that
     // already audits it — so `--debate` is cross-family by construction
     // without adding a vendor, a key or a billing surface to the preset.
-    advocate: DS,
+    advocate: SWARM,
     prosecutor: 'openrouter:moonshotai/kimi-k2.6',
   },
   /** Same as `hetero`, with the reporter demoted — it is mechanical prose over a diff. */
   thrifty: {
-    planner: 'openrouter:z-ai/glm-5.2',
-    recon: DS,
-    worker: DS,
+    planner: LEADER,
+    recon: SWARM,
+    worker: SWARM,
     critic: 'openrouter:moonshotai/kimi-k2.6',
-    reporter: DS_FLASH,
-    judge: DS,
-    integration: DS,
+    reporter: DEMOTED,
+    judge: SWARM,
+    integration: SWARM,
     // NOT demoted, unlike the reporter. Demoting ONE side of a debate buys a
     // few cents and hands the judge exactly the asymmetry its anonymized
     // rubric exists to remove: the weaker writer loses on prose rather than on
     // argument. Thrifty's economy comes from the reporter, not from here.
-    advocate: DS,
+    advocate: SWARM,
     prosecutor: 'openrouter:moonshotai/kimi-k2.6',
   },
   /**
@@ -238,33 +249,33 @@ export const DEV_MODEL_PRESETS = {
    * comparison. That also makes this an OpenRouter preset.
    */
   monoculture: {
-    planner: 'openrouter:z-ai/glm-5.2',
-    recon: DS,
-    worker: DS,
-    critic: DS,
-    reporter: DS,
-    judge: DS,
-    integration: DS,
+    planner: LEADER,
+    recon: SWARM,
+    worker: SWARM,
+    critic: SWARM,
+    reporter: SWARM,
+    judge: SWARM,
+    integration: SWARM,
     // Same family on BOTH sides of the debate, deliberately — this preset is
     // the A/B baseline, and the debate's heterogeneity claim is exactly the
     // kind of thing that has to be measured against a monoculture arm rather
     // than assumed. It is the one preset where this is not a defect.
-    advocate: DS,
-    prosecutor: DS,
+    advocate: SWARM,
+    prosecutor: SWARM,
   },
   /**
-   * The heterogeneous ROSTER: one endpoint (OpenRouter), five vendors, each
+   * The heterogeneous ROSTER: one endpoint (OpenRouter), four vendors, each
    * role on the model whose failure mode it can least afford.
    *
-   *   planner     V4 Pro           — the blind leader decomposes; it reads only
+   *   planner     MiMo V2.6 Flash  — the blind leader decomposes; it reads only
    *                                  a digest, so reasoning beats context here.
-   *   recon       V4 Pro           — the ARCHITECT. Front recon writes the task
+   *   recon       MiMo V2.6 Flash  — the ARCHITECT. Front recon writes the task
    *                                  specs, i.e. it decides the decomposition;
    *                                  a vague atlas produces vague findings.
-   *   worker      V4 Flash         — the fan-out. Cheapest per token, and every
+   *   worker      GLM-5.3 Flash    — the fan-out. Cheapest per token, and every
    *                                  worker's output is read by a critic.
    *   critic      GPT-5.6 Sol      — the PROSECUTOR, and cross-family from the
-   *                                  DeepSeek workers by construction. A model
+   *                                  MiMo workers by construction. A model
    *                                  auditing its own family is the single most
    *                                  fragile assumption in this design.
    *   reporter    GLM-5.3 Flash    — retrieval-and-summarize over a long diff:
@@ -272,7 +283,7 @@ export const DEV_MODEL_PRESETS = {
    *   judge       Claude Opus 5    — the strongest model in the roster, on the
    *                                  role whose failure is SILENT (every check
    *                                  has a forward `default: true`).
-   *   integration V4 Pro           — resolves conflicts in code the DeepSeek
+   *   integration MiMo V2.6 Flash  — resolves conflicts in code the MiMo
    *                                  workers wrote; same family is an asset for
    *                                  a merge, unlike for an audit.
    *
@@ -291,13 +302,13 @@ export const DEV_MODEL_PRESETS = {
    * family; the compiler stamps whatever the policy names.
    */
   roster: {
-    planner: DS,
-    recon: DS,
-    worker: DS_FLASH,
+    planner: SWARM,
+    recon: SWARM,
+    worker: DEMOTED,
     critic: 'openrouter:openai/gpt-5.6-sol',
     reporter: 'openrouter:z-ai/glm-5.3-flash',
     judge: 'openrouter:anthropic/claude-opus-5',
-    integration: DS,
+    integration: SWARM,
     advocate: 'openrouter:anthropic/claude-opus-5',
     prosecutor: 'openrouter:openai/gpt-5.6-sol',
   },

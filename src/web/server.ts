@@ -14,7 +14,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Server } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { extname, join, normalize } from 'node:path';
 import type { AgentBackendKind } from '../orchestrator/backends/registry.js';
@@ -798,8 +798,52 @@ export function createWebServer(opts: WebServerOptions): {
         }
         graphId = body.graphId.trim() || undefined;
       }
+      // --- PRINTS (uploads) ------------------------------------------------
+      //
+      // The browser sends screenshots as data URLs; the server is the one that
+      // STOPS nonsense before it costs a session: shape, type, count and size
+      // are all checked here with actionable messages, the files are saved
+      // under `.huu/prints/`, and only their paths travel onward. Analysis
+      // (a vision side-call) happens inside `devManager.start`, with the same
+      // credential precedence the run itself will use.
+      const printPaths: string[] = [];
+      if (body.prints !== undefined && body.prints !== null) {
+        if (!Array.isArray(body.prints) || body.prints.length > 8) {
+          return sendJson(res, 400, {
+            error: 'prints: esperado um array com no máximo 8 screenshots.',
+          });
+        }
+        const printsDir = join(opts.cwd, '.huu', 'prints');
+        mkdirSync(printsDir, { recursive: true });
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        for (const [i, entry] of body.prints.entries()) {
+          const dataUrl = typeof entry === 'object' && entry ? String((entry as { dataUrl?: unknown }).dataUrl ?? '') : '';
+          const m = dataUrl.match(/^data:image\/(png|jpe?g|webp|gif);base64,([A-Za-z0-9+/=]+)$/);
+          if (!m) {
+            return sendJson(res, 400, {
+              error: `prints[${i}]: esperado data URL base64 de PNG/JPEG/WebP/GIF (ex.: data:image/png;base64,…).`,
+            });
+          }
+          const bytes = Buffer.from(m[2], 'base64');
+          if (bytes.length > 5 * 1024 * 1024) {
+            return sendJson(res, 400, {
+              error: `prints[${i}]: imagem com ${(bytes.length / 1024 / 1024).toFixed(1)}MB — o limite é 5MB por print.`,
+            });
+          }
+          const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+          // The ORIGINAL name survives into the saved one: the briefing that
+          // references this print must say something the user recognizes.
+          const rawName = typeof entry === 'object' && entry ? String((entry as { name?: unknown }).name ?? '') : '';
+          const safeName = (rawName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60) || `print-${i}.${ext}`).replace(/\.+$/, '');
+          const outPath = join(printsDir, `upload-${stamp}-${safeName}`);
+          writeFileSync(outPath, bytes);
+          printPaths.push(outPath);
+        }
+      }
+
       try {
-        const started = devManager.start({
+        const started = await devManager.start({
+          ...(printPaths.length > 0 ? { printPaths } : {}),
           goal: String(body.goal ?? ''),
           backend,
           provider,

@@ -51,7 +51,8 @@
  */
 
 import { fileURLToPath } from 'node:url';
-import { loadRecommendedModels } from '../../models/catalog.js';
+import { loadRecommendedModels, modelAcceptsImage } from '../../models/catalog.js';
+import type { ModelEntry } from '../../contracts/models.js';
 import {
   buildModelProviderIndex,
   unionModelProviderIndexes,
@@ -71,6 +72,28 @@ const HUU_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
  * `projectRoot` is the AUDITED repository (`--run-dir`, or the cwd). Passing
  * huu's own root twice is harmless — the union deduplicates by construction.
  */
+/**
+ * The vision predicate a dev session gates on: does this model accept IMAGE
+ * input, per catalog entry. Same union as {@link devModelProviderIndex}
+ * (huu's catalog is the curated floor; the project's own entries override by
+ * id). An id nobody lists is UNKNOWN and answers `false` — the fail-safe lives
+ * in {@link modelAcceptsImage}; the escape hatch is curating
+ * `inputModalities`, never guessing from the name.
+ */
+export function devModelVisionLookup(projectRoot: string): (modelId: string) => boolean {
+  const byKey = new Map<string, boolean>();
+  const index = (entries: readonly ModelEntry[]): void => {
+    for (const m of entries) byKey.set(m.id.trim().toLowerCase(), modelAcceptsImage(m));
+  };
+  index(loadRecommendedModels(HUU_ROOT));
+  try {
+    if (projectRoot && projectRoot !== HUU_ROOT) index(loadRecommendedModels(projectRoot));
+  } catch {
+    // Unreadable project catalog: the curated floor above still answers.
+  }
+  return (modelId: string) => byKey.get(modelId.trim().toLowerCase()) ?? false;
+}
+
 export function devModelProviderIndex(projectRoot: string): ModelProviderIndex {
   // huu's own file keeps the `?? 'deepseek'` back-compat: its provider-less
   // entries predate the field and ARE DeepSeek's.

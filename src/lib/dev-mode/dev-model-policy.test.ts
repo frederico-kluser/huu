@@ -203,22 +203,22 @@ describe('defaultDevModelPolicy', () => {
   it('defaults to `hetero` on jcode: cross-family critic, glm planner', () => {
     const policy = defaultDevModelPolicy('jcode');
     expect(policy.critic).toEqual({ model: 'moonshotai/kimi-k2.6', provider: 'openrouter' });
-    expect(policy.planner).toEqual({ model: 'z-ai/glm-5.2', provider: 'openrouter' });
-    expect(policy.worker).toEqual({ model: 'deepseek/deepseek-v4-pro' });
+    expect(policy.planner).toEqual({ model: 'xiaomi/mimo-v2.6-pro', provider: 'openrouter' });
+    expect(policy.worker).toEqual({ model: 'xiaomi/mimo-v2.6-flash', provider: 'openrouter' });
     // The critic must NOT come from the worker's family — that is the point.
     expect(policy.critic!.model).not.toBe(policy.worker!.model);
   });
 
   it('`monoculture` puts the critic back on the worker model', () => {
     const policy = defaultDevModelPolicy('jcode', 'monoculture');
-    expect(policy.critic).toEqual({ model: 'deepseek/deepseek-v4-pro' });
+    expect(policy.critic).toEqual({ model: 'xiaomi/mimo-v2.6-flash', provider: 'openrouter' });
     expect(policy.critic).toEqual(policy.worker);
   });
 
   it('`thrifty` demotes only the reporter — the judge stays on the strong model', () => {
     const policy = defaultDevModelPolicy('jcode', 'thrifty');
-    expect(policy.reporter!.model).toBe('deepseek/deepseek-v4-flash');
-    expect(policy.judge!.model).toBe('deepseek/deepseek-v4-pro');
+    expect(policy.reporter!.model).toBe('z-ai/glm-5.3-flash');
+    expect(policy.judge!.model).toBe('xiaomi/mimo-v2.6-flash');
     expect(policy.critic!.model).toBe('moonshotai/kimi-k2.6');
   });
 
@@ -373,13 +373,13 @@ describe('DEV_MODEL_PRESETS.roster — the document roster over huu roles', () =
   const policy = defaultDevModelPolicy('jcode', 'roster');
 
   it('maps all five roster models onto the nine roles', () => {
-    expect(policy.planner!.model).toBe('deepseek/deepseek-v4-pro');
-    expect(policy.recon!.model).toBe('deepseek/deepseek-v4-pro');
-    expect(policy.worker!.model).toBe('deepseek/deepseek-v4-flash');
+    expect(policy.planner!.model).toBe('xiaomi/mimo-v2.6-flash');
+    expect(policy.recon!.model).toBe('xiaomi/mimo-v2.6-flash');
+    expect(policy.worker!.model).toBe('z-ai/glm-5.3-flash');
     expect(policy.critic!.model).toBe('openai/gpt-5.6-sol');
     expect(policy.reporter!.model).toBe('z-ai/glm-5.3-flash');
     expect(policy.judge!.model).toBe('anthropic/claude-opus-5');
-    expect(policy.integration!.model).toBe('deepseek/deepseek-v4-pro');
+    expect(policy.integration!.model).toBe('xiaomi/mimo-v2.6-flash');
     // The adversarial pair the roster document names, on the two ids the
     // roster ALREADY carries — the debate costs this preset no new vendor.
     expect(policy.advocate!.model).toBe('anthropic/claude-opus-5');
@@ -391,14 +391,19 @@ describe('DEV_MODEL_PRESETS.roster — the document roster over huu roles', () =
       [],
     );
     const refused = devModelRefusals(checkDevModelPolicy({ policy, provider: 'deepseek', index }));
-    // The debate pair joins the refusal list because BOTH its ids are
-    // openrouter-only — the same reason the critic and the judge are there.
+    // Since the vision-only turn (2026-10-03) EVERY roster id is
+    // OpenRouter-namespaced (the omni/swarm tiers have no DeepSeek sibling),
+    // so the whole roster is refused on DeepSeek — by name, before any spawn.
     expect(refused.map((r) => r.role).sort()).toEqual([
       'advocate',
       'critic',
+      'integration',
       'judge',
+      'planner',
       'prosecutor',
+      'recon',
       'reporter',
+      'worker',
     ]);
   });
 });

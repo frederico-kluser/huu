@@ -1340,6 +1340,29 @@ export function devFrontsCap() {
  * @param {string} modelId
  * @param {Record<string, any>} [extra] resume-path overrides; nothing else uses it
  */
+
+/**
+ * Screenshots → data URLs for the POST body. Mirrors the server's limits
+ * (8 × 5MB, PNG/JPEG/WebP/GIF) so the browser refuses the same things the
+ * server would — with the file named in the complaint.
+ */
+export async function collectDevPrints() {
+  const files = Array.from(/** @type {HTMLInputElement} */ ($('devPrints')).files ?? []).slice(0, 8);
+  const out = [];
+  for (const f of files) {
+    if (f.size > 5 * 1024 * 1024) {
+      throw new Error(`${f.name}: imagem com mais de 5MB — o limite é 5MB por print.`);
+    }
+    const buf = new Uint8Array(await f.arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < buf.length; i += 0x8000) {
+      bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    }
+    out.push({ name: f.name, dataUrl: `data:${f.type || 'image/png'};base64,${btoa(bin)}` });
+  }
+  return out;
+}
+
 export function devStartBody(goal, modelId, extra = {}) {
   // VERBATIM from the submit handler this replaced, `S.boot` included — i.e.
   // NOT included. `backendSpecName(id, boot)` resolves the key-spec name out of
@@ -1525,6 +1548,20 @@ export function wireDev() {
     adoptDevGraphFromCanvas(detail.id, detail.name);
   });
 
+  // PRINTS: the review is the picker + this list; the send is the submit.
+  /** @type {HTMLInputElement | null} */ (/** @type {unknown} */ ($('devPrints')))
+    ?.addEventListener('change', () => {
+    const files = Array.from(/** @type {HTMLInputElement} */ ($('devPrints')).files ?? []);
+    const count = $('devPrintsCount');
+    if (count) count.textContent = files.length ? String(files.length) : '';
+    const list = $('devPrintsList');
+    if (list) {
+      list.innerHTML = files
+        .map((f) => `<div class="muted">• ${f.name} — ${Math.max(1, Math.ceil(f.size / 1024))} KB</div>`)
+        .join('');
+    }
+  });
+
   $('devForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const goal = /** @type {HTMLTextAreaElement} */ ($('devGoal')).value.trim();
@@ -1537,9 +1574,11 @@ export function wireDev() {
     }
 
     try {
+      const prints = await collectDevPrints();
       const res = await api('/api/dev', {
         method: 'POST',
-        body: JSON.stringify(devStartBody(goal, modelId)),
+        body: JSON.stringify(devStartBody(goal, modelId, prints.length ? { prints } : {}),
+        ),
       });
       toast(t('web.dev.session_started', { id: res.sessionId }));
     } catch (e) {

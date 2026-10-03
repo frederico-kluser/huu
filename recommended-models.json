@@ -1,13 +1,60 @@
 {
   "models": [
     {
+      "id": "xiaomi/mimo-v2.6-pro",
+      "label": "MiMo V2.6 Pro",
+      "inputPrice": 0.435,
+      "outputPrice": 0.87,
+      "description": "★ default — omni-modal (texto+imagem+vídeo+áudio), reasoning forte, long-context. O sugerido em todos os modos; o modo DEV exige visão e este modelo tem.",
+      "bestFor": [
+        "general",
+        "coding",
+        "reasoning"
+      ],
+      "tier": "flagship",
+      "provider": "openrouter",
+      "inputModalities": [
+        "text",
+        "image",
+        "video",
+        "audio"
+      ]
+    },
+    {
+      "id": "xiaomi/mimo-v2.6-flash",
+      "label": "MiMo V2.6 Flash",
+      "inputPrice": 0.14,
+      "outputPrice": 0.28,
+      "description": "Omni-modal (texto+imagem+vídeo+áudio) barato: o swarm de visão do modo DEV e o workhorse para steps com prints.",
+      "bestFor": [
+        "fast",
+        "cheap",
+        "coding"
+      ],
+      "tier": "fast",
+      "provider": "openrouter",
+      "inputModalities": [
+        "text",
+        "image",
+        "video",
+        "audio"
+      ]
+    },
+    {
       "id": "deepseek/deepseek-v4-flash",
       "label": "DeepSeek V4 Flash",
       "inputPrice": 0.14,
       "outputPrice": 0.28,
-      "description": "★ default — rápido, barato e capaz (1M de contexto, tools + reasoning). O modelo padrão para rodar os steps; troque por um tier planning só para arquitetar.",
-      "bestFor": ["fast", "cheap", "coding"],
-      "tier": "fast"
+      "description": "Rápido, barato e capaz (1M de contexto, tools + reasoning). Workhorse para steps sem visão.",
+      "bestFor": [
+        "fast",
+        "cheap",
+        "coding"
+      ],
+      "tier": "fast",
+      "inputModalities": [
+        "text"
+      ]
     },
     {
       "id": "deepseek/deepseek-v4-pro",
@@ -15,8 +62,14 @@
       "inputPrice": 0.435,
       "outputPrice": 0.87,
       "description": "★ planejamento — o melhor custo-benefício para o Pipeline Architect (esboços paralelos + seleção). Planejar é alavancagem: o plano guia o run inteiro.",
-      "bestFor": ["planning", "reasoning"],
-      "tier": "planning"
+      "bestFor": [
+        "planning",
+        "reasoning"
+      ],
+      "tier": "planning",
+      "inputModalities": [
+        "text"
+      ]
     },
     {
       "id": "z-ai/glm-5.2",
@@ -24,9 +77,15 @@
       "inputPrice": 0.7686,
       "outputPrice": 2.4156,
       "description": "★ SÓ orquestrador — ausente do registry do pi (que para no glm-5.1), então NÃO roda como agente, juiz ou revisor. Serve de planner porque essa via é LangChain→OpenRouter.",
-      "bestFor": ["planning", "reasoning"],
+      "bestFor": [
+        "planning",
+        "reasoning"
+      ],
       "tier": "planning",
-      "provider": "openrouter"
+      "provider": "openrouter",
+      "inputModalities": [
+        "text"
+      ]
     },
     {
       "id": "openai/gpt-5.4",
@@ -34,9 +93,17 @@
       "inputPrice": 2.5,
       "outputPrice": 15.0,
       "description": "★ planejamento — frontier para arquitetar pipelines complexas no Pipeline Architect.",
-      "bestFor": ["planning", "reasoning"],
+      "bestFor": [
+        "planning",
+        "reasoning"
+      ],
       "tier": "planning",
-      "provider": "openrouter"
+      "provider": "openrouter",
+      "inputModalities": [
+        "text",
+        "image",
+        "file"
+      ]
     },
     {
       "id": "anthropic/claude-opus-4.6",
@@ -44,9 +111,17 @@
       "inputPrice": 5.0,
       "outputPrice": 25.0,
       "description": "★ planejamento — frontier para arquitetar pipelines complexas no Pipeline Architect.",
-      "bestFor": ["planning", "reasoning"],
+      "bestFor": [
+        "planning",
+        "reasoning"
+      ],
       "tier": "planning",
-      "provider": "openrouter"
+      "provider": "openrouter",
+      "inputModalities": [
+        "text",
+        "image",
+        "file"
+      ]
     },
     {
       "id": "minimax/minimax-m2.7",
@@ -54,9 +129,15 @@
       "inputPrice": 0.134,
       "outputPrice": 1.31,
       "description": "Rápido e barato — use para steps simples, per-file, fan-out paralelo (lint, rename, JSDoc, traduzir, boilerplate).",
-      "bestFor": ["cheap", "fast"],
+      "bestFor": [
+        "cheap",
+        "fast"
+      ],
       "tier": "fast",
-      "provider": "openrouter"
+      "provider": "openrouter",
+      "inputModalities": [
+        "text"
+      ]
     },
     {
       "id": "moonshotai/kimi-k2.6",
@@ -64,9 +145,17 @@
       "inputPrice": 0.646,
       "outputPrice": 2.72,
       "description": "★ crítico recomendado — cross-family em relação ao worker DeepSeek. Contexto 256k, mas saída máx. 16k no registry do pi: é esse teto que obriga o cap de achados por rodada.",
-      "bestFor": ["coding", "reasoning", "agentic"],
+      "bestFor": [
+        "coding",
+        "reasoning",
+        "agentic"
+      ],
       "tier": "workhorse",
-      "provider": "openrouter"
+      "provider": "openrouter",
+      "inputModalities": [
+        "text",
+        "image"
+      ]
     },
     {
       "id": "anthropic/claude-opus-5",
@@ -74,9 +163,18 @@
       "inputPrice": 5.0,
       "outputPrice": 25.0,
       "description": "★ planejamento — frontier de 1M de contexto pela OpenRouter. Use para arquitetar pipelines complexas; caro demais para rodar todos os steps.",
-      "bestFor": ["planning", "reasoning", "coding"],
+      "bestFor": [
+        "planning",
+        "reasoning",
+        "coding"
+      ],
       "tier": "planning",
-      "provider": "openrouter"
+      "provider": "openrouter",
+      "inputModalities": [
+        "text",
+        "image",
+        "file"
+      ]
     },
     {
       "id": "openai/gpt-5.6-sol",
@@ -84,9 +182,18 @@
       "inputPrice": 2.0,
       "outputPrice": 10.0,
       "description": "★ planejamento — 1,05M de contexto por ~40% do preço do Opus 5. Boa opção de família cruzada para crítico ou juiz.",
-      "bestFor": ["planning", "reasoning", "agentic"],
+      "bestFor": [
+        "planning",
+        "reasoning",
+        "agentic"
+      ],
       "tier": "planning",
-      "provider": "openrouter"
+      "provider": "openrouter",
+      "inputModalities": [
+        "file",
+        "image",
+        "text"
+      ]
     },
     {
       "id": "deepseek/deepseek-v4-pro",
@@ -94,19 +201,33 @@
       "inputPrice": 0.951,
       "outputPrice": 1.903,
       "description": "O V4 Pro roteado pela OpenRouter: mesma capacidade do acesso direto, com uma credencial só. Custa ~2× o endpoint nativo da DeepSeek.",
-      "bestFor": ["reasoning", "coding", "planning"],
+      "bestFor": [
+        "reasoning",
+        "coding",
+        "planning"
+      ],
       "tier": "workhorse",
-      "provider": "openrouter"
+      "provider": "openrouter",
+      "inputModalities": [
+        "text"
+      ]
     },
     {
       "id": "deepseek/deepseek-v4-flash",
       "label": "DeepSeek V4 Flash (OpenRouter)",
       "inputPrice": 0.086,
       "outputPrice": 0.173,
-      "description": "★ default da OpenRouter — o mais barato do catálogo com 1M de contexto. O workhorse para rodar os steps quando o provedor é OpenRouter.",
-      "bestFor": ["fast", "cheap", "coding"],
+      "description": "Rápido, barato e capaz (1M de contexto, tools + reasoning). Workhorse para steps sem visão.",
+      "bestFor": [
+        "fast",
+        "cheap",
+        "coding"
+      ],
       "tier": "fast",
-      "provider": "openrouter"
+      "provider": "openrouter",
+      "inputModalities": [
+        "text"
+      ]
     },
     {
       "id": "z-ai/glm-5.3-flash",
@@ -114,9 +235,17 @@
       "inputPrice": 0.075,
       "outputPrice": 0.25,
       "description": "Barato e com 1,31M de contexto — use em fan-out per-file e tarefas mecânicas, ou como crítico de família cruzada frente a um worker DeepSeek.",
-      "bestFor": ["cheap", "fast"],
+      "bestFor": [
+        "cheap",
+        "fast"
+      ],
       "tier": "fast",
-      "provider": "openrouter"
+      "provider": "openrouter",
+      "inputModalities": [
+        "text",
+        "image",
+        "video"
+      ]
     }
   ]
 }

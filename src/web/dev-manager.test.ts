@@ -318,7 +318,10 @@ describe('web server — development mode', () => {
   it('a preset seeds the policy and explicit roles layer over it', async () => {
     await post(base, '/api/dev', {
       goal: 'com preset',
-      modelId: 'fallback-model',
+      // A vision id: the dev mode gates on image input (2026-10-03), so even
+      // the run-level fallback — the unstamped steps and the knowledge
+      // bootstrap use it — must accept images.
+      modelId: 'anthropic/claude-opus-5',
       backend: 'jcode',
       // `hetero` is an OPENROUTER preset: a cross-family critic needs an
       // endpoint that fronts more than one family, and that is the only one.
@@ -327,12 +330,12 @@ describe('web server — development mode', () => {
       approval: 'each-epoch',
       skipKnowledgeBootstrap: true,
       modelsPreset: 'hetero',
-      models: { reporter: 'deepseek/deepseek-v4-flash' },
+      models: { reporter: 'z-ai/glm-5.3-flash' },
     });
     const session = (await (await fetch(base + '/api/dev')).json()).session;
-    expect(session.models.worker).toBe('deepseek/deepseek-v4-pro'); // from the preset
+    expect(session.models.worker).toBe('xiaomi/mimo-v2.6-flash'); // from the preset (vision-only)
     expect(session.models.critic).toBe('moonshotai/kimi-k2.6'); // cross-family, from the preset
-    expect(session.models.reporter).toBe('deepseek/deepseek-v4-flash'); // explicit wins
+    expect(session.models.reporter).toBe('z-ai/glm-5.3-flash'); // explicit wins
   });
 
   // The browser derives the required `modelId` from the `worker` role input,
@@ -376,6 +379,41 @@ describe('web server — development mode', () => {
   // MUTATION KILLED: dropping the `checkDevModelPolicy` refusal from
   // `DevSessionManager.start` (or letting the preset's `openrouter:` prefixes
   // be parsed away). The POST goes back to 200 and a doomed session opens.
+  it('accepts uploaded prints and SAYS SO when the backend cannot analyze them', async () => {
+    // A real 1×1 PNG data URL — the server validates shape, type and size
+    // before anything costs, and saves the bytes under `.huu/prints/`.
+    const png =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const { status } = await post(base, '/api/dev', {
+      goal: 'com prints',
+      modelId: 'any/model',
+      backend: 'stub',
+      approval: 'autonomous',
+      skipKnowledgeBootstrap: true,
+      prints: [{ name: 'tela.png', dataUrl: png }],
+    });
+    expect(status).toBe(200);
+    const session = (await (await fetch(base + '/api/dev')).json()).session;
+    // Silence is the anti-pattern: a print that will NOT be analyzed says so
+    // in the briefing itself.
+    expect(session.goal).toContain('NÃO analisados');
+    expect(session.goal).toContain('tela.png');
+  });
+
+  it('rejects a print that is not an image data URL — named, before the session', async () => {
+    const { status, json } = await post(base, '/api/dev', {
+      goal: 'print inválido',
+      modelId: 'any/model',
+      backend: 'stub',
+      approval: 'autonomous',
+      skipKnowledgeBootstrap: true,
+      prints: [{ name: 'x.html', dataUrl: 'data:text/html;base64,PGh0bWw+' }],
+    });
+    expect(status).toBe(400);
+    expect(json.error).toContain('prints[0]');
+    expect((await (await fetch(base + '/api/dev')).json()).session).toBeNull();
+  });
+
   it('REFUSES a hand-assembled preset/provider pair the endpoint cannot serve', async () => {
     const { status, json } = await post(base, '/api/dev', {
       goal: 'preset no provedor errado',
@@ -391,7 +429,7 @@ describe('web server — development mode', () => {
     // Actionable: which roles, which ids, and where they DO work.
     expect(json.error).toContain('planner');
     expect(json.error).toContain('critic');
-    expect(json.error).toContain('z-ai/glm-5.2');
+    expect(json.error).toContain('xiaomi/mimo-v2.6-pro');
     expect(json.error).toContain('openrouter');
     // No session was opened.
     expect((await (await fetch(base + '/api/dev')).json()).session).toBeNull();

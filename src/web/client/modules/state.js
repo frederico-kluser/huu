@@ -3,7 +3,7 @@
 export const $ = (id) => document.getElementById(id);
 
 // Canonical default model
-export const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-flash';
+export const DEFAULT_MODEL_ID = 'xiaomi/mimo-v2.6-pro';
 
 const _TOKEN = new URLSearchParams(location.search).get('token') || '';
 export const TOKEN = _TOKEN;

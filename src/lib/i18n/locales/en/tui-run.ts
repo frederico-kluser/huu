@@ -144,6 +144,7 @@ export const tuiRunEn = {
   // AI-driven surface end to end (a planner writes the pipeline at run time),
   // so the chrome is `theme.ai` on purpose — see AGENTS.md "Visual conventions".
   'tui.dev.title': 'dev mode',
+  'tui.dev.beta_badge': 'BETA',
   'tui.dev.goal': 'goal',
   'tui.dev.epochs': 'epochs',
   'tui.dev.epoch': 'epoch',

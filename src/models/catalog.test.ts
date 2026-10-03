@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadRecommendedModels, DEFAULT_MODEL_ID } from './catalog.js';
+import { loadRecommendedModels, modelAcceptsImage, resolveSuggestedModel, DEFAULT_MODEL_ID } from './catalog.js';
 import { RecommendedModelsFileSchema } from '../contracts/models.js';
 import { modelIdForProvider } from '../lib/providers.js';
 
@@ -147,6 +147,22 @@ describe('loadRecommendedModels (provider filter)', () => {
   });
 });
 
+describe('modelAcceptsImage — the vision gate predicate', () => {
+  // The dev mode REQUIRES vision; this predicate is the whole gate. Its
+  // contract is fail-safe: an entry without `inputModalities` is UNKNOWN and
+  // answers false — gating a capable model out is a visible complaint, an
+  // image that dies (or is silently dropped) mid-run is neither. Never from
+  // the model NAME: the MiMo family mixes omni and text-only members.
+  it('answers true only when `image` is an explicit input modality', () => {
+    expect(modelAcceptsImage({ id: 'x/y', label: 'Y', inputModalities: ['text', 'image'] })).toBe(true);
+    expect(modelAcceptsImage({ id: 'x/y', label: 'Y', inputModalities: ['text', 'video'] })).toBe(false);
+  });
+
+  it('treats an ABSENT field as unknown → false (fail-safe text-only)', () => {
+    expect(modelAcceptsImage({ id: 'x/y', label: 'Y' })).toBe(false);
+  });
+});
+
 describe('recommended-models.json (shipped catalog)', () => {
   // Regression: the shipped file once carried tier/bestFor values that were
   // NOT in the schema enums, so it failed zod validation and the catalog
@@ -201,13 +217,24 @@ describe('recommended-models.json — every entry is reachable on its provider',
     }
   });
 
-  it('keeps the DEFAULT model selectable under BOTH providers', () => {
-    // The two front-ends preselect DEFAULT_MODEL_ID before the user has picked
-    // a provider. If it existed on only one, the other's picker would open on a
-    // value not in its own list.
+  it('keeps the DEFAULT model selectable on the provider that serves it', () => {
+    // The default is a SUGGESTION, not a summons: `xiaomi/…` is
+    // OpenRouter-namespaced and api.deepseek.com cannot serve it, so listing
+    // it under BOTH providers would be a guaranteed "model not found" — the
+    // exact offer this suite exists to forbid. The contract is therefore:
+    // the default lives on a roster that can honor it.
+    const openrouter = loadRecommendedModels(repoRoot, 'jcode', 'openrouter').map((m) => m.id);
+    expect(openrouter).toContain(DEFAULT_MODEL_ID);
+  });
+
+  it('resolves a suggestion INSIDE every provider roster (never a phantom)', () => {
+    // The two front-ends seed their pick from the roster; when the canonical
+    // default is absent (another provider), they must open on a real option —
+    // `resolveSuggestedModel` is that rule, and this pins it per provider.
     for (const provider of ['deepseek', 'openrouter'] as const) {
-      const ids = loadRecommendedModels(repoRoot, 'jcode', provider).map((m) => m.id);
-      expect(ids).toContain(DEFAULT_MODEL_ID);
+      const roster = loadRecommendedModels(repoRoot, 'jcode', provider);
+      const suggested = resolveSuggestedModel(roster, DEFAULT_MODEL_ID);
+      expect(roster.map((m) => m.id)).toContain(suggested);
     }
   });
 });

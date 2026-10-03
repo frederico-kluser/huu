@@ -39,7 +39,9 @@ import {
 } from '../lib/dev-mode/debate-transcript.js';
 import { integrationWorktreePath } from '../git/branch-namer.js';
 import { activeMethodologies } from '../lib/dev-mode/methodology-registry.js';
-import { devModelProviderIndex } from '../lib/dev-mode/model-catalog-index.js';
+import { devModelProviderIndex, devModelVisionLookup } from '../lib/dev-mode/model-catalog-index.js';
+import { checkDevVisionGate } from '../lib/dev-mode/dev-vision-gate.js';
+import { analyzeImages } from '../lib/vision-side-call.js';
 import {
   checkDevModelPolicy,
   defaultDevModelPolicy,
@@ -337,6 +339,13 @@ export interface StartDevParams {
   mode?: 'auto' | 'manual' | 'greedy';
   timeoutMinutes?: number;
   /**
+   * Screenshots already saved server-side (the handler validates and stores
+   * uploads under `.huu/prints/`). Each one is ANALYZED by a vision side-call
+   * before the session opens and its DISCLOSED analysis joins the goal
+   * briefing — same contract as the CLI's `--print`.
+   */
+  printPaths?: readonly string[];
+  /**
    * Named starting point for the routing policy. Resolved HERE, at the
    * surface, never in the driver — that is what keeps heterogeneous routing an
    * opt-in. Non-`jcode` backends resolve to `{}`.
@@ -491,7 +500,7 @@ export class WebDevManager {
    * {@link DevStartRefusal} so the status and the reason code do not have to be
    * recovered from the prose.
    */
-  start(params: StartDevParams): { sessionId: string } {
+  async start(params: StartDevParams): Promise<{ sessionId: string }> {
     if (this.isActive()) {
       throw new Error('a development session is already running — abort it before starting another');
     }
@@ -609,13 +618,63 @@ export class WebDevManager {
       modelKnownFor(modelIndex, devProvider),
     );
 
+    // THE VISION GATE, same border. The dev mode captures/accepts screenshots
+    // and hands them to a vision side-call, so every model the session resolved
+    // must accept image input. Strict fail-safe (unknown id = no vision), the
+    // fix named in the message — never a silent skip. `stub` has no vision to
+    // require.
+    if (params.backend !== 'stub') {
+      const acceptsImage = devModelVisionLookup(runDirectory);
+      const gate = checkDevVisionGate({
+        models: [runModelId, ...Object.values(models)],
+        acceptsImage,
+      });
+      if (!gate.ok) throw new Error(gate.message);
+    }
+
+    // --- PRINTS: vision side-call, same credentials as the run --------------
+    //
+    // Same contract as the CLI: explicit prints are analyzed BEFORE the
+    // session exists, the analysis travels DISCLOSED, and an analysis that
+    // fails stops the start (never a silent drop). A stub backend cannot
+    // analyze anything — it says so in the briefing rather than pretending.
+    let goalWithBriefing = goal;
+    const printPaths = params.printPaths ?? [];
+    if (printPaths.length > 0) {
+      if (params.backend === 'stub') {
+        goalWithBriefing +=
+          `\n\n[prints registados mas NÃO analisados: backend stub não chama modelos (${printPaths.join(', ')})]`;
+      } else {
+        for (const path of printPaths) {
+          try {
+            const analysis = await analyzeImages({
+              ctx: { backend: params.backend, provider: devProvider, apiKey, ...(endpoint ? { endpoint } : {}) },
+              modelId: runModelId,
+              prompt:
+                'Descreve este screenshot com precisão operacional: que ecrã/janela é, que elementos ' +
+                'e texto visíveis existes (inclui texto literal curto como rótulos e mensagens de erro), ' +
+                'que estado da UI mostra, e qualquer erro/aviso legível. Não inventes o que não estiver legível.',
+              imagePaths: [path],
+              maxTokens: 700,
+            });
+            goalWithBriefing += `\n\n${analysis.disclosed}`;
+          } catch (e) {
+            throw new Error(
+              `falha ao analisar o print ${path}: ${(e as Error).message} — a sessão NÃO arranca ` +
+                'sem o print que pediu para analisar (sem substituições silenciosas).',
+            );
+          }
+        }
+      }
+    }
+
     this.abortController = new AbortController();
     this.debatePaths.clear();
     this.session = {
       active: true,
       sessionId,
       resumed: false,
-      goal,
+      goal: goalWithBriefing,
       runDirectory,
       approval,
       phase: 'probing',

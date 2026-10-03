@@ -392,7 +392,7 @@
       <!-- Development mode: goal in, swarm of parallel FRONTS out. -->
       <section class="view view--dev" id="viewDev" hidden>
         <div class="launch-head">
-          <h1 data-i18n="web.dev.title">Development mode</h1>
+          <h1 data-i18n="web.dev.title">Development mode</h1> <span class="beta-badge" data-i18n="web.dev.beta_badge" data-i18n-title="web.dev.beta_title" title="Beta — may change or disappear without notice; no SLA; not for production.">BETA</span>
           <p class="muted" data-i18n-html="web.dev.subtitle">Write the goal — huu bootstraps the project's agent skills when it has none, then plans and runs epochs of parallel <strong>fronts</strong>, each fanning out into a swarm of worktree agents and closing on a judge. You underwrite the goal; the planner only decomposes it.</p>
         </div>
 
@@ -414,6 +414,20 @@
             <div class="dev-goal__foot">
               <span class="muted" id="devMicHint" data-i18n="web.dev.mic_hint">Click the mic to dictate — transcribed by Gemini via your OpenRouter key.</span>
             </div>
+          </section>
+
+          <!-- PRINTS: screenshots the user hands over to be analyzed. The
+               file picker IS the review (you choose exactly what may leave);
+               the send act is the submit. Analysis is a vision side-call and
+               its text reaches the agent DISCLOSED — never a silent caption. -->
+          <section class="panel glass">
+            <div class="panel__title">
+              <span data-i18n="web.dev.prints_label">Screenshots</span>
+              <span class="count" id="devPrintsCount"></span>
+            </div>
+            <input type="file" id="devPrints" accept="image/png,image/jpeg,image/webp,image/gif" multiple>
+            <div class="muted" data-i18n="web.dev.prints_hint">Optional — PNG/JPEG/WebP/GIF, max 8 × 5MB. Each print is ANALYZED by the model through a disclosed vision side-call. Screenshots can contain secrets, notifications or customer data: the files you pick here are exactly what leaves the machine.</div>
+            <div id="devPrintsList"></div>
           </section>
 
           <!-- PROJECT: the same filesystem browser the pipeline flow uses,

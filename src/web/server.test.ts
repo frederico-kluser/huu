@@ -917,7 +917,7 @@ describe('web server — dev-mode routing contract on /api/bootstrap', () => {
     // `hetero` is the default and its critic is deliberately cross-family —
     // which is only reachable through the aggregator, so it names it.
     expect(boot.devModelPresets.hetero!.critic).toBe('openrouter:moonshotai/kimi-k2.6');
-    expect(boot.devModelPresets.hetero!.worker).toBe('deepseek/deepseek-v4-pro');
+    expect(boot.devModelPresets.hetero!.worker).toBe('openrouter:xiaomi/mimo-v2.6-flash');
     // `uniform` routes nothing — it IS today's behavior.
     expect(boot.devModelPresets.uniform).toEqual({});
     expect(boot.devModelRoles).toEqual([

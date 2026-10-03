@@ -17,7 +17,8 @@
 
 import { createInterface } from 'node:readline';
 import { readFileSync } from 'node:fs';
-import { resolve as resolvePath } from 'node:path';
+import { resolve as resolvePath, join as joinPath } from 'node:path';
+import { mkdirSync } from 'node:fs';
 import { resolveApiKey, specForProvider } from '../api-key.js';
 import { t } from '../i18n/index.js';
 import { resolveRunProvider, type LlmProvider } from '../providers.js';
@@ -40,7 +41,11 @@ import {
   type DevPlan,
   type DevState,
 } from '../types.js';
-import { devModelProviderIndex } from './model-catalog-index.js';
+import { devModelProviderIndex, devModelVisionLookup } from './model-catalog-index.js';
+import { checkDevVisionGate } from './dev-vision-gate.js';
+import { captureScreenshot, type CaptureMode } from '../screenshot-capture.js';
+import { analyzeImages } from '../vision-side-call.js';
+import { DEV_MODE_BETA_NOTICE } from './dev-beta.js';
 import {
   DEV_MODEL_ROLES,
   checkDevModelPolicy,
@@ -120,6 +125,16 @@ export interface DevCliPresenter {
   /** Last frame, then tear down. Awaited before the JSON reaches stdout. */
   close(): Promise<void>;
 }
+
+/**
+ * What the vision side-call is asked ABOUT a screenshot. Operational on
+ * purpose: the analysis is second-hand seeing that has to survive being read
+ * as text by the planner — what is on screen, what is legible, what is broken.
+ */
+const PRINT_ANALYSIS_PROMPT =
+  'Descreve este screenshot com precisão operacional: que ecrã/janela é, que elementos e ' +
+  'texto visíveis existes (inclui texto literal curto como rótulos e mensagens de erro), que ' +
+  'estado da UI mostra, e qualquer erro/aviso legível. Não inventes o que não estiver legível.';
 
 export interface RunDevCliArgs {
   /** Argv after the `dev` subcommand, with CLI-global flags already filtered. */
@@ -585,6 +600,18 @@ export interface DevCliOptions {
    * this parser is pure. See {@link DevGraphRef}.
    */
   graphRef?: DevGraphRef;
+  /**
+   * `--print=<ficheiro>` (repeatable) — screenshots the USER hands over to be
+   * analyzed. The review act is choosing the file; the send act is this flag.
+   * Paths, not bytes: this parser stays pure.
+   */
+  printPaths: string[];
+  /**
+   * `--capture[=region|window|full]` — take OUR screenshot first. Interactive
+   * modes are the review (the user picks the exact region/window); the capture
+   * only saves, the analysis is a separate explicit act.
+   */
+  capture?: CaptureMode;
   /** Non-fatal notes to print before starting. */
   warnings: string[];
 }
@@ -716,6 +743,34 @@ export function parseDevCliArgs(args: readonly string[], backend: AgentBackendKi
     }
   }
 
+  // `--print=<path>` is repeatable: every occurrence is one screenshot the
+  // user chose. `--capture[=<mode>]` takes ours (default: interactive region —
+  // the safest review: nothing is captured that was not pointed at).
+  const printPaths = args
+    .filter((a) => a.startsWith('--print='))
+    .map((a) => a.slice('--print='.length))
+    .filter((v) => v.trim().length > 0);
+  const printSeparate = args.indexOf('--print');
+  if (printSeparate >= 0 && args[printSeparate + 1] && !args[printSeparate + 1]!.startsWith('--')) {
+    printPaths.push(args[printSeparate + 1]!);
+  }
+  let capture: CaptureMode | undefined;
+  if (args.includes('--capture')) {
+    capture = 'region';
+  } else {
+    const captureEq = args.find((a) => a.startsWith('--capture='));
+    if (captureEq) {
+      const mode = captureEq.slice('--capture='.length);
+      if (mode !== 'region' && mode !== 'window' && mode !== 'full') {
+        return {
+          ok: false,
+          message: `huu dev: --capture=${mode} não existe — use --capture (região interativa), --capture=window ou --capture=full.`,
+        };
+      }
+      capture = mode;
+    }
+  }
+
   const approveEach = args.includes('--approve-each');
   if (approveEach && args.includes('--autonomous')) {
     return { ok: false, message: 'huu dev: --approve-each and --autonomous are mutually exclusive.' };
@@ -818,6 +873,8 @@ export function parseDevCliArgs(args: readonly string[], backend: AgentBackendKi
       ...(methodology ? { methodology } : {}),
       ...(wantsResume ? { resume: 'auto' as const } : refusesResume ? { resume: 'never' as const } : {}),
       landOrphans: args.includes('--land-orphans'),
+      printPaths,
+      ...(capture ? { capture } : {}),
       ...(graphRef ? { graphRef } : {}),
       warnings,
     },
@@ -828,6 +885,12 @@ export function parseDevCliArgs(args: readonly string[], backend: AgentBackendKi
  * Parse + run. Returns the process exit code; never throws for a user error
  * (those print a usage line and return 1).
  */
+
+/** Where the catalogs are read from: `--run-dir` when given, else the cwd. */
+function repoRootFor(cwd: string, runDir: string | undefined): string {
+  return runDir ? resolvePath(runDir) : cwd;
+}
+
 export async function runDevCli(input: RunDevCliArgs): Promise<number> {
   const { args, cwd } = input;
   const backend: AgentBackendKind = input.backend ?? 'jcode';
@@ -839,6 +902,28 @@ export async function runDevCli(input: RunDevCliArgs): Promise<number> {
   }
   const opts = parsed.options;
   for (const warning of opts.warnings) err(`huu dev: ${warning}`);
+
+  // --- dev mode REQUIRES vision (BETA screenshots) --------------------------
+  //
+  // The mode captures its own screenshots and accepts the user's prints, then
+  // hands them to a vision side-call — a text-only model would make all of that
+  // a lie. Refuse BEFORE the session opens, naming the fix (switch model /
+  // curate `inputModalities` / --stub). Never a silent skip: a print that dies
+  // mid-run — or gets dropped without a word — is worse than this refusal.
+  // `--stub` is exempt: a no-LLM dry run has no vision to require.
+  if (backend !== 'stub') {
+    const acceptsImage = devModelVisionLookup(repoRootFor(cwd, opts.runDir));
+    const sessionModels = [
+      opts.modelId,
+      ...DEV_MODEL_ROLES.map((role) => opts.models?.[role]?.model ?? ''),
+    ];
+    const gate = checkDevVisionGate({ models: sessionModels, acceptsImage });
+    if (!gate.ok) {
+      err(gate.message);
+      return 1;
+    }
+  }
+  err(DEV_MODE_BETA_NOTICE);
 
   const bundle = selectBackend(backend);
 
@@ -901,8 +986,66 @@ export async function runDevCli(input: RunDevCliArgs): Promise<number> {
     }
   }
 
+  // --- PRINTS: our capture + the user's insertions -------------------------
+  //
+  // Both arrive as EXPLICIT acts and end at the same place: a vision side-call
+  // whose DISCLOSED analysis joins the goal briefing. Nothing is sent without
+  // saying so, and a print the user asked to analyze that cannot be analyzed
+  // STOPS the session — starting without it would be the silent drop the
+  // research dossier ruled out (opencode #29216 / Cursor-Kimi K3).
+  const printPaths = [...opts.printPaths];
+  if (opts.capture) {
+    const printsDir = joinPath(repoRoot, '.huu', 'prints');
+    mkdirSync(printsDir, { recursive: true });
+    const outPath = joinPath(
+      printsDir,
+      `capture-${new Date().toISOString().replace(/[:.]/g, '-')}.png`,
+    );
+    const cap = await captureScreenshot({ mode: opts.capture, outPath });
+    err(cap.message);
+    if (!cap.ok) return 1;
+    printPaths.push(outPath);
+  }
+
+  let goalBriefing = opts.goal;
+  if (printPaths.length > 0) {
+    err(
+      `huu dev: ${printPaths.length} print(s) vão ser ENVIADOS ao modelo ${opts.modelId} ` +
+        `(side-call de visão): ${printPaths.join(', ')}\n` +
+        '  prints podem conter segredos, notificações ou dados de clientes — a análise é de segundo grau.',
+    );
+    if (backend === 'stub') {
+      err('huu dev: --stub não chama modelos — os prints ficam registados mas NÃO analisados.');
+    } else {
+      for (const path of printPaths) {
+        try {
+          const analysis = await analyzeImages({
+            ctx: {
+              backend,
+              provider: devProvider,
+              apiKey,
+              ...(endpoint ? { endpoint } : {}),
+            },
+            modelId: opts.modelId,
+            prompt: PRINT_ANALYSIS_PROMPT,
+            imagePaths: [path],
+            maxTokens: 700,
+          });
+          goalBriefing += `\n\n${analysis.disclosed}`;
+        } catch (e) {
+          err(
+            `huu dev: falha ao analisar ${path}: ${(e as Error).message}\n` +
+              '  A sessão NÃO arranca sem o print que pediu para analisar — corrija e repita ' +
+              '(ou tire o --print se já não o quiser).',
+          );
+          return 1;
+        }
+      }
+    }
+  }
+
   const dev: DevModeConfig = {
-    goal: opts.goal,
+    goal: goalBriefing,
     approval: opts.approveEach ? 'each-epoch' : 'autonomous',
     maxEpochs: opts.maxEpochs,
     maxFronts: opts.maxFronts,

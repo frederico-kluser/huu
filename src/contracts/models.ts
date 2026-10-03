@@ -67,6 +67,20 @@ export const ModelEntrySchema = z.object({
    * existed parsing without churn.
    */
   provider: ModelProviderSchema.optional(),
+  /**
+   * Input modalities the model accepts — the machine-readable capability
+   * gate, same shape as OpenRouter's `architecture.input_modalities`
+   * (verified live 2026-10-03). `image` here is what lets a mode REQUIRE
+   * vision (the dev mode does). ABSENT means UNKNOWN, never "yes": the
+   * fail-safe is text-only (clients that guess capabilities either block
+   * capable models or 400 mid-run — both documented), so an entry without
+   * this field gates as non-vision until curated. Never infer it from the
+   * model NAME: the MiMo family alone mixes omni and text-only members.
+   */
+  inputModalities: z
+    .array(z.enum(['text', 'image', 'video', 'audio', 'file']))
+    .min(1)
+    .optional(),
 });
 
 export type ModelEntry = z.infer<typeof ModelEntrySchema>;

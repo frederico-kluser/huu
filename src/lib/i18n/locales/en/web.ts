@@ -367,6 +367,12 @@ export const webEn = {
   'web.sim.back': '← Back to huu',
 
   'web.dev.title': 'Development mode',
+  'web.dev.beta_badge': 'BETA',
+  'web.dev.prints_label': 'Screenshots',
+  'web.dev.prints_hint':
+    'Optional — PNG/JPEG/WebP/GIF, max 8 × 5MB. Each print is ANALYZED by the model through a disclosed vision side-call. Screenshots can contain secrets, notifications or customer data: the files you pick here are exactly what leaves the machine.',
+  'web.dev.beta_title':
+    'Beta — the dev mode may change or disappear without notice; no SLA; not for production. Feedback: open an issue with the huu version.',
   'web.dev.subtitle':
     "Write the goal — huu bootstraps the project's agent skills when it has none, then plans and runs epochs of parallel <strong>fronts</strong>, each fanning out into a swarm of worktree agents and closing on a judge. You underwrite the goal; the planner only decomposes it.",
   'web.dev.goal': 'Goal',
