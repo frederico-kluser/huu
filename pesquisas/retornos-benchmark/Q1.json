@@ -1,0 +1,516 @@
+{
+ "id": "Q1",
+ "estado": "respondida",
+ "confianca": "moderada",
+ "resposta": "Adote um protocolo híbrido de três camadas: (1) revisão humana cega de screenshots com rubrica de 7 dimensões ancoradas — hierarquia visual, consistência de sistema, tipografia/legibilidade, espaçamento e composição, responsividade/estados reais, acessibilidade e acabamento estético — em escala 0–4 de Nielsen (0=não-problema … 4=catástrofe, com fatores frequência/impacto/persistência) ou Likert 1–7, aplicada por ≥3 avaliadores independentes com severidade agregada pela média [F1][F5][F9]; (2) comparação pareada cega A-vs-B (mesmo prompt, mesmos viewports e estados) com ranking tipo TrueSkill/Bradley-Terry e intervalos de confiança, que é o endpoint primário do UI-Bench porque métricas estéticas automáticas são tratadas como diagnósticos auxiliares [F2][F3][F17]; (3) LLM-as-judge apenas como triagem calibrada, nunca como veredito: em web apps os melhores juízes ficam >15% abaixo de especialistas humanos [F3] e a autoconsistência de avaliações heurísticas por LLM é apenas moderada (Cohen κ=0.50 na deteção de problemas; κ ponderado=0.63 e acordo exato de 56% na severidade) [F4]. A fiabilidade do LLM-as-judge está documentada mas condicionada: ~85% de acordo humano em MT-Bench (vs 81% humano-humano) [F13], ~70% em tarefas multimodais de UI [F8][F5], viéses sistemáticos de posição, verbosidade e auto-preferência [F11][F12], e degradação do alinhamento com humanos quando a rubrica não traz descrições de score e resposta de referência [F6]. Nunca avalie por screenshot isolado nem por métrica única: o código é a modalidade crítica em WebDevJudge [F3], ferramentas automáticas de acessibilidade cobrem só ~20–40% dos critérios WCAG (axe-core 22,6% e Evinced 62,8% dos problemas de auditorias manuais) [F15][F16], e vitória relativa pareada não implica qualidade absoluta (win rates ~80% com estética absoluta calibrada de 2,78–3,18/5) [F14] — combine sempre score absoluto ancorado por dimensão (eventualmente com VisAWI-S para estética [F10]), verificação manual de acessibilidade e calibração do juiz contra um golden set humano [F6].",
+ "afirmacoes": [
+  {
+   "texto": "A rubrica da NN/g para interfaces geradas por IA cobre alinhamento com o objetivo (ajuste ao objetivo de design, cumprimento do prompt), qualidade do conceito, design visual (hierarquia de informação, equilíbrio composicional, consistência, estética) e interação/usabilidade (boas práticas, acessibilidade).",
+   "fontes": [
+    "F1",
+    "F3",
+    "F5"
+   ],
+   "citacao_literal": "Content priority is reflected through the proper use of visual weight. Important content and elements are visually dominant.",
+   "central": true
+  },
+  {
+   "texto": "O UI-Bench avalia excelência visual de ferramentas text-to-app por comparação pareada cega de especialistas (10 ferramentas, 30 prompts, 300 sites, 4000+ juízos) com ranking TrueSkill e intervalos de credibilidade calibrados.",
+   "fontes": [
+    "F2",
+    "F17"
+   ],
+   "citacao_literal": "we introduce UI-Bench, the first large-scale benchmark that evaluates visual excellence across competing AI text-to-app tools through expert pairwise comparison.",
+   "central": true
+  },
+  {
+   "texto": "No UI-Bench as métricas estéticas automáticas são tratadas como diagnósticos auxiliares e o juízo pareado cego de especialistas é o endpoint primário.",
+   "fontes": [
+    "F2"
+   ],
+   "citacao_literal": "We therefore treat automated scores as ancillary diagnostics, and select blinded expert pairwise judgement as our primary endpoint",
+   "central": false
+  },
+  {
+   "texto": "No WebDevJudge a discrepância de desempenho entre os melhores modelos juízes e especialistas humanos excede 15% na avaliação de qualidade de web apps.",
+   "fontes": [
+    "F3",
+    "F5"
+   ],
+   "citacao_literal": "a significant capabilities gap persists between the most advanced models and human experts, with a performance discrepancy exceeding 15%",
+   "central": true
+  },
+  {
+   "texto": "No WebDevJudge o código-fonte é a modalidade mais crítica para avaliar web apps: omitir código degrada mais o juiz do que omitir screenshots, e usar ambas as modalidades dá os melhores resultados.",
+   "fontes": [
+    "F3"
+   ],
+   "citacao_literal": "code emerges as the most critical modality for evaluating web development tasks. Withholding code leads to a significantly larger performance drop than withholding screenshots",
+   "central": true
+  },
+  {
+   "texto": "A avaliação heurística de UI por GPT-4o tem consistência entre execuções apenas moderada na deteção de problemas de usabilidade (Cohen κ=0.50; acordo exato 84%).",
+   "fontes": [
+    "F4"
+   ],
+   "citacao_literal": "For issue detection, the model demonstrated moderate consistency, with an average pairwise Cohen's Kappa of 0.50 and an exact agreement of 84%.",
+   "central": true
+  },
+  {
+   "texto": "Os juízos de severidade de LLM variam consideravelmente (κ ponderado≈0.63, acordo exato 56%, α de Krippendorff próximo de zero) e exigem supervisão humana.",
+   "fontes": [
+    "F4",
+    "F5"
+   ],
+   "citacao_literal": "Severity judgments showed more variability: weighted Cohen's Kappa averaged 0.63, but exact agreement was just 56%, and Krippendorff's Alpha was near zero.",
+   "central": true
+  },
+  {
+   "texto": "MLLMs como juízes de UI devem complementar — não substituir — investigação inicial com utilizadores de baixo risco.",
+   "fontes": [
+    "F5"
+   ],
+   "citacao_literal": "we recommend that MLLMs are used to supplement early, low stakes user research – not replace it.",
+   "central": true
+  },
+  {
+   "texto": "A percepção humana de UI pode ser medida com 9 fatores agrupados em 3 temas (cognitivo, percetual, emocional) em escala Likert 1–7.",
+   "fontes": [
+    "F5",
+    "F1"
+   ],
+   "citacao_literal": "The nine factors are clustered into three themes: Cognitive, Perceptual, and Emotional",
+   "central": false
+  },
+  {
+   "texto": "Segundo Nielsen, classificações de severidade de um único avaliador são pouco fiáveis e a qualidade da média aumenta rapidamente com mais avaliadores (a média de 3 é suficiente para muitos fins práticos).",
+   "fontes": [
+    "F9"
+   ],
+   "citacao_literal": "As more evaluators are asked to judge the severity of usability problems, the quality of the mean severity rating increases rapidly",
+   "central": true
+  },
+  {
+   "texto": "Viés de auto-preferência está documentado em LLM-as-judge: GPT-4 exibiu auto-preferência significativa em avaliação pareada.",
+   "fontes": [
+    "F11"
+   ],
+   "citacao_literal": "The results indicated that GPT-4 exhibited a significant self-preference bias",
+   "central": true
+  },
+  {
+   "texto": "O viés de posição em LLM-as-judge não resulta de variação aleatória e varia entre juízes e tarefas.",
+   "fontes": [
+    "F12"
+   ],
+   "citacao_literal": "The position bias of capable LLM judges is not a result of random variations.",
+   "central": true
+  },
+  {
+   "texto": "Escolhas de desenho da avaliação afetam a fiabilidade: fornecer simultaneamente respostas de referência e descrições de score é crucial, e omitir qualquer um degrada o alinhamento com juízos humanos.",
+   "fontes": [
+    "F6"
+   ],
+   "citacao_literal": "Providing both reference answers and score descriptions is crucial for reliable evaluation. Omitting either significantly degrades alignment with human judgments",
+   "central": true
+  },
+  {
+   "texto": "A validação de juízes LLM por concordância exata (exact-match) não corrige para o acaso e superestima sistematicamente a capacidade discriminativa; a deflação ao passar para κ de Cohen é universal.",
+   "fontes": [
+    "F7",
+    "F13"
+   ],
+   "citacao_literal": "judge validation in practice relies on exact-match agreement, a metric that does not correct for chance and systematically overstates discriminative ability",
+   "central": true
+  },
+  {
+   "texto": "Em tarefas multimodais, GPT-4V como juiz alcança ~70% de acordo com humanos, com 79,3% em comparação pareada.",
+   "fontes": [
+    "F8"
+   ],
+   "citacao_literal": "GPT-4V achieved around 70% human agreement across all settings, excelling in the Pair Comparison task with 79.3% agreement.",
+   "central": true
+  },
+  {
+   "texto": "Superioridade relativa não implica qualidade absoluta: modelos com win rates pareadas perto de 80% têm pontuações estéticas absolutas calibradas de apenas 2,78–3,18 em 5.",
+   "fontes": [
+    "F14"
+   ],
+   "citacao_literal": "their human-calibrated absolute aesthetic scores remain only 2.78–3.18 out of 5, while some models achieve Pairwise Win Rates close to 80%",
+   "central": true
+  },
+  {
+   "texto": "A cobertura das ferramentas automáticas de acessibilidade é parcial: Evinced detetou 62,8% e axe-core 22,6% dos problemas encontrados em auditorias manuais.",
+   "fontes": [
+    "F15",
+    "F16"
+   ],
+   "citacao_literal": "In a 2026 study against real manual audits, it found 62.8% of issues. axe-core alone found 22.6%.",
+   "central": true
+  },
+  {
+   "texto": "Em MT-Bench o acordo GPT-4–humanos foi de 85% (excluindo empates), acima do acordo humano–humano de 81%.",
+   "fontes": [
+    "F13"
+   ],
+   "citacao_literal": "the gpt-4 to human agreement was 85% which exceeded the human-human agreement of 81%",
+   "central": true
+  },
+  {
+   "texto": "Estética percebida deve ser medida com instrumento validado (VisAWI-S) em vez de item único, pois juízos de item único são distorcidos por erro de medida e viéses de resposta.",
+   "fontes": [
+    "F10"
+   ],
+   "citacao_literal": "VisAWI-S is a reliable measure that captures a single dimension of perceived visual aesthetics and provides a good approximation to the full-length version.",
+   "central": false
+  }
+ ],
+ "fontes": [
+  {
+   "ref": "F1",
+   "url": "https://www.nngroup.com/articles/testing-ai-methodology",
+   "doi": "",
+   "titulo": "Testing AI with Real Design Scenarios: Evaluation Methodology and Prompts",
+   "autores": "Nielsen Norman Group",
+   "ano": "2025",
+   "veiculo": "nngroup.com",
+   "tipo": "blogue",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F2",
+   "url": "https://arxiv.org/abs/2508.20410",
+   "doi": "",
+   "titulo": "UI-Bench: A Benchmark for Evaluating Design Capabilities of AI Text-to-App Tools",
+   "autores": "Sam Jung; Agustin Garcinuno; Spencer Mateega",
+   "ano": "2025",
+   "veiculo": "arXiv:2508.20410",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F3",
+   "url": "https://arxiv.org/html/2510.18560v1",
+   "doi": "",
+   "titulo": "WebDevJudge: Evaluating (M)LLMs as Critiques for Web Development Quality",
+   "autores": "não extraído (equipa WebDevJudge)",
+   "ano": "2025",
+   "veiculo": "arXiv:2510.18560",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F4",
+   "url": "https://arxiv.org/html/2512.04262v1",
+   "doi": "",
+   "titulo": "Catching UX Flaws in Code: Leveraging LLMs to Identify Usability Flaws at the Development Stage",
+   "autores": "não extraído",
+   "ano": "2025",
+   "veiculo": "arXiv:2512.04262",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F5",
+   "url": "https://arxiv.org/html/2510.08783v1",
+   "doi": "",
+   "titulo": "MLLM as a UI Judge: Benchmarking Multimodal LLMs for Predicting Human Perception of User Interfaces",
+   "autores": "não extraído",
+   "ano": "2025",
+   "veiculo": "arXiv:2510.08783",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F6",
+   "url": "https://arxiv.org/html/2506.13639v1",
+   "doi": "",
+   "titulo": "An Empirical Study of LLM-as-a-Judge: How Design Choices Impact Evaluation Reliability",
+   "autores": "não extraído",
+   "ano": "2025",
+   "veiculo": "arXiv:2506.13639",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F7",
+   "url": "https://arxiv.org/html/2606.19544v1",
+   "doi": "",
+   "titulo": "Reliability without Validity: A Systematic, Large-Scale Evaluation of LLM-as-a-Judge Models Across Agreement, Consistency, and Bias",
+   "autores": "não extraído",
+   "ano": "2026",
+   "veiculo": "arXiv:2606.19544",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F8",
+   "url": "https://mllm-judge.github.io",
+   "doi": "",
+   "titulo": "MLLM-as-a-Judge: Assessing Multimodal LLM-as-a-Judge with Vision-Language Benchmark",
+   "autores": "equipa MLLM-as-a-Judge",
+   "ano": "2024",
+   "veiculo": "mllm-judge.github.io",
+   "tipo": "oficial",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F9",
+   "url": "https://www.nngroup.com/articles/how-to-rate-the-severity-of-usability-problems",
+   "doi": "",
+   "titulo": "Severity Ratings for Usability Problems",
+   "autores": "Jakob Nielsen",
+   "ano": "1994",
+   "veiculo": "nngroup.com",
+   "tipo": "blogue",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F10",
+   "url": "https://ideas.repec.org/a/taf/tbitxx/v32y2013i12p1305-1311.html",
+   "doi": "10.1080/0144929X.2012.694910",
+   "titulo": "A short version of the visual aesthetics of websites inventory (VisAWI-S)",
+   "autores": "Morten Moshagen; Meinald Thielsch",
+   "ano": "2013",
+   "veiculo": "Behaviour and Information Technology 32(12):1305-1311",
+   "tipo": "artigo-revisto",
+   "nivel": "A",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F11",
+   "url": "https://arxiv.org/html/2410.21819v1",
+   "doi": "",
+   "titulo": "Self-Preference Bias in LLM-as-a-Judge",
+   "autores": "não extraído",
+   "ano": "2024",
+   "veiculo": "arXiv:2410.21819",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F12",
+   "url": "https://aclanthology.org/2025.ijcnlp-long.18.pdf",
+   "doi": "",
+   "titulo": "A Systematic Study of Position Bias in LLM-as-a-Judge",
+   "autores": "Shi et al.",
+   "ano": "2025",
+   "veiculo": "IJCNLP-AACL 2025 (ACL Anthology)",
+   "tipo": "artigo-revisto",
+   "nivel": "A",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F13",
+   "url": "https://eugeneyan.com/writing/llm-evaluators",
+   "doi": "",
+   "titulo": "Evaluating the Effectiveness of LLM-Evaluators (aka LLM-as-Judge)",
+   "autores": "Eugene Yan",
+   "ano": "2024",
+   "veiculo": "eugeneyan.com",
+   "tipo": "blogue",
+   "nivel": "C",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F14",
+   "url": "https://arxiv.org/html/2609.34854",
+   "doi": "",
+   "titulo": "AUV-Bench: Aesthetic Understanding and Generation EValuation for User Interfaces",
+   "autores": "não extraído",
+   "ano": "2026",
+   "veiculo": "arXiv:2609.34854",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F15",
+   "url": "https://www.accessibility.works/blog/automated-wcag-testing-tools-accessibility-compliance",
+   "doi": "",
+   "titulo": "Why You Can't Trust Automated WCAG Testing Tools for Accessibility Compliance",
+   "autores": "Accessibility.Works",
+   "ano": "2026",
+   "veiculo": "accessibility.works",
+   "tipo": "blogue",
+   "nivel": "C",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F16",
+   "url": "https://testparty.ai/blog/automated-accessibility-testing-guide",
+   "doi": "",
+   "titulo": "Automated Accessibility Testing: What It Catches and What It Misses",
+   "autores": "TestParty",
+   "ano": "2026",
+   "veiculo": "testparty.ai",
+   "tipo": "blogue",
+   "nivel": "C",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F17",
+   "url": "https://lmarena.ai/blog/webdev-arena",
+   "doi": "",
+   "titulo": "WebDev Arena: A Live LLM Leaderboard for Web App Development",
+   "autores": "LMArena (UC Berkeley)",
+   "ano": "2025",
+   "veiculo": "lmarena.ai",
+   "tipo": "oficial",
+   "nivel": "B",
+   "lida": "trechos"
+  }
+ ],
+ "contradicoes": [
+  {
+   "tema": "Nível de concordância humano–juiz em avaliação de UI/web",
+   "posicoes": [
+    {
+     "fonte": "F13",
+     "diz": "85% de acordo GPT-4–humanos em MT-Bench, acima dos 81% humano–humano"
+    },
+    {
+     "fonte": "F8",
+     "diz": "GPT-4V com ~70% de acordo humano em tarefas multimodais (79,3% em pareamento)"
+    },
+    {
+     "fonte": "F3",
+     "diz": "os melhores juízes ficam >15% abaixo de especialistas humanos em web apps"
+    },
+    {
+     "fonte": "F4",
+     "diz": "entre execuções do mesmo LLM em avaliação heurística de UI, κ=0.50 (deteção) e κ ponderado=0.63 (severidade)"
+    }
+   ],
+   "explicacao_provavel": "metodo"
+  },
+  {
+   "tema": "Screenshots bastam para avaliar qualidade de UI?",
+   "posicoes": [
+    {
+     "fonte": "F2",
+     "diz": "o UI-Bench classifica excelência visual de sites gerados a partir de screenshots de página completa"
+    },
+    {
+     "fonte": "F3",
+     "diz": "screenshot-only degrada bastante o desempenho do juiz; o código é a modalidade crítica e ambas as modalidades são melhores"
+    }
+   ],
+   "explicacao_provavel": "definicao"
+  },
+  {
+   "tema": "Concordância alta prova a validade do juiz LLM",
+   "posicoes": [
+    {
+     "fonte": "F13",
+     "diz": "acordos de 85%+ são apresentados como prova de fiabilidade comparável à humana"
+    },
+    {
+     "fonte": "F7",
+     "diz": "o exact-match superestima a capacidade discriminativa; a deflação por κ é universal e os rankings de juízes deslocam-se até 14 posições entre benchmarks"
+    }
+   ],
+   "explicacao_provavel": "metodo"
+  },
+  {
+   "tema": "Superioridade relativa implica qualidade absoluta",
+   "posicoes": [
+    {
+     "fonte": "F2",
+     "diz": "ordena ferramentas por preferência pareada (win rates 48–67,5%)"
+    },
+    {
+     "fonte": "F14",
+     "diz": "win rates pareadas perto de 80% coexistem com pontuação estética absoluta de apenas 2,78–3,18/5"
+    }
+   ],
+   "explicacao_provavel": "definicao"
+  }
+ ],
+ "lacunas": [
+  "A concordância inter-avaliadores humana (κ/ICC) em reviews de screenshots de UI gerada não foi quantificada nas fontes lidas; o UI-Bench não reporta IRR entre especialistas.",
+  "Não há evidência publicada sobre a fiabilidade de LLM-as-judge quando o veredito é POR DIMENSÃO da rubrica de UI (hierarquia, tipografia, espaçamento) em vez de preferência global.",
+  "As percentagens de cobertura de ferramentas automáticas de acessibilidade (22,6%/62,8%; teto 20–40% dos critérios WCAG) vêm de blogs de engenharia, sem estudo peer-reviewed confirmado.",
+  "Faltam âncoras comportamentais validadas por nível de escala (o que distingue, observavelmente, um 2 de um 3 em cada dimensão) para maximizar a concordância.",
+  "Não foi encontrado um protocolo publicado de captura de screenshots (viewports, estados, densidade de conteúdo, ordem de avaliação) para avaliação reproduzível de UI de apps gerados."
+ ],
+ "novas_perguntas": [
+  {
+   "pergunta": "Quantos avaliadores humanos são necessários por tela e qual o κ/ICC observado em rubricas de qualidade de UI gerada por IA?",
+   "origem": "quantificacao",
+   "prioridade": "alta",
+   "porque": "Sem IRR humana quantificada a rubrica não é estatisticamente defensável perante críticos."
+  },
+  {
+   "pergunta": "Qual a fiabilidade (κ por dimensão) de LLM-as-judge com rubrica multidimensional de UI versus preferência global pareada?",
+   "origem": "contra-evidencia",
+   "prioridade": "alta",
+   "porque": "WebDevJudge mede preferência global; a nossa rubrica produz scores por dimensão, cenário ainda não validado."
+  },
+  {
+   "pergunta": "Como ancorar comportamentalmente cada nível das escalas (ex.: hierarquia visual 0–4) para maximizar a concordância entre avaliadores?",
+   "origem": "aprofundamento",
+   "prioridade": "media",
+   "porque": "Âncoras observáveis são a intervenção mais barata para elevar a concordância inter-avaliadores."
+  },
+  {
+   "pergunta": "Mostrar o código-fonte ao avaliador humano ou ao juiz LLM altera o veredito de qualidade visual e introduz viés a favor de ferramentas com código mais limpo?",
+   "origem": "contradicao",
+   "prioridade": "media",
+   "porque": "F3 mostra que o código é a modalidade dominante do juiz; isso pode contaminar uma avaliação supostamente visual."
+  },
+  {
+   "pergunta": "Os protocolos de votação cega do UI-Bench e do WebDev Arena são replicáveis para exatamente 2 ferramentas com o mesmo prompt?",
+   "origem": "atualidade",
+   "prioridade": "media",
+   "porque": "Reproduzibilidade do nosso comparativo depende de um protocolo de pareamento cego já testado à escala."
+  }
+ ],
+ "fontes_nao_usadas": [
+  {
+   "url": "https://dl.acm.org/doi/10.1145/3833541.3833788",
+   "porque_pode_importar": "Modelo de avaliação multimodal de qualidade de design web com benchmark de 3327 amostras reais da comunidade Figma — pode validar/adicionar dimensões da rubrica."
+  },
+  {
+   "url": "https://arxiv.org/html/2601.02430v3",
+   "porque_pode_importar": "WebCoderBench define 24 métricas em 9 perspetivas (Lighthouse, Stylelint, ESLint, princípios W3C) combinando regras automáticas e LLM-as-judge — fecharia a camada de métricas objetivas."
+  },
+  {
+   "url": "https://arxiv.org/html/2407.08850v2",
+   "porque_pode_importar": "UICrit: dataset de críticas de design por especialistas; evidência de que críticas geradas por LLM ficam bastante abaixo das humanas — útil para treinar/validar o juiz."
+  },
+  {
+   "url": "http://www.thielsch.org/download/VisAWI/VisAWI_Manual_EN.pdf",
+   "porque_pode_importar": "Manual VisAWI com valores de referência (benchmarking) para estética percebida de websites."
+  },
+  {
+   "url": "https://aclanthology.org/2024.hucllm-1.2.pdf",
+   "porque_pode_importar": "EvaluLLM (IBM Research): desenho de ferramentas LLM-as-judge com revisão humana cega e cálculo de agreement rate — modelo de interface para o nosso protocolo de calibração."
+  }
+ ],
+ "consultas": [
+  "web design quality rubric evaluation UI generated by AI",
+  "LLM-as-judge UI evaluation reliability human agreement",
+  "WebDev Arena web development benchmark evaluation LLM",
+  "multimodal LLM judge screenshot web UI design quality evaluation benchmark",
+  "heuristic evaluation usability severity rating inter-rater reliability Nielsen",
+  "visual aesthetics websites VisAWI questionnaire measurement instrument",
+  "LLM judge bias position bias verbosity self-preference pairwise comparison evaluation",
+  "design quality heuristics generated websites evaluation text-to-UI benchmark",
+  "screenshot review UI audit accessibility contrast responsive automated checks axe Lighthouse evaluation",
+  "expert agreement aesthetic ratings websites inter-rater reliability low subjective visual design",
+  "UI-Bench expert pairwise TrueSkill text-to-app design benchmark agreement",
+  "LLM-as-judge visual design evaluation weak correlation human judgment contrary evidence"
+ ],
+ "alertas_seguranca": []
+}

@@ -1,0 +1,485 @@
+{
+ "id": "Q3",
+ "estado": "respondida",
+ "confianca": "alta",
+ "resposta": "Método: somar, por run, os tokens faturados de TODAS as chamadas LLM (agente principal, subagentes, tool loops e todas as tentativas de retentativa), decompostos em input novo + cache read + cache write + output (+ reasoning contado uma vez), porque o campo 'input' reportado NÃO é o total de entrada: a Anthropic documenta total_input_tokens = cache_read + cache_creation + input [F5], a OpenAI define input_tokens agregado como incluindo cached e cache-write [F4] e a norma OTel GenAI manda que gen_ai.usage.input_tokens inclua tokens de cache e que se reporte a contagem faturada [F7]. O USD deve vir primeiro do custo reportado pelo provedor por chamada (OpenRouter devolve total_cost por generation em GET /api/v1/generation e usage.cost na resposta [F1]) e só como fallback da tabela de preços VERSIÓNADA com preço de cache-read separado — precificar cache-read a preço de input cheio inflaciona o custo ~5x e torna a comparação sem sentido [F2]; um custo defensável tem de incluir cache-write e descontos de cache [F3]. Retentativas e falhas contam todas as tentativas que chegaram ao modelo e registam-se sempre (tempo, tool calls), ainda que em routers com zero-completion insurance respostas com zero output não sejam cobradas [F8] — com exceções documentadas de caminhos 429 e outputs parciais [F8b]. Para comparar harnesses que contam coisas diferentes (DSH vs DEV do huu): normalizar ambos os lados para as mesmas categorias OTel (input/cache_read/cache_write/output/reasoning) [F7], reportar por tarefa USD + tokens por categoria + wall time [F3][F10], usar um trace id por tarefa para agregar sem dupla contagem e alocar custos partilhados de forma proporcional ao uso [F11], e reconciliar os totais contra os usage endpoints do provedor — OpenRouter Activity/Analytics API [F9], OpenAI usage/cost API [F4], Anthropic Admin Claude Code usage report [F6].",
+ "afirmacoes": [
+  {
+   "texto": "O total de tokens de entrada de uma chamada é cache_read_input_tokens + cache_creation_input_tokens + input_tokens; input_tokens sozinho não é o total",
+   "fontes": [
+    "F5"
+   ],
+   "citacao_literal": "total_input_tokens = cache_read_input_tokens + cache_creation_input_tokens + input_tokens",
+   "central": true
+  },
+  {
+   "texto": "A documentação da Anthropic avisa explicitamente que input_tokens não representa todos os tokens de entrada quando há cache",
+   "fontes": [
+    "F5"
+   ],
+   "citacao_literal": "Important: `input_tokens` does NOT represent all input tokens - only the portion after your last cache breakpoint.",
+   "central": true
+  },
+  {
+   "texto": "A norma OTel GenAI determina que gen_ai.usage.input_tokens inclua todos os tipos de tokens de entrada, incluindo tokens de cache",
+   "fontes": [
+    "F7"
+   ],
+   "citacao_literal": "This value SHOULD include all types of input tokens, including cached tokens.",
+   "central": true
+  },
+  {
+   "texto": "A norma OTel GenAI determina reportar a contagem de tokens FATURADA (a que o cliente é cobrado), não a consumida pelo modelo, quando há ambas",
+   "fontes": [
+    "F7"
+   ],
+   "citacao_literal": "instrumentations SHOULD report the billed count so the value matches the units the customer is charged for.",
+   "central": true
+  },
+  {
+   "texto": "A OpenAI define o input_tokens agregado da Usage/Cost API como incluindo tokens cached e cache-write",
+   "fontes": [
+    "F4"
+   ],
+   "citacao_literal": "The aggregated number of input tokens used, including cached and cache-write tokens.",
+   "central": true
+  },
+  {
+   "texto": "O endpoint de gerações do OpenRouter devolve tokens_prompt, tokens_completion e total_cost por generation, permitindo reconciliar custo por chamada",
+   "fontes": [
+    "F1"
+   ],
+   "citacao_literal": "\"total_cost\": 0.0015",
+   "central": true
+  },
+  {
+   "texto": "Um modelo de custo defensável inclui preço de input standard, preço descontado de cache-read, encargo separado de cache-write e preço de output",
+   "fontes": [
+    "F3"
+   ],
+   "citacao_literal": "that cost model includes standard input pricing, discounted cached-input pricing, separate cache-write charges, and output pricing rather than treating all prompt tokens as if they were billed at the same uncached input rate.",
+   "central": true
+  },
+  {
+   "texto": "Eficiência de tokens e custo não são a mesma coisa porque os providers precificam categorias de tokens de forma diferente e o cache altera materialmente a fatura",
+   "fontes": [
+    "F3"
+   ],
+   "citacao_literal": "token efficiency and cost are not identical because providers price token categories differently and caching can materially change the bill.",
+   "central": true
+  },
+  {
+   "texto": "Em relatórios de CLIs de agentes, o input total é a soma do input novo (não-cacheado) com cacheRead e cacheWrite; somar só o input novo subconta",
+   "fontes": [
+    "F2"
+   ],
+   "citacao_literal": "usage.input is the fresh, non-cached prompt slice, reported alongside cacheRead / cacheWrite, so total input is the sum of the three.",
+   "central": true
+  },
+  {
+   "texto": "total_prompt_tokens é inclusivo de total_cached_tokens e cache reads são tipicamente ~90% dos prompt tokens num run agêntico",
+   "fontes": [
+    "F2"
+   ],
+   "citacao_literal": "total_prompt_tokens is inclusive of total_cached_tokens, and cache reads are typically ~90% of prompt tokens in an agentic run.",
+   "central": true
+  },
+  {
+   "texto": "Precificar cache-read ao preço de input cheio inflaciona o custo ~5x e torna a comparação entre CLIs sem sentido",
+   "fontes": [
+    "F2"
+   ],
+   "citacao_literal": "Omitting the rate makes the parser fall back to the full input price and overstates Devin's cost by roughly 5x, which would make a CLI comparison meaningless.",
+   "central": true
+  },
+  {
+   "texto": "Runs agênticos multi-turno emitem vários eventos de passo (step_finish/turn_end); tokens e custo devem ser somados sobre todos eles",
+   "fontes": [
+    "F2"
+   ],
+   "citacao_literal": "so the harness sums both tokens and cost across all of them",
+   "central": true
+  },
+  {
+   "texto": "OpenRouter (ToS Enterprise §5.2): resposta inválida, erro ou zero output tokens não é cobrada (zero-completion insurance)",
+   "fontes": [
+    "F8"
+   ],
+   "citacao_literal": "If an AI Model does not return a valid response to Customer's Input, such as providing an error code or zero output tokens, Customer will not be charged.",
+   "central": true
+  },
+  {
+   "texto": "A própria OpenRouter documenta exceções à política de não faturar falhas: alguns caminhos 429 e outputs parciais chegaram a consumir créditos",
+   "fontes": [
+    "F8b"
+   ],
+   "citacao_literal": "Some users have reported cases where error 429 consumed credits, or where partial outputs were counted despite an error.",
+   "central": true
+  },
+  {
+   "texto": "A OpenRouter expõe endpoints de reconciliação de gastos: GET /api/v1/activity (uso e gasto diários por modelo), POST /api/v1/analytics/query e GET /api/v1/analytics/meta",
+   "fontes": [
+    "F9"
+   ],
+   "citacao_literal": "GET /api/v1/activity | Daily usage and spend grouped by model endpoint.",
+   "central": false
+  },
+  {
+   "texto": "Em benchmarks de harnesses, o uso de tokens deve incluir input novo, cache reads, cache writes e output, com reasoning tokens contados uma vez",
+   "fontes": [
+    "F10"
+   ],
+   "citacao_literal": "Reasoning tokens counted once",
+   "central": false
+  },
+  {
+   "texto": "A agregação de custo multi-agente liga-se por trace id atribuído no início da tarefa, com alocação de custos partilhados proporcional ao uso",
+   "fontes": [
+    "F11"
+   ],
+   "citacao_literal": "The mechanism for linking these costs is a trace ID — a unique identifier assigned when the client task begins.",
+   "central": false
+  },
+  {
+   "texto": "O dólar não vem das semconv OTel: o custo deve ser calculado no momento do log a partir dos tokens e duma tabela de preços versionada",
+   "fontes": [
+    "F12"
+   ],
+   "citacao_literal": "The spec deliberately doesn't define dollar cost, so you compute that at log time from the token counts and your versioned pricing table",
+   "central": false
+  },
+  {
+   "texto": "Há relatos de que timeouts e retentativas em providers diretos faturam os tokens de input duas vezes (uma por tentativa)",
+   "fontes": [
+    "F13"
+   ],
+   "citacao_literal": "A timeout is a double bill, not a missed call.",
+   "central": false
+  }
+ ],
+ "fontes": [
+  {
+   "ref": "F1",
+   "url": "https://openrouter.ai/docs/api/api-reference/generations/get-request-&-usage-metadata-for-a-generation",
+   "doi": "",
+   "titulo": "Get request & usage metadata for a generation",
+   "autores": "OpenRouter",
+   "ano": "2026",
+   "veiculo": "OpenRouter Documentation",
+   "tipo": "documentacao",
+   "nivel": "A",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F2",
+   "url": "https://github.com/aws-samples/sample-agent-cost-bench",
+   "doi": "",
+   "titulo": "sample-agent-cost-bench: benchmark framework that measures cost, quality and duration of coding agents across any CLI/model",
+   "autores": "AWS Samples",
+   "ano": "2026",
+   "veiculo": "GitHub (aws-samples)",
+   "tipo": "oficial",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F3",
+   "url": "https://artificialanalysis.ai/agents/coding-agents",
+   "doi": "",
+   "titulo": "Artificial Analysis Coding Agent Benchmarks & Leaderboard (metodologia: Cost per Task, Token Usage, Execution Time)",
+   "autores": "Artificial Analysis",
+   "ano": "2026",
+   "veiculo": "Artificial Analysis",
+   "tipo": "oficial",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F4",
+   "url": "https://platform.openai.com/docs/api-reference/usage/costs",
+   "doi": "",
+   "titulo": "Usage API Reference — OrganizationUsageCompletionsResult (Costs/Usage)",
+   "autores": "OpenAI",
+   "ano": "2026",
+   "veiculo": "OpenAI Platform Documentation",
+   "tipo": "documentacao",
+   "nivel": "A",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F5",
+   "url": "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching",
+   "doi": "",
+   "titulo": "Prompt caching — Claude Platform Docs",
+   "autores": "Anthropic",
+   "ano": "2026",
+   "veiculo": "Anthropic Docs",
+   "tipo": "documentacao",
+   "nivel": "A",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F6",
+   "url": "https://docs.anthropic.com/es/api/admin-api/claude-code/get-claude-code-usage-report",
+   "doi": "",
+   "titulo": "Get Claude Code usage report — Admin API (model_breakdown: tokens input/output/cache_read/cache_creation + estimated_cost)",
+   "autores": "Anthropic",
+   "ano": "2026",
+   "veiculo": "Anthropic Docs",
+   "tipo": "documentacao",
+   "nivel": "A",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F7",
+   "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/registry/attributes/gen-ai.md",
+   "doi": "",
+   "titulo": "GenAI semantic conventions — attribute registry (gen_ai.usage.* )",
+   "autores": "OpenTelemetry GenAI SIG",
+   "ano": "2026",
+   "veiculo": "OpenTelemetry semantic-conventions-genai",
+   "tipo": "norma",
+   "nivel": "A",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F8",
+   "url": "https://openrouter.ai/terms-of-service-enterprise",
+   "doi": "",
+   "titulo": "Enterprise Access Agreement §5.2 Errors",
+   "autores": "OpenRouter",
+   "ano": "2026",
+   "veiculo": "OpenRouter",
+   "tipo": "norma",
+   "nivel": "A",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F8b",
+   "url": "https://openrouter.ai/blog/insights/reliability-failover",
+   "doi": "",
+   "titulo": "OpenRouter Failover: Provider Failover vs Model Fallbacks Explained",
+   "autores": "OpenRouter",
+   "ano": "2026",
+   "veiculo": "OpenRouter Blog",
+   "tipo": "blogue",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F9",
+   "url": "https://openrouter.ai/docs/guides/features/activity",
+   "doi": "",
+   "titulo": "Activity — Analyze Your OpenRouter Usage (Analytics API)",
+   "autores": "OpenRouter",
+   "ano": "2026",
+   "veiculo": "OpenRouter Documentation",
+   "tipo": "documentacao",
+   "nivel": "A",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F10",
+   "url": "https://composio.dev/content/best-ai-agent-harnesses",
+   "doi": "",
+   "titulo": "8 Best AI Agent Harnesses in 2026: Performance, Cost, and Speed Compared (metodologia de contagem)",
+   "autores": "Composio",
+   "ano": "2026",
+   "veiculo": "Composio",
+   "tipo": "blogue",
+   "nivel": "C",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F11",
+   "url": "https://keito.ai/blog/multi-agent-cost-tracking",
+   "doi": "",
+   "titulo": "Multi-Agent Cost Tracking: How to Track Costs Across an AI Agent Fleet",
+   "autores": "Keito",
+   "ano": "2026",
+   "veiculo": "Keito Blog",
+   "tipo": "blogue",
+   "nivel": "C",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F12",
+   "url": "https://www.honeycomb.io/resources/getting-started/how-to-track-token-cost-across-llm-workflows",
+   "doi": "",
+   "titulo": "How to Track Token Cost Across LLM Workflows",
+   "autores": "Honeycomb",
+   "ano": "2026",
+   "veiculo": "Honeycomb",
+   "tipo": "blogue",
+   "nivel": "C",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F13",
+   "url": "https://theactionelite.com/failed-and-retried-llm-api-calls-are-money-counting-the-cost-of-a-timeout",
+   "doi": "",
+   "titulo": "Failed and Retried LLM API Calls Are Money: Counting the Cost of a Timeout",
+   "autores": "The Action Elite",
+   "ano": "2026",
+   "veiculo": "theactionelite.com",
+   "tipo": "blogue",
+   "nivel": "D",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F14",
+   "url": "https://www.productcompass.pm/p/claude-code-pricing",
+   "doi": "",
+   "titulo": "Claude Code Pricing: Plans, Limits, and Real Costs Explained",
+   "autores": "Paweł Huryn",
+   "ano": "2026",
+   "veiculo": "The Product Compass",
+   "tipo": "blogue",
+   "nivel": "C",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F15",
+   "url": "https://www.getapipulse.com/blog-api-error-handling.html",
+   "doi": "",
+   "titulo": "LLM API Error Handling and Retry Strategies: Avoid Wasting Money on Failed Requests",
+   "autores": "APIpulse",
+   "ano": "2026",
+   "veiculo": "getapipulse.com",
+   "tipo": "blogue",
+   "nivel": "D",
+   "lida": "trechos"
+  }
+ ],
+ "contradicoes": [
+  {
+   "tema": "Pedidos falhados/retentativas são faturados?",
+   "posicoes": [
+    {
+     "fonte": "F13",
+     "diz": "Um timeout é faturação dupla: o input é cobrado duas vezes (uma por tentativa) e o output uma vez"
+    },
+    {
+     "fonte": "F15",
+     "diz": "Erros 429 podem faturar tokens de input sem output; 5xx geralmente não são cobrados"
+    },
+    {
+     "fonte": "F8",
+     "diz": "Resposta inválida, erro ou zero output tokens não é cobrada (ToS §5.2, zero-completion insurance)"
+    },
+    {
+     "fonte": "F8b",
+     "diz": "A própria OpenRouter admite exceções: alguns caminhos 429 e outputs parciais consumiram créditos"
+    }
+   ],
+   "explicacao_provavel": "definicao"
+  },
+  {
+   "tema": "Que unidade de conta representa o 'custo' de um run: USD de API ou preço de plano?",
+   "posicoes": [
+    {
+     "fonte": "F14",
+     "diz": "Subscrições são 15-30x mais baratas do que o equivalente API (ex.: 1.588 USD equivalentes cobertos por plano de 200 USD)"
+    },
+    {
+     "fonte": "F3",
+     "diz": "O custo por tarefa mede apenas pay-per-token API cost, 'not consumer plan pricing or the full operational cost of deploying the system in production'"
+    }
+   ],
+   "explicacao_provavel": "definicao"
+  },
+  {
+   "tema": "Qual a métrica de eficiência certa: taxa de cache-hit, tokens totais ou USD?",
+   "posicoes": [
+    {
+     "fonte": "F2",
+     "diz": "Cache reads são ~90% dos prompt tokens em runs agênticos e a sua taxa de preço é o que decide o custo (erro de 5x se ignorada)"
+    },
+    {
+     "fonte": "F3",
+     "diz": "Eficiência de tokens e custo não são idênticos porque as categorias têm preços diferentes"
+    },
+    {
+     "fonte": "F15",
+     "diz": "A discussão pública (benchmark Pi/OpenCode/Codex) classifica a cache-hit percentage como 'poor efficiency metric'"
+    }
+   ],
+   "explicacao_provavel": "definicao"
+  }
+ ],
+ "lacunas": [
+  "Não foi levantado como o DSH expõe usage por subagente (formato de log/campos) para reconstruir as categorias in/out/cacheRead/cacheWrite — o que já se sabe é do huu; falta o lado DSH para aplicar a normalização",
+  "Preços concretos (input/output/cache read/cache write) do xiaomi/mimo-v2.6-pro no OpenRouter não foram consultados; sem eles o custo por token deste modelo fica por confirmar",
+  "Política de faturação de outputs parciais em streaming interrompido varia por provider e não tem documentação uniforme (só relatos)",
+  "Não existe (nas fontes lidas) um estudo público que execute o MESMO prompt multi-agente fan-out em dois harnesses diferentes com normalização de categorias — a comparação terá de ser construída à mão",
+  "Reasoning tokens: várias fontes dizem 'contados uma vez', mas não foi encontrada documentação de provider que especifique como o reasoning aparece no preço (dentro de output ou à parte)"
+ ],
+ "novas_perguntas": [
+  {
+   "pergunta": "Quais são os preços exatos in/out/cache-read/cache-write do xiaomi/mimo-v2.6-pro no OpenRouter e como refletem em usage.cost?",
+   "origem": "quantificacao",
+   "prioridade": "alta",
+   "porque": "Sem a tabela de preços do modelo usado pelo DSH, o lado DSH da comparação não é defensável"
+  },
+  {
+   "pergunta": "Como expõe o DSH o usage por agente/subagente (logs, API, ficheiros) e regista cache read/write e retentativas?",
+   "origem": "lacuna",
+   "prioridade": "alta",
+   "porque": "A normalização OTel só é aplicável se os registos do DSH tiverem esses campos por subagente"
+  },
+  {
+   "pergunta": "Há casos documentados e reproduzíveis de faturação de retentativas/429 que contradigam a zero-completion insurance do OpenRouter?",
+   "origem": "contra-evidencia",
+   "prioridade": "media",
+   "porque": "A regra de 'somar todas as tentativas' depende de saber se falhas são cobradas; hoje só há relatos"
+  },
+  {
+   "pergunta": "Como contabilizar tool calls sem LLM (bash, greps) e o tempo de parede de runs paralelos: soma dos tempos de agente ou makespan?",
+   "origem": "definicao",
+   "prioridade": "media",
+   "porque": "Em fan-out paralelo os dois números divergem muito e a comparação DSH vs huu tem de fixar uma definição"
+  }
+ ],
+ "fontes_nao_usadas": [
+  {
+   "url": "https://www.morphllm.com/ai-coding-costs",
+   "porque_pode_importar": "Matemática detalhada subscrição vs API por perfil de uso (75% cache hits), útil para discutir a unidade de conta; fonte C com interesse comercial"
+  },
+  {
+   "url": "https://github.com/earendil-works/pi/discussions/6646",
+   "porque_pode_importar": "Benchmark independente de overhead de tokens/caching entre CLIs com a conclusão 'cache-hit percentage is a poor efficiency metric'; mas é fórum com promoção de produto"
+  },
+  {
+   "url": "https://larridin.com/blog/ai-coding-tool-cost-benchmarks",
+   "porque_pode_importar": "Cita um estudo de 2026 em que runs agênticos usaram ~1000x mais tokens que chat e variaram até 30x na mesma tarefa — relevante para retentativas/variância; não verificado na fonte primária"
+  },
+  {
+   "url": "https://effloow.com/articles/agent-reliability-engineering-failure-recovery-poc-2026",
+   "porque_pode_importar": "Quantifica o custo de retentativas ingénuas (+94% tokens/tarefa) — útil para justificar contagem de retentativas; fonte D"
+  }
+ ],
+ "consultas": [
+  "search: OpenRouter generation usage stats endpoint token cost",
+  "search: AI coding agent cost benchmark token usage comparison harness",
+  "extract: openrouter.ai generation metadata + github.com/aws-samples/sample-agent-cost-bench",
+  "search: OpenAI usage API cost API organization daily token usage cached tokens",
+  "search: Anthropic Admin API usage cost report cache_read_input_tokens token counting",
+  "search: LLM cost accounting multi-agent token usage tracking agent harness methodology",
+  "search: coding agent benchmark cost comparison criticized counting tokens differently cache subscription vs API",
+  "search: OpenRouter activity endpoint credits usage aggregation API key cost breakdown",
+  "search: LLM API retries failed requests billed tokens agent loop error recovery cost accounting",
+  "extract: docs.anthropic.com prompt-caching + artificialanalysis.ai/agents/coding-agents",
+  "search: OpenRouter error handling failed request billing refund zero tokens docs",
+  "extract: github.com/aws-samples/sample-agent-cost-bench (metodologia)",
+  "search: OpenTelemetry GenAI semantic conventions usage tokens attributes gen_ai.usage.input_tokens cost"
+ ],
+ "alertas_seguranca": [
+  {
+   "url": "https://github.com/earendil-works/pi/discussions/6646",
+   "sinais": [
+    "promocao-encapotada-de-terceiros"
+   ],
+   "acao": "descartada"
+  }
+ ]
+}

@@ -1,0 +1,401 @@
+{
+ "id": "Q5",
+ "estado": "respondida",
+ "confianca": "alta",
+ "resposta": "Comparar DSH vs modo DEV do huu só é válido tratando o harness como variável experimental: escolhas de scaffold movem sozinhas 11–15 pp em SWE-bench Verified e as configurações incidentais (limites de iteração, teto de custo, modelo default, ferramentas) confundem-se com a capacidade do modelo [F1][F4]. Há ainda um duplo confound de medição — o scaffold executa as decisões críticas e o scorer valida forma em vez de ground truth — e contra-exemplos concretos: 32,67% de solution leakage + 31,08% de testes fracos em SWE-bench [F8][F9], memorização (até 76% a identificar ficheiros errados só com o issue) [F10] e um scaffold do TAU-bench cujo leakage invalidou resultados do HAL [F7]. Quanto à amostragem, uma única execução varia 2,2–6,0 pp (SD > 1,5 pp mesmo a temperatura 0), logo exigem-se N execuções independentes com variância/intervalos de confiança — e sob orçamento fixo convém mais tarefas × menos trials por tarefa [F2][F3]. Controlo: fixar e declarar modelo+versão, versão do harness, prompt e formato de ferramentas (formatos equivalentes mudam até 76 pontos de acurácia) [F6], esforço de reasoning (não é monotórico — até −20 pp com mais reasoning) [F7], limites de passos, temperatura/seed, ambiente e scorer [F4]. O desenho deve ser locked-harness (um único harness para ambas as condições) ou factorial com decomposição da variância em modelo + harness + interação [F1]; a declaração explícita deve incluir nível de scaffolding, critério de scoring e perfil de fiabilidade (pior caso/tails) [F5].",
+ "afirmacoes": [
+  {
+   "texto": "O harness/scaffold é um confound quantificado: monitoramento independente reporta 11–15 pp de variação só de scaffold em SWE-bench Verified, com o scaffold a ter o maior impacto isolado no desempenho.",
+   "fontes": [
+    "F1",
+    "F5"
+   ],
+   "citacao_literal": "Independent monitoring reports up to 11 to 15 percentage points of scaffold-only variation on SWE-bench Verified, with the explicit observation that scaffold choice has the single biggest impact on overall performance.",
+   "central": true
+  },
+  {
+   "texto": "Sem divulgação do harness, comparações entre modelos são inválidas; o controlo aceite é o protocolo locked-harness (um só harness para todos) ou o protocolo factorial (harness como fator controlado, com componentes de variância reportados).",
+   "fontes": [
+    "F1"
+   ],
+   "citacao_literal": "Valid comparisons require either a locked-harness protocol, where a single specified harness is applied to all models, or a factorial protocol, where harness choice is varied as a controlled factor and variance components are reported.",
+   "central": true
+  },
+  {
+   "texto": "Configurações incidentais — limites de iteração, teto de custo, seleção de modelo por omissão — e prompt engineering confundem-se com a arquitetura do scaffold e com a capacidade do modelo nas comparações de coding agents.",
+   "fontes": [
+    "F4"
+   ],
+   "citacao_literal": "benchmark scores confound scaffold architecture with model capability, prompt engineering, and incidental configuration choices (iteration limits, cost caps, default model selection)",
+   "central": true
+  },
+  {
+   "texto": "Execuções únicas não são reprodutíveis: em 60.000 trajetórias sobre SWE-bench-Verified, o pass@1 de execução única varia 2,2–6,0 pp consoante a execução observada, com desvios-padrão superiores a 1,5 pp mesmo a temperatura 0.",
+   "fontes": [
+    "F3"
+   ],
+   "citacao_literal": "single-run pass@1 estimates vary by 2.2 to 6.0 percentage points depending on which run is observed, with standard deviations exceeding 1.5 percentage points even at temperature 0",
+   "central": true
+  },
+  {
+   "texto": "A metodologia exige N execuções independentes com estimativas de variância e intervalos de confiança; qualquer estimativa pontual sem medida de variância está incompleta.",
+   "fontes": [
+    "F2",
+    "F3"
+   ],
+   "citacao_literal": "Any reported point estimate without a measure of variance is incomplete. Agentic evaluations are inherently stochastic, and a single accuracy number obscures the underlying variability.",
+   "central": true
+  },
+  {
+   "texto": "Sob orçamento computacional fixo, o erro-padrão da estimativa diminui alocando para mais itens com menos execuções cada (a fonte quantifica 68% de menor erro-padrão num cenário típico).",
+   "fontes": [
+    "F2"
+   ],
+   "citacao_literal": "variance is minimized by maximizing (i.e., evaluating more items with fewer trials each)",
+   "central": false
+  },
+  {
+   "texto": "O formato do prompt é um confound: mudanças de formatação que preservam o significado alteram a acurácia até 76 pontos (LLaMA-2-13B) e ~10 pontos em média em 50+ tarefas, pelo que o prompt e o formato de ferramentas do harness devem ser fixados ou declarados.",
+   "fontes": [
+    "F6"
+   ],
+   "citacao_literal": "accuracy varying in up to 76 points for LLaMA-2-13B between equivalent formats, and 10 accuracy points on average across 50+ tasks and several models",
+   "central": true
+  },
+  {
+   "texto": "Existe um duplo confound de medição nos benchmarks de agentes: decisões críticas de execução são feitas pelo scaffold fixo em vez do modelo, e o scorer avalia critérios que não refletem a correção da tarefa.",
+   "fontes": [
+    "F5"
+   ],
+   "citacao_literal": "execution-critical decisions are performed by a fixed scaffold instead of the model, while the scorer evaluates outputs using criteria that may not reflect task correctness",
+   "central": true
+  },
+  {
+   "texto": "Contra-exemplo de comparação invalidada por confounds: auditoria manual ao SWE-bench+ encontrou 32,67% de solution leakage e mais 31,08% de passagens só devidas a testes fracos, inflacionando taxas de resolução de sistemas de topo de tabela.",
+   "fontes": [
+    "F9",
+    "F8"
+   ],
+   "citacao_literal": "SWE-bench+ manually inspects successful patches and finds 32.67% involve solution leakage (the fix was already present in the issue report or comments) and a further 31.08% pass only because the test suite is too weak to verify correctness",
+   "central": true
+  },
+  {
+   "texto": "Contaminação/memorização é outro confound: modelos atingem até 76% a identificar caminhos de ficheiros errados usando só a descrição do issue, sem acesso à estrutura do repositório.",
+   "fontes": [
+    "F10"
+   ],
+   "citacao_literal": "state-of-the-art models achieve up to 76% accuracy in identifying buggy file paths using only issue descriptions, without access to repository structure",
+   "central": true
+  },
+  {
+   "texto": "O esforço de reasoning não é monotónico: no HAL, maior esforço de reasoning chegou a reduzir a acurácia em 20 pp, logo deve ser fixado e declarado, não presumido como 'quanto mais melhor'.",
+   "fontes": [
+    "F7"
+   ],
+   "citacao_literal": "higher reasoning effort can actually decrease accuracy by as much as 20 percentage points",
+   "central": true
+  },
+  {
+   "texto": "Mesmo a temperatura 0 há não-determinismo de infraestrutura (operações de ponto flutuante não associativas, erros de arredondamento, configuração de hardware, tamanho de batch), que afeta a reprodutibilidade fim-a-fim.",
+   "fontes": [
+    "F3"
+   ],
+   "citacao_literal": "non-associative floating point operations, rounding errors, hardware configuration, and batch size variations impact reproducibility at temperature 0",
+   "central": false
+  },
+  {
+   "texto": "Contra-exemplo de avaliação invalidada por leakage: o scaffold TAU-bench Few Shot do HAL incluía exemplos reais do test set nos few-shots, tornando as medições sem significado e obrigando à exclusão dos resultados.",
+   "fontes": [
+    "F7"
+   ],
+   "citacao_literal": "The TAU-bench Few Shot agent suffered from data leakage that invalidated our results; we discovered this through automated log analysis and excluded this scaffold from our analysis.",
+   "central": true
+  }
+ ],
+ "fontes": [
+  {
+   "ref": "F1",
+   "url": "https://arxiv.org/html/2605.23950v1",
+   "doi": "",
+   "titulo": "Stop Comparing LLM Agents Without Disclosing the Harness",
+   "autores": "não confirmados (preprint arXiv 2605.23950)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F2",
+   "url": "https://arxiv.org/html/2512.06710v1",
+   "doi": "",
+   "titulo": "Stochasticity in Agentic Evaluations: Quantifying Inconsistency with Intraclass Correlation",
+   "autores": "equipa You.com (Zairah, Abel, Megna, Saahil, Bryan — sobrenomes não confirmados)",
+   "ano": "2025",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F3",
+   "url": "https://arxiv.org/html/2602.07150v2",
+   "doi": "",
+   "titulo": "On Randomness in Agentic Evals",
+   "autores": "não confirmados (preprint arXiv 2602.07150)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F4",
+   "url": "https://arxiv.org/html/2604.03515v1",
+   "doi": "",
+   "titulo": "Inside the Scaffold: A Source-Code Taxonomy of Coding Agent Architectures",
+   "autores": "não confirmados (preprint arXiv 2604.03515)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F5",
+   "url": "https://arxiv.org/html/2609.09218v1",
+   "doi": "",
+   "titulo": "The Double Measurement Confound in Agent Benchmarks: De-Scaffolding, Ground-Truth Scoring, and Reliability Beyond the Mean",
+   "autores": "não confirmados (preprint arXiv 2609.09218)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F6",
+   "url": "https://arxiv.org/abs/2310.11324",
+   "doi": "",
+   "titulo": "Quantifying Language Models' Sensitivity to Spurious Features in Prompt Design (FormatSpread)",
+   "autores": "Melanie Sclar, Yejin Choi, Yulia Tsvetkov, Alane Suhr",
+   "ano": "2024",
+   "veiculo": "ICLR 2024 (arXiv 2310.11324)",
+   "tipo": "artigo-revisto",
+   "nivel": "A",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F7",
+   "url": "https://arxiv.org/pdf/2510.11977",
+   "doi": "10.48550/arXiv.2510.11977",
+   "titulo": "Holistic Agent Leaderboard: The Missing Infrastructure for AI Agent Evaluation",
+   "autores": "Sayash Kapoor, Peter Kirgis, Nitya Nadgir, Zachary S. Siegel, Boyi Wei et al. (incl. A. Narayanan, P. Liang, D. Song)",
+   "ano": "2025",
+   "veiculo": "ICLR 2026 (arXiv 2510.11977)",
+   "tipo": "artigo-revisto",
+   "nivel": "A",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F8",
+   "url": "https://openreview.net/pdf/f39d33e424d2af8ca2a6e1380c41eddfcaa49122.pdf",
+   "doi": "",
+   "titulo": "SWE-Bench+: Enhanced LLM Coding Benchmark",
+   "autores": "não confirmados",
+   "ano": "2025",
+   "veiculo": "OpenReview",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F9",
+   "url": "https://arxiv.org/html/2608.06663",
+   "doi": "",
+   "titulo": "The Horizon Gap: Planning, Memory, Execution, Training, and Evaluation for Long-Horizon LLM Agents",
+   "autores": "não confirmados (preprint arXiv 2608.06663)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F10",
+   "url": "https://arxiv.org/abs/2506.12286",
+   "doi": "",
+   "titulo": "The SWE-Bench Illusion: When State-of-the-Art LLMs Remember Instead of Reason",
+   "autores": "Liang et al. (parcialmente confirmado)",
+   "ano": "2025",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F11",
+   "url": "https://arxiv.org/pdf/2107.03374",
+   "doi": "10.48550/arXiv.2107.03374",
+   "titulo": "Evaluating Large Language Models Trained on Code (HumanEval/pass@k)",
+   "autores": "Mark Chen, Jerry Tworek, Heewoo Jun et al. (OpenAI)",
+   "ano": "2021",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F12",
+   "url": "https://arxiv.org/html/2603.23749v1",
+   "doi": "",
+   "titulo": "Efficient Benchmarking of AI Agents",
+   "autores": "não confirmados (preprint arXiv 2603.23749)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F13",
+   "url": "https://arxiv.org/html/2604.10508v1",
+   "doi": "",
+   "titulo": "How Many Tries Does It Take? Iterative Self-Repair in LLM Code Generation Across Model Scales and Benchmarks",
+   "autores": "não confirmados (preprint arXiv 2604.10508)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "C",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F14",
+   "url": "https://arxiv.org/html/2603.24755v1",
+   "doi": "",
+   "titulo": "SlopCodeBench: Benchmarking How Coding Agents Degrade Over Long-Horizon Iterative Tasks",
+   "autores": "não confirmados (preprint arXiv 2603.24755)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "C",
+   "lida": "trechos"
+  }
+ ],
+ "contradicoes": [
+  {
+   "tema": "Determinismo da decodificação greedy/temperatura 0",
+   "posicoes": [
+    {
+     "fonte": "F13",
+     "diz": "o uso de decodificação greedy 'ensures deterministic, reproducible results' e elimina a variância de amostragem"
+    },
+    {
+     "fonte": "F3",
+     "diz": "há desvios-padrão > 1,5 pp entre execuções mesmo a temperatura 0, por não-determinismo de infraestrutura (ponto flutuante, batch, hardware)"
+    }
+   ],
+   "explicacao_provavel": "definicao"
+  },
+  {
+   "tema": "Tamanho do efeito do harness: escore absoluto vs ordenação de modelos",
+   "posicoes": [
+    {
+     "fonte": "F1",
+     "diz": "a escolha de scaffold tem o maior impacto isolado (11–15 pp) e leaderboards sem harness divulgado atribuem sistematicamente mérito ao modelo"
+    },
+    {
+     "fonte": "F12",
+     "diz": "em agregado as ordenações permanecem estáveis sob mudança de scaffold; é difícil um harness fazer um modelo fraco ultrapassar um muito mais forte"
+    }
+   ],
+   "explicacao_provavel": "metodo"
+  },
+  {
+   "tema": "Esforço de reasoning: mais é melhor?",
+   "posicoes": [
+    {
+     "fonte": "F7",
+     "diz": "maior esforço de reasoning pode reduzir a acurácia até 20 pp em alguns benchmarks"
+    },
+    {
+     "fonte": "F14",
+     "diz": "protocolos de avaliação fixam reasoning effort 'high' para todos os modelos como configuração padrão"
+    }
+   ],
+   "explicacao_provavel": "populacao"
+  }
+ ],
+ "lacunas": [
+  "Não há estudos que quantifiquem isoladamente o efeito de temperatura, esforço de reasoning ou limite de passos no par concreto DSH vs modo DEV do huu com o mesmo modelo.",
+  "Não existe N universal de execuções: os protocolos observados (10 execuções, 24–64 trials) são escolhas de orçamento, não um consenso estatístico com poder de deteção especificado.",
+  "O efeito isolado da compactação/truncagem de contexto como confound está identificado na taxonomia [F4] mas não medido experimentalmente.",
+  "Autores e venues de várias fontes de 2026 não puderam ser confirmados (apenas título/URL via pesquisa).",
+  "A interação modelo×harness (termo de interação da decomposição da variância [F1]) não foi quantificada para harnesses de código aberto equivalentes aos nossos."
+ ],
+ "novas_perguntas": [
+  {
+   "pergunta": "Qual o número mínimo de execuções e que intervalos de confiança são necessários para detetar uma diferença de ~5 pp entre dois harnesses com o mesmo modelo?",
+   "origem": "quantificacao",
+   "prioridade": "alta",
+   "porque": "é o parâmetro decisivo do protocolo de comparação DSH vs huu-DEV; sem ele a diferença observada pode ser ruído de amostragem [F2][F3]"
+  },
+  {
+   "pergunta": "O efeito do harness interage com o modelo (fator model×harness) ou é aproximadamente aditivo neste par de harnesses?",
+   "origem": "contradicao",
+   "prioridade": "alta",
+   "porque": "F12 sugere ordenações estáveis, F1/F4 mostram interações; decide se um protocolo locked-harness com um único modelo chega ou se é preciso um desenho factorial"
+  },
+  {
+   "pergunta": "Como operacionalizar o locked-harness quando os dois harnesses não partilham ferramentas, formato de contexto nem prompts?",
+   "origem": "definicao",
+   "prioridade": "alta",
+   "porque": "sem esta definição o protocolo locked é inaplicável e resta o factorial, muito mais caro [F1]"
+  },
+  {
+   "pergunta": "Que checklist normativo de declaração (versão do harness, nível de scaffolding, scorer, seeds, effort) é aceite pela comunidade?",
+   "origem": "aprofundamento",
+   "prioridade": "media",
+   "porque": "F1 exige disclosure mas não propõe formato normativo verificável"
+  },
+  {
+   "pergunta": "Benchmarks continuamente atualizados (SWE-rebench/Harbour) reduzem de facto o confound de contaminação, ou apenas o deslocam?",
+   "origem": "contra-evidencia",
+   "prioridade": "media",
+   "porque": "F8/F9/F10 mostram que benchmarks congelados são vulneráveis a leakage e memorização"
+  }
+ ],
+ "fontes_nao_usadas": [
+  {
+   "url": "https://link.springer.com/article/10.1007/s10462-026-11571-0",
+   "porque_pode_importar": "revisão sistemática de2026 sobre avaliação de agentes; cobre o trade-off autenticidade vs reprodutibilidade e contaminação — evitada por ser agregadora, mas útil para consolidar a taxonomia"
+  },
+  {
+   "url": "https://arxiv.org/html/2602.03238v1",
+   "porque_pode_importar": "documenta acoplamento de resultados de benchmarks a system prompts, tool abstractions e memory mechanisms; base para um checklist de declaração"
+  },
+  {
+   "url": "https://arxiv.org/html/2605.28840v1",
+   "porque_pode_importar": "mede reprodutibilidade comportamental em pipelines de tool-calling; útil para definir invariantes entre execuções repetidas"
+  },
+  {
+   "url": "https://aclanthology.org/2026.findings-acl.1330",
+   "porque_pode_importar": "survey ACL sobre avaliação de agentes; pode legitimar a taxonomia de confounds num veículo revisto"
+  },
+  {
+   "url": "https://arxiv.org/html/2601.00481v1",
+   "porque_pode_importar": "MAESTRO: estabilidade de call-graph entre execuções como métrica de reprodutibilidade de sistemas multi-agente"
+  }
+ ],
+ "consultas": [
+  "agent benchmark confounds evaluation methodology LLM agents",
+  "LLM agent evaluation reproducibility stochastic variance multiple runs",
+  "temperature sampling variance coding benchmark pass@k confidence intervals human eval",
+  "scaffold harness choices change agent performance scaffold confound agentic benchmark",
+  "AI agents that matter Kapoor Narayanan pitfalls agent evaluation reproducibility cost confound",
+  "SWE-bench illusion memorization contamination agent leaderboard claims contested re-evaluation",
+  "prompt formatting sensitivity benchmark score variance rankings LLM spurious features",
+  "reasoning effort thinking budget step limit confound fair comparison coding agents evaluation protocol"
+ ],
+ "alertas_seguranca": []
+}

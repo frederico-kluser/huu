@@ -1,0 +1,268 @@
+{
+ "id": "Q4",
+ "estado": "respondida",
+ "confianca": "moderada",
+ "resposta": "Um prompt-atividade \"full-stack a correr local\" deve ter objetivo principal + lista enumerável de requisitos funcionais e de aparência, sem prescrever a stack: o template do WebGen-Bench manda explicitamente \"não especificar detalhes técnicos\" nem referir apps externas [F1], e as instruções publicadas têm ~400–600 caracteres (mediana 483) com 5–7 requisitos, cada um mapeado a um caso de teste [F1]. Exemplos públicos reais: instrução literal do WebGen-Bench (\"stock reports\" com funcionalidades + cor de fundo/cor dos componentes) [F2], prompts abertos do WebDev Arena (\"Build a simple chess game\", \"Create a Hacker News clone\"; 11 categorias, top-3 Website Design 15.3%, Games 12.1%, Clones 11.6%) [F3], o dataset bigcode/autocodearena-v0 (ex.: landing page React com secções Navbar/Features/Trailer/Contact enumeradas) [F6] e o Web-Bench (50 projetos × 20 tarefas dependentes) [F4]. Para comparabilidade, o ambiente fixo fica FORA do prompt do utilizador: o WebDev Arena trava TypeScript, Tailwind, componentes single-file e proibição de mudar dependências num scaffold Next.js comum [F3], e a execução isolada do código gerado é tratada como requisito fundamental do eval [F7]. O escopo tem de caber num run: um projeto completo do Web-Bench demora 4–8h a um sénior e o melhor modelo faz 25.1% Pass@1 [F4], e o próprio WebGen-Bench amostra só 2–8 instruções por categoria por custo de inferência [F1]. Critérios de aceitação: transformar cada requisito num ponto verificável — o WebCoderBench deriva checklists por requisito em funcionalidade, design visual e conteúdo, com pontos \"high-level e mínimos\" [F5].",
+ "afirmacoes": [
+  {
+   "texto": "O template de instruções do WebGen-Bench (benchmark de geração de webapps a partir de zero) define um objetivo principal + lista de requisitos funcionais e de aparência e proíbe explicitamente especificar detalhes técnicos ou referir aplicações externas na instrução.",
+   "fontes": [
+    "F1"
+   ],
+   "citacao_literal": "2. You should not specify any technical details in the instructions. 3. You should not refer to any outside applications in your instructions.",
+   "central": true
+  },
+  {
+   "texto": "No WebGen-Bench cada instrução tem 400–600 caracteres (mediana 483) e está ligada a 5–7 casos de teste, cada caso correspondendo a um requisito distinto da instrução — i.e. requisitos enumeráveis e testáveis um a um.",
+   "fontes": [
+    "F1"
+   ],
+   "citacao_literal": "Because each test case corresponds to a distinct requirement in the instruction, these statistics confirm that every instruction encompasses a sufficient set of functional and appearance requirements.",
+   "central": true
+  },
+  {
+   "texto": "Existe instrução pública literal no dataset WebGen-Bench que enuncia uma app e as suas funcionalidades + aparência (geração de relatórios de ações; busca, resumo, relatórios personalizados; cor de fundo branca e componentes navy).",
+   "fontes": [
+    "F2"
+   ],
+   "citacao_literal": "Please implement a website for generating stock reports to provide stock information and analysis. The website should have the functionality to search and summarize stock information, and generate customized stock reports based on user requirements.",
+   "central": true
+  },
+  {
+   "texto": "Os prompts reais do WebDev Arena são pedidos abertos de construção de apps em linguagem natural (ex.: \"Build a simple chess game\", \"Create a Hacker News clone\") e distribuem-se por 11 categorias, lideradas por Website Design (15.3%), Game Development (12.1%) e Clone Development (11.6%).",
+   "fontes": [
+    "F3"
+   ],
+   "citacao_literal": "prompts can be categorized into 11 broad categories, the largest three being Website Design (15.3%), Game Development (12.1%), and Clone Development (11.6%)",
+   "central": true
+  },
+  {
+   "texto": "No WebDev Arena a comparabilidade entre modelos obtém-se fixando o ambiente no system prompt (papel de engenheiro frontend, TypeScript, Tailwind sem valores arbitrários, componentes single-file, sem alterar dependências, scaffold Next.js pré-definido) em vez de no prompt do utilizador.",
+   "fontes": [
+    "F3"
+   ],
+   "citacao_literal": "Our system prompt also includes information pertaining to a predefined framework to provide the LLM a consistent starting point for generated applications.",
+   "central": true
+  },
+  {
+   "texto": "O Web-Bench usa como unidade o projeto completo (50 projetos × 20 tarefas com dependências sequenciais), cuja dimensão real é pesada: em média 4–8 horas de um engenheiro sénior por projeto e apenas 25.1% Pass@1 do melhor modelo — logo o escopo de projeto completo não cabe num run unitário.",
+   "fontes": [
+    "F4"
+   ],
+   "citacao_literal": "On average, a single project takes 4 to 8 hours for a senior engineer to complete.",
+   "central": true
+  },
+  {
+   "texto": "O WebCoderBench converte cada requisito do utilizador em checklists ground-truth verificáveis em três dimensões — funcionalidade, design visual e conteúdo — com pontos de requisito de alto nível e mínimos, um padrão de critério de aceitação para o prompt-atividade.",
+   "fontes": [
+    "F5"
+   ],
+   "citacao_literal": "we establish ground-truth checklists for each requirement across three dimensions: functionality, visual design, and content",
+   "central": true
+  },
+  {
+   "texto": "O dataset público bigcode/autocodearena-v0 contém instruções reais de construção de apps que especificam a estrutura da UI por enumeração de secções (ex.: landing page em React com Navbar fixa, Features, Trailer, Contact).",
+   "fontes": [
+    "F6"
+   ],
+   "citacao_literal": "Create a video game landing page using React.js. The page should be responsive, user-friendly, and follow best practices for React development. The page should include the following sections: Navbar: Fixed at the top of the page.",
+   "central": false
+  },
+  {
+   "texto": "Em evals de desenvolvimento web é requisito fundamental executar o código gerado (não basta gerar), com execução isolada por sandbox/VM — logo a atividade tem de terminar em algo executável localmente.",
+   "fontes": [
+    "F7"
+   ],
+   "citacao_literal": "When benchmarking LLMs on web development tasks, there's a fundamental need to run the code output. While getting LLMs to generate code is straightforward, running it securely at scale presents several challenges",
+   "central": false
+  }
+ ],
+ "fontes": [
+  {
+   "ref": "F1",
+   "url": "https://openreview.net/pdf/7f927a030a0e7ff4e67bd413b7c22011c81c8457.pdf",
+   "doi": "",
+   "titulo": "WebGen-Bench: Evaluating LLMs on Generating Interactive and Functional Websites from Scratch",
+   "autores": "Yu et al. (autores do WebGen-Bench; nomes individuais não confirmados no excerto lido)",
+   "ano": "2025",
+   "veiculo": "OpenReview / arXiv 2505.03733",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F2",
+   "url": "https://www.kaggle.com/datasets/zimulu/webgen-bench",
+   "doi": "",
+   "titulo": "WebGen-Bench (dataset: 101 instructions + 647 test cases + WebGen-Instruct)",
+   "autores": "equipa WebGen-Bench (zimulu)",
+   "ano": "2025",
+   "veiculo": "Kaggle Datasets",
+   "tipo": "oficial",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F3",
+   "url": "https://arena.ai/blog/webdev-arena",
+   "doi": "",
+   "titulo": "WebDev Arena: A Live LLM Leaderboard for Web App Development",
+   "autores": "equipa LMArena/Arena (UC Berkeley)",
+   "ano": "2025",
+   "veiculo": "blogue oficial arena.ai",
+   "tipo": "oficial",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F4",
+   "url": "https://arxiv.org/abs/2505.07473",
+   "doi": "",
+   "titulo": "Web-Bench: A LLM Code Benchmark Based on Web Standards and Frameworks",
+   "autores": "equipa ByteDance (Web-Bench)",
+   "ano": "2025",
+   "veiculo": "arXiv (repo oficial github.com/bytedance/web-bench)",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F5",
+   "url": "https://arxiv.org/html/2601.02430v1",
+   "doi": "",
+   "titulo": "WebCoderBench: Benchmarking Web Application Generation with Comprehensive and Interpretable Evaluation Metrics",
+   "autores": "autores WebCoderBench + parceiro industrial (nomes não confirmados no excerto lido)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F6",
+   "url": "https://huggingface.co/datasets/bigcode/autocodearena-v0",
+   "doi": "",
+   "titulo": "bigcode/autocodearena-v0 (dataset de prompts de código/apps)",
+   "autores": "BigCode",
+   "ano": "2026",
+   "veiculo": "Hugging Face Datasets",
+   "tipo": "oficial",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F7",
+   "url": "https://e2b.dev/customers/how-lmarena-collaborated-with-e2b-to-build-llm-web-development-evals",
+   "doi": "",
+   "titulo": "How Arena Collaborated with E2B to Build LLM Web Development Evals",
+   "autores": "Tereza Tizkova (E2B) sobre o trabalho da LMArena",
+   "ano": "2025",
+   "veiculo": "blogue E2B",
+   "tipo": "blogue",
+   "nivel": "C",
+   "lida": "trechos"
+  }
+ ],
+ "contradicoes": [
+  {
+   "tema": "Prescrever (ou não) a stack técnica dentro do prompt-atividade",
+   "posicoes": [
+    {
+     "fonte": "F1",
+     "diz": "O template do WebGen-Bench manda explicitamente não especificar detalhes técnicos nem referir apps externas na instrução dada ao agente."
+    },
+    {
+     "fonte": "F3",
+     "diz": "O WebDev Arena fixa restrições técnicas explícitas (TypeScript, Tailwind sem valores arbitrários, componentes single-file, não alterar dependências) e um scaffold Next.js pré-definido."
+    },
+    {
+     "fonte": "F6",
+     "diz": "Prompts reais do autocodearena-v0 especificam framework (\"Create a video game landing page using React.js\")."
+    }
+   ],
+   "explicacao_provavel": "definicao"
+  },
+  {
+   "tema": "Unidade de atividade: instrução única vs projeto multi-tarefa",
+   "posicoes": [
+    {
+     "fonte": "F1",
+     "diz": "Atividade = uma instrução de ~500 caracteres com 5–7 requisitos, avaliada por casos de teste por requisito."
+    },
+    {
+     "fonte": "F4",
+     "diz": "Atividade = projeto com 20 tarefas sequencialmente dependentes, 4–8h de engenheiro sénior, avaliado por testes end-to-end (Playwright)."
+    }
+   ],
+   "explicacao_provavel": "definicao"
+  }
+ ],
+ "lacunas": [
+  "Nenhuma fonte A/B prescreve explicitamente 'specs de entidades, rotas e estados' no prompt-atividade; essa formulação só aparece em guias de nível D (gist mega-prompt bolt, blogues de fornecedores), logo o vocabulário exato de entidades/rotas/estados continua sem autoridade forte.",
+  "Não foi encontrado nenhum prompt público de benchmark unitário 'full-stack a correr local' (UI + API + persistência): os benchmarks públicos ou são só frontend (WebDev Arena em Next.js single-file) ou multi-tarefa pesados (Web-Bench).",
+  "Sem dados publicados sobre o trade-off comprimento/nº de requisitos do prompt vs. sucesso do run, além das estatísticas descritivas do WebGen-Bench (400–600 caracteres, 5–7 requisitos).",
+  "Prompts de evals estilo bolt/v0/Devin não são públicos; só agregadores, blogues de fornecedores e gists (nível D)."
+ ],
+ "novas_perguntas": [
+  {
+   "pergunta": "Existe algum prompt-atividade público, de dimensão unitária, de app full-stack local (UI + API + base de dados) usado em evals de ferramentas agentic (estilo Devin/bolt)?",
+   "origem": "fonte-nao-usada",
+   "prioridade": "alta",
+   "porque": "É exatamente o formato de que precisamos e só encontrámos material de nível D."
+  },
+  {
+   "pergunta": "Deve o prompt-atividade fixar a stack (como o WebDev Arena) ou deixar cada ferramenta escolher (como o WebGen-Bench) para a comparação ser justa?",
+   "origem": "contradicao",
+   "prioridade": "alta",
+   "porque": "F1 e F3 recomendam coisas opostas; a escolha muda o que medimos entre as duas ferramentas."
+  },
+  {
+   "pergunta": "Como varia o sucesso do run com o número de requisitos enumerados (5 vs 7 vs 10)?",
+   "origem": "quantificacao",
+   "prioridade": "media",
+   "porque": "Define o limite 'simples mas completo' do prompt com evidência em vez de intuição."
+  },
+  {
+   "pergunta": "Os padrões 'clone' (Hacker News/WhatsApp UI) produzem runs mais curtos e comparáveis do que apps de domínio rico com entidades próprias?",
+   "origem": "aprofundamento",
+   "prioridade": "baixa",
+   "porque": "As categorias mais comuns do WebDev Arena são clones e landing pages, sugerindo bom custo-benefício."
+  }
+ ],
+ "fontes_nao_usadas": [
+  {
+   "url": "https://www.rocket.new/blog/how-to-generate-full-stack-apps-from-prompt-with-ai-tools",
+   "porque_pode_importar": "Guia de fornecedor (nível D/SEO) com cinco elementos de prompt forte (definir utilizador, outcomes, relações de dados entre entidades, direção visual, integrações) — úteis como checklist, mas sem autoridade de benchmark."
+  },
+  {
+   "url": "https://gist.github.com/iamnolanhu/d0f6b04cea7b83e36fc83895e1cef7d1",
+   "porque_pode_importar": "Mega-prompt bolt.new com secções Database Schema / Routing / Auth / UI-UX / Testing — cobre entidades e rotas que as fontes A/B não explicitam, mas é um gist pessoal (nível D)."
+  },
+  {
+   "url": "https://www.alphaxiv.org/abs/2505.07473",
+   "porque_pode_importar": "Agregador do Web-Bench com o workflow de avaliação passo-a-passo; usámos a fonte primária (arXiv + repo GitHub) em vez dele."
+  },
+  {
+   "url": "https://benchmarklist.com/benchmarks/lmarena_webdev_arena",
+   "porque_pode_importar": "Aggregador do leaderboard WebDev Arena; útil só para o estado atual dos rankings, irrelevante para o desenho do prompt."
+  }
+ ],
+ "consultas": [
+  "search: WebDev Arena benchmark prompt web development LMArena",
+  "search: text-to-app benchmark prompts full-stack app generation evaluation",
+  "search: WebGen-Bench benchmark text-to-webapp generation task instructions",
+  "search: benchmark prompt build a task tracker CRUD app LLM evaluation paper",
+  "search: Web-Bench benchmark real-world web development tasks LLM project from scratch",
+  "search: v0 bolt.new prompt guide best practices specify data model routes features app generation",
+  "search: Arena E2B LLM web development evals how they built",
+  "search: WebDev Arena prompts dataset huggingface example prompts build a chess game landing page",
+  "search (preset academico): benchmark task design requirements specification entities user flows acceptance criteria web app generation agent",
+  "extract: arena.ai/blog/webdev-arena (estratégia de prompting, componentes do system prompt, categorias de prompts)",
+  "extract: arxiv.org/html/2505.03733v2 + openreview.net/pdf/7f927a03... (curadoria de instruções, template do apêndice C, estatísticas)",
+  "extract: kaggle.com/datasets/zimulu/webgen-bench (instrução literal de exemplo)",
+  "extract: github.com/bytedance/web-bench + arxiv.org/abs/2505.07473 (estrutura de projetos/tarefas)",
+  "extract: arxiv.org/html/2601.02430v1 (estrutura de requisitos e checklists do WebCoderBench)",
+  "extract: huggingface.co/datasets/bigcode/autocodearena-v0 (prompts reais)"
+ ],
+ "alertas_seguranca": []
+}

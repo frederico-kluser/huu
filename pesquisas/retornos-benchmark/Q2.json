@@ -1,0 +1,559 @@
+{
+ "id": "Q2",
+ "estado": "respondida",
+ "confianca": "moderada",
+ "resposta": "A qualidade de código de apps gerados por agentes deve ser medida por uma rubrica de dimensões verificáveis por ferramenta: (1) higiene estática — lint/typecheck/build sem erros e delta de issues por KLOC com a MESMA toolchain antes/depois (ESLint+njsscan, Pylint+Bandit, tsc --strict, SonarQube) [F19, F15]; (2) correção funcional por testes automatizados no protocolo fail-to-pass/pass-to-pass do SWE-bench [F4, F2], com suites reforçadas, pois a EvalPlus mostrou que 80x mais testes reduzem o pass@k em 19.3–28.9% e invertem rankings [F3]; (3) qualidade dos testes: cobertura + mutation score, porque cobertura não se correlaciona fortemente com deteção de defeitos e o mutation score é proxy mais fiável [F9, F8-inocuo]; (4) complexidade/tamanho (ciclomática, LLOC, Halstead) só como alerta de outliers, pois correlacionam fracamente com manutenibilidade [F11, F12]; (5) duplicação (% de linhas/clones duplicados, NiCad/jscpd/SonarQube) [F15]; (6) segurança estática SAST por CWE/severidade (CodeQL, Semgrep, Snyk, Bandit) — 275/600 snippets JS gerados por 6 LLMs continham vulnerabilidades [F7, F8]; (7) organização/arquitetura por regras de dependência verificáveis (ArchUnit, dependency-cruiser, route coverage), sendo ~80% da arquitetura verificável por máquina [F13, F14]. Os benchmarks medem sobretudo execução/pass@k (SWE-bench, HumanEval+/MBPP+) [F2, F3], mas testes fracos inflacionam: 7.8% dos patches 'resolvidos' falham os testes completos dos developers e 29.6% comportam-se de forma diferente do ground truth [F4], e 19.78% dos patches que passam os testes do SWE-bench Verified são semanticamente incorrectos [F1]; os benchmarks de apps web misturam métricas por regras com LLM-as-a-judge (WebCoderBench: 24 métricas / 9 perspetivas) ou preferência humana pareada (WebDev Arena) [F5, F6], sendo o LLM-judge pouco fiável (~70% de acordo com especialistas; desalinhado em 6 de 11 critérios clássicos de SE) [F6, F17].",
+ "afirmacoes": [
+  {
+   "texto": "O SWE-bench avalia um patch executando testes do programador: pelo menos um teste fail-to-pass confirma a correção e testes pass-to-pass verificam não-regressão; o métrico de leaderboard é a percentagem de instâncias resolvidas.",
+   "fontes": [
+    "F4",
+    "F2"
+   ],
+   "citacao_literal": "SWE-bench evaluates the generated patch by running tests associated with the issue, including at least one fail-to-pass test to confirm the issue is resolved",
+   "central": true
+  },
+  {
+   "texto": "A validação baseada apenas nos testes do benchmark sobre-estima a correção: 7.8% de todos os patches contam como corretos mas falham a suite completa de testes do programador, e 29.6% dos patches plausíveis têm comportamento diferente do patch ground truth.",
+   "fontes": [
+    "F4"
+   ],
+   "citacao_literal": "which causes 7.8% of all patches to count as \"correct\" while failing the developer-written test suite",
+   "central": true
+  },
+  {
+   "texto": "Entre patches que passam os testes originais do SWE-bench Verified dos top-30 agentes de leaderboard, 19.78% foram rejeitados como semanticamente incorrectos (2.184 de 11.041).",
+   "fontes": [
+    "F1"
+   ],
+   "citacao_literal": "19.78% of cases labeled as \"solved\" among the top-30 leaderboard agents are semantically incorrect",
+   "central": true
+  },
+  {
+   "texto": "Ampliar as suites de teste em 80x (EvalPlus/HumanEval+) apanha código errado que passava antes, reduzindo o pass@k em 19.3–28.9% e chegando a inverter o ranking de modelos.",
+   "fontes": [
+    "F3"
+   ],
+   "citacao_literal": "HumanEval+ is able to catch significant amounts of previously undetected wrong code synthesized by LLMs, reducing the pass@k by up-to 19.3-28.9%",
+   "central": true
+  },
+  {
+   "texto": "Os benchmarks de geração de código classificam as suas métricas em três famílias: match-based (ex.: Exact Match), execution-based (ex.: Pass@k) e LLM-based (ex.: CodeBERTScore).",
+   "fontes": [
+    "F2"
+   ],
+   "citacao_literal": "we summarize them into match-based (e.g., Exact Match), execution-based (e.g., Pass@K (Chen et al., 2021)), and LLM-based ones (e.g., CodeBERTScore (Zhou et al., 2023))",
+   "central": true
+  },
+  {
+   "texto": "O levantamento de benchmarks de SE identifica a sobre-dependência de Pass@k como fraqueza central: Pass@k mede apenas se o código passa um conjunto predefinido de testes e ignora correção parcial, qualidade de código e nuance semântica.",
+   "fontes": [
+    "F2"
+   ],
+   "citacao_literal": "Many benchmarks adopt Pass@k as the dominant evaluation metric, which solely measures whether generated code passes a predefined set of test cases.",
+   "central": true
+  },
+  {
+   "texto": "O WebCoderBench (benchmark de geração de web apps com 1.572 requisitos reais) avalia 24 métricas finas em 9 perspetivas, combinando métricas baseadas em regras com LLM-as-a-judge e pesos alinhados com preferência humana.",
+   "fontes": [
+    "F5"
+   ],
+   "citacao_literal": "WebCoderBench provides 24 fine-grained evaluation metrics across 9 perspectives, combining rule-based metrics with the LLM-as-a-judge paradigm to achieve fully automated, objective, and general evaluation",
+   "central": true
+  },
+  {
+   "texto": "Os benchmarks de apps web divergem no que medem: WebGen-Bench e Web-Bench usam execução de test cases; FullFront usa similaridade de código/imagem + LLM-judge; WebDev Arena usa rotulagem manual pareada (preferência humana), não métricas de código.",
+   "fontes": [
+    "F5",
+    "F6"
+   ],
+   "citacao_literal": "WebDev Arena LMArena.ai (2025) | Text | 10,501 | Real user requirements | No | Pairwise manual labeling",
+   "central": true
+  },
+  {
+   "texto": "Código JavaScript gerado por 6 LLMs contém vulnerabilidades detetáveis por SAST: 275 de 600 snippets, classificados por CWE com Semgrep, Snyk e SonarCloud mais revisão manual.",
+   "fontes": [
+    "F8",
+    "F7"
+   ],
+   "citacao_literal": "Our results show that 275 of the 600 generated JavaScript code snippets contain vulnerabilities.",
+   "central": true
+  },
+  {
+   "texto": "Análise estática SAST (CodeQL, Snyk Code) sobre código C/C++ gerado por 10 LLMs encontrou quantidade preocupante de CWEs, alguns mapeáveis a CVEs.",
+   "fontes": [
+    "F7"
+   ],
+   "citacao_literal": "The amount of CWEs present in AI-generated code is concerning.",
+   "central": false
+  },
+  {
+   "texto": "Cobertura de código elevada não implica forte capacidade de deteção de defeitos; o mutation score é considerado métrica mais fiável da eficácia dos testes.",
+   "fontes": [
+    "F9"
+   ],
+   "citacao_literal": "mutation score is a more reliable and meaningful metric for evaluating the effectiveness of test cases",
+   "central": true
+  },
+  {
+   "texto": "A correlação entre manutenibilidade e métricas individuais (LoC, complexidade ciclomática, volume de Halstead) é fraca; Cognitive Complexity não prediz melhor a compreensibilidade do que LLOC ou McCC.",
+   "fontes": [
+    "F11",
+    "F12"
+   ],
+   "citacao_literal": "research suggests that the correlation between maintainability and individual metrics such as LoC, CC, and HV is weak at best",
+   "central": true
+  },
+  {
+   "texto": "A conformidade arquitetural é parcialmente verificável por máquina: num estudo com agentes de coding, ~80% da arquitetura era verificável automaticamente (existência de componentes, padrões de comunicação, route coverage, estrutura de ficheiros), deixando por verificar design rationale e propriedades semânticas.",
+   "fontes": [
+    "F13",
+    "F14"
+   ],
+   "citacao_literal": "Approximately 80% of the architecture is machine-verifiable. Unchecked elements include design rationale, full status transition matrix, and semantic data ownership.",
+   "central": true
+  },
+  {
+   "texto": "Regras arquiteturais articuladas são impõíveis deterministicamente por ferramentas: dependências via ArchUnit ou Dependency Cruiser, fronteiras de serviço via contract testing (Pact).",
+   "fontes": [
+    "F14",
+    "F13"
+   ],
+   "citacao_literal": "dependency rules via tools such as ArchUnit or Dependency Cruiser, service boundary agreements via contract testing frameworks such as Pact",
+   "central": false
+  },
+  {
+   "texto": "LLM-as-a-judge não é substituto fiável de avaliação humana em código: permanece significativamente desalinhado com a preferência humana em 6 de 11 temas de critérios clássicos de engenharia de software.",
+   "fontes": [
+    "F17",
+    "F6"
+   ],
+   "citacao_literal": "LLM judges remain significantly misaligned with human preference on 6 of these 11 themes across modalities",
+   "central": true
+  },
+  {
+   "texto": "Em avaliação de qualidade web, o melhor avaliador LLM (GPT-4.1, paradigma pairwise) atinge apenas 70.34% de acordo com juízes especialistas humanos, com platagem por volta dos 70%.",
+   "fontes": [
+    "F6"
+   ],
+   "citacao_literal": "The top-performing evaluator, GPT-4.1 under the pairwise paradigm, attains an agreement rate of 70.34%.",
+   "central": false
+  },
+  {
+   "texto": "Ferramentas de deteção de technical debt/code smells discordam entre si: seis ferramentas de nível de ficheiro têm sobreposição mínima nos ficheiros mais endividados, e medidas de co-change correlacionam melhor com esforço de manutenção.",
+   "fontes": [
+    "F15"
+   ],
+   "citacao_literal": "found minimal overlap in the top-ranked debt files, with co-change-based measures correlating best with maintenance effort",
+   "central": false
+  },
+  {
+   "texto": "Método replicável para avaliar código gerado: correr a MESMA toolchain de análise estática (Pylint+Bandit para Python; ESLint+njsscan para JS/TS) sobre a versão antes e depois de cada commit gerado por IA e comparar o delta de issues.",
+   "fontes": [
+    "F19"
+   ],
+   "citacao_literal": "For Python, we use Pylint and Bandit. For JavaScript and TypeScript, we use ESLint and njsscan.",
+   "central": true
+  },
+  {
+   "texto": "O modelo de qualidade ISO/IEC 25010 decompõe a manutenibilidade em cinco subcaracterísticas: modularidade, reutilização, analisabilidade, modificabilidade e testabilidade — âncora normativa para uma rubrica de qualidade de código.",
+   "fontes": [
+    "F18"
+   ],
+   "citacao_literal": "Maintainability, as described by the ISO/IEC 25010 quality model, is further subdivided into five subcategories like modularity, reusability, analyzability, modifiability, and testability",
+   "central": false
+  }
+ ],
+ "fontes": [
+  {
+   "ref": "F1",
+   "url": "https://arxiv.org/html/2603.00520v1",
+   "doi": "",
+   "titulo": "SWE-ABS: Adversarial Benchmark Strengthening Exposes Inflated Success Rates on Test-based Benchmark",
+   "autores": "não confirmados (preprint arXiv)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F2",
+   "url": "https://arxiv.org/html/2505.08903v4",
+   "doi": "",
+   "titulo": "Assessing and Advancing Benchmarks for Evaluating Large Language Models in Software Engineering Tasks",
+   "autores": "não confirmados (preprint arXiv)",
+   "ano": "2025",
+   "veiculo": "arXiv",
+   "tipo": "revisao-sistematica",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F3",
+   "url": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/43e9d647ccd3e4b7b5baab53f0368686-Abstract-Conference.html",
+   "doi": "",
+   "titulo": "Is Your Code Generated by ChatGPT Really Correct? Rigorous Evaluation of Large Language Models for Code Generation (EvalPlus)",
+   "autores": "Liu et al.",
+   "ano": "2023",
+   "veiculo": "NeurIPS 2023",
+   "tipo": "artigo-revisto",
+   "nivel": "A",
+   "lida": "integral"
+  },
+  {
+   "ref": "F4",
+   "url": "https://arxiv.org/html/2503.15223v2",
+   "doi": "",
+   "titulo": "Are \"Solved Issues\" in SWE-bench Really Solved Correctly? An Empirical Study",
+   "autores": "não confirmados (preprint arXiv)",
+   "ano": "2025",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F5",
+   "url": "https://arxiv.org/abs/2601.02430",
+   "doi": "",
+   "titulo": "WebCoderBench: Benchmarking Web Application Generation with Comprehensive and Interpretable Evaluation Metrics",
+   "autores": "Chenxu Liu, Yingjie Fu, Wei Yang, Ying Zhang, Tao Xie (PKU/UTD)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F6",
+   "url": "https://arxiv.org/html/2510.18560v3",
+   "doi": "",
+   "titulo": "WebDevJudge: Evaluating (M)LLMs as Critiques for Web Development Quality",
+   "autores": "não confirmados (preprint arXiv)",
+   "ano": "2025",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F7",
+   "url": "https://ar5iv.labs.arxiv.org/html/2511.18966",
+   "doi": "",
+   "titulo": "LLM-CSEC: Empirical Evaluation of Security in C/C++ Code Generated by Large Language Models",
+   "autores": "não confirmados (preprint arXiv)",
+   "ano": "2025",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F8",
+   "url": "https://ieeexplore.ieee.org/document/11130176",
+   "doi": "",
+   "titulo": "Security Vulnerabilities in AI-Generated JavaScript: A Comparative Study of Large Language Models",
+   "autores": "não confirmados",
+   "ano": "2025",
+   "veiculo": "IEEE",
+   "tipo": "artigo-revisto",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F9",
+   "url": "https://arxiv.org/html/2506.02954v1",
+   "doi": "",
+   "titulo": "Towards More Effective Fault Detection in LLM-Based Unit Test Generation",
+   "autores": "não confirmados (preprint arXiv)",
+   "ano": "2025",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F10",
+   "url": "https://arxiv.org/html/2607.22880v1",
+   "doi": "10.1145/3832093",
+   "titulo": "Do Coverage and Mutation Scores of LLM-Generated Test Suites Correlate with Their Effectiveness? (Replicability Study)",
+   "autores": "não confirmados",
+   "ano": "2026",
+   "veiculo": "ACM / arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F11",
+   "url": "https://arxiv.org/html/2408.10754v1",
+   "doi": "",
+   "titulo": "Ghost Echoes Revealed: Benchmarking Maintainability Metrics and Machine Learning Predictions Against Human Assessments",
+   "autores": "não confirmados (preprint arXiv)",
+   "ano": "2024",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F12",
+   "url": "https://link.springer.com/article/10.1007/s10664-023-10396-7",
+   "doi": "10.1007/s10664-023-10396-7",
+   "titulo": "An empirical study on software understandability and its dependence on code characteristics",
+   "autores": "não confirmados",
+   "ano": "2023",
+   "veiculo": "Empirical Software Engineering (Springer)",
+   "tipo": "artigo-revisto",
+   "nivel": "A",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F13",
+   "url": "https://arxiv.org/html/2608.21747v1",
+   "doi": "",
+   "titulo": "Architecture as Capability Equalizer for Coding Agents",
+   "autores": "não confirmados (preprint arXiv)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F14",
+   "url": "https://arxiv.org/html/2603.25773v1",
+   "doi": "",
+   "titulo": "The Specification as Quality Gate: Three Hypotheses on AI-Assisted Code Review",
+   "autores": "não confirmados (preprint arXiv)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "C",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F15",
+   "url": "https://ieeexplore.ieee.org/document/11105380",
+   "doi": "",
+   "titulo": "Global Trends and Empirical Metrics in the Evaluation of Code Smells and Technical Debt: A Bibliometric Study",
+   "autores": "não confirmados",
+   "ano": "2025",
+   "veiculo": "IEEE",
+   "tipo": "artigo-revisto",
+   "nivel": "C",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F16",
+   "url": "https://www.sciencedirect.com/science/article/abs/pii/S0164121220301734",
+   "doi": "",
+   "titulo": "Some SonarQube issues have a significant but small effect on faults and changes. A large-scale empirical study",
+   "autores": "Lenarduzzi et al.",
+   "ano": "2020",
+   "veiculo": "Journal of Systems and Software (Elsevier)",
+   "tipo": "artigo-revisto",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F17",
+   "url": "https://arxiv.org/html/2603.24586v2",
+   "doi": "",
+   "titulo": "Comparing Developer and LLM Biases in Code Evaluation",
+   "autores": "não confirmados (preprint arXiv)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F18",
+   "url": "https://ar5iv.labs.arxiv.org/html/2209.10131",
+   "doi": "10.1007/s11063-022-10987-x",
+   "titulo": "A Systemative Literature Review of Soft Computing Techniques for Software Maintainability Prediction (descreve o modelo ISO/IEC 25010)",
+   "autores": "não confirmados",
+   "ano": "2022",
+   "veiculo": "arXiv/Neural Computing and Applications",
+   "tipo": "revisao-sistematica",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F19",
+   "url": "https://arxiv.org/html/2603.28592v1",
+   "doi": "",
+   "titulo": "Debt Behind the AI Boom: A Large-Scale Empirical Study of AI-Generated Code in the Wild",
+   "autores": "não confirmados (preprint arXiv)",
+   "ano": "2026",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  },
+  {
+   "ref": "F20",
+   "url": "https://arxiv.org/pdf/2204.09165",
+   "doi": "",
+   "titulo": "Test suite effectiveness metric evaluation",
+   "autores": "não confirmados (preprint arXiv)",
+   "ano": "2022",
+   "veiculo": "arXiv",
+   "tipo": "preprint",
+   "nivel": "B",
+   "lida": "trechos"
+  }
+ ],
+ "contradicoes": [
+  {
+   "tema": "Cobertura de testes como proxy de qualidade/eficácia dos testes",
+   "posicoes": [
+    {
+     "fonte": "F9",
+     "diz": "Sintetiza Inozemtseva & Holmes (ICSE 2014): cobertura elevada não implica deteção forte de defeitos; mutation score é métrica mais fiável."
+    },
+    {
+     "fonte": "F10",
+     "diz": "Estudo de replicação com testes gerados por LLM encontra correlações moderadas a fortes entre critérios de cobertura e padrões distintos dos reportados em 2014, invalidando a conclusão de que medidas simples bastam."
+    }
+   ],
+   "explicacao_provavel": "populacao (suites escritas por humanos vs suites geradas por LLM) + metodo (agregação média vs acumulada, controlo do tamanho da suite)"
+  },
+  {
+   "tema": "Métricas de complexidade como preditoras de qualidade",
+   "posicoes": [
+    {
+     "fonte": "F15",
+     "diz": "Estudo bibliométrico afirma que complexidade ciclomática, acoplamento e coesão estão empiricamente validadas como indicadores para priorizar refactoring."
+    },
+    {
+     "fonte": "F11",
+     "diz": "A correlação entre manutenibilidade e métricas individuais (LoC, CC, Halstead) é 'weak at best'; F12 mostra que Cognitive Complexity não melhora a predição."
+    }
+   ],
+   "explicacao_provavel": "definicao (priorização relativa de refactoring vs correlação com manutenibilidade/percebida) + metodo"
+  },
+  {
+   "tema": "Utilidade das regras de ferramentas de code smells/technical debt (ex.: SonarQube)",
+   "posicoes": [
+    {
+     "fonte": "F15",
+     "diz": "A deteção automatizada com SonarQube/PMD melhora a mitigação de problemas em fase inicial."
+    },
+    {
+     "fonte": "F16",
+     "diz": "Estudo em larga escala: issues do SonarQube têm efeito significativo MAS PEQUENO sobre defeitos e mudanças."
+    },
+    {
+     "fonte": "F15",
+     "diz": "(citando Lefever et al.) seis ferramentas de dívida técnica têm sobreposição mínima nos ficheiros mais endividados."
+    }
+   ],
+   "explicacao_provavel": "interesse (marketing de ferramentas vs efeito causal medido) + metodo"
+  },
+  {
+   "tema": "Fiabilidade do mutation score como proxy de deteção de defeitos reais",
+   "posicoes": [
+    {
+     "fonte": "F9",
+     "diz": "Mutation score é a alternativa mais rigorosa e fiável à cobertura para avaliar testes."
+    },
+    {
+     "fonte": "F20",
+     "diz": "A literatura é contraditória: há estudos com correlação fraca e outros com correlação forte entre mutation score e deteção de defeitos reais, consoante o controlo do tamanho da suite."
+    }
+   ],
+   "explicacao_provavel": "metodo (controlo do tamanho dos suites e escolha do ground truth: mutantes vs defeitos reais)"
+  },
+  {
+   "tema": "Segurança: SAST puro vs SAST+LLM para deteção de vulnerabilidades",
+   "posicoes": [
+    {
+     "fonte": "F7",
+     "diz": "SAST (CodeQL, Snyk Code) deteta quantidades preocupantes de CWEs em código gerado — papel central do SAST como gate."
+    },
+    {
+     "fonte": "F20",
+     "diz": "Estudos comparativos (síntese em F20/relacionados) mostram resultados mistos: LLMs podem superar SAST nalguns contextos, mas SAST puro é melhor em software crítico de negócio."
+    }
+   ],
+   "explicacao_provavel": "populacao (linguagem/escala do código) + metodo (detecção de vulnerabilidades conhecidas vs análise contextual)"
+  }
+ ],
+ "lacunas": [
+  "Não existe uma rubrica padronizada e puramente tool-verifiable para qualidade de código de apps full-stack gerados por agentes: benchmarks como o WebCoderBench misturam métricas por regras com LLM-as-a-judge, que não é determinístico nem totalmente verificável.",
+  "Como agregar 6–7 dimensões num score único comparável entre duas ferramentas sem pesos arbitrários (o WebCoderBench usa pesos de preferência humana, que reintroduzem subjetividade) não está resolvido na literatura.",
+  "Custo/praticabilidade de mutation testing em apps full-stack heterogéneos (frontend JS/TS + backend + SQL) — a evidência é sobretudo Java/Python.",
+  "Métricas estruturais/arquiteturais têm evidência forte sobretudo em Java (ArchUnit); a verificabilidade equivalente em TypeScript (dependency-cruiser, madge) e em camadas de dados/infra está pouco estudada.",
+  "A dimensão 'duplicação' tem evidência conceptual sólida, mas o efeito causal de clones gerados por IA na manutenibilidade de apps gerados por agentes não foi quantificado."
+ ],
+ "novas_perguntas": [
+  {
+   "pergunta": "Que método de agregação (ex.: pesos de preferência humana vs gate não-compensatório por limiares) produz comparações estáveis entre duas ferramentas geradoras sem subjetividade?",
+   "origem": "definicao",
+   "prioridade": "alta",
+   "porque": "Sem isto, a rubrica mede dimensões mas não decide a comparação que motivou a pergunta."
+  },
+  {
+   "pergunta": "Mutation testing é exequível como gate de avaliação em apps full-stack gerados, e que cobertura de mutantes justifica o custo?",
+   "origem": "quantificacao",
+   "prioridade": "media",
+   "porque": "A evidência aponta o mutation score como melhor proxy que a cobertura, mas sem dados de custo em stacks completas."
+  },
+  {
+   "pergunta": "Os pesos humanos do WebCoderBench (9 perspetivas) replicam-se quando a avaliação é só por ferramenta, ou desviam-se para dimensões visuais?",
+   "origem": "fonte-unica",
+   "prioridade": "media",
+   "porque": "Única fonte que define 24 métricas/9 perspetivas para apps web; convém corroboração independente."
+  },
+  {
+   "pergunta": "Que regras de arquitetura são verificáveis deterministicamente fora de Java (dependency-cruiser, eslint-plugin-boundaries, contract tests) e com que sensibilidade?",
+   "origem": "lacuna",
+   "prioridade": "media",
+   "porque": "A dimensão organização/arquitetura é a menos coberta por ferramentas maduras em stacks JS/TS."
+  },
+  {
+   "pergunta": "Métricas específicas para SQL, migrações e infraestrutura (IaC) geradas por agentes — que ferramentas e correlações existem?",
+   "origem": "lacuna",
+   "prioridade": "baixa",
+   "porque": "Apps full-stack gerados incluem camadas que a rubrica acima não cobre diretamente."
+  }
+ ],
+ "fontes_nao_usadas": [
+  {
+   "url": "https://arxiv.org/html/2507.04952v2",
+   "porque_pode_importar": "ArtifactsBench — protocolo de checklist para artefactos visuais interativos; útil para Q1 (UI), fora do âmbito desta pergunta."
+  },
+  {
+   "url": "https://aclanthology.org/2026.findings-acl.1569.pdf",
+   "porque_pode_importar": "Benchmark de segurança ao nível de repositório para código gerado por IA, com categorias 'Qualified & Secure' baseadas em SAST — pode refinar a dimensão de segurança da rubrica."
+  },
+  {
+   "url": "https://www.semanticscholar.org/paper/78d91e51ce50e20139a132aefbe374e6e1125996",
+   "porque_pode_importar": "Web-Bench (100 tarefas sobre web standards/frameworks com test cases) — detalharia o protocolo de testes de benchmarks de apps web."
+  },
+  {
+   "url": "https://arxiv.org/html/2604.05955",
+   "porque_pode_importar": "SWE-Shield — avalia compliance com design constraints para além do pass rate; complementa a evidência de que test-passing é insuficiente."
+  }
+ ],
+ "consultas": [
+  "SWE-bench benchmark evaluation methodology test-based evaluation pass@k",
+  "EvalPlus HumanEval+ MBPP+ benchmark robustness code generation evaluation",
+  "WebDev Arena benchmark LLM web development coding preference Elo LMSYS",
+  "static analysis security vulnerabilities LLM generated code study SAST CWE",
+  "benchmark full-stack application generation LLM evaluation metrics functional correctness maintainability WebGen-Bench",
+  "cyclomatic complexity poor predictor maintainability empirical study software metrics validity",
+  "test coverage weakly correlated defect detection test suite effectiveness Inozemtseva Holmes",
+  "WebCoderBench Web-bench FullFront benchmark web application generation interpretable evaluation metrics",
+  "LLM generated code maintainability code smells SonarQube empirical study technical debt",
+  "code duplication clone detection metric software quality generated code evaluation tools",
+  "type checking lint static analysis evidence reduces defects empirical TypeScript gradual typing bugs",
+  "architecture conformance testing dependency rules ArchUnit module coupling metrics verifiable automated",
+  "ISO/IEC 25010 quality model maintainability modularity analysability testability reusability metrics",
+  "LLM-as-a-judge code quality evaluation reliability agreement human developers limitations bias"
+ ],
+ "alertas_seguranca": []
+}
