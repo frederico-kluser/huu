@@ -64,9 +64,20 @@ cache-read $0.0036/M (0,8% do input). Provider-reported por-run indisponível
 - Estrutura: A — server/lib/public com store atómica (tmp+rename), fallback de
   porta, toggle de falha simulada. B — server/{index,api,store} + public/, sem
   testes em ambos; B duplica mais linhas e o `npm start` está partido (ver §1).
-- **UI visual (screenshots A/B + rubrica cega de 7 dimensões): NÃO EXECUTADA**
-  nesta ronda — o run de B ocupou 2h54 e o orçamento de rondas do objetivo
-  esgotou-se. É a principal lacuna desta avaliação e o primeiro follow-up.
+- **UI visual (captura à mesma vista 1280×800, `shots/appA-list.png` vs
+  `shots/appB-list.png`)**: A vence de forma clara — identidade própria
+  ("Pauta" + logo + taglinha), barra de estatísticas com dados reais
+  (8 · 6 · 1 · 1), filtros integrados (pesquisa + segmentado de estado +
+  prioridade), lista numerada com badges de prioridade, controlo de estado
+  por linha e ações Editar/Apagar; sistema de cor quente coerente, hierarquia
+  e densidade cuidadas. B é o visual "developer default": formulário primeiro
+  (Título/Descrição/Estado/Prioridade + botão Criar), secção "Filtros e
+  pesquisa" por baixo, acento azul genérico, selects por estilizar, lista e
+  dados abaixo da dobra, sem estatísticas nem identidade. Funcional, mas sem
+  desenho. Rubrica rápida (hierarquia · identidade · IA de informação · cor ·
+  componentes · densidade · affordances): **A 7–0 B** numa vista.
+  Reserva: uma vista só (lista/landing); estados de formulário/erro/vazio
+  não capturados.
 - **N=2 por lado: NÃO EXECUTADO** — números são de 1 run por lado; com a
   variância de run único da literatura (2,2–6,0pp) diferenças finas de UI/código
   não são significativas. Só os efeitos GIGANTES (5,3× tempo, 4,8× custo,
@@ -76,8 +87,9 @@ cache-read $0.0036/M (0,8% do input). Provider-reported por-run indisponível
 
 Para "uma app que corre local" com o mesmo modelo e o mesmo prompt:
 
-- **DSH vence em tempo (5,3× mais rápido) e custo (4,8× mais barato)**, entrega
-  um `npm start` que funciona e auto-verificou a UI com screenshots.
+- **DSH vence em tempo (5,3× mais rápido), custo (4,8× mais barato) E UI
+  (7–0 na rubrica da vista principal)**, entrega um `npm start` que funciona e
+  auto-verificou a UI com screenshots durante o próprio run.
 - **huu DEV entrega o mesmo checklist funcional** e um processo muito mais
   auditável (épocas, revisões, juízes, merges, memória de decisões) — mas com
   overhead pesado, um artefacto de arranque partido, contabilidade de tokens
@@ -90,7 +102,8 @@ Para "uma app que corre local" com o mesmo modelo e o mesmo prompt:
   certo do huu é audição/geração de testes/conhecimento, não build de apps.
 
 ## Follow-ups (prioridade)
-1. Screenshots A/B às mesmas vistas + rubrica cega 7 dimensões + pareamento.
+1. Capturar as vistas restantes (formulário, vazio, erro) e refazer a rubrica
+   completa às 7 dimensões com as duas vistas de cada lado.
 2. N=2 por lado para variância real.
 3. Corrigir o run-logger (contadores de tokens a zeros).
 4. `npm start` do dev mode: garantir que a app entregue arranca sem shim externo
