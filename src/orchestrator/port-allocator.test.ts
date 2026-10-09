@@ -49,9 +49,17 @@ describe('PortAllocator', () => {
   it('exposes semantic slots aligned to base port', async () => {
     const alloc = new PortAllocator({ basePort: TEST_BASE + 100, windowSize: 10, maxAgents: 3 });
     const b = await alloc.allocate(1);
-    expect(b.http).toBe(TEST_BASE + 100);
-    expect(b.db).toBe(TEST_BASE + 101);
-    expect(b.ws).toBe(TEST_BASE + 102);
+    // The FIRST window is the happy path, but the fixed base (56600) lives in
+    // the kernel's ephemeral port range: a parallel test binding port 0 — or
+    // any external process — can transiently squat a slot and make the
+    // allocator slide to the next window, which is its DOCUMENTED behavior
+    // (see "skips a window when an external process holds one of its ports").
+    // Alignment is the property under test, and it is what survives the skip:
+    // a window-grid base with the semantic slots at +0/+1/+2 of it.
+    expect(b.http).toBeGreaterThanOrEqual(TEST_BASE + 100);
+    expect((b.http - (TEST_BASE + 100)) % 10).toBe(0);
+    expect(b.db).toBe(b.http + 1);
+    expect(b.ws).toBe(b.http + 2);
     expect(b.extras).toHaveLength(7);
     expect(b.databaseUrl).toBe(`postgresql://localhost:${b.db}/huu_agent_1`);
   });
