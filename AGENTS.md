@@ -91,7 +91,9 @@ defines this as enforceable by machine in a future wave.
                 ↓
 [container]  cli.tsx → web/serve.ts (DEFAULT front-end) | app.tsx (TUI, via --cli)
                 ↓
-              web/ (node:http + SSE server + vanilla-JS browser client)
+              web/ (node:http + SSE server + vanilla-JS browser client —
+                incl. the pipeline BUILDER with AI editor:
+                client/modules/builder.js + lib/pipeline-ai-editor.ts)
               ui/components/ (Ink React views — the --cli TUI)
                 ↓ (both front-ends can host N concurrent runs via the
                   GlobalScheduler — see the `skill/working-on-orchestrator`
@@ -115,10 +117,13 @@ defines this as enforceable by machine in a future wave.
               lib/ (types, providers (LlmProvider + the provider table),
                     pipeline-io, file-scanner, run-id, status,
                     init-docker, docker-reexec, active-run-sentinel,
-                    api-key, api-key-registry, prune, debug-logger,
-                    run-logger, repo-lock,
+                    api-key, api-key-registry,
+                    key-validation (metadata-only credential probes),
+                    prune, debug-logger,
+                    run-logger, repo-lock, run-config (headless --config),
                     run-many (headless multi-run driver),
                     screen-fsm, assistant-check-feasibility,
+                    pipeline-ai-editor (the builder's AI edit loop),
                     i18n/ — en + pt-BR catalogs behind a `t()` that THROWS on a
                     key missing from any locale; every entrypoint calls
                     `initI18n()`, the browser gets the same catalog over
@@ -159,6 +164,35 @@ hermetic `config.toml` (`backends/jcode/hermetic.ts`) is GENERATED from the
 provider table, one `[providers.<profile>]` block per provider, and never
 contains a credential — only the `api_key_env` name.
 
+### OpenRouter API — ground rules (code-facing)
+
+Anything touching the model catalog, `providers.ts`, key validation or cost
+accounting loads the `openrouter-agent-skill` FIRST
+(`~/.agents/skills/openrouter-agent-skill` — it owns the API surface; the
+excerpt below is only what this code assumes). Facts the API is wont to
+contradict:
+
+- Model ids are **OpenRouter-shaped** (`vendor/model`): the catalog stores that
+  shape (`src/models/catalog.ts`, `recommended-models.json`) and
+  `modelIdForProvider()` renders it into the endpoint's own namespace at spawn.
+- One-model detail is `/api/v1/model/{author}/{slug}` — **singular**;
+  `/api/v1/models` lists (public, unauthenticated) and
+  `/api/v1/models/{author}/{slug}/endpoints` returns the serving providers,
+  where `tag` is the routing value and `provider_name` is display only.
+- `pricing.prompt`/`pricing.completion` are per-token USD **strings**; the
+  price charged is the SELECTED provider's (see `/endpoints`), and
+  `provider.max_price` caps are per **million** tokens.
+- The key is `sk-or-v1-…` (spec `openrouter` in `src/lib/api-key-registry.ts`,
+  `validatePrefix: 'sk-or-'`); validation probes hit **metadata** endpoints
+  only (`src/lib/key-validation.ts` → `checkOpenRouterReachable`) — never
+  inference, so validating a key never spends a credit.
+- 429 → exponential backoff + `Retry-After` handled **manually** (no SDK
+  honors the header), and a provider error can arrive as HTTP 200 + `error`
+  inside a mid-stream chunk — judge by `error_type`, not the status alone.
+- Cost/latency truth: `usage.cost` + the `X-Generation-Id` header →
+  `GET /api/v1/generation?id=…`; attribution is `HTTP-Referer` +
+  `X-OpenRouter-Title` (there is no `X-OpenRouter-App`).
+
 ### Visual conventions
 
 - Color tokens are centralized in `src/ui/theme.ts`.
@@ -198,6 +232,10 @@ interactive flow.
 
 - Project knowledge: the CoALA memory — `coala.py recall/search` (the skill
   library is archived there as `skill/<name>` records since 2026-10-03)
+- OpenRouter API: the `openrouter-agent-skill`
+  (`~/.agents/skills/openrouter-agent-skill`) — load BEFORE touching the model
+  catalog, `providers.ts`, key validation or cost accounting; the ground rules
+  in "OpenRouter API" above are the excerpt, the skill is the source
 - Community / governance: [CONTRIBUTING.md](CONTRIBUTING.md) ·
   [SECURITY.md](SECURITY.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
