@@ -1,0 +1,26 @@
+# .github/dependabot.yml — atualizações automáticas de dependências.
+# Dois ecossistemas: as ACTIONS dos workflows (a superfície de supply-chain
+# mais crítica — uma action comprometida roda com o GITHUB_TOKEN do job) e o
+# npm do runner. PRs pequenos e contínuos valem mais que bumps gigantes
+# anuais; o gate da CI valida cada um.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: ci
+      include: scope
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: chore
+      include: scope
+    open-pull-requests-limit: 5

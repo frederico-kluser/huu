@@ -14,8 +14,8 @@ building new features.
 
 - [Install](#install)
 - [First run: smoke with `--stub`](#first-run-smoke-with---stub)
-- [First real run: Pi / OpenRouter](#first-real-run-pi--openrouter)
-- [Same run with GitHub Copilot](#same-run-with-github-copilot)
+- [First real run: DeepSeek / OpenRouter](#first-real-run-deepseek--openrouter)
+- [Choosing a provider — the two axes](#choosing-a-provider--the-two-axes)
 - [When to use huu / when not to](#when-to-use-huu--when-not-to)
 - [huu vs alternatives](#huu-vs-alternatives)
 - [Example walkthrough: huu Test Suite](#example-walkthrough)
@@ -24,7 +24,7 @@ building new features.
   - [Pipeline Assistant (`A` on welcome)](#pipeline-assistant)
   - [Saved pipelines (`S` on welcome)](#saved-pipelines)
 - [Headless mode (`huu auto`)](#headless-mode)
-- [Backends deep dive (Pi · Copilot · Stub)](#backends-deep-dive)
+- [Backends deep dive (jcode · Stub)](#backends-deep-dive)
 - [Bundled default pipelines](#bundled-default-pipelines)
 - [Pipelines as a shared artifact](#pipelines-as-a-shared-artifact)
 - [Philosophy](#philosophy)
@@ -51,7 +51,7 @@ publishes nothing. If a tag is available, the wrapper pulls it
 automatically:
 
 ```bash
-export OPENROUTER_API_KEY=sk-or-...
+export DEEPSEEK_API_KEY=sk-...       # the default provider — or OPENROUTER_API_KEY=sk-or-... with --provider=openrouter
 huu run pipelines/huu-test-suite.pipeline.json     # auto-uses ghcr.io/frederico-kluser/huu:latest
 ```
 
@@ -115,10 +115,11 @@ into its worktree and the orchestrator merges them. No tokens spent.
 
 ---
 
-## First real run: Pi / OpenRouter
+## First real run: DeepSeek / OpenRouter
 
 ```bash
-export OPENROUTER_API_KEY=sk-or-...
+export DEEPSEEK_API_KEY=sk-...        # default provider — or, for the OpenRouter roster:
+# export OPENROUTER_API_KEY=sk-or-…   # …add --provider=openrouter below
 huu run pipelines/huu-test-suite.pipeline.json
 ```
 
@@ -148,9 +149,9 @@ your own is just a list of steps with a `$file` token, e.g.:
 
 What you'll see on a real run:
 
-1. The **backend selector** (Pi / Copilot — skipped when you pass
-   `--backend=`, `--copilot`, or `--stub` on the CLI).
-2. The model picker (catalog from OpenRouter or Copilot, with your
+1. The **provider selector** (DeepSeek / OpenRouter — skipped when you
+   pass `--provider=` or `--stub` on the CLI).
+2. The model picker (the chosen provider's catalog, with your
    recents pinned to the top and live metrics from Artificial Analysis
    when `ARTIFICIAL_ANALYSIS_API_KEY` is set).
 3. A live kanban with one card per agent — phase, tokens, cost, current
@@ -178,21 +179,35 @@ table.
 
 ---
 
-## Same run with GitHub Copilot
+## Choosing a provider — the two axes
 
-```bash
-export COPILOT_GITHUB_TOKEN=ghp_...      # fine-grained PAT, "Copilot Requests" scope
-huu --copilot run pipelines/huu-test-suite.pipeline.json
-```
+Two independent choices — and conflating them is what once made an
+OpenRouter run demand `DEEPSEEK_API_KEY`:
 
-Same pipeline, same orchestrator, same merge logic — the only difference
-is the agent factory and the cost model (subscription instead of
-per-token). The Copilot SDK is declared as an `optionalDependency`; if it's
-absent at runtime, picking the Copilot backend produces a clear error and
-the rest of `huu` keeps working.
+- **Backend = *how* the agent runs.** `jcode` (the default — spawns the
+  `jcode` CLI as a subprocess) or `stub` (no model at all).
+- **Provider = *where the call goes and which credential it spends*.**
+  `deepseek` (default) or `openrouter` — one key each
+  (`DEEPSEEK_API_KEY` / `OPENROUTER_API_KEY`).
 
-Copilot support is currently **stabilizing**. Pi / OpenRouter is the
-recommended default.
+One backend serves N providers, so the backend cannot name the key: a run
+asks for **exactly one** credential — the active provider's — and strips
+every other provider's key from the child environment.
+
+| Provider | Flag | Cost model |
+|---|---|---|
+| **DeepSeek** (default) | `--provider=deepseek` | Per-token via `DEEPSEEK_API_KEY` — the cheapest; only DeepSeek's own models |
+| OpenRouter | `--provider=openrouter` | Per-token via `OPENROUTER_API_KEY` — one key in front of many vendors (Claude, GPT, GLM, DeepSeek…) |
+| Stub | `--stub` | Free, no LLM — smoke tests / demos |
+
+The catalog id is OpenRouter-shaped (`vendor/model`) and is rendered in
+the endpoint's own namespace at spawn time (`modelIdForProvider()`): the
+openrouter.ai endpoint routes *by* the prefix and receives the whole id,
+while api.deepseek.com names its models without one. Pick the provider on
+the launch screen (web and TUI) or lock it on the command line with
+`--provider=`. Pasting a key of the *other* provider is **refused**, not
+just warned about (`sk-or-…` satisfies DeepSeek's `sk-` prefix, so a
+prefix test alone would never separate the two).
 
 ---
 
@@ -382,7 +397,7 @@ collect — model, backend, per-step file overrides, timeouts:
 ```json
 {
   "modelId": "minimax/minimax-m2.7",
-  "backend": "pi",
+  "provider": "openrouter",
   "files": {
     "3. Test $file (user-selected)": ["src/index.ts"]
   },
@@ -391,6 +406,11 @@ collect — model, backend, per-step file overrides, timeouts:
   "concurrency": 4
 }
 ```
+
+`modelId` is required; `provider` (`deepseek` | `openrouter`) is the
+credential axis and `backend` (`jcode` | `stub`, default `jcode`) the
+dispatch axis — set `provider` to the account that pays, and `backend`
+only when you want the no-LLM `stub`.
 
 `files` is a map keyed by **`step.name`** (exact match — typos surface
 as warnings on stderr, not silent failures). The mapped array overrides
@@ -404,11 +424,13 @@ limit); `"autoScale": true` forces auto explicitly. The memory guard is
 always on in every mode. For sizing on CI runners, see
 [`docs/ci.md`](ci.md).
 
-API key resolution follows the same chain as the TUI:
-`/run/secrets/openrouter_api_key` → the persisted global store →
-`OPENROUTER_API_KEY_FILE` → `OPENROUTER_API_KEY`. In CI there's no saved
-key, so `OPENROUTER_API_KEY=sk-or-... huu auto …` just works (the env var
-is the fallback); a key saved via the TUI takes precedence.
+API key resolution follows the same chain as the TUI — one chain per
+provider (for `openrouter`: `/run/secrets/openrouter_api_key` → the
+persisted global store → `OPENROUTER_API_KEY_FILE` →
+`OPENROUTER_API_KEY`; for `deepseek`, the `deepseek_api_key` /
+`DEEPSEEK_API_KEY` equivalents). In CI there's no saved key, so
+`OPENROUTER_API_KEY=sk-or-... huu auto …` just works (the env var is the
+fallback); a key saved via the TUI takes precedence.
 
 ### Output
 
@@ -432,44 +454,40 @@ memory ceiling.)
 
 ## Backends deep dive
 
-`huu` ships three pluggable agent backends. The choice is made once per
+`huu` ships two pluggable agent backends. The choice is made once per
 run — via CLI flag or the TUI's **BackendSelector** screen (shown when
 no flag is passed):
 
-| Backend | Flag | SDK | Cost model |
+| Backend | Flag | How it runs | Cost model |
 |---|---|---|---|
-| **Pi** (default) | `--backend=pi` | `@mariozechner/pi-coding-agent` over OpenRouter | Pay-per-token (`OPENROUTER_API_KEY`). |
-| **GitHub Copilot** | `--backend=copilot` or `--copilot` | `@github/copilot-sdk` (optional dep, lazy-loaded) | Subscription with premium-request quota (`COPILOT_GITHUB_TOKEN`). |
-| **Stub** | `--backend=stub` or `--stub` | Built-in no-LLM mock | Free — writes `STUB_*.md` files and emits fake events. For smoke tests and demos. |
+| **jcode** (default) | `--backend=jcode` | Spawns the `jcode` CLI as a subprocess (prompt in argv, provider profile from a hermetic `config.toml`) | Pay-per-token at the active provider (`DEEPSEEK_API_KEY` / `OPENROUTER_API_KEY`) |
+| **Stub** | `--backend=stub` or `--stub` | Built-in no-LLM mock | Free — writes `STUB_*.md` files and emits fake events. For smoke tests and demos |
 
-All three share the same orchestrator, worktree lifecycle, and merge
-logic — only the "call the LLM" step differs. Adding a future backend
-(ACP, Claude Code, …) is a one-folder + one-case-in-registry change
-under `src/orchestrator/backends/`.
+The backend is the *dispatch kind*, never the vendor — both providers
+run on the same `jcode` backend (see
+[Choosing a provider](#choosing-a-provider--the-two-axes)). All backends
+share the same orchestrator, worktree lifecycle, and merge logic — only
+the "call the LLM" step differs. Adding a future backend (ACP, Claude
+Code, …) is a one-folder + one-case-in-registry change under
+`src/orchestrator/backends/`.
 
-Aliases `--copilot` and `--stub` are shorthand for `--backend=copilot`
-and `--backend=stub`. The long form `--backend=<kind>` also accepts
-legacy aliases: `real` / `openrouter` → `pi`, `gh-copilot` /
-`github-copilot` → `copilot`, `fake` / `mock` → `stub`.
+`--stub` is shorthand for `--backend=stub` (`fake` / `mock` are accepted
+legacy spellings, `deepseek` maps to `jcode`). The long form
+`--backend=<kind>` wins over `--provider=` when both are passed.
 
-The Copilot SDK is declared as an `optionalDependency` in
-`package.json`. If it's absent at runtime, selecting the Copilot
-backend produces a clear error — the rest of `huu` still works.
+### Why jcode is the default
 
-### Why Pi is the default
+`jcode` is a coding CLI spawned as a **subprocess**: a crash inside the
+agent cannot take the orchestrator down, and the credential reaches it
+as a single env var. The hermetic `config.toml` huu generates
+(`src/orchestrator/backends/jcode/hermetic.ts`) carries the provider
+profile and the *name* of the key env var — never a credential itself —
+and every other provider's key is stripped from the child environment,
+so a run spends exactly one key.
 
-`huu`'s Pi factory enables **thinking mode at `medium`** by default for
-every model that supports it (see
-`src/orchestrator/backends/pi/factory.ts`). Thinking mode trades latency
-for quality: the model is allowed to draft, critique, and revise
-internally before emitting a final answer. For per-file work — the
-sweet spot for `huu` — this is the right trade-off, because each agent
-has exactly one mission and the marginal cost of "thinking harder"
-is small.
-
-The Pi SDK also has built-in auto-retry (up to 5 attempts on transient
-errors), exposed transparently in the run log. No huu-specific override
-is needed.
+The subprocess protocol surfaces tagged stdout lines (`[write]`,
+`[tokens]`, `[thinking]`, …) straight into the run log and the
+per-agent transcripts, so the run stays auditable from the outside.
 
 ---
 
@@ -586,7 +604,7 @@ product whose proposition is *cheap, auditable parallelism*, MCP
 inverts the trade-off.
 
 The supported use cases (tests, audits, refactors) need to read files,
-run shell commands, and edit files. Pi SDK's default tools
+run shell commands, and edit files. The agent's default tools
 (read/bash/edit/write) cover all of that with no overhead.
 Integrations with Jira, Linear, or Slack are deliberately out of
 scope — `huu` is a code-transformation product, not a general-purpose

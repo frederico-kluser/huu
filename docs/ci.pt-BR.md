@@ -61,9 +61,12 @@ dos dois casos.
 2. **O pipeline JSON commitado no repo.** Pipelines são artefatos versionados
    — comite os que o huu materializou em `pipelines/`, ou os seus. O
    `huu auto` recebe o caminho explicitamente.
-3. **API key como secret do CI.** O backend Pi (default) lê
-   `OPENROUTER_API_KEY`; os outros backends leem as próprias env vars
-   (`COPILOT_GITHUB_TOKEN`, `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL`).
+3. **API key como secret do CI — a chave do PROVEDOR, não a do backend.**
+   Os dois eixos são ortogonais (ver AGENTS.md "Backend × provider"): o
+   backend é *como* o agente roda (`jcode`, o padrão — a CLI `jcode` como
+   subprocesso — ou o `stub` sem LLM), e o provedor é *para onde a chamada
+   vai e qual credencial ela gasta*. `"provider": "deepseek"` (o padrão) lê
+   `DEEPSEEK_API_KEY`; `"provider": "openrouter"` lê `OPENROUTER_API_KEY`.
    Toda key também aceita a variante `<NOME>_FILE` apontando para um arquivo.
 4. **Clone completo quando o pipeline lê histórico.** A auditoria de Security
    varre o histórico git atrás de segredos — use `fetch-depth: 0` (GitHub) /
@@ -77,8 +80,9 @@ O `huu auto` separa o pipeline *portátil* do config *específico do ambiente*
 ```jsonc
 // huu-ci-config.json
 {
-  "modelId": "x-ai/grok-4-fast",      // qualquer model id do OpenRouter
-  "backend": "pi",                     // pi (default) | copilot | azure | stub
+  "modelId": "x-ai/grok-4-fast",      // model id no formato OpenRouter (fornecedor/modelo)
+  "provider": "openrouter",            // deepseek (default) | openrouter — o eixo da credencial
+  // "backend": "jcode",               // jcode (default) | stub — o eixo do dispatch
   "files": {
     // nome do step → lista de arquivos, para steps com scope per-file
     "3. OWASP Top 10:2025 scan for $file": ["src/server.ts", "src/auth.ts"]
@@ -87,12 +91,16 @@ O `huu auto` separa o pipeline *portátil* do config *específico do ambiente*
 }
 ```
 
+Coloque em `provider` a conta que paga: ela escolhe o namespace do modelo,
+o profile de provedor do `jcode` e a única env var que o run gasta — as
+chaves dos **outros** provedores são removidas do ambiente do subprocesso.
+
 Gerar a lista per-file dinamicamente mantém o config em sincronia com o repo
 (exemplo para a auditoria de segurança):
 
 ```bash
 git ls-files 'src/**/*.ts' | jq -R . | jq -s --arg step "3. OWASP Top 10:2025 scan for \$file" \
-  '{ modelId: "x-ai/grok-4-fast", backend: "pi", files: { ($step): . } }' \
+  '{ modelId: "x-ai/grok-4-fast", provider: "openrouter", files: { ($step): . } }' \
   > huu-ci-config.json
 ```
 
@@ -129,7 +137,7 @@ jobs:
       - name: Gerar config (lista per-file via git)
         run: |
           git ls-files 'src/**' | jq -R . | jq -s \
-            '{ modelId: "x-ai/grok-4-fast", backend: "pi",
+            '{ modelId: "x-ai/grok-4-fast", provider: "openrouter",
                files: { "3. OWASP Top 10:2025 scan for $file": . } }' \
             > huu-ci-config.json
 
@@ -182,7 +190,7 @@ huu:security-audit:
     - npm install -g huu-pipe
     - |
       git ls-files 'src/**' | jq -R . | jq -s \
-        '{ modelId: "x-ai/grok-4-fast", backend: "pi",
+        '{ modelId: "x-ai/grok-4-fast", provider: "openrouter",
            files: { "3. OWASP Top 10:2025 scan for $file": . } }' \
         > huu-ci-config.json
   script:

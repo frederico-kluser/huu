@@ -6,6 +6,10 @@ on:
   schedule:
     - cron: '0 6 * * 0'   # weekly, Sunday 06:00 UTC
 
+# Least privilege: the job reads the repo and runs huu — nothing else.
+permissions:
+  contents: read
+
 jobs:
   audit:
     runs-on: ubuntu-latest
@@ -13,10 +17,12 @@ jobs:
     env:
       HUU_IMAGE: ghcr.io/frederico-kluser/huu:latest
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      # First-run setup gate is TTY-safe already; this just silences its notice.
+      HUU_SKIP_SETUP: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
 
@@ -25,10 +31,14 @@ jobs:
 
       - name: Build config
         run: |
+          # `provider` is the credential axis: openrouter spends
+          # OPENROUTER_API_KEY. There is no `pi`/`copilot`/`azure` backend —
+          # `jcode` serves every provider and `stub` calls no model at all
+          # (see AGENTS.md "Backend × provider — two axes, never one").
           cat > huu-ci-config.json <<'EOF'
           {
             "modelId": "x-ai/grok-4-fast",
-            "backend": "pi"
+            "provider": "openrouter"
           }
           EOF
 
@@ -42,7 +52,7 @@ jobs:
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: huu-dogfood-audits
           path: |

@@ -1,0 +1,76 @@
+name: Relatar um bug / Report a bug
+description: Algo quebrado no huu — comportamento diferente do documentado.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado pelo relato! **Não inclua chaves de API, tokens ou segredos**
+        em nenhum campo — logs devem ser mascarados. Vulnerabilidades seguem
+        [SECURITY.md](https://github.com/frederico-kluser/huu/blob/main/SECURITY.md),
+        nunca esta issue.
+        (English speakers: feel free to fill this in in English.)
+  - type: input
+    id: version
+    attributes:
+      label: Versão / Version
+      description: "`npm view huu-pipe version` ou a tag da imagem (`ghcr.io/frederico-kluser/huu:<tag>`)."
+      placeholder: "6.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      options:
+        - Docker (padrão / default)
+        - Nativo (--no-docker / HUU_NO_DOCKER=1)
+        - Não sei / I don't know
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provedor / Provider
+      options:
+        - deepseek (padrão / default)
+        - openrouter
+        - stub (sem LLM)
+        - não se aplica / not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: O que aconteceu / What happened
+      description: Comportamento observado, com passos de reprodução.
+      placeholder: |
+        1. `huu auto pipelines/… --config …`
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: O que era esperado / What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / saída relevante
+      description: Cole apenas o trecho relevante, mascarando qualquer segredo.
+      render: shell
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: Estou na última versão do `huu-pipe` / I am on the latest version
+          required: true
+        - label: Procurei issues existentes e não encontrei duplicado / I searched existing issues
+          required: true
+        - label: Este relato não contém chaves, tokens ou dados sensíveis / This report contains no secrets
+          required: true

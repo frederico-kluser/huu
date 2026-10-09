@@ -42,9 +42,8 @@ src/
 ├── orchestrator/
 │   ├── index.ts               # Orchestrator class (pool, lifecycle, abort, destroyAgent)
 │   ├── task-decomposer.ts     # step → tasks
-│   ├── stub-agent.ts          # synthetic lifecycle for demos / tests
 │   ├── simulation/            # SimulationEngine: synthetic /simulation web demo (no git/LLM/key)
-│   ├── real-agent.ts          # real LLM agent via pi-coding-agent
+│   ├── backends/              # HOW an agent runs: jcode/ (CLI subprocess) · stub/ (no-LLM) · _shared/ · registry.ts
 │   ├── integration-agent.ts   # LLM conflict resolver
 │   ├── auto-scaler.ts         # resource-bound concurrency state machine
 │   ├── port-allocator.ts      # per-agent TCP port windows + probe
@@ -167,9 +166,9 @@ pick-model → intent → recon → asking ↻ ──┬──> editor (Pipeline
 
 The assistant uses LangChain (`@langchain/openai`, `@langchain/core`)
 because the OpenAI tool-calling/structured-output surface there is
-better-tested than building a JSON-mode loop on the Pi SDK. The Pi SDK
-is reserved for the actual run agents — they need filesystem tools, and
-LangChain doesn't.
+better-tested than building a JSON-mode loop against the agent CLI. The
+`jcode` backend is reserved for the actual run agents — they need
+filesystem tools, and LangChain doesn't.
 
 ## Auto-scaling layer
 
@@ -184,7 +183,7 @@ UI via `OrchestratorState.autoScale` (`AutoScaleStatus`):
 | `NORMAL` | Under both thresholds; will grant `shouldSpawn() === true`. |
 | `SCALING_UP` | Actively granting spawn slots while the queue has work. |
 | `BACKING_OFF` | CPU or RAM ≥ stop threshold (default 90%); refuses new spawns but leaves running agents alone. |
-| `DESTROYING` | The memory guard now fires on a **pressure ladder**: sustained over the RAM budget dial (L1), plus earlyoom-style host pressure — low host-available **and** low free swap, high PSI `full`, or sustained swap-in — at L2/L3; the old CPU/RAM ≥ 95% line is only a legacy fallback. The newest agent is then **paused by default**: `pauseAgent()` checkpoints the pi session, disposes the agent to free RAM, PRESERVES its worktree + branch + transcript, and re-queues the task in a `paused` phase, resuming it **in place** (same worktree, restored session) once headroom returns. Only when the backend can't checkpoint or `HUU_NO_PAUSE=1` is set does it fall back to the legacy KILL — `destroyAgent(newestId)` drops the worktree + branch and requeues the task from zero. |
+| `DESTROYING` | The memory guard now fires on a **pressure ladder**: sustained over the RAM budget dial (L1), plus earlyoom-style host pressure — low host-available **and** low free swap, high PSI `full`, or sustained swap-in — at L2/L3; the old CPU/RAM ≥ 95% line is only a legacy fallback. The newest agent is then **paused by default**: `pauseAgent()` checkpoints the agent session, disposes the agent to free RAM, PRESERVES its worktree + branch + transcript, and re-queues the task in a `paused` phase, resuming it **in place** (same worktree, restored session) once headroom returns. Only when the backend can't checkpoint or `HUU_NO_PAUSE=1` is set does it fall back to the legacy KILL — `destroyAgent(newestId)` drops the worktree + branch and requeues the task from zero. |
 | `COOLDOWN` | 30s pause after a destroy/back-off event so the system doesn't oscillate. |
 
 Manual `+`/`-` on the run dashboard disables auto-scale (a single `A`
@@ -260,8 +259,8 @@ Key invariants:
 
 | Decision | Choice | Why |
 |---|---|---|
-| LLM SDK | [`@mariozechner/pi-coding-agent`](https://www.npmjs.com/package/@mariozechner/pi-coding-agent) via OpenRouter | Lean, multi-provider-capable SDK designed for coding agents. |
-| MCP | Not supported, deliberately | Tool definitions × N parallel agents = a significant fixed token cost on every turn before any useful work. Pi SDK's default tools (read/bash/edit/write) cover the supported use cases. |
+| Agent execution | The `jcode` CLI spawned as a subprocess (providers: DeepSeek / OpenRouter) — `src/orchestrator/backends/` | The dispatch kind is `jcode`/`stub`, never a vendor: one backend serves N providers, and the credential is chosen by the provider (`AGENTS.md` "Backend × provider"). |
+| MCP | Not supported, deliberately | Tool definitions × N parallel agents = a significant fixed token cost on every turn before any useful work. The agent's default tools (read/bash/edit/write) cover the supported use cases. |
 | Conflict resolution | Integration agent (real LLM) on a side worktree | Fallback for misdesigned pipelines, not a core path — see "Decomposition is human work" in the README. |
 | Worktree location | `<repo>/.huu-worktrees/<runId>/` | Isolated edits, native git audit trail. |
 | Per-agent network isolation | `LD_PRELOAD` / `DYLD_INSERT_LIBRARIES` shim that rewrites `bind(2)` against a per-agent port table | No Docker, no privileges, no edits to customer code. Worktrees isolate FS but not network — without this, parallel `npm run dev` invocations collide on port 3000. See [`PORT-SHIM.md`](PORT-SHIM.md) for the full alternatives analysis (Docker / netns / code rewriting / serialization rejected). |

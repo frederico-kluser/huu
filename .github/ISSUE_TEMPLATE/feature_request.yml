@@ -1,0 +1,43 @@
+name: Propor uma ideia / Propose an idea
+description: Pipeline novo, melhoria ou discussão de desenho — escopo primeiro, código depois.
+title: "[feat]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        O huu desenha pipelines que fazem agentes que *pensam* seguirem um
+        processo *determinístico* — auditorias, geração de testes, extração de
+        conhecimento. **O método é humano; a inteligência é do modelo.**
+        Propostas fora desse escopo (agente geral de produtividade, MCP,
+        integrações de chat) estão fora do manifesto — leia
+        [MANIFESTO.md](https://github.com/frederico-kluser/huu/blob/main/MANIFESTO.md).
+        (English speakers: feel free to fill this in in English.)
+  - type: textarea
+    id: problem
+    attributes:
+      label: O problema / The problem
+      description: Que processo previsível de valor real hoje não tem pipeline?
+      placeholder: Hoje eu gero testes de N módulos à mão e …
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: A proposta / The proposal
+      description: O que você imagina — pipeline, gate, doc, backend. Seja concreto sobre o MÉTODO, não sobre o que o modelo "deve pensar".
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas / Alternatives considered
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: Li o MANIFESTO e a proposta se encaixa na identidade do huu (ou declara explicitamente a divergência)
+          required: true
+        - label: Procurei issues e discussões existentes / I searched existing issues
+          required: true

@@ -260,11 +260,12 @@ Docker, passthrough de env, limpeza de órfãos) itera pela mesma lista.
 
 Registry atual:
 
-| Key | Obrigatória | Backend | Usada por |
+| Key | Obrigatória | Provedor | Usada por |
 |---|---|---|---|
-| `OPENROUTER_API_KEY` (`openrouter`) | sim (sem `--stub`) | Pi | O agente do Pi SDK + o pipeline assistant + project recon. |
-| `ARTIFICIAL_ANALYSIS_API_KEY` (`artificialAnalysis`) | sim | todos | Recomendações de modelo / lookups de capabilities ao vivo no picker. |
-| `COPILOT_GITHUB_TOKEN` (`copilot`) | sim (quando `--copilot`) | Copilot | O agente do Copilot SDK. PAT fine-grained com escopo "Copilot Requests", ou `GH_TOKEN`. |
+| `DEEPSEEK_API_KEY` (`deepseek`) | sim (provedor default, sem `--stub`) | deepseek | O agente `jcode` + o pipeline assistant + project recon. |
+| `OPENROUTER_API_KEY` (`openrouter`) | sim quando é o provedor ATIVO | openrouter | O agente `jcode` no roster da OpenRouter (Claude, GPT, GLM…). Exigida independente da flag `required` sempre que `provider: openrouter` — e nunca pedida fora disso. |
+| `ARTIFICIAL_ANALYSIS_API_KEY` (`artificialAnalysis`) | não | — | Recomendações de modelo / lookups de capabilities ao vivo no picker (informacional; degrada com elegância). |
+| `TAVILY_API_KEY` · `PARALLEL_API_KEY` · `BRAVE_API_KEY` (`tavily` / `parallel` / `brave`) | não | — | Chaves de pesquisa web pra agentes que chamam CLIs de research. |
 
 Ordem de resolução por spec (primeira não-vazia vence) — a escolha
 EXPLÍCITA ganha da AMBIENTE:
@@ -313,10 +314,10 @@ logado no terminal que iniciou o huu.
 
 | Variável | Obrigatória | Pra que serve |
 |---|---|---|
-| `OPENROUTER_API_KEY` | sim (sem `--stub`) | Enviada pro OpenRouter via Pi SDK. Se faltar, o TUI pede na primeira execução real e "save globally" persiste em `~/.config/huu/config.json`. |
-| `OPENROUTER_API_KEY_FILE` | não | Caminho de um arquivo contendo a key. Tem precedência sobre `OPENROUTER_API_KEY` quando ambos estão setados; o mount canônico de Docker secret em `/run/secrets/openrouter_api_key` tem precedência sobre ambos. Uma key salva via Options (`~/.config/huu/config.json`) ganha dos três — limpe-a se quiser que uma env var valha. |
-| `ARTIFICIAL_ANALYSIS_API_KEY` | sim | Usada pra lookups de capabilities de modelo ao vivo (`supportsThinking`, pricing). Mesma cadeia de precedência via `ARTIFICIAL_ANALYSIS_API_KEY_FILE` e `/run/secrets/artificial_analysis_api_key`. |
-| `COPILOT_GITHUB_TOKEN` | sim (quando `--copilot`) | PAT fine-grained do GitHub com escopo "Copilot Requests" (ou `GH_TOKEN`). Obrigatória só quando `--backend=copilot` está ativo. Mesma cadeia de precedência via `COPILOT_GITHUB_TOKEN_FILE` e `/run/secrets/copilot_token`. |
+| `DEEPSEEK_API_KEY` | sim (provedor default, sem `--stub`) | Gasta por runs no provedor default (`provider: deepseek`). Se faltar, o TUI pede na primeira execução real e "save globally" persiste em `~/.config/huu/config.json`. |
+| `OPENROUTER_API_KEY` | sim quando `--provider=openrouter` | Gasta por runs em `provider: openrouter`. Se faltar, o TUI pede na primeira execução real e "save globally" persiste em `~/.config/huu/config.json`. |
+| `DEEPSEEK_API_KEY_FILE` / `OPENROUTER_API_KEY_FILE` | não | Caminho de um arquivo contendo a key. Tem precedência sobre a var simples quando ambos estão setados; os mounts canônicos de Docker secret (`/run/secrets/deepseek_api_key` · `/run/secrets/openrouter_api_key`) têm precedência sobre ambos. Uma key salva via Options (`~/.config/huu/config.json`) ganha de todos — limpe-a se quiser que uma env var valha. |
+| `ARTIFICIAL_ANALYSIS_API_KEY` | não | Usada pra lookups de capabilities de modelo ao vivo (`supportsThinking`, pricing). Mesma cadeia de precedência via `ARTIFICIAL_ANALYSIS_API_KEY_FILE` e `/run/secrets/artificial_analysis_api_key`. |
 | `HUU_WORKTREE_BASE` | não | Override do diretório base dos worktrees por execução. Paths absolutos são usados verbatim; paths relativos resolvidos contra a raiz do repo. Padrão: `<repo>/.huu-worktrees`. Usado pelo modo isolated-volume do container. |
 | `HUU_WORKSPACE` | não | Diretório do host que o **seletor de pastas** da web pode navegar (bind-mount RW no container, no mesmo path absoluto). Padrão `$HOME`, então o picker vê todos os projetos embaixo do seu home. Aperte (`HUU_WORKSPACE=~/Projects`) ou amplie (`HUU_WORKSPACE=/` para o filesystem inteiro). **Segurança:** o workspace é montado read-write, então o shell de um agente pode ler/gravar qualquer coisa embaixo dele (inclusive `~/.ssh` quando for `$HOME`) — mantenha o menor que seus projetos permitirem. O picker abre aqui (botão ⌂ Home) e os `runDirectory` escolhidos são resolvidos contra ele. |
 | `HUU_CHECK_PUSH` | não | Quando setada, preflight verifica que o remote configurado está alcançável antes de a execução começar. |
@@ -346,7 +347,7 @@ logado no terminal que iniciou o huu.
 | `HUU_HOST_HOME` | não | Setada automaticamente pelo wrapper pro home directory do host. Dentro do container, `getHuuHome()` lê isso pra escritas em `~/.huu/` e o target default de export `~/Downloads/` caírem no filesystem bind-montado do host. Sem set fora do Docker. |
 | `HUU_CONFIG_DIR` | não | Setada automaticamente pelo wrapper pro config dir do HOST (`$XDG_CONFIG_HOME/huu`, padrão `~/.config/huu`), que é bind-montado read-write no container. `configFilePath()` (o store de keys salvas) e `webSettingsPath()` preferem ela, então keys/settings salvos de dentro do container persistem no host. Sem set fora do Docker (resolução XDG local vale). |
 | `HUU_WEB_LOG_STREAM` | não | Sete `1` pra TAMBÉM espelhar o firehose bruto de saída dos agentes (texto de resposta/raciocínio, linha a linha) no terminal que iniciou o huu. O log de ciclo de vida (runs na fila/iniciados/concluídos/falhados, atividade por agente, eventos de key, launches recusados) é sempre ativo — esta flag só adiciona o stream verboso. |
-| `HUU_MAX_EVENT_LISTENERS` | não | Sobe o teto padrão de listeners de EventTarget / EventEmitter do Node (padrão `256`; `0` mantém os defaults do próprio Node) pra silenciar uma tempestade de `MaxListenersExceededWarning` — o pi adiciona um listener de abort por tool call no `AbortSignal` da sessão. |
+| `HUU_MAX_EVENT_LISTENERS` | não | Sobe o teto padrão de listeners de EventTarget / EventEmitter do Node (padrão `256`; `0` mantém os defaults do próprio Node) pra silenciar uma tempestade de `MaxListenersExceededWarning` — o agente adiciona um listener de abort por tool call no `AbortSignal` da sessão. |
 | `HUU_UID` | não | UID do container pra execuções `docker compose`. Padrão: `1000`. Override com `HUU_UID=$(id -u)` se seu UID de host não é 1000, ou use o wrapper `scripts/huu-compose` que seta automaticamente. |
 | `HUU_GID` | não | GID do container pra execuções `docker compose`. Mesmas regras de default que `HUU_UID`. |
 
@@ -618,9 +619,9 @@ pode decidir "também fazer X" — você recebe a execução que pagou.
 
 - `--stub` roda o fluxo todo sem nenhum LLM. Use pra validar a
   estrutura e a decomposição do pipeline antes de gastar um dólar.
-- `--copilot` usa créditos do Copilot baseados em assinatura em vez de
-  cobrança por token — o custo fica dentro da cota de premium-requests
-  do seu plano GitHub existente.
+- `--provider=deepseek` (o default) é o endpoint mais barato por token;
+  `--provider=openrouter` troca por um roster de modelos mais largo
+  (Claude, GPT, GLM…) numa chave só.
 - O `modelId` por step permite rotear estágios mecânicos pra
   Haiku/Gemini Flash e reservar Sonnet/Opus pros estágios que de fato
   precisam.
@@ -775,12 +776,11 @@ timeout significa feedback apertado em trabalho per-file sem matar
 prematuramente um cartão mais amplo que ainda está progredindo.
 
 **Onde coloco minha API key?**
-Pra **Pi** (backend padrão): exporte `OPENROUTER_API_KEY` antes de
-lançar, ou cole no prompt na primeira vez que iniciar uma execução
-real sem ela. Pra **Copilot**: exporte `COPILOT_GITHUB_TOKEN` (PAT
-do GitHub com escopo "Copilot Requests"). A ferramenta em si nunca
-persiste a key a não ser que você escolha "save globally" no prompt
-do TUI.
+Exporte a key do **provedor** que o seu run gasta — `DEEPSEEK_API_KEY`
+(o default) ou `OPENROUTER_API_KEY` (com `--provider=openrouter`) —
+antes de lançar, ou cole no prompt na primeira vez que iniciar uma
+execução real sem ela. A ferramenta em si nunca persiste a key a não
+ser que você escolha "save globally" no prompt do TUI.
 
 **Por que o container Docker é mais lento no macOS?**
 Filesystems bind-mounted no macOS atravessam um boundary de VM,

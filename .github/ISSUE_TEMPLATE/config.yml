@@ -1,0 +1,9 @@
+# config.yml — configuração dos templates de issue.
+blank_issues_enabled: true
+contact_links:
+  - name: Vulnerabilidade de segurança / Security vulnerability
+    url: https://github.com/frederico-kluser/huu/blob/main/SECURITY.md
+    about: NUNCA abra issue pública para vulnerabilidade — siga o SECURITY.md (relato privado).
+  - name: Documentação / Documentation
+    url: https://github.com/frederico-kluser/huu#readme
+    about: Tutorial, referência de pipeline e operações antes de abrir issue.

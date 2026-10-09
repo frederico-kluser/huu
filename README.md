@@ -32,6 +32,7 @@
   <a href="https://www.npmjs.com/package/huu-pipe"><img alt="npm version" src="https://img.shields.io/npm/v/huu-pipe?color=blueviolet&label=npm"></a>
   <a href="#licença"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
   <a href="https://www.repostatus.org/#active"><img alt="Status do projeto: ativo — em uso e em desenvolvimento ativo" src="https://www.repostatus.org/badges/latest/active.svg"></a>
+  <a href="https://github.com/frederico-kluser/huu/actions/workflows/gate.yml"><img alt="CI (gate)" src="https://github.com/frederico-kluser/huu/actions/workflows/gate.yml/badge.svg"></a>
   <img alt="Node.js 20+" src="https://img.shields.io/badge/node-%E2%89%A5%2020-339933?logo=node.js&logoColor=white">
   <img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.x-3178C6?logo=typescript&logoColor=white">
   <img alt="Built with Ink" src="https://img.shields.io/badge/TUI-Ink%204-000000">
@@ -1029,12 +1030,17 @@ Pra ninguém confundir intenção com pronto:
 ## Contribuindo
 
 Contribuições são bem-vindas — o projeto é jovem e há bastante a fazer.
-Abra uma issue em [github.com/frederico-kluser/huu/issues](https://github.com/frederico-kluser/huu/issues)
-pra propor uma pipeline, reportar um bug ou discutir uma ideia. **A CI roda
-o gate em todo push e PR** (`.github/workflows/gate.yml` →
+O guia completo — escopo, ambiente, gate, Commits Convencionais, gêmeos
+de documentação — está em [`CONTRIBUTING.md`](CONTRIBUTING.md), e ao
+contribuir você concorda com o
+[`Código de Conduta`](CODE_OF_CONDUCT.md). Abra uma issue em
+[github.com/frederico-kluser/huu/issues](https://github.com/frederico-kluser/huu/issues)
+pra propor uma pipeline, reportar um bug ou discutir uma ideia —
+**vulnerabilidades seguem [`SECURITY.md`](SECURITY.md), nunca issues
+públicas**. **A CI roda o gate em todo push e PR** (`.github/workflows/gate.yml` →
 `scripts/gate.sh`), mas rode `npm run typecheck && npm test` localmente
-antes de abrir um — a CI só avisa depois, e o hook de pre-push em
-`.githooks` ajuda a não esquecer. `bash scripts/gate.sh` reproduz a CI
+antes de abrir um — a CI só avisa depois, e os hooks em `.githooks`
+(pre-push + commit-msg) ajudam a não esquecer. `bash scripts/gate.sh` reproduz a CI
 exatamente — hoje **dez passos**: typecheck · test · validate-skills ·
 check-acceptance · smoke-defaults · validate-graph · check-pins · check-twins ·
 check-metodo · check-dockerfile. Detalhes de

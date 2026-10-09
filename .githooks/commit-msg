@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Commit-msg hook: Commits Convencionais, o mesmo gate que o oss-gate exige.
+# Falha → commit abortado. Habilitar uma vez por clone:
+#   git config core.hooksPath .githooks
+#
+# Formato: `tipo(escopo)!: descrição` — tipos fechados:
+#   feat fix docs style refactor perf test build ci chore revert
+# BREAKING CHANGE marca com `!` depois do escopo (e detalha no corpo).
+# Título ≤ 100 caracteres (limite padrão do commitlint).
+#
+# Padrões aceites fora do formato (histórico do git, não convenção):
+#   - "Merge ..."   (merges de branch)
+#   - "Revert ..."  (git revert padrão)
+#
+# Bypass deliberado (uma vez, quando o motivo for bom):
+#   git commit --no-verify
+set -euo pipefail
+
+MSG_FILE="$1"
+HEADER="$(head -n1 "$MSG_FILE" | tr -d '\r')"
+
+[ -n "$HEADER" ] || {
+  echo "Erro: mensagem de commit vazia — Solução: escreva um título no formato Conventional Commits (tipo(escopo)!: descrição)" >&2
+  exit 1
+}
+
+# Merge/Revert nativos do git passam sem validação.
+case "$HEADER" in
+  "Merge "*|"Revert "*) exit 0 ;;
+esac
+
+MAX=100
+if [ "${#HEADER}" -gt "$MAX" ]; then
+  echo "Erro: título com ${#HEADER} caracteres (máximo ${MAX}) — Solução: encurte a descrição; detalhes vão no corpo" >&2
+  exit 1
+fi
+
+TYPE='(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)'
+SCOPE='(\([A-Za-z0-9._/-]+\))?!?: '
+if ! [[ "$HEADER" =~ ^${TYPE}${SCOPE}[^[:space:]].+$ ]]; then
+  echo "Erro: título fora do padrão Conventional Commits: \"$HEADER\"" >&2
+  echo "— Solução: use \`tipo(escopo)!: descrição\` com tipo em {feat fix docs style refactor perf test build ci chore revert}" >&2
+  echo "  ex.: fix(merge): impede laço rework de virar default · docs: atualiza README" >&2
+  echo "  (bypass deliberado: git commit --no-verify)" >&2
+  exit 1
+fi
+
+exit 0

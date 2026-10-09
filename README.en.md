@@ -32,6 +32,7 @@
   <a href="https://www.npmjs.com/package/huu-pipe"><img alt="npm version" src="https://img.shields.io/npm/v/huu-pipe?color=blueviolet&label=npm"></a>
   <a href="#license"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
   <a href="https://www.repostatus.org/#active"><img alt="Project Status: Active — usable and under active development" src="https://www.repostatus.org/badges/latest/active.svg"></a>
+  <a href="https://github.com/frederico-kluser/huu/actions/workflows/gate.yml"><img alt="CI (gate)" src="https://github.com/frederico-kluser/huu/actions/workflows/gate.yml/badge.svg"></a>
   <img alt="Node.js 20+" src="https://img.shields.io/badge/node-%E2%89%A5%2020-339933?logo=node.js&logoColor=white">
   <img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.x-3178C6?logo=typescript&logoColor=white">
   <img alt="Built with Ink" src="https://img.shields.io/badge/TUI-Ink%204-000000">
@@ -1021,12 +1022,17 @@ So nobody confuses intent with done:
 ## Contributing
 
 Contributions are welcome — the project is young and there's plenty to
-do. Open an issue at [github.com/frederico-kluser/huu/issues](https://github.com/frederico-kluser/huu/issues)
-to propose a pipeline, report a bug, or discuss an idea. **CI runs the gate
-on every push and PR** (`.github/workflows/gate.yml` → `scripts/gate.sh`),
+do. The full guide — scope, environment, gate, Conventional Commits,
+documentation twins — lives in [`CONTRIBUTING.en.md`](CONTRIBUTING.en.md),
+and by contributing you agree to the
+[`Code of Conduct`](CODE_OF_CONDUCT.en.md). Open an issue at
+[github.com/frederico-kluser/huu/issues](https://github.com/frederico-kluser/huu/issues)
+to propose a pipeline, report a bug, or discuss an idea —
+**vulnerabilities follow [`SECURITY.en.md`](SECURITY.en.md), never public
+issues**. **CI runs the gate on every push and PR** (`.github/workflows/gate.yml` → `scripts/gate.sh`),
 but run `npm run typecheck && npm test` locally before opening one anyway —
-CI only reports after the fact, and the pre-push hook in `.githooks` helps
-you not forget. `bash scripts/gate.sh` reproduces CI exactly — **ten steps**
+CI only reports after the fact, and the hooks in `.githooks` (pre-push +
+commit-msg) help you not forget. `bash scripts/gate.sh` reproduces CI exactly — **ten steps**
 today: typecheck · test · validate-skills · check-acceptance · smoke-defaults ·
 validate-graph · check-pins · check-twins · check-metodo · check-dockerfile.
 Development and architecture details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

@@ -59,10 +59,14 @@ contract is unchanged either way.
 2. **The pipeline JSON committed to your repo.** Pipelines are versioned
    artifacts — commit the ones huu materialized under `pipelines/`, or your
    own. `huu auto` takes the path explicitly.
-3. **An API key as a CI secret.** The Pi backend (default) reads
-   `OPENROUTER_API_KEY`; other backends read their own env vars
-   (`COPILOT_GITHUB_TOKEN`, `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL`).
-   Every key also accepts a `<NAME>_FILE` variant pointing at a file path.
+3. **An API key as a CI secret — the PROVIDER's key, not the backend's.**
+   The two axes are orthogonal (see AGENTS.md "Backend × provider"): the
+   backend is *how* the agent runs (`jcode`, the default — the `jcode` CLI
+   as a subprocess — or the no-LLM `stub`), and the provider is *where the
+   call goes and which credential it spends*. `"provider": "deepseek"`
+   (the default) reads `DEEPSEEK_API_KEY`; `"provider": "openrouter"`
+   reads `OPENROUTER_API_KEY`. Every key also accepts a `<NAME>_FILE`
+   variant pointing at a file path.
 4. **A full clone when the pipeline reads history.** The Security audit scans
    git history for secrets — use `fetch-depth: 0` (GitHub) / `GIT_DEPTH: 0`
    (GitLab) for those.
@@ -75,8 +79,9 @@ config (which files on THIS repo, which model on THIS account):
 ```jsonc
 // huu-ci-config.json
 {
-  "modelId": "x-ai/grok-4-fast",      // any OpenRouter model id
-  "backend": "pi",                     // pi (default) | copilot | azure | stub
+  "modelId": "x-ai/grok-4-fast",      // model id, OpenRouter shape (vendor/model)
+  "provider": "openrouter",            // deepseek (default) | openrouter — the credential axis
+  // "backend": "jcode",               // jcode (default) | stub — the dispatch axis
   "files": {
     // step name → file list, for steps with scope per-file
     "3. OWASP Top 10:2025 scan for $file": ["src/server.ts", "src/auth.ts"]
@@ -85,12 +90,16 @@ config (which files on THIS repo, which model on THIS account):
 }
 ```
 
+Set `provider` to the account that pays: it selects the model namespace,
+the `jcode` provider profile and the single env var the run spends —
+every other provider's key is stripped from the child environment.
+
 Generating the per-file list dynamically keeps the config in sync with the
 repo (example for the security audit):
 
 ```bash
 git ls-files 'src/**/*.ts' | jq -R . | jq -s --arg step "3. OWASP Top 10:2025 scan for \$file" \
-  '{ modelId: "x-ai/grok-4-fast", backend: "pi", files: { ($step): . } }' \
+  '{ modelId: "x-ai/grok-4-fast", provider: "openrouter", files: { ($step): . } }' \
   > huu-ci-config.json
 ```
 
@@ -127,7 +136,7 @@ jobs:
       - name: Build config (per-file list from git)
         run: |
           git ls-files 'src/**' | jq -R . | jq -s \
-            '{ modelId: "x-ai/grok-4-fast", backend: "pi",
+            '{ modelId: "x-ai/grok-4-fast", provider: "openrouter",
                files: { "3. OWASP Top 10:2025 scan for $file": . } }' \
             > huu-ci-config.json
 
@@ -180,7 +189,7 @@ huu:security-audit:
     - npm install -g huu-pipe
     - |
       git ls-files 'src/**' | jq -R . | jq -s \
-        '{ modelId: "x-ai/grok-4-fast", backend: "pi",
+        '{ modelId: "x-ai/grok-4-fast", provider: "openrouter",
            files: { "3. OWASP Top 10:2025 scan for $file": . } }' \
         > huu-ci-config.json
   script:

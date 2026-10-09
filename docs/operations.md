@@ -258,11 +258,12 @@ env-passthrough, orphan cleanup) iterates the same list.
 
 The current registry:
 
-| Key | Required | Backend | Used by |
+| Key | Required | Provider | Used by |
 |---|---|---|---|
-| `OPENROUTER_API_KEY` (`openrouter`) | yes (without `--stub`) | Pi | The Pi SDK agent + the pipeline assistant + project recon. |
-| `ARTIFICIAL_ANALYSIS_API_KEY` (`artificialAnalysis`) | yes | all | Model recommendations / live capability lookups in the picker. |
-| `COPILOT_GITHUB_TOKEN` (`copilot`) | yes (when `--copilot`) | Copilot | The Copilot SDK agent. Fine-grained PAT with "Copilot Requests" scope, or `GH_TOKEN`. |
+| `DEEPSEEK_API_KEY` (`deepseek`) | yes (default provider, without `--stub`) | deepseek | The `jcode` agent + the pipeline assistant + project recon. |
+| `OPENROUTER_API_KEY` (`openrouter`) | yes when it is the ACTIVE provider | openrouter | The `jcode` agent on the OpenRouter roster (Claude, GPT, GLM…). Enforced regardless of its `required` flag whenever `provider: openrouter` — and never demanded otherwise. |
+| `ARTIFICIAL_ANALYSIS_API_KEY` (`artificialAnalysis`) | no | — | Model recommendations / live capability lookups in the picker (informational; degrades gracefully). |
+| `TAVILY_API_KEY` · `PARALLEL_API_KEY` · `BRAVE_API_KEY` (`tavily` / `parallel` / `brave`) | no | — | Web-research keys for agents that shell out to research CLIs. |
 
 Resolution order for every spec (first non-empty wins) — the EXPLICIT
 choice beats the AMBIENT one:
@@ -313,10 +314,10 @@ run-lifecycle event is also logged to the terminal that launched huu.
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `OPENROUTER_API_KEY` | yes (without `--stub`) | Sent to OpenRouter through the Pi SDK. If missing, the TUI prompts on first real run; "save globally" persists to `~/.config/huu/config.json`. |
-| `OPENROUTER_API_KEY_FILE` | no | Path to a file containing the key. Wins over `OPENROUTER_API_KEY` when both are set; the canonical Docker-secret mount at `/run/secrets/openrouter_api_key` wins over both. A key saved via the Options screen (`~/.config/huu/config.json`) now outranks all three — clear it if you want an env var to apply. |
-| `ARTIFICIAL_ANALYSIS_API_KEY` | yes | Used for live model-capability lookups (`supportsThinking`, pricing). Same precedence chain via `ARTIFICIAL_ANALYSIS_API_KEY_FILE` and `/run/secrets/artificial_analysis_api_key`. |
-| `COPILOT_GITHUB_TOKEN` | yes (when `--copilot`) | GitHub fine-grained PAT with "Copilot Requests" scope (or `GH_TOKEN`). Required only when `--backend=copilot` is active. Same precedence chain via `COPILOT_GITHUB_TOKEN_FILE` and `/run/secrets/copilot_token`. |
+| `DEEPSEEK_API_KEY` | yes (default provider, without `--stub`) | Spent by runs on the default provider (`provider: deepseek`). If missing, the TUI prompts on first real run; "save globally" persists to `~/.config/huu/config.json`. |
+| `OPENROUTER_API_KEY` | yes when `--provider=openrouter` | Spent by runs on `provider: openrouter`. If missing, the TUI prompts on first real run; "save globally" persists to `~/.config/huu/config.json`. |
+| `DEEPSEEK_API_KEY_FILE` / `OPENROUTER_API_KEY_FILE` | no | Path to a file containing the key. Wins over the plain var when both are set; the canonical Docker-secret mounts (`/run/secrets/deepseek_api_key` · `/run/secrets/openrouter_api_key`) win over both. A key saved via the Options screen (`~/.config/huu/config.json`) now outranks all of them — clear it if you want an env var to apply. |
+| `ARTIFICIAL_ANALYSIS_API_KEY` | no | Used for live model-capability lookups (`supportsThinking`, pricing). Same precedence chain via `ARTIFICIAL_ANALYSIS_API_KEY_FILE` and `/run/secrets/artificial_analysis_api_key`. |
 | `HUU_WORKTREE_BASE` | no | Override the base directory for per-run worktrees. Absolute paths are used verbatim; relative paths are resolved against the repo root. Default: `<repo>/.huu-worktrees`. Used by the isolated-volume container mode. |
 | `HUU_WORKSPACE` | no | Host directory the web **folder picker** may browse (bind-mounted RW into the container at the same absolute path). Default `$HOME`, so the picker sees every project under your home. Tighten it (`HUU_WORKSPACE=~/Projects`) or widen it (`HUU_WORKSPACE=/` for the whole filesystem). **Security:** the workspace is mounted read-write, so an agent's shell can read/write anything under it (including `~/.ssh` when it is `$HOME`) — keep it as small as your projects allow. The picker opens here (⌂ Home button) and `runDirectory` picks are resolved against it. |
 | `HUU_CHECK_PUSH` | no | When set, preflight verifies the configured remote is reachable before the run starts. |
@@ -346,7 +347,7 @@ run-lifecycle event is also logged to the terminal that launched huu.
 | `HUU_HOST_HOME` | no | Set automatically by the wrapper to the host's home directory. Inside the container, `getHuuHome()` reads it so writes to `~/.huu/` and the default `~/Downloads/` export target land on the host's bind-mounted filesystem. Unset outside Docker. |
 | `HUU_CONFIG_DIR` | no | Set automatically by the wrapper to the HOST's huu config dir (`$XDG_CONFIG_HOME/huu`, default `~/.config/huu`), which is bind-mounted read-write into the container. `configFilePath()` (the saved-key store) and `webSettingsPath()` prefer it, so keys/settings saved from inside the container persist on the host. Unset outside Docker (local XDG resolution applies). |
 | `HUU_WEB_LOG_STREAM` | no | Set `1` to ALSO mirror the raw agent-output firehose (streamed assistant/thinking text, per line) to the terminal that launched huu. The lifecycle log (runs queued/started/finished/failed, per-agent activity, key events, refused launches) is always on — this flag only adds the verbose stream. |
-| `HUU_MAX_EVENT_LISTENERS` | no | Raises the Node EventTarget / EventEmitter default listener cap (default `256`; `0` keeps Node's own defaults) to silence a `MaxListenersExceededWarning` storm — pi adds one abort listener per tool call to the session `AbortSignal`. |
+| `HUU_MAX_EVENT_LISTENERS` | no | Raises the Node EventTarget / EventEmitter default listener cap (default `256`; `0` keeps Node's own defaults) to silence a `MaxListenersExceededWarning` storm — the agent adds one abort listener per tool call to the session `AbortSignal`. |
 | `HUU_UID` | no | Container UID for `docker compose` runs. Default: `1000`. Override with `HUU_UID=$(id -u)` if your host UID isn't 1000, or use the `scripts/huu-compose` wrapper which sets it automatically. |
 | `HUU_GID` | no | Container GID for `docker compose` runs. Same defaulting rules as `HUU_UID`. |
 
@@ -610,9 +611,9 @@ X" — you get the run you paid for.
 
 - `--stub` runs the entire flow without any LLM. Use it to validate
   pipeline structure and decomposition before spending a dollar.
-- `--copilot` uses subscription-based Copilot credits instead of
-  per-token billing — cost stays within your existing GitHub plan's
-  premium-request quota.
+- `--provider=deepseek` (the default) is the cheapest per-token
+  endpoint; `--provider=openrouter` trades up for a wider model roster
+  (Claude, GPT, GLM…) on one key.
 - Per-step `modelId` lets you route mechanical stages to Haiku / Gemini
   Flash and reserve Sonnet / Opus for stages that actually need it.
 - Tokens and cost are recorded per agent and surfaced in the run
@@ -759,11 +760,11 @@ per-file work without prematurely killing a broader card that's still
 making progress.
 
 **Where do I put my API key?**
-For **Pi** (default backend): export `OPENROUTER_API_KEY` before
-launching, or paste it in the prompt the first time you start a run
-without it. For **Copilot**: export `COPILOT_GITHUB_TOKEN` (GitHub
-PAT with "Copilot Requests" scope). The tool itself never persists
-the key unless you choose "save globally" in the TUI prompt.
+Export the key of the **provider** your run spends — `DEEPSEEK_API_KEY`
+(the default) or `OPENROUTER_API_KEY` (with `--provider=openrouter`) —
+before launching, or paste it in the prompt the first time you start a
+run without it. The tool itself never persists the key unless you
+choose "save globally" in the TUI prompt.
 
 **Why is the Docker container slower on macOS?**
 Bind-mounted filesystems on macOS cross a VM boundary, adding ~3×

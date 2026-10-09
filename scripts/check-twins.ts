@@ -4,8 +4,10 @@
  *
  * Verifies:
  *   1. README.md ↔ README.en.md — count and order of ## headers
- *   2. docs/X.md ↔ docs/X.pt-BR.md — same check, all pairs
- *   3. src/lib/card-state.ts ↔ src/web/client/card-state.js —
+ *   2. Root doc twins (MANIFESTO, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT)
+ *      — same check, canonical pt-BR name ↔ .en.md
+ *   3. docs/X.md ↔ docs/X.pt-BR.md — same check, all pairs
+ *   4. src/lib/card-state.ts ↔ src/web/client/card-state.js —
  *      exported function/const names
  *
  * Usage:  npx tsx scripts/check-twins.ts
@@ -108,6 +110,34 @@ function checkExports(a: string, b: string, label: string) {
 const readmePt = join(ROOT, 'README.md');
 const readmeEn = join(ROOT, 'README.en.md');
 checkHeaders(readmePt, readmeEn, 'README');
+
+// ---------------------------------------------------------------------------
+// 2. root doc twins (canonical pt-BR ↔ .en.md)
+// ---------------------------------------------------------------------------
+// The community files GitHub surfaces (CONTRIBUTING, SECURITY,
+// CODE_OF_CONDUCT) and the manifesto ship as language pairs like the README.
+// A gate, not a reminder: a twin that drifts on `##` structure fails here
+// instead of in review.
+
+const rootTwins: ReadonlyArray<readonly [string, string]> = [
+  ['MANIFESTO.md', 'MANIFESTO.en.md'],
+  ['CONTRIBUTING.md', 'CONTRIBUTING.en.md'],
+  ['SECURITY.md', 'SECURITY.en.md'],
+  ['CODE_OF_CONDUCT.md', 'CODE_OF_CONDUCT.en.md'],
+];
+for (const [pt, en] of rootTwins) {
+  const ptPath = join(ROOT, pt);
+  const enPath = join(ROOT, en);
+  if (!existsSync(ptPath)) {
+    fail(`${pt}: missing — root twins must exist as a pair`);
+    continue;
+  }
+  if (!existsSync(enPath)) {
+    fail(`${en}: missing — no English twin for ${pt}`);
+    continue;
+  }
+  checkHeaders(ptPath, enPath, `${pt} ↔ ${en}`);
+}
 
 // ---------------------------------------------------------------------------
 // 2. docs pairs

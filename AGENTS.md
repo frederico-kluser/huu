@@ -169,7 +169,9 @@ contains a credential — only the `api_key_env` name.
 ## Commit Rules
 
 - Run `npm run typecheck && npm test` before every commit. To harden it
-  locally, enable the pre-push hook: `git config core.hooksPath .githooks`.
+  locally, enable the hooks: `git config core.hooksPath .githooks` — the
+  `pre-push` hook runs the typecheck+test gate, and the `commit-msg` hook
+  enforces Conventional Commits.
 - **CI runs the same gate.** `.github/workflows/gate.yml` executes
   `scripts/gate.sh` on every push and pull request — typecheck · test ·
   validate-skills · check-acceptance · smoke-defaults · validate-graph ·
@@ -179,7 +181,9 @@ contains a credential — only the `api_key_env` name.
   reproduce it exactly; `bash scripts/gate.sh --list-from-ci` prints what CI
   runs, so the two lists cannot drift silently. CI is a backstop, not a
   substitute: it reports only after you push.
-- Prefer Conventional Commits.
+- Commits and PR titles are Conventional Commits (`tipo(escopo)!: descrição`);
+  the `commit-msg` hook rejects anything else (format in
+  [CONTRIBUTING.md](CONTRIBUTING.md)).
 - Never force-push to main.
 
 ## Release procedure
@@ -194,6 +198,8 @@ interactive flow.
 
 - Project knowledge: the CoALA memory — `coala.py recall/search` (the skill
   library is archived there as `skill/<name>` records since 2026-10-03)
+- Community / governance: [CONTRIBUTING.md](CONTRIBUTING.md) ·
+  [SECURITY.md](SECURITY.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
 <!-- BEGIN:coala-memory (gerido por coala-agent-skill — não editar dentro do bloco) -->
 ## Memória CoALA local do projeto

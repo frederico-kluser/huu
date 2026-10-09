@@ -745,13 +745,14 @@ Honestidade brutal sobre os limites:
 A camada 3 (interceptor) só ativa quando o agente roda comandos via
 `./.huu-bin/with-ports <cmd>`. Se o agente ignora a instrução do
 system prompt e roda `npm run dev` direto, `LD_PRELOAD` não chega
-no processo filho — porque o `bash` tool do Pi SDK herda
-`process.env` do orquestrador Node, e `process.env.LD_PRELOAD` no
-orquestrador **não está setado** (e não pode estar — todos os
+no processo filho — porque a tool de shell do agente herda
+`process.env` do processo que a dispara, e `process.env.LD_PRELOAD` nele
+**não está setado** (e não pode estar — todos os
 agentes paralelos compartilham `process.env`).
 
-**Por que não corrigimos com per-call env injection no Pi SDK?**
-Exigiria patch upstream do `@mariozechner/pi-coding-agent`. Possível,
+**Por que não corrigimos com per-call env injection no SDK do agente?**
+Exigiria patch upstream do SDK em uso (na época,
+`@mariozechner/pi-coding-agent`; hoje a CLI `jcode`). Possível,
 mas fora do escopo desta sessão. Workaround: o system prompt é
 explícito sobre `with-ports`; o agente, quando segue, fecha o
 loop. Quando não segue, cai no fallback de camada 1+2.
@@ -820,8 +821,8 @@ independente. Não há coordenação cross-host. Para esse cenário
 
 Se algum desses se tornar dor recorrente:
 
-1. **Per-call env injection no Pi SDK**: PR upstream para que o
-   `bash` tool aceite env próprio. Fecha o gap de §8.1.
+1. **Per-call env injection no SDK do agente**: PR upstream para que a
+   tool de shell aceite env próprio. Fecha o gap de §8.1.
 2. **AF_UNIX socket path remap**: estender o shim para interceptar
    `bind()` em sockets Unix e remapear path. ~30 linhas extras de C.
 3. **Network namespaces opt-in (Linux)**: para usuários que aceitam

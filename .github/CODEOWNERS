@@ -1,0 +1,13 @@
+# CODEOWNERS — todo diff exige revisão do responsável.
+# O ruleset `pull-request-rule` do repositório combina com isto:
+# 1 aprovação + require_code_owner_review.
+#
+# Regra global: o mantenedor é o dono do domínio (ver AGENTS.md —
+# "Document precedence": cada fonte tem um dono de domínio).
+* @frederico-kluser
+
+# Governança e documentação normativa: identidade e método são o cofre.
+/MANIFESTO.md @frederico-kluser
+/MANIFESTO.en.md @frederico-kluser
+/METODO.md @frederico-kluser
+/AGENTS.md @frederico-kluser
