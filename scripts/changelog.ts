@@ -78,7 +78,17 @@ function parseFragment(filePath: string, fileName: string): Fragment {
       continue;
     }
 
-    // Non-blank, non-heading, non-bullet line
+    // A wrapped continuation line joins the bullet above it, verbatim (the
+    // indentation is preserved so the consolidated CHANGELOG keeps the
+    // multi-line shape). Writers may wrap prose at ~80 columns; forcing
+    // one-line bullets produced 400-char lines nobody diffs.
+    const items = currentSection ? fragment.sections.get(currentSection)! : [];
+    if (items.length > 0) {
+      items[items.length - 1] += `\n${line}`;
+      continue;
+    }
+
+    // Non-blank line with no bullet above it to continue
     fragment.errors.push(
       `${fileName}:${i + 1}: unexpected line — expected '### Section' or '- item'`,
     );

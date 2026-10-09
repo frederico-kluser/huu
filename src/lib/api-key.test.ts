@@ -6,6 +6,7 @@ import {
   readFileSync,
   readSync,
   readdirSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -720,6 +721,24 @@ describe('api-key registry', () => {
       }
     };
 
+    /**
+     * The name the WARNING uses. The write path canonicalizes on purpose —
+     * `writeConfigStore` renames onto `realpathSync(configured)` so a
+     * symlinked `config.json` stays linked to its dotfiles target — and the
+     * stderr message names that same path. Where the scratch dir ITSELF sits
+     * behind a symlink (session sandboxes with a symlinked `$TMPDIR`), the
+     * canonical path differs from `configFilePath()`; asserting on it keeps
+     * the test honest in both worlds (equals `configFilePath()` whenever tmp
+     * is a real directory).
+     */
+    const namedAs = (p: string): string => {
+      try {
+        return realpathSync(p);
+      } catch {
+        return p;
+      }
+    };
+
     /** The name `preserveCorruptConfig` builds — deterministic, hence predictable. */
     const backupPathFor = (when: Date): string =>
       `${configFilePath()}${CORRUPT_BACKUP_INFIX}${when.toISOString().replace(/[:.]/g, '-')}-${process.pid}`;
@@ -758,8 +777,8 @@ describe('api-key registry', () => {
       saveApiKey(findSpec('deepseek')!, 'sk-ds-NEW');
 
       const said = warnings.join('\n');
-      expect(said).toContain(configFilePath());
-      expect(said).toContain(backups()[0]!);
+      expect(said).toContain(namedAs(configFilePath()));
+      expect(said).toContain(namedAs(backups()[0]!));
     });
 
     it('gives the copy mode 0600 even when the broken file was world-readable', () => {
@@ -862,7 +881,7 @@ describe('api-key registry', () => {
 
       expect(loadStoredApiKey(findSpec('deepseek')!)).toBe('sk-ds-NEW');
       const said = warnings.join('\n');
-      expect(said).toContain(configFilePath());
+      expect(said).toContain(namedAs(configFilePath()));
       expect(said).toMatch(/could not save a copy/i);
     });
 

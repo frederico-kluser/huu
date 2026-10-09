@@ -20,6 +20,10 @@ heading `### <Section>` seguido de bullets `- descrição`:
 As seções válidas são: **Added**, **Changed**, **Fixed**, **Removed**
 (exatamente essas quatro, com inicial maiúscula).
 
+Bullets podem quebrar em várias linhas (guarde ~80 colunas): as linhas de
+continuação são preservadas na consolidação, e a entrada sai com o mesmo
+formato de sempre no `CHANGELOG.md`.
+
 Fragmentos são consolidados em ordem alfabética de nome de arquivo sob
 `## [Unreleased]` no `CHANGELOG.md`.
 
