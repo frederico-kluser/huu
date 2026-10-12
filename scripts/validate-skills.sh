@@ -10,6 +10,9 @@
 #               catalog.md + agent-skills.md → CoALA records `skill/<name>`)
 #               and deleted. Knowledge lives ONLY in
 #               .agents/huu-coala-memory-agent-skill/memory/coala.sqlite.
+#   2026-10-12 — the v3 installer renamed the memory skill to
+#               <p>-coala-agent-skill (old name kept as a compat symlink) and
+#               registers it under the NEW name; both names are accepted below.
 #
 # So this validator no longer validates a library — there is none. It enforces
 # that the retired shape STAYS retired ("Ausência não falha sozinha", METODO
@@ -31,7 +34,7 @@ skills="$root/.agents/skills"
 fail=0
 err() { echo "FAIL[$1] $2"; fail=1; }
 
-memory_gone="knowledge lives only in .agents/huu-coala-memory-agent-skill/memory/coala.sqlite"
+memory_gone="knowledge lives only in .agents/huu-coala-agent-skill/memory/coala.sqlite"
 
 # ---- 1. .agents/skills/ holds ONLY the memory registration ----
 # The coala installer registers the memory skill here (symlink) so agents can
@@ -41,7 +44,7 @@ if [ -d "$skills" ]; then
     [ -e "$entry" ] || continue
     name="$(basename "$entry")"
     case "$name" in
-      *-coala-memory-agent-skill) continue ;;
+      *-coala-memory-agent-skill|*-coala-agent-skill) continue ;;
       *) err "library" "'${entry#"$root"/}' — the skill library was migrated to the CoALA base (2026-10-03); $memory_gone" ;;
     esac
   done
@@ -62,16 +65,20 @@ fi
 
 # ---- 4. The memory skill itself must exist ----
 mem_skill=""
-for d in "$root"/.agents/*-coala-memory-agent-skill/ "$root"/.agents/skills/*-coala-memory-agent-skill/; do
+for d in "$root"/.agents/*-coala-agent-skill/ "$root"/.agents/*-coala-memory-agent-skill/ "$root"/.agents/skills/*-coala-agent-skill/ "$root"/.agents/skills/*-coala-memory-agent-skill/; do
   [ -f "$d/SKILL.md" ] && mem_skill="$d" && break
 done
-[ -n "$mem_skill" ] || err "memory" "no .agents/<p>-coala-memory-agent-skill/ — install it with the coala-agent-skill installer"
+[ -n "$mem_skill" ] || err "memory" "no .agents/<p>-coala-agent-skill/ — install it with the coala-agent-skill installer"
 
-# ---- 5. Its .claude/skills registration must resolve ----
+# ---- 5. Its .claude/skills registration must resolve (v3 name or legacy) ----
 if [ -n "$mem_skill" ]; then
   mem_name="$(basename "$mem_skill")"
-  link="$root/.claude/skills/$mem_name"
-  { [ -L "$link" ] && [ -e "$link" ]; } || err "memory" "symlink missing or dangling in .claude/skills/$mem_name (re-run the coala-agent-skill installer)"
+  base="${mem_name%-coala-memory-agent-skill}"; base="${base%-coala-agent-skill}"
+  ok_link=0
+  for cand in "$root/.claude/skills/${base}-coala-agent-skill" "$root/.claude/skills/${base}-coala-memory-agent-skill"; do
+    { [ -L "$cand" ] && [ -e "$cand" ]; } && ok_link=1
+  done
+  [ "$ok_link" -eq 1 ] || err "memory" "symlink missing or dangling in .claude/skills/${base}-coala-agent-skill (re-run the coala-agent-skill installer)"
 fi
 
 # ---- Report ----
