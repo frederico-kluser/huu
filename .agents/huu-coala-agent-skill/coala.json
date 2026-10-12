@@ -1,0 +1,22 @@
+{
+  "coala_manifest": 1,
+  "project": "huu",
+  "skill": "huu-coala-agent-skill",
+  "db": "memory/coala.sqlite",
+  "engine": {
+    "file": "scripts/coala.py",
+    "version": "3.0.0",
+    "sha256": "41c550b6f0a462170fe4f37cc2b03094f2e06a967efac049f805f3e705b7db53"
+  },
+  "schema_version": 4,
+  "git_policy": "ignore",
+  "installer": "coala-agent-skill/scripts/coala-install.py",
+  "installed_at": "2026-09-27T09:09:06+00:00",
+  "updated_at": "2026-10-12T19:42:13+00:00",
+  "managed": {
+    "SKILL.md": "a76dd9abf8d34cb232fdde5998d11aa46528111dc3cc5a13cd8db0ceefbb713f",
+    "memory/.gitignore": "5941079484623004d0493eda784610b14f22d89d4a7473df50f514a8a3b044d4",
+    "references/schema.md": "350f2e0b075c382ecadb608819ad31ebd76cacef3ecaf95db3775b23c09699ea",
+    "scripts/coala.py": "41c550b6f0a462170fe4f37cc2b03094f2e06a967efac049f805f3e705b7db53"
+  }
+}
